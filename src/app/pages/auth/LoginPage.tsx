@@ -4,8 +4,11 @@ import { supabase } from '../../../lib/supabaseClient';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Loader2, Lock, Mail, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+
+const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
+const useLocalAuth = import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
 
 const getLoginErrorMessage = (err: unknown) => {
   if (err instanceof Error) {
@@ -45,6 +48,15 @@ export const LoginPage = () => {
     setError(null);
 
     try {
+      if (useLocalAuth) {
+        localStorage.setItem(LOCAL_AUTH_SESSION_KEY, 'active');
+        localStorage.setItem('rhi-v2-local-email', email.trim() || 'owner@polesheadlamp.id');
+        localStorage.setItem('app_last_active', Date.now().toString());
+        toast.success('Login lokal v2 berhasil.');
+        window.location.href = '/dashboard/';
+        return;
+      }
+
       // LOGIN LOGIC
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -94,7 +106,7 @@ export const LoginPage = () => {
           <p className="loginEyebrow">RHI System</p>
           <h1>Restoration Headlamp</h1>
         </div>
-        <p className="loginSub">Masukkan email dan password untuk masuk.</p>
+        <p className="loginSub">Masuk untuk mengelola data operasional internal.</p>
 
           <form onSubmit={handleAuth} className="loginForm">
             {error && (
@@ -153,23 +165,26 @@ export const LoginPage = () => {
                   Processing...
                 </>
               ) : (
-                'Masuk'
+                <>
+                  <LogIn className="h-6 w-6" />
+                  Masuk ke Dashboard
+                </>
               )}
             </Button>
           </form>
 
         <footer className="loginFoot">
-           <span>
-             <span>Belum punya akun?</span>
-             <button 
-                type="button" 
-                onClick={handleRegisterClick}
-                className="loginLinkButton"
-             >
-                Daftar
-             </button>
-           </span>
-           <p>Restoration Headlamp Indonesia App v1.0</p>
+           <button
+              type="button"
+              onClick={handleRegisterClick}
+              className="loginLinkButton"
+           >
+              Lupa password?
+           </button>
+           <p className="loginAccessNote">
+             <ShieldCheck className="h-4 w-4" />
+             Akses mengikuti role dan akses khusus user.
+           </p>
         </footer>
       </section>
     </main>

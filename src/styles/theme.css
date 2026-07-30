@@ -4,7 +4,7 @@
 
 @theme {
   /* Brand Colors (Preserved) */
-  --color-primary: #3B82F6; /* Adjusted to Blue-500 for better contrast on white */
+  --color-primary: #0057b8;
   --color-primary-foreground: #FFFFFF;
   
   --color-secondary: #64748B; /* Slate-500 */
@@ -15,12 +15,12 @@
   
   /* Status Colors (Preserved) */
   --color-status-todo: #9CA3AF;
-  --color-status-progress: #3B82F6;
+  --color-status-progress: #0057b8;
   --color-status-done: #10B981;
   --color-status-waiting: #F59E0B;
   --color-status-canceled: #EF4444;
 
-  --color-ring: #3B82F6;
+  --color-ring: #0097e6;
 
   /* Fonts */
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
@@ -36,6 +36,30 @@
   --font-xs: 0.68rem;
   --leading-title: 1.15;
   --leading-body: 1.55;
+  --text-2xs: 0.68rem;
+  --text-xs: 0.78rem;
+  --text-sm: 0.86rem;
+  --text-body: 0.94rem;
+  --text-md: 1rem;
+  --text-lg: 1.12rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.65rem;
+  --text-3xl: 2rem;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
 
   /* DYNAMIC COLOR SYSTEM (Mapped to Base Layer) */
   --color-background: var(--background);
@@ -66,10 +90,10 @@
   :root {
     /* LIGHT MODE PALETTE */
     --background: #FFFFFF;
-    --surface: #F8FAFC;
+    --surface: #FFFFFF;
     --surface-raised: #FFFFFF;
-    --surface-overlay: #F8FAFC;
-    --card: #F8FAFC;
+    --surface-overlay: #FFFFFF;
+    --card: #FFFFFF;
     --subtle: #F1F5F9;
     
     --text-primary: #0F172A;   /* Near-black, high contrast */
@@ -80,7 +104,7 @@
     --border: #E2E8F0;         /* Slate-200 */
 
     /* Operational UI foundation tokens, aligned with Tokotemansaya internal app */
-    --ops-app-bg: #f5f7fb;
+    --ops-app-bg: #ffffff;
     --ops-ink: #0c142b;
     --ops-ink-2: #1d2942;
     --ops-muted: #64748b;
@@ -89,8 +113,8 @@
     --ops-line-strong: rgba(15, 23, 42, 0.12);
     --ops-panel: rgba(255, 255, 255, 0.95);
     --ops-panel-solid: #ffffff;
-    --ops-blue: #4f7bff;
-    --ops-blue-ink: #2c5bd6;
+    --ops-blue: #006fd6;
+    --ops-blue-ink: #004aad;
     --ops-green: #10b981;
     --ops-amber: #f59e0b;
     --ops-danger: #f43f5e;
@@ -101,11 +125,11 @@
     --ops-radius-sm: 14px;
     --ops-radius-xs: 10px;
     --ops-pill: 999px;
-    --ops-control-h-sm: 38px;
-    --ops-control-h: 46px;
-    --ops-control-h-lg: 58px;
-    --ops-filter-control-h-sm: 34px;
-    --ops-filter-control-h: 40px;
+    --ops-control-h-sm: 36px;
+    --ops-control-h: 44px;
+    --ops-control-h-lg: 52px;
+    --ops-filter-control-h-sm: 32px;
+    --ops-filter-control-h: 38px;
     --ops-tab-h: 40px;
 
     /* Tokotemansaya-compatible aliases for v2 UI components */
@@ -115,9 +139,11 @@
     --muted-2: var(--ops-muted-2);
     --line: var(--ops-line);
     --line-strong: var(--ops-line-strong);
-    --grad-a: #6366f1;
-    --grad-b: #3b82f6;
-    --grad-c: #8b5cf6;
+    --grad-a: #004aad;
+    --grad-b: #0077d9;
+    --grad-c: #00a7f5;
+    --brand-yellow: #ffe33b;
+    --brand-yellow-ink: #b58900;
     --blue: var(--ops-blue);
     --blue-ink: var(--ops-blue-ink);
     --green: var(--ops-green);
@@ -136,9 +162,9 @@
     --shadow-sm: var(--ops-shadow-sm);
     --shadow: var(--ops-shadow);
     --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 34px 64px -28px rgba(15, 23, 42, 0.4);
-    --btn-shadow: 0 12px 26px -10px rgba(79, 70, 229, 0.55);
-    --btn-shadow-hover: 0 18px 34px -10px rgba(79, 70, 229, 0.62);
-    --ring: 0 0 0 4px rgba(99, 102, 241, 0.16);
+    --btn-shadow: 0 12px 26px -10px rgba(0, 74, 173, 0.42);
+    --btn-shadow-hover: 0 18px 34px -10px rgba(0, 74, 173, 0.5);
+    --ring: 0 0 0 4px rgba(0, 151, 230, 0.16);
     --radius-lg: var(--ops-radius-lg);
     --radius: var(--ops-radius);
     --radius-sm: var(--ops-radius-sm);
@@ -150,10 +176,10 @@
     --icon-btn: 40px;
     --table-header-bg: #f4f7fd;
     --table-row-bg: rgba(255, 255, 255, 0.76);
-    --table-row-hover-bg: rgba(99, 102, 241, 0.06);
+    --table-row-hover-bg: rgba(0, 119, 217, 0.06);
     --table-cell-x: 18px;
-    --table-cell-y: 15px;
-    --table-row-min-h: 76px;
+    --table-cell-y: 12px;
+    --table-row-min-h: 64px;
     --table-text-max: 260px;
     --table-primary-lines: 1;
     --table-secondary-lines: 1;

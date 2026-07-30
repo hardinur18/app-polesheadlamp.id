@@ -325,12 +325,32 @@ export function AppLayout() {
   const currentRole = context?.currentRole;
   const currentUser = context?.currentUser;
   const isCurrentUserResolved = context?.isCurrentUserResolved ?? false;
+  const currentUserIssue = context?.currentUserIssue;
   const triggerRefresh = context?.triggerRefresh ?? (() => {});
   const dashboardViewModes = React.useMemo(
     () => Object.keys(DASHBOARD_VIEW_PERMISSION_MAP) as DashboardViewMode[],
     [],
   );
   const hasInvalidRoleSession = isCurrentUserResolved && !currentUser;
+  const currentUserIssueTitle = (() => {
+    switch (currentUserIssue?.code) {
+      case 'profile_not_found':
+        return 'Profil App V2 Belum Ada';
+      case 'profile_inactive':
+        return 'Akun Dinonaktifkan';
+      case 'invalid_role':
+        return 'Role Belum Didukung';
+      case 'profile_query_error':
+        return 'Profil Tidak Bisa Dibaca';
+      case 'profile_timeout':
+        return 'Koneksi Profil Timeout';
+      default:
+        return 'Profil Login Belum Valid';
+    }
+  })();
+  const currentUserIssueHint =
+    currentUserIssue?.message ||
+    'Sesi browser masih aktif, tetapi profil pengguna belum siap dipakai di app v2.';
 
   const preferredDashboardView = currentRole ? DEFAULT_DASHBOARD_VIEW_BY_ROLE[currentRole] : undefined;
   const preferredDashboardPermission = preferredDashboardView
@@ -621,24 +641,19 @@ export function AppLayout() {
   const handleLogout = async () => {
     const loadingToast = toast.loading('Sedang keluar...');
     try {
-      // Clean up local storage first to prevent persistent sessions
       localStorage.clear();
       sessionStorage.clear();
-      
-      // Attempt to sign out
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.warn('Logout warning:', error.message);
+
+      if (!(import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local')) {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.warn('Logout warning:', error.message);
+        }
       }
     } catch (error) {
       console.error('Logout critical error:', error);
     } finally {
-      // FORCE SUCCESS: Always clear state and redirect
-      // This ensures the user is never stuck in a "failed to logout" state
       toast.dismiss(loadingToast);
-      
-      // Small delay to let the toast disappear nicely, then hard reload
-      // Hard reload ensures all memory states are cleared
       window.location.href = '/'; 
     }
   };
@@ -668,14 +683,13 @@ export function AppLayout() {
         <span className="loginMark">
           <Lock size={26} />
         </span>
-        <p className="loginEyebrow">Session</p>
-        <h1>Profil Login Belum Valid</h1>
+        <p className="loginEyebrow">Session App V2</p>
+        <h1>{currentUserIssueTitle}</h1>
         <p className="loginHint">
-          Sesi auth masih aktif, tetapi profil pengguna tidak ditemukan, tidak aktif, atau role-nya belum dikenali sistem.
-          Silakan login ulang dengan akun yang sudah terdaftar di Pengguna & Akses.
+          {currentUserIssueHint} Login ulang akan membersihkan session lama dari browser ini.
         </p>
         <Button onClick={handleLogout} variant="outline">
-          Login Ulang
+          Bersihkan Session
         </Button>
       </section>
     </main>

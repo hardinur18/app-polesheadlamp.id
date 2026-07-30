@@ -11,6 +11,37 @@ import { getAppRouteByPath, getCanonicalAppPath } from '@/app/routing/appRouteRe
 
 const DEFAULT_AUTHENTICATED_PATH = '/dashboard/';
 const LOGIN_REDIRECT_STORAGE_KEY = 'app_post_login_redirect';
+const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
+const useLocalAuth = import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
+
+const createLocalSession = (): Session => {
+  const email = localStorage.getItem('rhi-v2-local-email') || 'owner@polesheadlamp.id';
+  const now = Math.floor(Date.now() / 1000);
+
+  return {
+    access_token: 'local-v2-access-token',
+    refresh_token: 'local-v2-refresh-token',
+    expires_in: 60 * 60 * 24,
+    expires_at: now + 60 * 60 * 24,
+    token_type: 'bearer',
+    user: {
+      id: 'local-owner',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email,
+      email_confirmed_at: new Date().toISOString(),
+      phone: '',
+      confirmed_at: new Date().toISOString(),
+      last_sign_in_at: new Date().toISOString(),
+      app_metadata: { provider: 'local', providers: ['local'] },
+      user_metadata: { name: 'Owner Polesheadlamp' },
+      identities: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_anonymous: false,
+    },
+  };
+};
 
 export const AuthenticatedApp = () => {
   const location = useLocation();
@@ -20,6 +51,13 @@ export const AuthenticatedApp = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (useLocalAuth) {
+      const localSessionEnabled = localStorage.getItem(LOCAL_AUTH_SESSION_KEY) === 'active';
+      setSession(localSessionEnabled ? createLocalSession() : null);
+      setLoading(false);
+      return;
+    }
+
     let isActive = true;
     const AUTH_BOOT_TIMEOUT_MS = 6000;
 

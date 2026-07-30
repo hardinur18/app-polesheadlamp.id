@@ -134,6 +134,30 @@ type MutationOptions = {
   silent?: boolean;
 };
 
+const shouldUseLocalProfileFallback =
+  import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
+
+const buildLocalProfileFallbackUser = (session: Session): User => ({
+  id: session.user.id || 'local-owner',
+  name:
+    session.user.user_metadata?.name ||
+    session.user.email?.split('@')[0] ||
+    'Owner Polesheadlamp',
+  email: session.user.email || 'owner@polesheadlamp.id',
+  role: 'Owner',
+  status: 'active',
+  branchId: 'B1',
+  joinDate: new Date().toISOString().slice(0, 10),
+  phone: '',
+});
+
+export type CurrentUserIssue =
+  | { code: 'profile_not_found'; message: string }
+  | { code: 'profile_inactive'; message: string; status?: string }
+  | { code: 'invalid_role'; message: string; role?: string }
+  | { code: 'profile_query_error'; message: string }
+  | { code: 'profile_timeout'; message: string };
+
 interface MasterDataContextType {
   areas: Area[];
   branches: Branch[];
@@ -278,6 +302,7 @@ interface MasterDataContextType {
   currentRole: Role | undefined;
   currentUser: User | undefined;
   isCurrentUserResolved: boolean;
+  currentUserIssue: CurrentUserIssue | undefined;
   setCurrentRole: (role: Role) => void;
   setCurrentUser: (user: User) => void;
 }
@@ -324,6 +349,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [realUser, setRealUser] = useState<User | undefined>(undefined);
   const [isCurrentUserResolved, setIsCurrentUserResolved] = useState(!session?.user);
+  const [currentUserIssue, setCurrentUserIssue] = useState<CurrentUserIssue | undefined>(undefined);
   
   // Global Refresh Trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -603,6 +629,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     if (!session?.user) {
       setCurrentUserId('');
       setRealUser(undefined);
+      setCurrentUserIssue(undefined);
       setIsCurrentUserResolved(true);
       return;
     }
@@ -612,10 +639,35 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     let didProfileSyncTimeout = false;
     setCurrentUserId('');
     setRealUser(undefined);
+    setCurrentUserIssue(undefined);
     setIsCurrentUserResolved(false);
 
     const syncUser = async () => {
       let profileSyncTimeoutId: number | undefined;
+
+      const useLocalFallbackUser = (reason: CurrentUserIssue) => {
+        if (!shouldUseLocalProfileFallback) {
+          setCurrentUserIssue(reason);
+          return false;
+        }
+
+        const fallbackUser = buildLocalProfileFallbackUser(session);
+        console.warn('[MasterData] Using local v2 profile fallback:', {
+          reason: reason.code,
+          userId: fallbackUser.id,
+          email: fallbackUser.email,
+        });
+        setCurrentUserIssue(undefined);
+        setCurrentUserId(fallbackUser.id);
+        setRealUser(fallbackUser);
+        setUsers(prev => {
+          const exists = prev.some(user => user.id === fallbackUser.id);
+          if (exists) return prev.map(user => user.id === fallbackUser.id ? fallbackUser : user);
+          return [fallbackUser, ...prev];
+        });
+        return true;
+      };
+
       try {
         // Add a small delay to prevent race conditions on rapid re-renders
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -627,7 +679,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           .select('*')
           .eq('id', session.user.id)
           .abortSignal(abortController.signal)
-          .single();
+          .maybeSingle();
 
         const profileTimeout = new Promise<{ timedOut: true }>((resolve) => {
           profileSyncTimeoutId = window.setTimeout(() => {
@@ -643,6 +695,10 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         if ('timedOut' in profileResult) {
           console.warn("[MasterData] Profile fetch timed out");
+          useLocalFallbackUser({
+            code: 'profile_timeout',
+            message: 'Koneksi ke data profil timeout. Coba refresh atau login ulang.',
+          });
           return;
         }
 
@@ -659,37 +715,70 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
             return;
           }
           console.error("[MasterData] Profile fetch error:", error.message);
+          useLocalFallbackUser({
+            code: 'profile_query_error',
+            message: error.message || 'Profil login tidak bisa dibaca dari database.',
+          });
           return;
         }
-        
-        if (profile) {
-            console.log(`[MasterData] Syncing user profile - Role: ${profile.role}, Status: ${profile.status}`);
 
-            const mappedUser = mapProfileToUser({
-              ...profile,
-              email: session.user.email || profile.email,
-              name: profile.name || session.user.email?.split('@')[0] || 'User',
-              created_at: profile.created_at || new Date().toISOString(),
-            });
-
-            if (!isMounted) return;
-
-            setCurrentUserId(profile.id);
-
-            if (!mappedUser) {
-              setRealUser(undefined);
-              setUsers(prev => prev.filter(u => u.id !== profile.id));
-              return;
-            }
-
-            setRealUser(mappedUser);
-
-            setUsers(prev => {
-               const exists = prev.find(u => u.id === mappedUser.id);
-               if (exists) return prev.map(u => u.id === mappedUser.id ? mappedUser : u);
-               return [mappedUser, ...prev];
-            });
+        if (!profile) {
+          console.warn('[MasterData] Active auth session has no matching profile row:', {
+            userId: session.user.id,
+            email: session.user.email,
+          });
+          useLocalFallbackUser({
+            code: 'profile_not_found',
+            message: 'Sesi browser masih aktif, tetapi akun ini belum punya profil internal di app v2.',
+          });
+          return;
         }
+
+        console.log(`[MasterData] Syncing user profile - Role: ${profile.role}, Status: ${profile.status}`);
+
+        const normalizedStatus = typeof profile.status === 'string' ? profile.status.trim().toLowerCase() : '';
+        if (normalizedStatus === 'inactive') {
+          setCurrentUserId(profile.id);
+          setRealUser(undefined);
+          setUsers(prev => prev.filter(u => u.id !== profile.id));
+          setCurrentUserIssue({
+            code: 'profile_inactive',
+            status: profile.status,
+            message: 'Profil akun ini berstatus inactive, jadi akses app ditutup.',
+          });
+          return;
+        }
+
+        const mappedUser = mapProfileToUser({
+          ...profile,
+          email: session.user.email || profile.email,
+          name: profile.name || session.user.email?.split('@')[0] || 'User',
+          created_at: profile.created_at || new Date().toISOString(),
+        });
+
+        if (!isMounted) return;
+
+        setCurrentUserId(profile.id);
+
+        if (!mappedUser) {
+          setRealUser(undefined);
+          setUsers(prev => prev.filter(u => u.id !== profile.id));
+          setCurrentUserIssue({
+            code: 'invalid_role',
+            role: profile.role,
+            message: `Role "${profile.role || '-'}" belum masuk daftar role app v2.`,
+          });
+          return;
+        }
+
+        setCurrentUserIssue(undefined);
+        setRealUser(mappedUser);
+
+        setUsers(prev => {
+           const exists = prev.find(u => u.id === mappedUser.id);
+           if (exists) return prev.map(u => u.id === mappedUser.id ? mappedUser : u);
+           return [mappedUser, ...prev];
+        });
       } catch (err: any) {
         // Ignore abort errors
         if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
@@ -701,6 +790,10 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           return;
         }
         console.error("[MasterData] Unexpected error syncing user:", err);
+        useLocalFallbackUser({
+          code: 'profile_query_error',
+          message: err?.message || 'Terjadi error saat sinkronisasi profil login.',
+        });
       } finally {
         if (profileSyncTimeoutId !== undefined) {
           window.clearTimeout(profileSyncTimeoutId);
@@ -2025,13 +2118,13 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     refreshTrigger, triggerRefresh,
 
     setAreas,
-    currentRole, currentUser, isCurrentUserResolved, setCurrentRole, setCurrentUser
+    currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
     leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, advertiserConfigs, affiliates, vendors, cancelReasons,
     technicianSchedules,
-    auditLogs, currentRole, currentUser, isCurrentUserResolved, refreshTrigger
+    auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger
   ]);
 
   return (
