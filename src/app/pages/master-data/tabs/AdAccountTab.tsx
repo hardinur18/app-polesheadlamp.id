@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
+import { Input } from '../../../components/ui/input';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../../../components/ui/table';

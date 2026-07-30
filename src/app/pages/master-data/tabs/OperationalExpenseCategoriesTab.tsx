@@ -16,6 +16,7 @@ import { DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS } from '@/app/data/operationalExpe
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
+import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import {
   AlertDialog,
