@@ -386,6 +386,13 @@
   min-height: 0;
   overflow-y: auto;
   padding: 0 2px 16px 0;
+  scrollbar-width: none;
+}
+
+.navList::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .navGroup {
@@ -420,6 +427,7 @@
 .sidebar.collapsed .navList {
   gap: 10px;
   padding-right: 0;
+  scrollbar-gutter: auto;
 }
 
 .sidebar.collapsed .navGroupItems {
