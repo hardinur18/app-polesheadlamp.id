@@ -42,7 +42,7 @@
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  background: #ffffff;
+  background: #fbfcfe;
 }
 
 .appTopbar {
@@ -249,7 +249,7 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  background: #ffffff;
+  background: #fbfcfe;
   overscroll-behavior-y: contain;
 }
 
@@ -1796,7 +1796,7 @@
 
 .appMain,
 .workspaceViewport {
-  background: #ffffff;
+  background: #fbfcfe;
 }
 
 .sidebar {
@@ -3044,7 +3044,47 @@
 }
 
 .opsPageShell {
-  padding-top: 30px;
+  max-width: 1600px;
+  padding: 34px 42px 44px;
+}
+
+.topbar {
+  margin-bottom: 22px;
+}
+
+.topbarTitle {
+  max-width: 1120px;
+}
+
+.eyebrowLine {
+  gap: 9px;
+  margin-bottom: 14px;
+  color: var(--blue-ink);
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0.055em;
+}
+
+.eyebrowLine svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.1;
+}
+
+.topbar h1 {
+  max-width: 980px;
+  font-size: clamp(2.05rem, 3.1vw, 2.88rem);
+  font-weight: 800;
+  line-height: 1.04;
+}
+
+.topbar p {
+  max-width: 1040px;
+  margin-top: 16px;
+  color: #64748b;
+  font-size: 1rem;
+  font-weight: 620;
+  line-height: 1.42;
 }
 
 .opsPageShell > .uiTabs {
@@ -3246,7 +3286,7 @@
 
 @media (max-width: 767px) {
   .opsPageShell {
-    padding: 22px 14px 96px;
+    padding: 22px 16px 96px;
   }
 
   .topbar {
@@ -3254,12 +3294,13 @@
   }
 
   .topbar h1 {
-    font-size: 1.72rem;
+    font-size: 1.68rem;
   }
 
   .topbar p {
     margin-top: 9px;
     font-size: 0.88rem;
+    line-height: 1.45;
   }
 
   .masterDataTabs {
