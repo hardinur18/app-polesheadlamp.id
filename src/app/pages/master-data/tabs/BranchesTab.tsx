@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Edit, Trash2,
-  MapPin, ExternalLink, Building2, Clock, AlertCircle
+  MapPin, Building2, Clock
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';

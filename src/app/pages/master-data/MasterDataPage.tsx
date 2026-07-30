@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { 
-  Building2, Users, FileText, Database, CreditCard, Wrench, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText
+import {
+  Building2, Users, Database, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { OperationalPageHeader, OperationalPageShell } from '../../components/ui/operational-page';
@@ -12,7 +12,7 @@ import { BranchesTab } from './tabs/BranchesTab';
 import { ServicesTab } from './tabs/ServicesTab';
 import { GenericMasterTab } from './tabs/GenericMasterTab';
 import { OperationalExpenseCategoriesTab } from './tabs/OperationalExpenseCategoriesTab';
-import { Role, MOCK_VEHICLES, MOCK_PAYMENTS, MOCK_ROLES, VehicleType } from './data';
+import { Role, VehicleType } from './data';
 import { VehicleImportModal } from './modals/VehicleImportModal';
 import { toast } from 'sonner';
 
