@@ -2989,6 +2989,41 @@
 }
 
 /* Master Data final surface polish */
+.sidebar.collapsed {
+  width: 82px;
+  padding-inline: 12px;
+}
+
+.sidebar.collapsed .navGroupItems {
+  justify-items: center;
+}
+
+.sidebar.collapsed .navBranch {
+  width: 100%;
+  min-height: 52px;
+  justify-content: center;
+}
+
+.sidebar.collapsed .navItem,
+.sidebar.collapsed .navBranch .navItemParent,
+.sidebar.collapsed .navItem[aria-expanded="true"],
+.sidebar.collapsed .navBranch.open > .navItem {
+  flex: 0 0 52px;
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  height: 52px;
+  min-height: 52px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 16px;
+  transform: none;
+}
+
+.sidebar.collapsed .navItem:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
 .opsPageShell {
   padding-top: 30px;
 }
