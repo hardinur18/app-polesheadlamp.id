@@ -292,9 +292,11 @@ export function OperationalExpenseCategoriesTab() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-        <Badge variant="outline" className="w-fit">
-          {filteredItems.length.toLocaleString('id-ID')} data
-        </Badge>
+          <div className="masterDataControlActions">
+            <Badge variant="outline" className="masterDataCountBadge">
+              {filteredItems.length.toLocaleString('id-ID')} data
+            </Badge>
+          </div>
         </ControlRow>
       </ControlPanel>
 

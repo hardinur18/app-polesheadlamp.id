@@ -314,9 +314,10 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
               placeholder="Cari cabang atau kota..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-            />
+          />
 
           {canCreate && (
+            <div className="masterDataControlActions">
             <Button 
               className="masterDataActionButton"
               onClick={() => {
@@ -326,6 +327,7 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
             >
               <Plus /> Tambah Cabang
             </Button>
+            </div>
           )}
         </ControlRow>
       </ControlPanel>

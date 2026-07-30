@@ -263,6 +263,7 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
           />
 
           {canCreate && (
+            <div className="masterDataControlActions">
             <Button 
               className="masterDataActionButton"
               onClick={() => {
@@ -272,6 +273,7 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
             >
               <Plus /> Tambah Daerah
             </Button>
+            </div>
           )}
         </ControlRow>
       </ControlPanel>

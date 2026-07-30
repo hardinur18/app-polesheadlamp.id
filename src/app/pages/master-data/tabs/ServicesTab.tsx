@@ -271,6 +271,7 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
           />
 
           {canCreate && (
+            <div className="masterDataControlActions">
             <Button 
               className="masterDataActionButton"
               onClick={() => {
@@ -280,6 +281,7 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
             >
               <Plus /> Tambah Layanan
             </Button>
+            </div>
           )}
         </ControlRow>
       </ControlPanel>

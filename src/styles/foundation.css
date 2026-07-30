@@ -3694,14 +3694,17 @@ body {
 }
 
 .masterDataControlRow {
-  grid-template-columns: minmax(280px, 0.9fr) max-content;
-  justify-content: space-between;
+  grid-template-columns: minmax(360px, 1fr) auto;
+  justify-content: stretch;
 }
 
 .masterDataControlActions {
   display: flex;
+  width: max-content;
+  min-width: 220px;
   justify-content: flex-end;
   gap: 10px;
+  justify-self: end;
 }
 
 .masterDataActionButton {
@@ -3714,11 +3717,26 @@ body {
   min-width: 148px;
 }
 
+.masterDataCountBadge {
+  display: inline-flex;
+  min-width: 108px;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .controlRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: center;
   gap: 10px;
+}
+
+.controlRow.masterDataControlRow {
+  grid-template-columns: minmax(360px, 1fr) auto;
 }
 
 .searchBox,
@@ -3868,6 +3886,7 @@ body {
 
   .masterDataControlActions {
     width: 100%;
+    min-width: 0;
     flex-direction: column;
   }
 

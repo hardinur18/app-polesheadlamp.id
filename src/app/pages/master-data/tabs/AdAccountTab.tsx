@@ -1135,6 +1135,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
           />
 
           {canCreate && (
+            <div className="masterDataControlActions">
             <Button 
               className="masterDataActionButton"
               onClick={() => {
@@ -1145,6 +1146,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             >
               <Plus /> Tambah Akun
             </Button>
+            </div>
               )}
         </ControlRow>
       </ControlPanel>
