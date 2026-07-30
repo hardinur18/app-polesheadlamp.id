@@ -77,6 +77,36 @@ Catatan:
 - Scrollbar nav disembunyikan, scroll wheel/trackpad tetap jalan.
 - Avatar profil user berbentuk bulat.
 
+## Module: Button System
+
+Status: parity 1:1 dengan Management Internal.
+
+Dipakai oleh:
+- `src/app/components/ui/button.tsx`
+- `src/app/components/Sidebar.tsx`
+- `src/app/pages/master-data/tabs/BranchesTab.tsx`
+- `src/app/pages/master-data/tabs/GenericMasterTab.tsx`
+
+Komponen/class:
+- `Button`
+- `buttonVariants`
+- `.uiButton`
+- `.primaryButton`
+- `.ghostButton`
+- `.secondaryButton`
+- `.dangerButton`
+- `.successButton`
+- `.linkButton`
+- `.buttonSm`
+- `.buttonLg`
+- `.iconButton`
+
+Catatan:
+- Default action button mengikuti Management Internal: min-height `48px`, padding `0 20px`, radius `14px`, font `0.86rem`, weight `700`.
+- Icon button default `40px`, icon `17px`, radius `10px`.
+- Button `sm` untuk action kecil: height `38px`, icon `15px`, font `0.78rem`.
+- Primary tetap memakai warna Polesheadlamp, tapi dimensi dan typography mengikuti Management.
+
 ## Module: Operational Page Header
 
 Status: parity 1:1 dengan Management Internal.
