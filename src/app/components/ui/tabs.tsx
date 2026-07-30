@@ -34,6 +34,30 @@ function TabsList({
   );
 }
 
+function TabsViewport({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn("uiTabsViewport", className)}
+      {...props}
+    />
+  );
+}
+
+function TabsRail({
+  className,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.List>) {
+  return (
+    <TabsList
+      className={cn("uiTabsRail", className)}
+      {...props}
+    />
+  );
+}
+
 function TabsTrigger({
   className,
   ...props
@@ -63,4 +87,4 @@ function TabsContent({
   );
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent };
+export { Tabs, TabsList, TabsRail, TabsTrigger, TabsContent, TabsViewport };

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Building2, Users, Database, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '../../components/ui/tabs';
 import { OperationalPageHeader, OperationalPageShell } from '../../components/ui/operational-page';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -149,16 +149,16 @@ const MasterDataContent: React.FC<{
       />
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-          <div className="w-full min-w-0 overflow-x-auto pb-1 scrollbar-hide">
-            <TabsList className="masterDataTabs min-w-max">
+          <TabsViewport>
+            <TabsRail className="masterDataTabs min-w-max">
               {tabs.map((tab) => (
                 <TabsTrigger key={tab.id} value={tab.id} className="masterDataTab">
                   {React.createElement(tab.icon, { className: 'h-4 w-4' })}
                   <span>{tab.label}</span>
                 </TabsTrigger>
               ))}
-            </TabsList>
-          </div>
+            </TabsRail>
+          </TabsViewport>
 
           {/* Custom Tabs */}
           <TabsContent value="branches" className="mt-0 focus-visible:ring-0">

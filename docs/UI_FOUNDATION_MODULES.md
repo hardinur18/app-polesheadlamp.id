@@ -153,6 +153,36 @@ Catatan:
 - Header table kecil, uppercase, ringan.
 - Row hover soft, action button ghost.
 
+## Module: UI Tabs
+
+Status: dipakai di Master Data, siap dipakai ulang.
+
+Dipakai oleh:
+- `src/app/components/ui/tabs.tsx`
+- `src/app/pages/master-data/MasterDataPage.tsx`
+
+Komponen/class:
+- `Tabs`
+- `TabsViewport`
+- `TabsRail`
+- `TabsTrigger`
+- `TabsContent`
+- `.uiTabs`
+- `.uiTabsViewport`
+- `.uiTabsRail`
+- `.uiTabsList`
+- `.uiTabsTrigger`
+- `.uiTabsContent`
+- `.masterDataTabs`
+- `.masterDataTab`
+
+Catatan:
+- Untuk tab horizontal modern dengan overflow scroll tersembunyi.
+- `TabsViewport` memberi edge fade kiri/kanan.
+- `TabsRail` adalah scroll rail ringan.
+- Active tab memakai soft white pill.
+- Icon tab punya micro animation saat active/hover dan wajib menghormati `prefers-reduced-motion`.
+
 ## Module: Master Data Surface
 
 Status: sedang tahap foundation, sudah diterapkan ke tab Cabang dan Generic Master.
@@ -168,6 +198,8 @@ Komponen/class:
 - `ControlPanel`
 - `SearchBox`
 - `DataTable`
+- `TabsViewport`
+- `TabsRail`
 - `.masterDataTabs`
 - `.masterDataTab`
 - `.tablePanel`
@@ -188,4 +220,3 @@ Belum final parity:
 - Kategori Biaya
 - Form/modal di tiap tab
 - Mobile list view detail
-
