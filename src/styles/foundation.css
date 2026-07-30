@@ -3063,28 +3063,47 @@
   font-size: 0.72rem;
   font-weight: 820;
   letter-spacing: 0.055em;
+  animation: headerStageIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .eyebrowLine svg {
-  width: 17px;
-  height: 17px;
+  box-sizing: content-box;
+  width: 16px;
+  height: 16px;
+  padding: 7px;
+  border-radius: 11px;
+  color: var(--blue-ink);
+  background: rgba(37, 99, 235, 0.08);
   stroke-width: 2.1;
 }
 
 .topbar h1 {
   max-width: 980px;
-  font-size: clamp(2.05rem, 3.1vw, 2.88rem);
-  font-weight: 800;
-  line-height: 1.04;
+  font-size: clamp(1.92rem, 2.45vw, 2.42rem);
+  font-weight: 780;
+  line-height: 1.08;
+  animation: headerStageIn 460ms cubic-bezier(0.22, 1, 0.36, 1) 55ms both;
 }
 
 .topbar p {
   max-width: 1040px;
-  margin-top: 16px;
+  margin-top: 14px;
   color: #64748b;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 620;
   line-height: 1.42;
+  animation: headerStageIn 480ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+}
+
+@keyframes headerStageIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .opsPageShell > .uiTabs {
@@ -3294,12 +3313,12 @@
   }
 
   .topbar h1 {
-    font-size: 1.68rem;
+    font-size: 1.5rem;
   }
 
   .topbar p {
     margin-top: 9px;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     line-height: 1.45;
   }
 
@@ -3332,6 +3351,9 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace > *,
   .opsPageShell > *,
+  .eyebrowLine,
+  .topbar h1,
+  .topbar p,
   .loginCard,
   .loginMark,
   .loginMark.brandLogo::after,
