@@ -73,7 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
         canNavigate: false,
         children: [
           { icon: Megaphone, label: 'Iklan Harian', id: 'daily-ads', permission: 'ads.view_daily' },
-          { icon: TrendingUp, label: 'Monitoring Perf.', id: 'ads-monitoring', permission: 'monitoring.marketing.view' },
+          { icon: TrendingUp, label: 'Monitoring Iklan', id: 'ads-monitoring', permission: 'monitoring.marketing.view' },
           { icon: Target, label: 'OKR CS', id: 'cs-okr-report', permission: 'cs_okr.view' },
           { icon: Share2, label: 'Affiliate', id: 'affiliates', permission: 'affiliate.view' },
         ],
@@ -85,7 +85,7 @@ const NAV_GROUPS: NavGroup[] = [
         canNavigate: false,
         children: [
           { icon: UserPlus, label: 'Prospek', id: 'leads', permission: 'leads.view' },
-          { icon: ClipboardList, label: 'Embed Form', id: 'embed-forms', permission: 'leads.view' },
+          { icon: ClipboardList, label: 'Form Embed', id: 'embed-forms', permission: 'leads.view' },
           { icon: Images, label: 'Galeri Bukti', id: 'proof-assets', permission: 'proof_assets.view' },
         ],
       },
@@ -97,13 +97,13 @@ const NAV_GROUPS: NavGroup[] = [
         children: [
           { icon: LayoutDashboard, label: 'Dashboard', id: 'whatsapp-dashboard', permission: 'whatsapp.view' },
           { icon: MessageSquare, label: 'Chats', id: 'whatsapp-chats', permission: 'whatsapp.view' },
-          { icon: Users, label: 'Contacts', id: 'whatsapp-contacts', permission: 'whatsapp.view' },
-          { icon: FileText, label: 'Templates', id: 'whatsapp-templates', permission: 'whatsapp.templates.manage' },
-          { icon: Megaphone, label: 'Broadcasts', id: 'whatsapp-broadcasts', permission: 'whatsapp.broadcast.manage' },
+          { icon: Users, label: 'Kontak', id: 'whatsapp-contacts', permission: 'whatsapp.view' },
+          { icon: FileText, label: 'Template', id: 'whatsapp-templates', permission: 'whatsapp.templates.manage' },
+          { icon: Megaphone, label: 'Broadcast', id: 'whatsapp-broadcasts', permission: 'whatsapp.broadcast.manage' },
           { icon: BarChart3, label: 'Analytics', id: 'whatsapp-analytics', permission: 'whatsapp.view' },
           { icon: Database, label: 'Storage', id: 'whatsapp-storage', permission: 'whatsapp.view' },
-          { icon: Settings, label: 'Inbox Settings', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
-          { icon: Smartphone, label: 'Accounts', id: 'whatsapp-accounts', permission: 'whatsapp.settings.manage' },
+          { icon: Settings, label: 'Pengaturan Inbox', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
+          { icon: Smartphone, label: 'Akun WA', id: 'whatsapp-accounts', permission: 'whatsapp.settings.manage' },
         ],
       },
       {
@@ -180,7 +180,7 @@ const NAV_GROUPS: NavGroup[] = [
         children: [
           { icon: Database, label: 'Master Data', id: 'master-data', permission: 'master_data.view' },
           { icon: ShieldCheck, label: 'Pengguna & Akses', id: 'users', permission: 'users.view' },
-          { icon: Shield, label: 'Role Permission', id: 'roles', permission: 'role_permissions.view' },
+          { icon: Shield, label: 'Role & Permission', id: 'roles', permission: 'role_permissions.view' },
           { icon: Activity, label: 'Kontrol Pemakaian', id: 'usage-control', permission: 'role_permissions.view', ownerOnly: true },
           { icon: MessageSquare, label: 'Template WhatsApp', id: 'wa-templates', permission: 'wa_template.view' },
         ],
@@ -439,7 +439,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onNavigate, isColla
                                        {!isCollapsed && isExpanded && (
                                            <div className="navSubList">
                                                 {item.children?.map(child => {
-                                                    let isChildActiveItem = activeTab === child.id;
+                                                    const isChildActiveItem = activeTab === child.id;
                                                     const childHref = getNavHref(child.id);
                                                     
                                                     return (
@@ -453,6 +453,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onNavigate, isColla
                                                             }}
                                                             className={cn('navSubItem', isChildActiveItem && 'active')}
                                                         >
+                                                            <child.icon size={15} />
                                                             <span>{child.label}</span>
                                                         </a>
                                                     );
