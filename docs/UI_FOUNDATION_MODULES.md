@@ -7,7 +7,7 @@ Dokumen ini mencatat modul UI foundation Polesheadlamp.id v2, komponen/class yan
 - Rasa visual: ringan, modern, operational app, bukan landing page.
 - Font utama: Plus Jakarta Sans, mengikuti token Management Internal Tokotemansaya.
 - Base body: `15px`, line-height `1.55`, heading tanpa negative tracking kecuali page H1 operational `-0.02em`.
-- Background app: off-white lembut `#fbfcfe`.
+- Background app: putih bersih `#ffffff`, sama seperti Management Internal.
 - Primary color: biru logo Polesheadlamp, dengan cyan/blue highlight dan aksen kuning hanya seperlunya.
 - Komponen shared dipakai ulang sebelum membuat style spesifik halaman.
 - Motion hanya micro-interaction halus dan wajib hormat `prefers-reduced-motion`.

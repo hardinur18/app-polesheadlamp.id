@@ -42,7 +42,7 @@
   height: 100%;
   flex-direction: column;
   overflow: hidden;
-  background: #fbfcfe;
+  background: #ffffff;
 }
 
 .appTopbar {
@@ -249,7 +249,7 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  background: #fbfcfe;
+  background: #ffffff;
   overscroll-behavior-y: contain;
 }
 
@@ -1796,7 +1796,7 @@
 
 .appMain,
 .workspaceViewport {
-  background: #fbfcfe;
+  background: #ffffff;
 }
 
 .sidebar {
@@ -3375,8 +3375,9 @@ body {
   line-height: var(--leading-body, 1.55);
 }
 
-.appMain {
-  background: #fbfcfe;
+.appMain,
+.workspaceViewport {
+  background: #ffffff;
 }
 
 .opsPageShell {
