@@ -3369,6 +3369,228 @@
   letter-spacing: 0.025em;
 }
 
+/* Management Internal 1:1 parity layer for operational modules. */
+body {
+  font-size: 15px;
+  line-height: var(--leading-body, 1.55);
+}
+
+.appMain {
+  background: #fbfcfe;
+}
+
+.opsPageShell {
+  max-width: none;
+  margin: 0;
+  padding: 34px 36px 40px;
+}
+
+.appShell.sidebarCollapsed .opsPageShell {
+  padding-left: 36px;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.topbarTitle {
+  max-width: none;
+}
+
+.eyebrowLine {
+  gap: 8px;
+  margin-bottom: 11px;
+  color: var(--blue-ink);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.12em;
+}
+
+.eyebrowLine svg {
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--blue-ink);
+  stroke-width: 2.1;
+}
+
+.topbar h1 {
+  max-width: none;
+  color: var(--ink);
+  font-size: clamp(1.9rem, 2.4vw, 2.55rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.topbar p {
+  max-width: none;
+  margin-top: 13px;
+  color: var(--muted);
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.uiButton,
+.primaryButton,
+.ghostButton,
+.dangerButton,
+.successButton,
+.secondaryButton,
+.linkButton {
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: var(--radius-sm);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.topbarActions {
+  gap: 10px;
+}
+
+.topbarActions .primaryButton,
+.topbarActions .ghostButton {
+  min-height: 48px;
+}
+
+.opsPageShell > .uiTabs {
+  gap: 16px;
+}
+
+.uiTabsViewport {
+  overflow: hidden;
+}
+
+.masterDataTabs {
+  min-height: 48px;
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+}
+
+.masterDataTab {
+  min-height: 36px;
+  padding: 0 15px;
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.masterDataTab svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-2);
+  stroke-width: 2;
+}
+
+.masterDataTab:hover:not(:disabled) {
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.masterDataTab[data-state="active"] {
+  border-color: rgba(59, 130, 246, 0.16);
+  color: var(--blue-ink);
+  background: #ffffff;
+  box-shadow: 0 12px 26px -20px rgba(37, 99, 235, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.82) inset;
+}
+
+.masterDataTab[data-state="active"] svg {
+  color: var(--blue-ink);
+}
+
+.controlPanel {
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.controlRow {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.searchBox,
+.selectBox,
+.filterSelectBox {
+  min-height: 48px;
+  padding: 0 14px;
+  border-color: var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  box-shadow: none;
+}
+
+.searchBox input,
+.selectBox select {
+  min-height: 42px;
+  font-size: 0.94rem;
+  font-weight: 650;
+}
+
+.tablePanel {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass);
+  box-shadow: var(--shadow);
+}
+
+.tableScroller table,
+.uiDataTableScroller > table {
+  font-size: 0.86rem;
+}
+
+.tableScroller th {
+  height: 46px;
+  color: var(--muted);
+  background: var(--table-header-bg);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.tableScroller td {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.uiDataTableScroller td strong,
+.uiDataTableScroller .tableTextPrimary {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.uiDataTableScroller td > span:not([class]),
+.uiDataTableScroller td small,
+.uiDataTableScroller .tableTextSecondary {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 @media (max-width: 767px) {
   .opsPageShell {
     padding: 22px 16px 96px;
@@ -3380,6 +3602,7 @@
 
   .topbar h1 {
     font-size: 1.5rem;
+    line-height: 1.12;
   }
 
   .topbar p {

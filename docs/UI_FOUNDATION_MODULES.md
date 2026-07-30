@@ -5,7 +5,8 @@ Dokumen ini mencatat modul UI foundation Polesheadlamp.id v2, komponen/class yan
 ## Prinsip Global
 
 - Rasa visual: ringan, modern, operational app, bukan landing page.
-- Font utama: Plus Jakarta Sans.
+- Font utama: Plus Jakarta Sans, mengikuti token Management Internal Tokotemansaya.
+- Base body: `15px`, line-height `1.55`, heading tanpa negative tracking kecuali page H1 operational `-0.02em`.
 - Background app: off-white lembut `#fbfcfe`.
 - Primary color: biru logo Polesheadlamp, dengan cyan/blue highlight dan aksen kuning hanya seperlunya.
 - Komponen shared dipakai ulang sebelum membuat style spesifik halaman.
@@ -78,7 +79,7 @@ Catatan:
 
 ## Module: Operational Page Header
 
-Status: selesai tahap polish awal.
+Status: parity 1:1 dengan Management Internal.
 
 Dipakai oleh:
 - `src/app/components/ui/operational-page.tsx`
@@ -94,10 +95,10 @@ Komponen/class:
 - `.eyebrowLine`
 
 Catatan:
-- Header memakai icon chip halus di eyebrow.
-- H1 bukan hero-scale: max sekitar `2.42rem`, weight `780`, line-height `1.08`.
-- Subtitle ringan: sekitar `0.95rem`.
-- Eyebrow, title, subtitle punya staged fade-in halus.
+- Header mengikuti pola `.topbar` Management Internal: flex row, gap `18px`, margin-bottom `26px`.
+- Eyebrow mengikuti `.crumbLine`: `0.74rem`, weight `800`, letter spacing `0.12em`, icon inline tanpa chip.
+- H1 operational: `clamp(1.9rem, 2.4vw, 2.55rem)`, weight `800`, line-height `1.1`.
+- Subtitle: `0.94rem`, line-height `1.55`, muted.
 
 ## Module: Control Panel
 
@@ -155,7 +156,7 @@ Catatan:
 
 ## Module: UI Tabs
 
-Status: dipakai di Master Data, siap dipakai ulang.
+Status: parity 1:1 dengan Management Internal.
 
 Dipakai oleh:
 - `src/app/components/ui/tabs.tsx`
@@ -180,8 +181,9 @@ Catatan:
 - Untuk tab horizontal modern dengan overflow scroll tersembunyi.
 - `TabsViewport` memberi edge fade kiri/kanan.
 - `TabsRail` adalah scroll rail ringan.
-- Active tab memakai soft white pill.
-- Icon tab punya micro animation saat active/hover dan wajib menghormati `prefers-reduced-motion`.
+- Active tab memakai soft white pill seperti active state Management Internal.
+- Ukuran trigger: min-height `36px`, padding horizontal `15px`, font `0.82rem`, weight `700`.
+- Icon tab disamakan di `16px`, stroke `2`, active mengikuti `var(--blue-ink)`.
 
 ## Module: Master Data Surface
 
