@@ -261,9 +261,9 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
   };
 
   return (
-    <div className="space-y-6">
+    <div className="masterDataTabSurface">
       <ControlPanel aria-label="Filter layanan">
-        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+        <ControlRow className="masterDataControlRow">
           <SearchBox
             placeholder="Cari layanan..."
             value={search}
@@ -272,7 +272,7 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
 
           {canCreate && (
             <Button 
-              className="w-full sm:w-auto sm:min-w-[220px]"
+              className="masterDataActionButton"
               onClick={() => {
                 setEditingItem(null);
                 setIsAddOpen(true);

@@ -252,10 +252,10 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
   };
 
   return (
-    <div className="space-y-6">
+    <div className="masterDataTabSurface">
       
       <ControlPanel aria-label="Filter daerah">
-        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+        <ControlRow className="masterDataControlRow">
           <SearchBox
             placeholder="Cari daerah..."
             value={search}
@@ -264,7 +264,7 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
 
           {canCreate && (
             <Button 
-              className="w-full sm:w-auto sm:min-w-[220px]"
+              className="masterDataActionButton"
               onClick={() => {
                 setEditingItem(null);
                 setIsAddOpen(true);

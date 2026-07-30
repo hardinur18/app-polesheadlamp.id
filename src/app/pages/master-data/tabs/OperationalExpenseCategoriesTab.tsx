@@ -286,7 +286,7 @@ export function OperationalExpenseCategoriesTab() {
       </OperationalPageHeader>
 
       <ControlPanel aria-label="Filter kategori biaya">
-        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+        <ControlRow className="masterDataControlRow">
           <SearchBox
             placeholder="Cari akun..."
             value={search}

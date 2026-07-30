@@ -1124,10 +1124,10 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   };
 
   return (
-    <div className="space-y-6">
+    <div className="masterDataTabSurface">
       {/* Search Toolbar */}
       <ControlPanel aria-label="Filter akun iklan">
-        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+        <ControlRow className="masterDataControlRow">
           <SearchBox
             placeholder="Cari akun atau advertiser..."
             value={search}
@@ -1136,7 +1136,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
           {canCreate && (
             <Button 
-              className="w-full sm:w-auto sm:min-w-[220px]"
+              className="masterDataActionButton"
               onClick={() => {
                 setEditingItem(null);
                 setIsAddOpen(true);

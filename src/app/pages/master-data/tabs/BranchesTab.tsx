@@ -307,9 +307,9 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
   };
 
   return (
-    <div className="space-y-6">
+    <div className="masterDataTabSurface">
       <ControlPanel aria-label="Filter cabang">
-        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+        <ControlRow className="masterDataControlRow">
             <SearchBox
               placeholder="Cari cabang atau kota..."
               value={search}
@@ -318,7 +318,7 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
 
           {canCreate && (
             <Button 
-              className="w-full sm:w-auto sm:min-w-[220px]"
+              className="masterDataActionButton"
               onClick={() => {
                 setEditingItem(null);
                 setIsAddOpen(true);

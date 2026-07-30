@@ -148,7 +148,7 @@ const MasterDataContent: React.FC<{
         icon={Database}
       />
 
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="masterDataTabsShell">
           <TabsViewport>
             <TabsRail className="masterDataTabs min-w-max">
               {tabs.map((tab) => (
