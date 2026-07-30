@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/vite-env.d.ts",
+    "src/app/pages/finance/**/*.ts",
+    "src/app/pages/finance/**/*.tsx",
+    "src/app/pages/Kas.tsx",
+    "src/app/pages/Laporan.tsx",
+    "src/app/pages/master-data/tabs/RecurringExpensesTab.tsx",
+    "src/app/components/ui/**/*.ts",
+    "src/app/components/ui/**/*.tsx",
+    "src/app/hooks/**/*.ts",
+    "src/app/hooks/**/*.tsx",
+    "src/app/data/**/*.ts",
+    "src/app/pages/master-data/context/**/*.ts",
+    "src/app/pages/master-data/context/**/*.tsx",
+    "src/app/pages/master-data/data.ts",
+    "src/app/services/**/*.ts",
+    "src/lib/**/*.ts",
+    "utils/supabase/info.tsx"
+  ]
+}

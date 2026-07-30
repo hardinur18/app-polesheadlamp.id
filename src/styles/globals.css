@@ -1,0 +1,160 @@
+/* Global styles */
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  
+  /* Custom Font Sizes for consistent hierarchy */
+  --text-h1: 2rem;
+  --text-h2: 1.35rem;
+  --text-h3: 1.12rem;
+  --text-p: 0.94rem;
+  --text-small: 0.78rem;
+  --text-xs: 0.68rem;
+}
+
+/* App shell sizing */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+* {
+  min-width: 0;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Typography Hierarchy Defaults */
+h1 {
+  font-size: var(--text-h1);
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+h2 {
+  font-size: var(--text-h2);
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: var(--text-h3);
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+p {
+  font-size: var(--text-p);
+  line-height: 1.55;
+  font-weight: 400;
+}
+
+small {
+  font-size: var(--text-small);
+  font-weight: 500;
+}
+
+/* Scrollbars stay visible by default so long operational screens are discoverable. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.72);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.custom-scrollbar,
+.scrollbar-stable {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+  scrollbar-gutter: stable;
+}
+
+.no-scrollbar,
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* WhatsApp-style subtle doodle wallpaper behind chat messages */
+.wa-chat-wallpaper {
+  background-color: #f3f4f1;
+  background-image:
+    linear-gradient(rgba(243, 244, 241, 0.9), rgba(243, 244, 241, 0.9)),
+    url('/wa-chat-background.jpg');
+  background-repeat: repeat;
+  background-size: auto, 360px 240px;
+}
+
+.dark .wa-chat-wallpaper {
+  background-color: #0b1120;
+  background-image:
+    linear-gradient(rgba(11, 17, 32, 0.92), rgba(11, 17, 32, 0.92)),
+    url('/wa-chat-background.jpg');
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

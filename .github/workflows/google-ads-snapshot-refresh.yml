@@ -1,0 +1,50 @@
+name: Google Ads Snapshot Refresh
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  refresh_google_ads_snapshots:
+    name: Refresh Google Ads Snapshots
+    runs-on: ubuntu-latest
+    concurrency:
+      group: google-ads-snapshot-refresh
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      VITE_FUNCTIONS_BASE_URL: https://dhnxwrteolnjdrxlmgwi.supabase.co/functions/v1/make-server-f781cd00
+      GOOGLE_ADS_SNAPSHOT_AUTH_SOFT_FAIL: 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh Google Ads snapshots
+        run: npm run ads:google-snapshot-refresh
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "### Google Ads snapshot refresh" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Scheduler: GitHub Actions" >> "$GITHUB_STEP_SUMMARY"
+          echo "- History window: 90 hari sampai kemarin" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Today window: hari ini dengan min fresh 10 menit" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target function: \`/google/sync-snapshots\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Google OAuth reconnect dibaca sebagai warning agar scheduler tidak spam failed run" >> "$GITHUB_STEP_SUMMARY"

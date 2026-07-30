@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">RHI System</title>
+  <desc id="desc">Restoration Headlamp Indonesia application icon</desc>
+  <rect width="512" height="512" rx="112" fill="#0f172a"/>
+  <circle cx="256" cy="256" r="166" fill="#ffffff"/>
+  <path d="M90 256a166 166 0 0 1 166-166v332A166 166 0 0 1 90 256Z" fill="#facc15"/>
+  <circle cx="256" cy="256" r="192" fill="none" stroke="#4f46e5" stroke-width="34"/>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#4338ca" stroke-width="18"/>
+  <g stroke-linecap="round" stroke-width="20">
+    <path d="M158 216v80" stroke="#766f5f"/>
+    <path d="M202 184v144" stroke="#766f5f"/>
+    <path d="M246 160v192" stroke="#766f5f"/>
+    <path d="M290 160v192" stroke="#818cf8"/>
+    <path d="M334 184v144" stroke="#818cf8"/>
+    <path d="M378 216v80" stroke="#818cf8"/>
+  </g>
+</svg>

@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/vite-env.d.ts",
+    "src/app/pages/Pesanan.tsx",
+    "src/app/pages/orders/**/*.ts",
+    "src/app/pages/orders/**/*.tsx",
+    "src/app/components/ui/**/*.ts",
+    "src/app/components/ui/**/*.tsx",
+    "src/app/hooks/**/*.ts",
+    "src/app/hooks/**/*.tsx",
+    "src/app/data/**/*.ts",
+    "src/app/pages/master-data/context/**/*.ts",
+    "src/app/pages/master-data/context/**/*.tsx",
+    "src/app/pages/master-data/data.ts",
+    "src/app/services/**/*.ts",
+    "src/lib/**/*.ts",
+    "utils/supabase/info.tsx"
+  ]
+}

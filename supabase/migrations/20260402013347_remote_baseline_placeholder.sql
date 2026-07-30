@@ -1,0 +1,2 @@
+-- Placeholder migration to align local migration history with the remote project.
+-- The corresponding schema change was already applied directly on the remote project.

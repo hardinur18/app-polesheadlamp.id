@@ -1,0 +1,142 @@
+name: Supabase Functions Delivery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/supabase-functions-delivery.yml'
+      - 'supabase/functions/**'
+  pull_request:
+    branches:
+      - development
+      - main
+    paths:
+      - '.github/workflows/supabase-functions-delivery.yml'
+      - 'supabase/functions/**'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
+  workflow_dispatch:
+
+env:
+  SUPABASE_PROJECT_REF: dhnxwrteolnjdrxlmgwi
+  SUPABASE_FUNCTION_NAME: make-server-f781cd00
+  SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME: kirimdev-messaging-webhook
+
+jobs:
+  validate:
+    name: Validate Supabase Function
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check Supabase function entrypoint
+        run: deno check --node-modules-dir=auto supabase/functions/make-server-f781cd00/index.ts
+
+      - name: Check Kirimdev webhook entrypoint
+        run: deno check --node-modules-dir=auto supabase/functions/kirimdev-messaging-webhook/index.ts
+
+      - name: Publish validation summary
+        run: |
+          echo "### Supabase function validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Function: \`${{ env.SUPABASE_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Kirimdev webhook: \`${{ env.SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source entrypoint: \`supabase/functions/make-server-f781cd00/index.ts\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shared implementation: \`supabase/functions/server/index.tsx\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy_production:
+    name: Deploy Supabase Function
+    if: |
+      (github.event_name == 'push' && github.ref_name == 'main') ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+        github.event.action == 'closed' &&
+        github.event.pull_request.merged == true &&
+        github.event.pull_request.base.ref == 'main')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-supabase-functions
+      cancel-in-progress: true
+    environment:
+      name: production
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Require Supabase access token
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          KIRIMDEV_API_KEY: ${{ secrets.KIRIMDEV_API_KEY }}
+          KIRIMDEV_PHONE_NUMBER_ID: ${{ secrets.KIRIMDEV_PHONE_NUMBER_ID }}
+          KIRIMDEV_WEBHOOK_SECRET: ${{ secrets.KIRIMDEV_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error title=Missing secret::Add repository secret SUPABASE_ACCESS_TOKEN before deploying Supabase Functions."
+            exit 1
+          fi
+          if [ -z "$KIRIMDEV_API_KEY" ] || [ -z "$KIRIMDEV_PHONE_NUMBER_ID" ] || [ -z "$KIRIMDEV_WEBHOOK_SECRET" ]; then
+            echo "::error title=Missing Kirimdev secret::Add KIRIMDEV_API_KEY, KIRIMDEV_PHONE_NUMBER_ID, and KIRIMDEV_WEBHOOK_SECRET before deploying."
+            exit 1
+          fi
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Set Kirimdev runtime secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          KIRIMDEV_API_KEY: ${{ secrets.KIRIMDEV_API_KEY }}
+          KIRIMDEV_PHONE_NUMBER_ID: ${{ secrets.KIRIMDEV_PHONE_NUMBER_ID }}
+          KIRIMDEV_DISPLAY_PHONE_NUMBER: ${{ secrets.KIRIMDEV_DISPLAY_PHONE_NUMBER }}
+          KIRIMDEV_API_BASE_URL: ${{ secrets.KIRIMDEV_API_BASE_URL }}
+          KIRIMDEV_WEBHOOK_SECRET: ${{ secrets.KIRIMDEV_WEBHOOK_SECRET }}
+          KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS: ${{ secrets.KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS }}
+        run: |
+          supabase secrets set \
+            KIRIMDEV_API_KEY="$KIRIMDEV_API_KEY" \
+            KIRIMDEV_PHONE_NUMBER_ID="$KIRIMDEV_PHONE_NUMBER_ID" \
+            KIRIMDEV_DISPLAY_PHONE_NUMBER="${KIRIMDEV_DISPLAY_PHONE_NUMBER:-+62 857-8018-0989}" \
+            KIRIMDEV_API_BASE_URL="${KIRIMDEV_API_BASE_URL:-https://api.kirimdev.com/v1}" \
+            KIRIMDEV_WEBHOOK_SECRET="$KIRIMDEV_WEBHOOK_SECRET" \
+            KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS="${KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS:-300}" \
+            --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy production function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy "${SUPABASE_FUNCTION_NAME}" --project-ref "${SUPABASE_PROJECT_REF}" --use-api
+
+      - name: Deploy Kirimdev webhook function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy "${SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME}" --project-ref "${SUPABASE_PROJECT_REF}" --no-verify-jwt --use-api
+
+      - name: Publish deployment summary
+        run: |
+          echo "### Supabase production deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Project ref: \`${{ env.SUPABASE_PROJECT_REF }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Function: \`${{ env.SUPABASE_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Kirimdev webhook: \`${{ env.SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trigger: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"

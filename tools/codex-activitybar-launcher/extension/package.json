@@ -1,0 +1,77 @@
+{
+  "name": "codex-activitybar-launcher",
+  "publisher": "local",
+  "displayName": "Codex Activity Bar Launcher",
+  "description": "Adds a Codex icon to the left Activity Bar and provides quick actions to open the installed Codex extension.",
+  "version": "0.0.1",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:codexLauncher.home",
+    "onCommand:codexLauncher.openCodex",
+    "onCommand:codexLauncher.newAgent",
+    "onCommand:codexLauncher.openMenu"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codexLauncher.openCodex",
+        "title": "Open Codex",
+        "category": "Codex Launcher"
+      },
+      {
+        "command": "codexLauncher.newAgent",
+        "title": "New Codex Agent",
+        "category": "Codex Launcher"
+      },
+      {
+        "command": "codexLauncher.openMenu",
+        "title": "Open Codex Command Menu",
+        "category": "Codex Launcher"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codexLauncher",
+          "title": "Codex",
+          "icon": "resources/codex-activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "codexLauncher": [
+        {
+          "id": "codexLauncher.home",
+          "name": "Codex"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codexLauncher.home",
+        "contents": "Quick access to the installed Codex extension.\n\n[Open Codex Sidebar](command:codexLauncher.openCodex)\n\n[New Codex Agent](command:codexLauncher.newAgent)\n\n[Open Codex Command Menu](command:codexLauncher.openMenu)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codexLauncher.openCodex",
+          "when": "view == codexLauncher.home",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codexLauncher.newAgent",
+          "when": "view == codexLauncher.home",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  }
+}

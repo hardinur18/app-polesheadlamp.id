@@ -1,0 +1,43 @@
+{
+  "workbench.startupEditor": "none",
+  "workbench.sideBar.location": "left",
+  "workbench.activityBar.location": "default",
+  "workbench.secondarySideBar.defaultVisibility": "hidden",
+  "chatgpt.openOnStartup": true,
+  "workbench.panel.defaultLocation": "bottom",
+  "workbench.statusBar.visible": true,
+  "workbench.editor.enablePreview": false,
+  "workbench.tree.indent": 18,
+  "workbench.tree.renderIndentGuides": "always",
+  "explorer.compactFolders": false,
+  "explorer.openEditors.visible": 0,
+  "explorer.sortOrder": "type",
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, pnpm-lock.yaml, yarn.lock, bun.lockb",
+    "vite.config.ts": "postcss.config.mjs, index.html",
+    "README.md": "APP_OVERVIEW.md, PLATFORM_OVERVIEW.md, ATTRIBUTIONS.md"
+  },
+  "breadcrumbs.enabled": true,
+  "editor.minimap.enabled": false,
+  "editor.stickyScroll.enabled": true,
+  "editor.guides.indentation": true,
+  "editor.renderWhitespace": "selection",
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1200,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "terminal.integrated.defaultLocation": "panel",
+  "terminal.integrated.tabs.enabled": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "search.exclude": {
+    "**/dist": true,
+    "**/node_modules": true
+  },
+  "files.exclude": {
+    "**/.codex-*.log": true,
+    "**/dist": true
+  }
+}

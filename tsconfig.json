@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "/utils/*": ["utils/*"]
+    },
+    "allowJs": false,
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src", "utils"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dev-dist",
+    "supabase",
+    "scripts",
+    "File Review",
+    "guidelines"
+  ]
+}

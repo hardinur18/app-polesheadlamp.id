@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/vite-env.d.ts",
+    "src/lib/**/*.ts",
+    "src/app/pages/master-data/context/**/*.ts",
+    "src/app/pages/master-data/context/**/*.tsx",
+    "src/app/pages/master-data/data.ts",
+    "src/app/pages/leads/socialContact.ts",
+    "src/app/routing/**/*.ts",
+    "src/app/services/orderScheduleValidation.ts",
+    "src/app/services/internal/**/*.ts",
+    "src/app/services/conversationCenterService.ts",
+    "src/app/services/googleAdsLiveService.ts",
+    "src/app/services/liveAdsService.ts",
+    "src/app/services/masterDataService.ts",
+    "src/app/services/orderPaymentService.ts",
+    "src/app/services/tiktokAdsLiveService.ts",
+    "utils/supabase/info.tsx"
+  ]
+}

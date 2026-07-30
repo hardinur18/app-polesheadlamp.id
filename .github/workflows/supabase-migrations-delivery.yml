@@ -1,0 +1,146 @@
+name: Supabase Migrations Delivery
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/supabase-migrations-delivery.yml'
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+    inputs:
+      migration_file:
+        description: Optional migration SQL file to apply when DB password is unavailable.
+        required: false
+        type: string
+
+env:
+  SUPABASE_PROJECT_REF: dhnxwrteolnjdrxlmgwi
+
+jobs:
+  deploy_production:
+    name: Apply Supabase Migrations
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-supabase-migrations
+      cancel-in-progress: true
+    environment:
+      name: production
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check Supabase secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::notice title=Missing secret::Add repository secret SUPABASE_ACCESS_TOKEN before deploying Supabase migrations."
+            echo "HAS_SUPABASE_ACCESS_TOKEN=false" >> "$GITHUB_ENV"
+            echo "### Supabase migrations deployment" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Status: skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Reason: repository secret \`SUPABASE_ACCESS_TOKEN\` is missing." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "HAS_SUPABASE_ACCESS_TOKEN=true" >> "$GITHUB_ENV"
+
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::notice title=Missing secret::SUPABASE_DB_PASSWORD is missing; applying changed migration SQL through Supabase Management API."
+            echo "HAS_SUPABASE_DB_PASSWORD=false" >> "$GITHUB_ENV"
+          else
+            echo "HAS_SUPABASE_DB_PASSWORD=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Supabase CLI
+        if: env.HAS_SUPABASE_ACCESS_TOKEN == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Initialize Supabase project metadata
+        if: env.HAS_SUPABASE_ACCESS_TOKEN == 'true'
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            supabase init --yes
+          fi
+
+      - name: Link project
+        if: env.HAS_SUPABASE_ACCESS_TOKEN == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ -n "$SUPABASE_DB_PASSWORD" ]; then
+            supabase link --project-ref "${SUPABASE_PROJECT_REF}" --password "${SUPABASE_DB_PASSWORD}" --yes
+          else
+            supabase link --project-ref "${SUPABASE_PROJECT_REF}" --yes
+          fi
+
+      - name: Apply production migrations with db push
+        if: env.HAS_SUPABASE_ACCESS_TOKEN == 'true' && env.HAS_SUPABASE_DB_PASSWORD == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --linked --password "${SUPABASE_DB_PASSWORD}" --yes
+
+      - name: Apply changed migration SQL through Management API
+        if: env.HAS_SUPABASE_ACCESS_TOKEN == 'true' && env.HAS_SUPABASE_DB_PASSWORD == 'false'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          MANUAL_MIGRATION_FILE: ${{ github.event.inputs.migration_file }}
+        run: |
+          if [ -n "$MANUAL_MIGRATION_FILE" ]; then
+            changed_files="$MANUAL_MIGRATION_FILE"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            before_sha="${{ github.event.before }}"
+            head_sha="${{ github.sha }}"
+
+            if [ "$before_sha" = "0000000000000000000000000000000000000000" ]; then
+              changed_files="$(git ls-tree -r --name-only "$head_sha" -- 'supabase/migrations/*.sql')"
+            else
+              changed_files="$(git diff --name-only "$before_sha" "$head_sha" -- 'supabase/migrations/*.sql')"
+            fi
+          else
+            changed_files=""
+          fi
+
+          if [ -z "$changed_files" ]; then
+            echo "No migration SQL files selected for fallback apply."
+            exit 0
+          fi
+
+          echo "Applying migration SQL files:"
+          printf '%s\n' "$changed_files"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if [ ! -f "$file" ]; then
+              echo "::error title=Migration file not found::$file"
+              exit 1
+            fi
+            supabase db query --linked --file "$file"
+          done <<EOF
+          $changed_files
+          EOF
+
+      - name: Publish deployment summary
+        if: env.HAS_SUPABASE_ACCESS_TOKEN == 'true'
+        run: |
+          echo "### Supabase migrations deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Project ref: \`${{ env.SUPABASE_PROJECT_REF }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trigger: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${HAS_SUPABASE_DB_PASSWORD}" = "true" ]; then
+            echo "- Mode: \`supabase db push\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Mode: changed SQL files via \`supabase db query --linked\`" >> "$GITHUB_STEP_SUMMARY"
+          fi

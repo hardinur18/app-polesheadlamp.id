@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <g fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.15">
+    <!-- speech bubble with lines -->
+    <rect x="22" y="28" width="84" height="48" rx="12"/>
+    <path d="M44 76l-4 12 16-12z"/>
+    <line x1="34" y1="46" x2="92" y2="46"/>
+    <line x1="34" y1="58" x2="78" y2="58"/>
+    <!-- smiley -->
+    <circle cx="188" cy="50" r="22"/>
+    <path d="M178 58q10 9 20 0"/>
+    <circle cx="180" cy="45" r="2" fill="#64748b" stroke="none"/>
+    <circle cx="196" cy="45" r="2" fill="#64748b" stroke="none"/>
+    <!-- typing dots bubble -->
+    <rect x="146" y="150" width="74" height="42" rx="12"/>
+    <path d="M168 192l-4 12 16-12z"/>
+    <circle cx="168" cy="171" r="2.6" fill="#64748b" stroke="none"/>
+    <circle cx="183" cy="171" r="2.6" fill="#64748b" stroke="none"/>
+    <circle cx="198" cy="171" r="2.6" fill="#64748b" stroke="none"/>
+    <!-- image icon -->
+    <rect x="20" y="150" width="56" height="46" rx="10"/>
+    <circle cx="35" cy="166" r="4"/>
+    <path d="M24 192l16-16 10 10 8-7 16 13"/>
+  </g>
+</svg>
