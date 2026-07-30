@@ -13,6 +13,8 @@ Dokumen ini adalah arah migrasi UI/UX Polesheadlamp.id v2. Referensi visual dan 
 
 - Layout padat dan mudah discan, bukan landing page.
 - Tabel, filter, form, modal, badge status, dan empty/loading state harus konsisten.
+- Warna utama UI harus mengikuti logo Poles Headlamp.ID: biru logo sebagai primary, cyan/biru terang sebagai highlight, dan kuning logo hanya sebagai aksen kecil. Hindari gradient ungu-biru generic untuk button, focus ring, dan state utama.
+- Input form harus netral dan bersih; jangan biarkan autofill/browser memberi fill biru muda yang terasa seperti field error/selected state.
 - Font size stabil memakai token, tidak mengikuti viewport width.
 - Sidebar dikelompokkan berdasarkan alur kerja: cari customer, follow up, order, eksekusi teknisi, finance, admin.
 - Komponen shared diperbaiki lebih dulu supaya banyak halaman ikut rapi tanpa rewrite logic.

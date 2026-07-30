@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  Search, Plus, Filter, Edit, Trash2, 
+import {
+  Plus, Edit, Trash2,
   MapPin, ExternalLink, Building2, Clock, AlertCircle
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../../../components/ui/table';
+import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
+import { DataTable, TableActionCell, TableActionHeader, TableText } from '../../../components/ui/data-table';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
@@ -116,57 +114,56 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
             </Badge>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="tablePanel">
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6 min-w-[150px]">Nama Cabang</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 min-w-[200px]">Lokasi</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Koordinat</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center w-[100px]">Maps</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 min-w-[150px]">Coverage</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Status</TableHead>
-                  {(canEdit || canDelete) && <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pr-6">Aksi</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <div className="hidden md:block">
+          <DataTable actionWidth={112} cellY={12} minWidth={1180} rowMinHeight={66}>
+            <table>
+              <colgroup>
+                <col style={{ width: 230 }} />
+                <col style={{ width: 300 }} />
+                <col style={{ width: 190 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 150 }} />
+                <col style={{ width: 130 }} />
+                {(canEdit || canDelete) && <col style={{ width: 112 }} />}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Nama Cabang</th>
+                  <th>Lokasi</th>
+                  <th>Koordinat</th>
+                  <th>Maps</th>
+                  <th>Coverage</th>
+                  <th>Status</th>
+                  {(canEdit || canDelete) && <TableActionHeader />}
+                </tr>
+              </thead>
+              <tbody>
                 {data.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
-                    <TableCell className="py-4 pl-6">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-slate-900 dark:text-slate-200 text-sm">{item.name}</span>
-                        {item.code && <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">{item.code}</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4">
-                      <div className="flex flex-col max-w-[250px]">
-                        <span className="font-medium text-slate-900 dark:text-slate-200 text-sm">{item.city}</span>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{item.address || '-'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-center">
+                  <tr key={item.id}>
+                    <td>
+                      <TableText primary={item.name} secondary={item.code || '-'} />
+                    </td>
+                    <td>
+                      <TableText primary={item.city} secondary={item.address || '-'} />
+                    </td>
+                    <td>
                        {item.lat && item.lng ? (
-                         <div className="flex flex-col items-center">
-                            <span className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 inline-block">
-                                {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
-                            </span>
-                         </div>
+                          <TableText primary={`${item.lat.toFixed(5)}, ${item.lng.toFixed(5)}`} />
                        ) : (
-                         <span className="text-xs text-slate-400 italic">-</span>
+                         <TableText primary="-" />
                        )}
-                    </TableCell>
-                    <TableCell className="py-4 text-center">
+                    </td>
+                    <td>
                       {item.mapsUrl ? (
-                        <div className="flex justify-center">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <a 
                                 href={item.mapsUrl} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="h-8 w-8 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:text-blue-700 transition-colors"
+                                className="iconButton ghostButton mx-auto"
                               >
                                 <MapPin className="h-4 w-4" />
                               </a>
@@ -175,20 +172,14 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                               <p>Buka di Google Maps</p>
                             </TooltipContent>
                           </Tooltip>
-                        </div>
                       ) : (
-                        <span className="text-slate-400 dark:text-slate-600 text-xs">-</span>
+                        <TableText primary="-" />
                       )}
-                    </TableCell>
-                    <TableCell className="py-4">
-                      <div className="flex items-center gap-2">
-                          <div className={cn("w-2 h-2 rounded-full", item.radius ? "bg-indigo-400" : item.geofence ? "bg-purple-400" : "bg-slate-300")} />
-                          <span className="text-sm text-slate-600 dark:text-slate-400">
-                            {item.radius ? `${item.radius} KM` : (item.geofence ? 'Geofence' : '-')}
-                          </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-center">
+                    </td>
+                    <td>
+                      <TableText primary={item.radius ? `${item.radius} KM` : (item.geofence ? 'Geofence' : '-')} />
+                    </td>
+                    <td>
                       <div className="flex flex-col items-center gap-1">
                         <Badge 
                           variant="outline"
@@ -206,21 +197,20 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                              <span className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 Est. {new Date(item.openingDate).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
                              </span>
-                        )}
+                          )}
                       </div>
-                    </TableCell>
+                    </td>
                     {(canEdit || canDelete) && (
-                      <TableCell className="py-4 pr-6 text-right">
-                        <div className="flex justify-end gap-1">
+                      <TableActionCell>
                           {canEdit && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30" onClick={() => openEdit(item)}>
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label="Edit cabang">
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
                           {canDelete && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30">
+                                <Button variant="ghost" size="icon" aria-label="Hapus cabang">
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -240,13 +230,13 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
-                        </div>
-                      </TableCell>
+                      </TableActionCell>
                     )}
-                  </TableRow>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
+          </DataTable>
           </div>
 
           {/* Mobile List View */}
@@ -318,21 +308,17 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
 
   return (
     <div className="space-y-6">
-      {/* Search Toolbar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <Input 
-              placeholder="Cari cabang..." 
-              className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm"
+      <ControlPanel aria-label="Filter cabang">
+        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+            <SearchBox
+              placeholder="Cari cabang atau kota..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-          </div>
 
           {canCreate && (
             <Button 
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 dark:shadow-none w-full sm:w-auto"
+              className="w-full sm:w-auto sm:min-w-[220px]"
               onClick={() => {
                 setEditingItem(null);
                 setIsAddOpen(true);
@@ -341,7 +327,8 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
               <Plus className="mr-2 h-4 w-4" /> Tambah Cabang
             </Button>
           )}
-      </div>
+        </ControlRow>
+      </ControlPanel>
 
       {/* Render Sections */}
       {filteredData.length > 0 ? (

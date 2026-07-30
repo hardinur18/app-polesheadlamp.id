@@ -1,13 +1,9 @@
 import React, { useState } from 'react';
 import {
-  Search, Plus, Edit, Trash2,
+  Plus, Edit, Trash2,
   LucideIcon, CheckCircle2, XCircle
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../../../components/ui/table';
 import {
   Select,
   SelectContent,
@@ -30,6 +26,9 @@ import {
   AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog"
 import { Badge } from '../../../components/ui/badge';
+import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
+import { DataTable, TableActionCell, TableActionHeader, TableText } from '../../../components/ui/data-table';
+import { OperationalEmptyState, OperationalTableCard } from '../../../components/ui/operational-page';
 import { Role } from '../data';
 import { toast } from 'sonner';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -239,44 +238,48 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
             </Badge>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <OperationalTableCard>
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                  <TableHead className="w-[72px] font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6 text-center">No</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6 min-w-[150px]">Nama {title}</TableHead>
+          <div className="hidden md:block">
+            <DataTable actionWidth={112} cellY={12} minWidth={columns?.length ? 980 + columns.length * 120 : 760} rowMinHeight={64}>
+            <table>
+              <colgroup>
+                <col style={{ width: 72 }} />
+                <col style={{ width: 260 }} />
+                {columns?.map((_, idx) => <col key={idx} style={{ width: 220 }} />)}
+                <col style={{ width: 130 }} />
+                {(canEdit || canDelete) && <col style={{ width: 112 }} />}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>Nama {title}</th>
                   {columns?.map((col, idx) => (
-                    <TableHead key={idx} className={`font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 ${col.width || ''} min-w-[150px]`}>
-                      {col.header}
-                    </TableHead>
+                    <th key={idx}>{col.header}</th>
                   ))}
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Status</TableHead>
-                  {(canEdit || canDelete) && <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pr-6">Aksi</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+                  <th className="text-center">Status</th>
+                  {(canEdit || canDelete) && <TableActionHeader />}
+                </tr>
+              </thead>
+              <tbody>
                 {rows.map(({ item, rowNumber }) => (
-                  <TableRow 
+                  <tr
                     key={item.id} 
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors cursor-pointer"
+                    className="cursor-pointer"
                     onClick={() => setViewingItem(item)}
                   >
-                    <TableCell className="py-4 pl-6 text-center text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <td className="text-center">
                       {rowNumber}
-                    </TableCell>
-                    <TableCell className="py-4 pl-6 font-medium text-slate-900 dark:text-slate-200 text-sm">
-                      <div className="flex items-center space-x-3">
-                        <span className="font-semibold">{item.name || item.bankName}</span>
-                      </div>
-                    </TableCell>
+                    </td>
+                    <td>
+                      <TableText primary={item.name || item.bankName} />
+                    </td>
                     {columns?.map((col, idx) => (
-                      <TableCell key={idx} className="py-4 text-slate-600 dark:text-slate-400 text-sm">
-                        {col.render ? col.render(item) : item[col.accessor]}
-                      </TableCell>
+                      <td key={idx}>
+                        <TableText primary={col.render ? col.render(item) : item[col.accessor]} />
+                      </td>
                     ))}
-                    <TableCell className="py-4 text-center">
+                    <td>
                       <Badge 
                         variant="outline"
                         className={item.status === 'active' || !item.status
@@ -285,19 +288,18 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                       >
                         {item.status === 'active' || !item.status ? 'AKTIF' : 'NON AKTIF'}
                       </Badge>
-                    </TableCell>
+                    </td>
                     {(canEdit || canDelete) && (
-                      <TableCell className="py-4 pr-6 text-right">
-                        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <TableActionCell onClick={(e) => e.stopPropagation()}>
                           {canEdit && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/30" onClick={() => openEdit(item)}>
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label={`Edit ${title}`}>
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
                           {canDelete && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/30">
+                                <Button variant="ghost" size="icon" aria-label={`Hapus ${title}`}>
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -318,13 +320,13 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
-                        </div>
-                      </TableCell>
+                      </TableActionCell>
                     )}
-                  </TableRow>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
+            </DataTable>
           </div>
 
           {/* Mobile Card List */}
@@ -423,38 +425,34 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                 </div>
              ))}
           </div>
-        </div>
+        </OperationalTableCard>
       </div>
     );
   };
 
   return (
     <div className="space-y-6">
-      {/* Search Toolbar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <Input 
+      <ControlPanel aria-label={`Filter ${title}`}>
+        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+            <SearchBox
               placeholder={`Cari ${title}...`}
-              className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-        </div>
 
         {canAdd && (
             <div className="flex gap-2 w-full sm:w-auto">
               {onImport && (
                 <Button 
                   variant="outline"
-                  className="border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 w-full sm:w-auto"
+                  className="w-full sm:w-auto"
                   onClick={onImport}
                 >
                   Import Data
                 </Button>
               )}
               <Button 
-                className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 dark:shadow-none w-full sm:w-auto"
+                className="w-full sm:w-auto sm:min-w-[220px]"
                 onClick={() => {
                   setEditingItem(null);
                   setIsAddOpen(true);
@@ -464,15 +462,16 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
               </Button>
             </div>
         )}
-      </div>
+        </ControlRow>
+      </ControlPanel>
 
       {filteredData.length > 0 ? (
           <>
             {renderSection(activeItems, `${title} Aktif`, 'active', activeTotal)}
             {renderSection(inactiveItems, `${title} Non-Aktif`, 'inactive', inactiveTotal)}
 
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            <div className="surfacePanel flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-[length:var(--text-xs)] font-semibold text-[color:var(--muted)]">
                 Menampilkan {pageStartIndex + 1}-{pageEndIndex} dari {filteredData.length} data
               </div>
 
@@ -482,7 +481,6 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   >
@@ -497,7 +495,6 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                     disabled={currentPage === totalPages || totalPages === 0}
                     onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                   >
@@ -506,12 +503,12 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tampilkan</span>
+                  <span className="text-xs font-semibold text-[color:var(--muted)]">Tampilkan</span>
                   <Select
                     value={String(itemsPerPage)}
                     onValueChange={(value) => setItemsPerPage(Number(value))}
                   >
-                    <SelectTrigger className="h-8 w-[140px] rounded-md border-slate-200 bg-white text-xs shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <SelectTrigger className="h-8 w-[140px] rounded-md text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -527,15 +524,13 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
             </div>
           </>
       ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-               <div className="p-4 rounded-full bg-slate-50 dark:bg-slate-900 mb-4">
-                   <Icon className="w-8 h-8 text-slate-300" />
-               </div>
-               <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">Tidak ada data {title}</h3>
-               <p className="text-slate-500 text-sm max-w-xs mx-auto mt-1">
-                   {search ? 'Tidak ditemukan data yang sesuai dengan pencarian Anda.' : `Belum ada data ${title} yang ditambahkan.`}
-               </p>
-          </div>
+          <OperationalTableCard className="border-dashed">
+            <OperationalEmptyState
+              icon={Icon}
+              title={`Tidak ada data ${title}`}
+              description={search ? 'Tidak ditemukan data yang sesuai dengan pencarian Anda.' : `Belum ada data ${title} yang ditambahkan.`}
+            />
+          </OperationalTableCard>
       )}
 
       {/* Add/Edit Modal */}

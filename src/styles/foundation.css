@@ -2988,6 +2988,252 @@
   }
 }
 
+/* Master Data final surface polish */
+.opsPageShell {
+  padding-top: 30px;
+}
+
+.opsPageShell > .uiTabs {
+  gap: 18px;
+}
+
+.masterDataTabs {
+  min-height: 44px;
+  gap: 5px;
+  padding: 5px;
+  border-color: rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.82);
+  box-shadow: none;
+}
+
+.masterDataTab {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 13px;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 740;
+}
+
+.masterDataTab svg {
+  width: 16px;
+  height: 16px;
+  color: #8fa0b7;
+  stroke-width: 2;
+}
+
+.masterDataTab:hover:not(:disabled) {
+  color: #1d2942;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.masterDataTab[data-state="active"] {
+  border-color: rgba(37, 99, 235, 0.13);
+  color: var(--blue-ink);
+  background: #ffffff;
+  box-shadow: 0 12px 24px -22px rgba(37, 99, 235, 0.45);
+}
+
+.masterDataTab[data-state="active"] svg {
+  color: var(--blue-ink);
+}
+
+.controlPanel {
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px;
+  border-color: rgba(15, 23, 42, 0.065);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 18px 42px -36px rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(12px) saturate(130%);
+}
+
+.controlRow {
+  gap: 12px;
+}
+
+.searchBox,
+.selectBox,
+.filterSelectBox {
+  min-height: 44px;
+  border-color: rgba(15, 23, 42, 0.11);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 7px -7px rgba(15, 23, 42, 0.24);
+}
+
+.searchBox input,
+.selectBox select {
+  min-height: 40px;
+  color: #111827;
+  font-size: 0.9rem;
+  font-weight: 680;
+}
+
+.searchBox svg,
+.selectBox svg,
+.filterSelectBox svg {
+  color: #8fa0b7;
+  stroke-width: 2;
+}
+
+.searchBox:focus-within,
+.selectBox:focus-within,
+.filterSelectBox:focus-within {
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.07);
+}
+
+.tablePanel {
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.075);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 20px 46px -40px rgba(15, 23, 42, 0.36);
+}
+
+.tableScroller {
+  background: #ffffff;
+  cursor: default;
+  scrollbar-width: thin;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+.tableScroller table,
+.uiDataTableScroller > table {
+  font-size: 0.84rem;
+}
+
+.tableScroller th {
+  height: 42px;
+  color: #738197;
+  background: #f5f7fb;
+  font-size: 0.68rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+}
+
+.tableScroller td {
+  border-top-color: rgba(15, 23, 42, 0.055);
+  color: #526179;
+  font-size: 0.84rem;
+  font-weight: 560;
+}
+
+.tableScroller tbody tr {
+  background: #ffffff;
+}
+
+.tableScroller tbody tr:hover {
+  background: #f8fbff;
+}
+
+.uiDataTableScroller td strong,
+.uiDataTableScroller .tableTextPrimary {
+  color: #111827;
+  font-size: 0.84rem;
+  font-weight: 760;
+}
+
+.uiDataTableScroller td > span:not([class]),
+.uiDataTableScroller td small,
+.uiDataTableScroller .tableTextSecondary {
+  color: #738197;
+  font-size: 0.74rem;
+  font-weight: 620;
+}
+
+.tableActionHeader,
+.tableActionCell {
+  text-align: center;
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.rowActions [data-slot="button"],
+.tableScroller .iconButton,
+.tableScroller .ghostButton.iconButton {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 12px;
+  color: #64748b;
+  background: transparent;
+  box-shadow: none;
+}
+
+.rowActions [data-slot="button"]:hover,
+.tableScroller .iconButton:hover,
+.tableScroller .ghostButton.iconButton:hover {
+  color: var(--blue-ink);
+  background: rgba(37, 99, 235, 0.08);
+  transform: translateY(-1px);
+}
+
+.tablePanel .rounded-lg,
+.tablePanel .rounded-sm {
+  border-radius: 999px;
+}
+
+.tablePanel [class*="uppercase"][class*="text-"] {
+  border-radius: 999px;
+  letter-spacing: 0.025em;
+}
+
+@media (max-width: 767px) {
+  .opsPageShell {
+    padding: 22px 14px 96px;
+  }
+
+  .topbar {
+    margin-bottom: 18px;
+  }
+
+  .topbar h1 {
+    font-size: 1.72rem;
+  }
+
+  .topbar p {
+    margin-top: 9px;
+    font-size: 0.88rem;
+  }
+
+  .masterDataTabs {
+    min-height: 42px;
+    padding: 4px;
+    border-radius: 16px;
+  }
+
+  .masterDataTab {
+    min-height: 32px;
+    padding: 0 11px;
+    font-size: 0.78rem;
+  }
+
+  .controlPanel {
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .controlRow {
+    grid-template-columns: 1fr;
+  }
+
+  .tablePanel {
+    border-radius: 18px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace > *,
   .opsPageShell > *,

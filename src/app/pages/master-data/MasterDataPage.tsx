@@ -3,6 +3,7 @@ import {
   Building2, Users, FileText, Database, CreditCard, Wrench, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { OperationalPageHeader, OperationalPageShell } from '../../components/ui/operational-page';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { AdAccountTab } from './tabs/AdAccountTab';
@@ -139,15 +140,13 @@ const MasterDataContent: React.FC<{
   ];
 
   return (
-    <div className="p-6 w-full max-w-[1600px] mx-auto transition-colors duration-300">
-      <div className="flex flex-col space-y-6">
-        {/* Header Section */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Master Data</h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Kelola seluruh data referensi sistem RHI di sini.</p>
-          </div>
-        </div>
+    <OperationalPageShell>
+      <OperationalPageHeader
+        title="Master Data"
+        subtitle="Kelola data referensi operasional RHI untuk cabang, area, layanan, iklan, pembayaran, biaya, dan role."
+        eyebrow="Data & Admin"
+        icon={Database}
+      />
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
           <div className="w-full min-w-0 overflow-x-auto pb-1 scrollbar-hide">
@@ -291,13 +290,12 @@ const MasterDataContent: React.FC<{
           </TabsContent>
 
         </Tabs>
-      </div>
 
       <VehicleImportModal 
         isOpen={isImportVehicleOpen}
         onClose={() => setIsImportVehicleOpen(false)}
         onConfirm={handleImportVehicle}
       />
-    </div>
+    </OperationalPageShell>
   );
 };

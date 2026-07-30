@@ -5,12 +5,12 @@
   --font-display: 'Plus Jakarta Sans', 'Poppins', ui-sans-serif, system-ui, sans-serif;
   
   /* Custom Font Sizes for consistent hierarchy */
-  --text-h1: 2rem;
-  --text-h2: 1.35rem;
-  --text-h3: 1.12rem;
-  --text-p: 0.94rem;
-  --text-small: 0.78rem;
-  --text-xs: 0.68rem;
+  --text-h1: var(--text-3xl, 2rem);
+  --text-h2: var(--text-xl, 1.35rem);
+  --text-h3: var(--text-lg, 1.12rem);
+  --text-p: var(--text-body, 0.94rem);
+  --text-small: var(--text-xs, 0.78rem);
+  --text-xs: var(--text-2xs, 0.68rem);
 }
 
 /* App shell sizing */
@@ -25,6 +25,7 @@ html, body, #root {
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.55;
+  text-rendering: optimizeLegibility;
 }
 
 * {
