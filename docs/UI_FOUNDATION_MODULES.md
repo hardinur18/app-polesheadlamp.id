@@ -132,12 +132,16 @@ Catatan:
 
 ## Module: Control Panel
 
-Status: dipakai di Master Data, siap dipakai ulang.
+Status: parity 1:1 dengan Management Internal.
 
 Dipakai oleh:
 - `src/app/components/ui/control-panel.tsx`
 - `src/app/pages/master-data/tabs/BranchesTab.tsx`
+- `src/app/pages/master-data/tabs/AreasTab.tsx`
+- `src/app/pages/master-data/tabs/ServicesTab.tsx`
 - `src/app/pages/master-data/tabs/GenericMasterTab.tsx`
+- `src/app/pages/master-data/tabs/AdAccountTab.tsx`
+- `src/app/pages/master-data/tabs/OperationalExpenseCategoriesTab.tsx`
 
 Komponen/class:
 - `ControlPanel`
@@ -152,6 +156,8 @@ Komponen/class:
 
 Catatan:
 - Untuk search/filter/action toolbar yang berada sebelum table.
+- Panel mengikuti Management Internal: padding `16px`, radius `20px`, gap row `10px`, control height `48px`.
+- Search box memakai icon `17px`, input `0.94rem`, weight `650`, focus ring token foundation.
 - Panel harus ringan, tidak heavy card.
 
 ## Module: Data Table

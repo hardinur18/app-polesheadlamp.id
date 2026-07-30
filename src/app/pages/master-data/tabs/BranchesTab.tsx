@@ -324,7 +324,7 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                 setIsAddOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" /> Tambah Cabang
+              <Plus /> Tambah Cabang
             </Button>
           )}
         </ControlRow>

@@ -3656,26 +3656,62 @@ body {
 }
 
 .controlRow {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: center;
   gap: 10px;
 }
 
 .searchBox,
 .selectBox,
 .filterSelectBox {
+  display: flex;
+  min-width: 0;
   min-height: 48px;
+  align-items: center;
+  gap: 10px;
   padding: 0 14px;
+  border: 1px solid var(--line-strong);
   border-color: var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--field-bg);
+  color: var(--muted);
   box-shadow: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .searchBox input,
 .selectBox select {
+  width: 100%;
+  min-width: 0;
   min-height: 42px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
   font-size: 0.94rem;
   font-weight: 650;
+}
+
+.searchBox input::placeholder {
+  color: var(--muted-2);
+}
+
+.searchBox svg,
+.selectBox svg,
+.filterSelectBox svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  color: var(--muted);
+  stroke-width: 2.15;
+}
+
+.searchBox:focus-within,
+.selectBox:focus-within,
+.filterSelectBox:focus-within {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: var(--ring);
 }
 
 .tablePanel {

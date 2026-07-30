@@ -458,7 +458,7 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                   setIsAddOpen(true);
                 }}
               >
-                <Plus className="mr-2 h-4 w-4" /> Tambah {title}
+                <Plus /> Tambah {title}
               </Button>
             </div>
         )}

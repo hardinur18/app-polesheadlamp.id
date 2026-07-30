@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
-  Search, Plus, Filter, Edit, Trash2, 
+  Plus, Filter, Edit, Trash2,
   Monitor, CheckCircle2, XCircle, UserCheck, Users
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
+import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import { 
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../../../components/ui/table';
@@ -1125,30 +1125,28 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   return (
     <div className="space-y-6">
       {/* Search Toolbar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <Input 
-              placeholder="Cari akun atau advertiser..." 
-              className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+      <ControlPanel aria-label="Filter akun iklan">
+        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+          <SearchBox
+            placeholder="Cari akun atau advertiser..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
 
           {canCreate && (
             <Button 
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 dark:shadow-none w-full sm:w-auto"
+              className="w-full sm:w-auto sm:min-w-[220px]"
               onClick={() => {
                 setEditingItem(null);
                 setIsAddOpen(true);
                 void refreshLiveRegistries();
               }}
             >
-              <Plus className="mr-2 h-4 w-4" /> Tambah Akun
+              <Plus /> Tambah Akun
             </Button>
               )}
-      </div>
+        </ControlRow>
+      </ControlPanel>
 
       {liveMetaError ? (
         <div className={cn(

@@ -6,7 +6,6 @@ import {
   Plus,
   ReceiptText,
   RefreshCw,
-  Search,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,7 +15,7 @@ import { usePermissions } from '@/app/hooks/usePermissions';
 import { DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS } from '@/app/data/operationalExpenseAccounts';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
+import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import { Label } from '../../../components/ui/label';
 import {
   AlertDialog,
@@ -45,7 +44,6 @@ import {
 } from '../../../components/ui/table';
 import {
   OperationalEmptyState,
-  OperationalFilterPanel,
   OperationalKpiCard,
   OperationalKpiGrid,
   OperationalPageHeader,
@@ -286,20 +284,18 @@ export function OperationalExpenseCategoriesTab() {
         </OperationalKpiGrid>
       </OperationalPageHeader>
 
-      <OperationalFilterPanel className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input
-            className="pl-9"
+      <ControlPanel aria-label="Filter kategori biaya">
+        <ControlRow className="sm:grid-cols-[minmax(280px,0.9fr)_max-content]">
+          <SearchBox
             placeholder="Cari akun..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-        </div>
         <Badge variant="outline" className="w-fit">
           {filteredItems.length.toLocaleString('id-ID')} data
         </Badge>
-      </OperationalFilterPanel>
+        </ControlRow>
+      </ControlPanel>
 
       {loading ? (
         <OperationalTableCard className="flex h-40 items-center justify-center">
