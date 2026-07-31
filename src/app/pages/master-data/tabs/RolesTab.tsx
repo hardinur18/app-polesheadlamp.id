@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, RotateCcw, Save, Check, Loader2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../../../components/ui/table';
+import { DataTable } from '../../../components/ui/data-table';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { Switch } from '../../../components/ui/switch';
 import { Badge } from '../../../components/ui/badge';
+import { AlertDialog } from '../../../components/ui/alert-dialog';
+import { MasterDataConfirmContent } from '../../../components/ui/master-data-ui';
 import { Role, MOCK_ROLES } from '../data';
 import { toast } from 'sonner';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -24,6 +24,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedMobileRole, setSelectedMobileRole] = useState<string>('Admin PIC');
+  const [isResetOpen, setIsResetOpen] = useState(false);
 
   // Sync local state with context when loaded
   useEffect(() => {
@@ -70,11 +71,10 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
   };
 
   const handleReset = () => {
-      if (confirm("Kembalikan semua pengaturan permission ke default sistem?")) {
-        setLocalPermissions(DEFAULT_ROLE_PERMISSIONS);
-        setIsDirty(true);
-        toast.info("Permission dikembalikan ke default (Klik Simpan untuk menerapkan)");
-      }
+      setLocalPermissions(DEFAULT_ROLE_PERMISSIONS);
+      setIsDirty(true);
+      setIsResetOpen(false);
+      toast.info("Permission dikembalikan ke default (Klik Simpan untuk menerapkan)");
   };
 
   const canEdit = hasPermission('role_permissions.manage');
@@ -99,11 +99,11 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
     <div className="space-y-4 lg:space-y-6">
       
       {/* Header Section */}
-      <div className="bg-white dark:bg-slate-900 p-4 lg:p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="masterDataRoleHero">
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
               <div className="space-y-2 max-w-lg">
-                  <h2 className="text-xl lg:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Manajemen Role & Akses</h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <h2>Manajemen Role & Akses</h2>
+                  <p>
                     Atur hak akses (permission) aplikasi untuk setiap role pengguna.
                     Perubahan akan mempengaruhi semua user dengan role terkait.
                   </p>
@@ -114,17 +114,18 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
                  <div className="flex items-center gap-2 pt-2 md:pt-0 w-full md:w-auto">
                     <Button 
                       variant="outline" 
-                      onClick={handleReset} 
-                      className="border-slate-200 text-slate-600 hover:bg-slate-50 h-10 px-4 flex-1 md:flex-none"
+                      onClick={() => setIsResetOpen(true)}
+                      icon={<RotateCcw className="h-4 w-4" />}
+                      className="flex-1 md:flex-none"
                     >
-                        <RotateCcw className="w-4 h-4 mr-2" />
                         Reset Default
                     </Button>
                     <Button 
                       onClick={handleSave} 
                       disabled={!isDirty || isSaving}
                       size="icon"
-                      className={`h-10 w-10 shrink-0 rounded-lg shadow-sm transition-all ${isDirty ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                      className="shrink-0"
+                      aria-label="Simpan permission"
                     >
                       {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     </Button>
@@ -137,7 +138,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
       <div className="xl:hidden space-y-4">
           
           {/* Role Selector Tabs */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4">
+          <div className="masterDataRoleSelector p-4">
              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 block">
                 Pilih Role untuk Diedit
              </label>
@@ -148,12 +149,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
                     <button
                         key={role.id}
                         onClick={() => setSelectedMobileRole(role.name)}
-                        className={`
-                          px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all border
-                          ${isActive 
-                              ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-700/40 shadow-sm ring-1 ring-indigo-200' 
-                              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}
-                        `}
+                        className={`masterDataRoleChip ${isActive ? 'isActive' : ''}`}
                     >
                         {role.name}
                     </button>
@@ -163,7 +159,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
           </div>
 
           {/* Permission Cards by Group */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="masterDataRolePanel">
               <div className="p-4 border-b border-slate-100 bg-indigo-50/30 dark:bg-indigo-900/20">
                 <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-indigo-600" />
@@ -206,7 +202,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
                                                 checked={isChecked}
                                                 disabled={isOwner || !canEdit}
                                                 onCheckedChange={() => togglePermission(selectedMobileRole, perm.key)}
-                                                className="data-[state=checked]:bg-indigo-600 scale-90"
+                                                className="data-[state=checked]:bg-primary scale-90"
                                             />
                                         </div>
                                     </div>
@@ -220,70 +216,87 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
       </div>
 
       {/* DESKTOP VIEW: Matrix Table (Only visible on XL screens > 1280px) */}
-      <div className="hidden xl:block bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="masterDataMatrixPanel hidden xl:block">
         <div className="p-6 border-b border-slate-100">
           <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-lg">Permission Matrix</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Tabel matriks lengkap untuk membandingkan hak akses antar role.
           </p>
         </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-slate-50/50">
-              <TableRow className="border-b border-slate-100">
-                <TableHead className="w-[300px] font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6">Fitur / Permission</TableHead>
+        <DataTable
+          cellY={12}
+          columns={[320, ...MOCK_ROLES.map(() => 108)]}
+          minWidth={320 + MOCK_ROLES.length * 108}
+          rowMinHeight={66}
+        >
+          <table>
+            <thead>
+              <tr>
+                <th>Fitur / Permission</th>
                 {MOCK_ROLES.map(role => (
-                  <TableHead key={role.id} className="text-center font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 px-2 min-w-[80px]">
+                  <th key={role.id} className="text-center">
                     {role.name}
-                  </TableHead>
+                  </th>
                 ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+              </tr>
+            </thead>
+            <tbody>
               {Object.entries(groupedPermissions).map(([group, permissions]) => (
                 <React.Fragment key={group}>
-                  <TableRow className="bg-slate-50/30 dark:bg-slate-800/30">
-                    <TableCell colSpan={MOCK_ROLES.length + 1} className="py-2 px-6 font-semibold text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  <tr className="bg-slate-50/45 hover:bg-slate-50/45 dark:bg-slate-950/30 dark:hover:bg-slate-950/30">
+                    <td colSpan={MOCK_ROLES.length + 1}>
+                      <span className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
                       {group}
-                    </TableCell>
-                  </TableRow>
+                      </span>
+                    </td>
+                  </tr>
                   {permissions.map((perm) => (
-                    <TableRow key={perm.key} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0 transition-colors">
-                      <TableCell className="py-4 pl-6">
+                    <tr key={perm.key}>
+                      <td>
                         <div className="flex flex-col gap-1">
-                          <span className="font-medium text-slate-900 dark:text-slate-100 text-sm">{perm.label}</span>
+                          <span className="text-[0.94rem] font-semibold leading-tight text-slate-950 dark:text-slate-100">{perm.label}</span>
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700">{perm.key}</Badge>
                           </div>
                           {perm.description && <span className="text-xs text-slate-400 dark:text-slate-500 mt-1">{perm.description}</span>}
                         </div>
-                      </TableCell>
+                      </td>
                       {MOCK_ROLES.map(role => {
                         const currentList = localPermissions[role.name as Role] || [];
                         const isChecked = currentList.includes(perm.key);
                         const isOwner = role.name === 'Owner';
                         
                         return (
-                          <TableCell key={role.id} className="text-center py-4">
+                          <td key={role.id} className="text-center">
                             <div className="flex justify-center">
                               <Checkbox 
                                 checked={isChecked}
                                 disabled={isOwner || !canEdit}
                                 onCheckedChange={() => togglePermission(role.name, perm.key)}
-                                className={isOwner ? "data-[state=checked]:bg-slate-300 data-[state=checked]:border-slate-300 cursor-not-allowed opacity-70" : "data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"}
+                                className={isOwner ? "data-[state=checked]:bg-slate-300 data-[state=checked]:border-slate-300 cursor-not-allowed opacity-70" : "data-[state=checked]:bg-primary data-[state=checked]:border-primary"}
                               />
                             </div>
-                          </TableCell>
+                          </td>
                         );
                       })}
-                    </TableRow>
+                    </tr>
                   ))}
                 </React.Fragment>
               ))}
-            </TableBody>
-          </Table>
-        </div>
+            </tbody>
+          </table>
+        </DataTable>
       </div>
+      <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
+        <MasterDataConfirmContent
+          actionLabel="Reset"
+          onConfirm={handleReset}
+          title="Reset permission ke default?"
+          tone="default"
+        >
+          Perubahan lokal akan diganti ke konfigurasi default sistem. Klik Simpan setelah reset untuk menerapkan.
+        </MasterDataConfirmContent>
+      </AlertDialog>
     </div>
   );
 };

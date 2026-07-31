@@ -1,7 +1,7 @@
 export type Role = 'Owner' | 'Super Admin' | 'Admin PIC' | 'CS' | 'Advertiser' | 'Teknisi' | 'Finance';
 export type CsAssignmentStatus = 'available' | 'busy' | 'offline';
 
-export interface Platform { id: string; name: string; status: 'active' | 'inactive'; }
+export interface Platform { id: string; name: string; status: 'active' | 'inactive'; logoPath?: string | null; }
 export interface SubChannel { id: string; name: string; platformId: string; status: 'active' | 'inactive'; }
 export interface User { 
   id: string; 
@@ -50,6 +50,7 @@ export interface AdAccountOwnerAssignment {
   startDate: string;
   endDate?: string | null;
   status: 'active' | 'inactive';
+  notes?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -61,6 +62,7 @@ export interface AdAccountAssignment {
   startDate: string;
   endDate?: string | null;
   status: 'active' | 'inactive';
+  notes?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

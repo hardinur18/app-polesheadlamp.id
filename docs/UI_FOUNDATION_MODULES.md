@@ -167,28 +167,58 @@ Status: dipakai di Master Data, siap dipakai ulang.
 Dipakai oleh:
 - `src/app/components/ui/data-table.tsx`
 - `src/app/pages/master-data/tabs/BranchesTab.tsx`
+- `src/app/pages/master-data/tabs/AreasTab.tsx`
+- `src/app/pages/master-data/tabs/ServicesTab.tsx`
 - `src/app/pages/master-data/tabs/GenericMasterTab.tsx`
+- `src/app/pages/master-data/tabs/SourcesTab.tsx`
+- `src/app/pages/master-data/tabs/AdAccountTab.tsx`
+- `src/app/pages/master-data/tabs/OperationalExpenseCategoriesTab.tsx`
+- `src/app/pages/master-data/tabs/RolesTab.tsx`
+- `src/app/pages/master-data/tabs/RecurringExpensesTab.tsx`
 
 Komponen/class:
 - `DataTable`
 - `TableText`
 - `TableActionHeader`
 - `TableActionCell`
+- `TableActionMenu`
+- `TableActionMenuItem`
 - `TableActionMenuTrigger`
+- `TableCellIcon`
+- `TableStatusCell`
+- `TableStatusIcon`
 - `.tablePanel`
 - `.tableScroller`
 - `.uiDataTableScroller`
+- `.uiDataTableHasColumns`
 - `.tableTextStack`
 - `.tableTextPrimary`
 - `.tableTextSecondary`
 - `.tableActionHeader`
 - `.tableActionCell`
+- `.tableIconCell`
 - `.rowActions`
+- `.dataTableCellIcon`
+- `.dataStatusIcon`
 
 Catatan:
-- Untuk tabel operational yang butuh scroll horizontal dan row text truncation.
-- Header table kecil, uppercase, ringan.
-- Row hover soft, action button ghost.
+- Untuk tabel operational yang butuh scroll horizontal, fixed column sizing, dan row text truncation.
+- Semua tabel desktop di Master Data sekarang melewati modul `DataTable`; recurring expense memakai wrapper modul dengan row renderer lama yang masih kompleks.
+- Standar baru wajib memakai `columns` di `DataTable` untuk mengunci alignment header dan cell.
+- Tambahkan kolom `No` untuk tabel master data list agar scanning lebih mudah.
+- Header table kecil, uppercase, ringan, dan tetap lebih dominan daripada isi cell.
+- Header table wajib center secara vertikal di area atas-bawah header; CSS foundation memaksa `vertical-align: middle`.
+- Isi cell memakai `TableText`; hindari teks isi yang terlalu bold atau lebih besar dari header.
+- Text row default rata atas untuk menjaga multi-line cell sejajar dan mudah discan; CSS foundation memaksa `vertical-align: top`.
+- Status aktif/nonaktif memakai `TableStatusIcon`, bukan badge teks besar.
+- Kolom status wajib memakai `TableStatusCell`; header status pakai `text-center`.
+- Alignment `text-center` pada `th/td` dikunci oleh foundation CSS agar header dan isi kolom tidak meleset.
+- Mobile card dan detail master data juga memakai `TableStatusIcon` agar status tidak kembali ke badge teks.
+- Action desktop memakai `TableActionMenu` dan `TableActionMenuItem`; trigger titik tiga internal tetap `TableActionMenuTrigger`.
+- Tab Master Data tidak boleh import `DropdownMenu*` langsung hanya untuk action table.
+- Kolom icon-only seperti Maps memakai `tableIconCell` agar icon rata atas dan center horizontal.
+- Icon pendamping cell opsional; jika dipakai, gunakan `TableCellIcon`, bukan class/icon ad hoc.
+- Native browser tooltip pada text truncation tidak dipakai; detail panjang gunakan tooltip custom bila benar-benar perlu.
 
 ## Module: UI Tabs
 
@@ -223,14 +253,30 @@ Catatan:
 
 ## Module: Master Data Surface
 
-Status: sedang tahap foundation, sudah diterapkan ke tab Cabang dan Generic Master.
+Status: sudah foundation pass untuk page, tab, filter, table, form action, dialog, dan mobile action.
 
 Dipakai oleh:
 - `src/app/pages/master-data/MasterDataPage.tsx`
 - `src/app/pages/master-data/tabs/BranchesTab.tsx`
 - `src/app/pages/master-data/tabs/GenericMasterTab.tsx`
+- `src/app/pages/master-data/tabs/AreasTab.tsx`
+- `src/app/pages/master-data/tabs/ServicesTab.tsx`
+- `src/app/pages/master-data/tabs/SourcesTab.tsx`
+- `src/app/pages/master-data/tabs/AdAccountTab.tsx`
+- `src/app/pages/master-data/tabs/RolesTab.tsx`
+- `src/app/pages/master-data/tabs/RecurringExpensesTab.tsx`
+- `src/app/pages/master-data/tabs/MasterDataDetailDialog.tsx`
+- `src/app/components/ui/master-data-ui.tsx`
 
 Komponen/class:
+- `MasterDataFormActions`
+- `MasterDataDialogBody`
+- `MasterDataConfirmContent`
+- `MobileCardActions`
+- `.assignmentHistoryGrid`
+- `.assignmentHistoryPanel`
+- `.assignmentStatusPill`
+- `.integrationStatusPill`
 - `OperationalPageShell`
 - `OperationalPageHeader`
 - `ControlPanel`
@@ -241,20 +287,41 @@ Komponen/class:
 - `.masterDataTabs`
 - `.masterDataTab`
 - `.tablePanel`
+- `.masterDataFormActions`
+- `.masterDataDialogBody`
+- `.masterDataConfirmDialog`
+- `.masterDataDetailRow`
+- `.mobileCardActions`
+- `.platformLogo`
+- `.platformLogoTableCell`
+- `.platformLogoUploader`
+- `.masterDataRoleHero`
+- `.masterDataRoleSelector`
+- `.masterDataRolePanel`
+- `.masterDataMatrixPanel`
+- `.masterDataRoleChip`
 
 Sudah mencakup tab:
 - Cabang
+- Daerah
+- Jenis Layanan
 - Vendor
 - Tipe Mobil
 - Platform Iklan
 - Sub Channel
+- Akun Iklan
 - Akun Bank
+- Kategori Biaya
 - Role
 
-Belum final parity:
-- Daerah
-- Jenis Layanan
-- Akun Iklan
-- Kategori Biaya
-- Form/modal di tiap tab
-- Mobile list view detail
+Catatan:
+- Platform Iklan memakai `PlatformLogo` + storage bucket `platform-logos`; path logo dibuat deterministik per platform (`{platformId}/logo.ext`) dan upload memakai replace/upsert supaya tidak menumpuk gambar double.
+- `PlatformLogo` punya default asset lokal untuk Meta, TikTok, Google, dan SnackVideo; logo hasil upload CRUD tetap prioritas di atas default.
+- Form footer Master Data wajib memakai `MasterDataFormActions`; hindari class manual seperti `bg-blue-600` pada tombol submit.
+- Dialog detail data memakai `MasterDataDialogBody` dan row class foundation.
+- Action mobile card memakai `MobileCardActions` dengan menu titik tiga, bukan tombol edit/delete manual berjajar.
+- Dialog konfirmasi baru bisa memakai `MasterDataConfirmContent`; dialog lama yang belum dipindah tetap wajib memakai button foundation class.
+- Roles tab memakai surface khusus karena bentuknya matrix permission, tapi typography/panel/chip mengikuti foundation.
+- Akun Iklan adalah pusat integrasi: ownership advertiser dan CS handling disimpan di tabel assignment historis, bukan sebagai setting tersebar di user/order.
+- Perpindahan Advertiser/CS wajib menutup assignment lama dengan `end_date`, membuat row baru aktif, dan boleh membawa `notes` sebagai alasan perpindahan.
+- Akun Iklan memisahkan `Live Ads` untuk status API spending dan `Assignment` untuk kesiapan Advertiser/CS. Jangan gabungkan dua konsep ini dalam satu label "Integrasi".

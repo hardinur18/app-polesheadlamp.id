@@ -3286,6 +3286,12 @@
   font-size: 0.84rem;
 }
 
+.uiDataTableHasColumns th:not(.tableActionHeader),
+.uiDataTableHasColumns td:not(.tableActionCell) {
+  width: auto !important;
+  min-width: 0;
+}
+
 .tableScroller th {
   height: 42px;
   color: #738197;
@@ -3293,6 +3299,8 @@
   font-size: 0.68rem;
   font-weight: 820;
   letter-spacing: 0.04em;
+  line-height: 1.15;
+  vertical-align: middle;
 }
 
 .tableScroller td {
@@ -3328,13 +3336,27 @@
 .tableActionHeader,
 .tableActionCell {
   text-align: center;
+  vertical-align: top;
 }
 
 .rowActions {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 4px;
+}
+
+.dataTableCellIcon {
+  display: inline-flex;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  background: #f6f9fd;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 11px;
 }
 
 .rowActions [data-slot="button"],
@@ -3349,6 +3371,16 @@
   color: #64748b;
   background: transparent;
   box-shadow: none;
+}
+
+.uiDataTableScroller .tableIconCell {
+  text-align: center;
+  vertical-align: top;
+}
+
+.uiDataTableScroller .tableIconCell .iconButton,
+.uiDataTableScroller .tableActionCell .rowActions {
+  margin-top: -3px;
 }
 
 .rowActions [data-slot="button"]:hover,
@@ -3688,9 +3720,11 @@ body {
 }
 
 .masterDataTabSurface {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow: visible;
 }
 
 .masterDataControlRow {
@@ -3723,9 +3757,322 @@ body {
   min-height: 38px;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink-soft);
   font-size: 0.78rem;
+  font-weight: 760;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+}
+
+.masterDataSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px;
+  min-width: 0;
+}
+
+.masterDataSectionIcon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 89, 183, 0.16);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 35% 24%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.22) 34%),
+    linear-gradient(135deg, rgba(0, 168, 232, 0.12), rgba(15, 89, 183, 0.14));
+  color: var(--brand-blue);
+  box-shadow: 0 14px 28px rgba(15, 89, 183, 0.1);
+}
+
+.masterDataSectionIcon svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 2.25;
+}
+
+.masterDataSectionEyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  color: var(--brand-blue);
+  font-size: 0.72rem;
   font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.masterDataSectionHeader h2 {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.18rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.12;
+  white-space: nowrap;
+}
+
+.masterDataSectionHeader h2 > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.masterDataSectionHeader p:last-child {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.masterDataListHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+
+.masterDataListIcon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 89, 183, 0.14);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.2) 34%),
+    linear-gradient(135deg, rgba(0, 168, 232, 0.1), rgba(15, 89, 183, 0.12));
+  color: var(--brand-blue);
+  box-shadow: 0 12px 24px rgba(15, 89, 183, 0.08);
+}
+
+.masterDataListIcon.isInactive {
+  border-color: rgba(100, 116, 139, 0.16);
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.2) 34%),
+    linear-gradient(135deg, rgba(148, 163, 184, 0.1), rgba(100, 116, 139, 0.12));
+  color: var(--muted);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.masterDataListIcon svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.35;
+}
+
+.masterDataListHeader h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.masterDataListCount {
+  min-width: 32px;
+  min-height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.noticeStack {
+  position: relative;
+  z-index: 80;
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+}
+
+.masterDataFloatingNotices {
+  position: absolute;
+  top: -44px;
+  right: 4px;
+  z-index: 120;
+  justify-content: flex-end;
+}
+
+.noticeIconButton {
+  position: relative;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  overflow: visible;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.noticeIconButton:hover,
+.noticeIconButton:focus-visible {
+  transform: translateY(-1px);
+}
+
+.noticeIconButton:focus-visible {
+  outline: 3px solid rgba(15, 89, 183, 0.18);
+  outline-offset: 2px;
+}
+
+.noticeIconButton .noticeIcon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.35;
+}
+
+.noticeHoverText {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 5px);
+  z-index: 90;
+  display: flex;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 48px));
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px) saturate(140%);
+  padding: 7px 10px;
+  pointer-events: none;
+  transform: translateY(-4px);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1;
+  opacity: 0;
+  text-overflow: ellipsis;
+  transition:
+    transform 160ms ease,
+    opacity 120ms ease;
+}
+
+.masterDataFloatingNotices .noticeHoverText {
+  right: 0;
+  left: auto;
+}
+
+.masterDataHeaderLine {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  vertical-align: baseline;
+}
+
+.masterDataHeaderLine > span:first-child {
+  min-width: 0;
+}
+
+.masterDataHeaderNotices {
+  display: inline-flex;
+  width: auto;
+  flex: 0 0 auto;
+  gap: 4px;
+  vertical-align: text-bottom;
+}
+
+.masterDataHeaderNotices .noticeIconButton {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  vertical-align: text-bottom;
+}
+
+.masterDataHeaderNotices .noticeIconButton:hover,
+.masterDataHeaderNotices .noticeIconButton:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.masterDataHeaderNotices .noticeIconButton .noticeIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.masterDataHeaderNotices .noticeHoverText {
+  top: auto;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translate(-50%, 4px);
+}
+
+.masterDataHeaderNotices .noticeIconButton:hover .noticeHoverText,
+.masterDataHeaderNotices .noticeIconButton:focus-visible .noticeHoverText {
+  transform: translate(-50%, 0);
+}
+
+.noticeIconButton:hover .noticeHoverText,
+.noticeIconButton:focus-visible .noticeHoverText {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.noticeHoverText > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.noticeHoverTitle {
+  color: var(--ink);
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.noticeIconButton-warning {
+  color: #b45309;
+}
+
+.noticeIconButton-danger {
+  color: #be123c;
+}
+
+.noticeIconButton-info {
+  color: var(--brand-blue);
+}
+
+.noticeIconButton-success {
+  color: #059669;
 }
 
 .controlRow {
@@ -3810,19 +4157,22 @@ body {
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.04em;
+  line-height: 1.15;
+  vertical-align: middle !important;
 }
 
 .tableScroller td {
   color: var(--muted);
   font-size: 0.86rem;
   font-weight: 600;
+  vertical-align: top !important;
 }
 
 .uiDataTableScroller td strong,
 .uiDataTableScroller .tableTextPrimary {
-  color: var(--ink);
+  color: #172033;
   font-size: 0.86rem;
-  font-weight: 800;
+  font-weight: 680;
 }
 
 .uiDataTableScroller td > span:not([class]),
@@ -3831,6 +4181,663 @@ body {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 600;
+}
+
+.uiDataTableScroller .monoCell {
+  color: #738197;
+  font-size: 0.8rem;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.masterDataBranchTable .tableTextPrimary {
+  font-weight: 680;
+}
+
+.masterDataBranchTable .tableTextSecondary {
+  font-weight: 560;
+}
+
+.dataStatusIconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.dataStatusIcon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  vertical-align: middle;
+}
+
+.dataStatusIcon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+
+.dataStatusIcon.isActive {
+  color: #10b981;
+}
+
+.dataStatusIcon.isSoon {
+  color: #2563eb;
+}
+
+.dataStatusIcon.isInactive {
+  color: #94a3b8;
+}
+
+.uiDataTableScroller th.text-center,
+.uiDataTableScroller td.text-center,
+.uiDataTableScroller .tableActionHeader,
+.uiDataTableScroller .tableActionCell {
+  text-align: center !important;
+}
+
+.uiDataTableScroller .tableActionCell .rowActions {
+  justify-content: center;
+}
+
+.uiDataTableScroller .tableStatusCell {
+  text-align: center !important;
+}
+
+.uiDataTableScroller .tableStatusCell .dataStatusIcon {
+  margin-top: -1px;
+}
+
+.masterDataDialogBody {
+  padding: 18px 24px 22px;
+}
+
+.masterDataDialogBody.isCompact {
+  padding-block: 14px 18px;
+}
+
+.masterDataFormActions {
+  margin-top: 22px;
+  gap: 10px;
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  padding-top: 16px;
+}
+
+.masterDataFormActions .uiButton {
+  min-width: 118px;
+}
+
+.masterDataConfirmDialog {
+  max-width: 420px;
+  border-radius: 24px;
+  border-color: rgba(203, 213, 225, 0.82);
+  box-shadow: 0 24px 76px rgba(15, 23, 42, 0.18);
+}
+
+.masterDataConfirmDialog [data-slot="alert-dialog-title"],
+.masterDataConfirmDialog h2 {
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.masterDataConfirmDialog [data-slot="alert-dialog-description"],
+.masterDataConfirmDialog p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 560;
+  line-height: 1.55;
+}
+
+.masterDataConfirmActions {
+  gap: 10px;
+}
+
+.masterDataDetailRows {
+  display: grid;
+  gap: 2px;
+  padding-block: 8px 2px;
+}
+
+.masterDataDetailRow {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.42fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+  padding: 10px 0;
+}
+
+.masterDataDetailRow:last-child {
+  border-bottom: 0;
+}
+
+.masterDataDetailLabel {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.masterDataDetailValue {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 680;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.masterDataDetailDescription {
+  display: grid;
+  gap: 7px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+  padding: 12px 0;
+}
+
+.masterDataDetailDescription p {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 560;
+  line-height: 1.55;
+}
+
+.mobileCardActions {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid rgba(226, 232, 240, 0.76);
+  padding-top: 10px;
+}
+
+.mobileCardActions .iconButton {
+  width: 36px;
+  height: 36px;
+}
+
+.platformLogo {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  border-radius: 999px;
+  background: #fff;
+  color: #0f55bd;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+  padding: 4px;
+}
+
+.platformLogo.isSm {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.platformLogo.isCompact {
+  padding: 6px;
+}
+
+.platformLogo img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: contain;
+}
+
+.platformLogo span {
+  font-size: 0.66rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.platformLogo.isCompact span {
+  font-size: 0.56rem;
+}
+
+.platformLogo svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.25;
+}
+
+.platformLogoTableCell {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.platformLogoTableCell.isInline {
+  align-items: center;
+}
+
+.platformLogoUploader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.62);
+  padding: 12px;
+}
+
+.platformLogoUploaderText {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.platformLogoUploaderText strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 740;
+  line-height: 1.25;
+}
+
+.platformLogoUploaderText span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.platformLogoUploaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.assignmentHistoryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.adAccountViewSwitch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -10px 0 24px;
+}
+
+.adAccountViewSwitchItem {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 720;
+  line-height: 1;
+  padding: 0 13px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.035);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.adAccountViewSwitchItem:hover {
+  border-color: rgba(15, 85, 189, 0.22);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.adAccountViewSwitchItem.isActive {
+  border-color: rgba(15, 85, 189, 0.28);
+  background: rgba(239, 246, 255, 0.92);
+  color: #0f55bd;
+}
+
+.adAccountViewSwitchItem strong {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.6);
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 780;
+  padding: 0 7px;
+}
+
+.integrationStatusPill {
+  display: inline-flex;
+  min-width: 96px;
+  max-width: 100%;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 780;
+  line-height: 1;
+  padding: 0 11px;
+  white-space: nowrap;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.integrationStatusPill:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.integrationStatusPill:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.integrationStatusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.integrationStatusPill.is-live {
+  border-color: rgba(16, 185, 129, 0.22);
+  background: rgba(236, 253, 245, 0.82);
+  color: #059669;
+}
+
+.integrationStatusPill.is-live .integrationStatusDot {
+  animation: integrationLivePulse 1.5s ease-in-out infinite;
+}
+
+.integrationStatusPill.is-warning {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 235, 0.88);
+  color: #b45309;
+}
+
+.integrationStatusPill.is-off {
+  border-color: rgba(203, 213, 225, 0.9);
+  background: rgba(248, 250, 252, 0.86);
+  color: #64748b;
+}
+
+.integrationStatusPill.is-saving {
+  border-color: rgba(59, 130, 246, 0.24);
+  background: rgba(239, 246, 255, 0.88);
+  color: #0f55bd;
+}
+
+.integrationStatusPill.is-saving .integrationStatusDot {
+  animation: integrationLivePulse 900ms ease-in-out infinite;
+}
+
+.assignmentStatusPill {
+  display: inline-flex;
+  min-width: 86px;
+  max-width: 100%;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  box-sizing: border-box;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 780;
+  line-height: 1;
+  padding: 0 11px;
+  white-space: nowrap;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.assignmentStatusPill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.assignmentStatusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.assignmentStatusPill.is-ready {
+  border-color: rgba(16, 185, 129, 0.22);
+  background: rgba(236, 253, 245, 0.82);
+  color: #059669;
+}
+
+.assignmentStatusPill.is-ready .assignmentStatusDot {
+  animation: integrationLivePulse 1.8s ease-in-out infinite;
+}
+
+.assignmentStatusPill.is-partial {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 235, 0.88);
+  color: #b45309;
+}
+
+.assignmentStatusPill.is-empty {
+  border-color: rgba(244, 63, 94, 0.2);
+  background: rgba(255, 241, 242, 0.72);
+  color: #be123c;
+}
+
+.assignmentStatusPopover {
+  width: 310px;
+  border-color: rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
+}
+
+.assignmentStatusPopoverHeader {
+  display: grid;
+  gap: 3px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.76);
+  padding-bottom: 10px;
+}
+
+.assignmentStatusPopoverHeader strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.assignmentStatusPopoverHeader span,
+.assignmentStatusRows span,
+.assignmentStatusRows small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.assignmentStatusRows {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.assignmentStatusRows div {
+  display: grid;
+  gap: 3px;
+}
+
+.assignmentStatusRows strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 740;
+  line-height: 1.3;
+}
+
+.assignmentStatusActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid rgba(226, 232, 240, 0.76);
+  padding-top: 10px;
+}
+
+@keyframes integrationLivePulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 1;
+  }
+  55% {
+    box-shadow: 0 0 0 5px transparent;
+    opacity: 0.72;
+  }
+}
+
+.assignmentHistoryPanel {
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.64);
+  padding: 14px;
+}
+
+.assignmentHistoryHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.assignmentHistoryHeading svg {
+  color: #0f55bd;
+  stroke-width: 2.35;
+}
+
+.assignmentHistoryList {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.assignmentHistoryItem {
+  border-left: 2px solid rgba(15, 85, 189, 0.18);
+  padding-left: 11px;
+}
+
+.assignmentHistoryItem strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 730;
+  line-height: 1.25;
+}
+
+.assignmentHistoryItem span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 620;
+  line-height: 1.3;
+}
+
+.assignmentHistoryItem p {
+  margin-top: 6px;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 560;
+  line-height: 1.42;
+}
+
+.assignmentHistoryEmpty {
+  border: 1px dashed rgba(203, 213, 225, 0.9);
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 620;
+  padding: 14px;
+}
+
+@media (max-width: 768px) {
+  .assignmentHistoryGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.masterDataRoleHero {
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 56px rgba(15, 23, 42, 0.07);
+  padding: 18px;
+}
+
+.masterDataRoleHero h2 {
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.masterDataRoleHero p {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 560;
+  line-height: 1.5;
+}
+
+.masterDataRoleSelector,
+.masterDataRolePanel,
+.masterDataMatrixPanel {
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 56px rgba(15, 23, 42, 0.065);
+}
+
+.masterDataRolePanel {
+  overflow: hidden;
+}
+
+.masterDataMatrixPanel {
+  overflow: hidden;
+}
+
+.masterDataRoleChip {
+  min-height: 36px;
+  border-radius: 999px;
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  background: #fff;
+  color: var(--muted);
+  padding: 0 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.masterDataRoleChip.isActive {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: rgba(239, 246, 255, 0.98);
+  color: #0f55bd;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
 }
 
 @media (max-width: 767px) {
@@ -3896,8 +4903,54 @@ body {
     min-width: 0;
   }
 
+  .masterDataSectionHeader {
+    gap: 10px;
+    padding: 0 2px;
+  }
+
+  .masterDataSectionIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 13px;
+  }
+
+  .masterDataSectionEyebrow {
+    font-size: 0.64rem;
+  }
+
+  .masterDataSectionHeader h2 {
+    font-size: 1.02rem;
+    gap: 7px;
+  }
+
+  .masterDataSectionHeader p:last-child {
+    font-size: 0.8rem;
+  }
+
   .tablePanel {
     border-radius: 18px;
+  }
+
+  .masterDataDialogBody {
+    padding: 14px 18px 18px;
+  }
+
+  .masterDataFormActions {
+    flex-direction: column-reverse;
+  }
+
+  .masterDataFormActions .uiButton {
+    width: 100%;
+  }
+
+  .masterDataDetailRow {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    align-items: start;
+  }
+
+  .masterDataDetailValue {
+    text-align: left;
   }
 }
 

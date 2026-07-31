@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { 
-  Plus, Filter, Edit, Trash2, Map, CheckCircle2, XCircle
+  Plus, Filter, Edit, Trash2, Map
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../../../components/ui/table';
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
+import { MobileCardActions } from '../../../components/ui/master-data-ui';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
@@ -19,7 +19,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog"
 import { Badge } from '../../../components/ui/badge';
 import { Area, Role } from '../data';
@@ -39,6 +38,7 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Area | null>(null);
+  const [deletingItem, setDeletingItem] = useState<Area | null>(null);
 
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
@@ -94,89 +94,68 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
 
     return (
       <div className="mb-8 last:mb-0">
-         <div className="flex items-center gap-2 mb-4 px-1">
-            <div className={cn("p-1.5 rounded-lg", variant === 'active' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400")}>
-                {variant === 'active' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-            </div>
-            <h3 className="font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
-            <Badge variant="secondary" className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500">
-                {items.length}
-            </Badge>
-        </div>
+        <MasterDataTableTitle title={title} count={items.length} variant={variant} />
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="tablePanel">
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6 min-w-[200px]">Nama Daerah</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 min-w-[200px]">Induk Cabang</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Status</TableHead>
-                  {(canEdit || canDelete) && <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pr-6">Aksi</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
-                    <TableCell className="py-4 pl-6 font-medium text-slate-900 dark:text-slate-200 text-sm">
-                      <div className="flex items-center space-x-3">
-                        <div className="h-8 w-8 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400">
-                          <Map className="h-4 w-4" />
-                        </div>
-                        <span className="font-semibold">{item.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400">{getBranchName(item.branchId)}</TableCell>
-                    <TableCell className="py-4 text-center">
-                      <Badge 
-                        variant="outline"
-                        className={item.status === 'active' 
-                          ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm" 
-                          : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm"}
-                      >
-                        {item.status === 'active' ? 'AKTIF' : 'NON AKTIF'}
-                      </Badge>
-                    </TableCell>
+          <div className="hidden md:block">
+            <DataTable
+              actionWidth={82}
+              cellY={12}
+              className="masterDataAreaTable"
+              columns={[64, 300, 300, 90, (canEdit || canDelete) ? 82 : null]}
+              minWidth={canEdit || canDelete ? 836 : 754}
+              rowMinHeight={64}
+            >
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>Nama Daerah</th>
+                  <th>Induk Cabang</th>
+                  <th className="text-center">Status</th>
+                  {(canEdit || canDelete) && <TableActionHeader />}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={item.id}>
+                    <td className="monoCell text-center">
+                      {index + 1}
+                    </td>
+                    <td>
+                      <TableText primary={item.name} />
+                    </td>
+                    <td>
+                      <TableText primary={getBranchName(item.branchId)} />
+                    </td>
+                    <TableStatusCell>
+                      <TableStatusIcon
+                        label={item.status === 'active' ? 'Aktif' : 'Non aktif'}
+                        tone={item.status === 'active' ? 'active' : 'inactive'}
+                      />
+                    </TableStatusCell>
                     {(canEdit || canDelete) && (
-                      <TableCell className="py-4 pr-6 text-right">
-                        <div className="flex justify-end gap-1">
+                      <TableActionCell>
+                        <TableActionMenu>
                           {canEdit && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/30" onClick={() => openEdit(item)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <TableActionMenuItem icon={Edit} onClick={() => openEdit(item)}>
+                              Edit Daerah
+                            </TableActionMenuItem>
                           )}
                           {canDelete && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/30">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle className="dark:text-slate-200">Hapus Daerah</AlertDialogTitle>
-                                  <AlertDialogDescription className="dark:text-slate-400">
-                                    Apakah anda yakin ingin menghapus daerah <strong>{item.name}</strong>?
-                                    <br/>Tindakan ini tidak dapat dibatalkan.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(item.id)}>
-                                    Hapus
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
+                              Hapus
+                            </TableActionMenuItem>
                           )}
-                        </div>
-                      </TableCell>
+                        </TableActionMenu>
+                      </TableActionCell>
                     )}
-                  </TableRow>
+                  </tr>
                 ))}
-              </TableBody>
-            </Table>
+              </tbody>
+            </table>
+            </DataTable>
           </div>
 
           {/* Mobile Card List */}
@@ -190,14 +169,10 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
                            </div>
                            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg">{item.name}</h3>
                         </div>
-                        <Badge 
-                          variant="outline"
-                          className={item.status === 'active' 
-                            ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800 text-[10px] px-1.5 py-0.5 h-5" 
-                            : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 text-[10px] px-1.5 py-0.5 h-5"}
-                        >
-                          {item.status === 'active' ? 'AKTIF' : 'NON AKTIF'}
-                        </Badge>
+                        <TableStatusIcon
+                          label={item.status === 'active' ? 'Aktif' : 'Non aktif'}
+                          tone={item.status === 'active' ? 'active' : 'inactive'}
+                        />
                     </div>
                     
                     <div className="pl-[52px] space-y-1 mb-3">
@@ -206,42 +181,13 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
                     </div>
 
                     {(canEdit || canDelete) && (
-                       <div className="pl-[52px] flex gap-2 pt-2">
-                           {canEdit && (
-                             <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="flex-1 text-xs h-8 text-blue-600 border-slate-200 dark:border-slate-700"
-                                onClick={() => openEdit(item)}
-                             >
-                                <Edit className="w-3 h-3 mr-2" />
-                                Edit
-                             </Button>
-                           )}
-                           {canDelete && (
-                             <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                   <Button variant="outline" size="sm" className="w-8 px-0 text-red-600 border-slate-200 dark:border-slate-700 h-8 shrink-0">
-                                      <Trash2 className="w-3 h-3" />
-                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                   <AlertDialogHeader>
-                                      <AlertDialogTitle className="dark:text-slate-200">Hapus Daerah</AlertDialogTitle>
-                                      <AlertDialogDescription className="dark:text-slate-400">
-                                        Apakah anda yakin ingin menghapus daerah <strong>{item.name}</strong>?
-                                      </AlertDialogDescription>
-                                   </AlertDialogHeader>
-                                   <AlertDialogFooter>
-                                      <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
-                                      <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(item.id)}>
-                                        Hapus
-                                      </AlertDialogAction>
-                                   </AlertDialogFooter>
-                                </AlertDialogContent>
-                             </AlertDialog>
-                           )}
-                       </div>
+                      <MobileCardActions
+                        className="ml-[52px]"
+                        actions={[
+                          ...(canEdit ? [{ icon: Edit, label: 'Edit', onClick: () => openEdit(item) }] : []),
+                          ...(canDelete ? [{ danger: true, icon: Trash2, label: 'Hapus', onClick: () => setDeletingItem(item) }] : []),
+                        ]}
+                      />
                     )}
                 </div>
              ))}
@@ -320,6 +266,30 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Hapus Daerah</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              Apakah anda yakin ingin menghapus daerah <strong>{deletingItem?.name}</strong>?
+              <br/>Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (deletingItem) void handleDelete(deletingItem.id);
+                setDeletingItem(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

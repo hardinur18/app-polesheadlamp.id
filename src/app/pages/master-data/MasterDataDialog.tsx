@@ -82,7 +82,7 @@ export const MasterDataDialog: React.FC<MasterDataDialogProps> = ({
       case 'payments':
         return <GenericForm type="payment" item={item as any} label="Metode Pembayaran" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
       case 'platforms':
-        return <GenericForm type="simple" item={item as any} label="Platform" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="platform" item={item as any} label="Platform" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
       case 'staff_status':
         return <GenericForm type="simple" item={item as any} label="Status Staff" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
       case 'employment':

@@ -84,6 +84,7 @@ export const mapAdAccountOwnerAssignmentFromDB = (a: any): AdAccountOwnerAssignm
   startDate: a.start_date,
   endDate: a.end_date,
   status: a.status,
+  notes: a.notes || null,
   createdAt: a.created_at,
   updatedAt: a.updated_at,
 });
@@ -95,6 +96,7 @@ export const mapAdAccountOwnerAssignmentToDB = (a: AdAccountOwnerAssignment) => 
   start_date: a.startDate,
   end_date: a.endDate || null,
   status: a.status || 'active',
+  notes: a.notes || null,
 });
 
 export const mapAdAccountAssignmentFromDB = (a: any): AdAccountAssignment => ({
@@ -105,6 +107,7 @@ export const mapAdAccountAssignmentFromDB = (a: any): AdAccountAssignment => ({
   startDate: a.start_date,
   endDate: a.end_date,
   status: a.status,
+  notes: a.notes || null,
   createdAt: a.created_at,
   updatedAt: a.updated_at,
 });
@@ -117,6 +120,7 @@ export const mapAdAccountAssignmentToDB = (a: AdAccountAssignment) => ({
   start_date: a.startDate,
   end_date: a.endDate || null,
   status: a.status || 'active',
+  notes: a.notes || null,
 });
 
 export const mapAdSourceFromDB = (s: any): AdSource => ({
@@ -168,12 +172,14 @@ export const mapPlatformFromDB = (p: any): Platform => ({
   id: p.id,
   name: p.name,
   status: p.status,
+  logoPath: p.logo_path || p.logoPath || null,
 });
 
 export const mapPlatformToDB = (p: Platform) => ({
   id: p.id,
   name: p.name,
   status: p.status,
+  logo_path: p.logoPath || null,
 });
 
 export const mapSubChannelFromDB = (s: any): SubChannel => ({

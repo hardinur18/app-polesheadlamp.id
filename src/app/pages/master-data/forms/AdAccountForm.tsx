@@ -2,6 +2,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { RefreshCw } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import {
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
-import { DialogFooter } from '../../../components/ui/dialog';
+import { MasterDataFormActions } from '../../../components/ui/master-data-ui';
 import { AdAccount, Platform, User } from '../data';
 import type { AdsIntegrationConfig, MetaLiveBreakdownResponse } from '@/app/services/liveAdsService';
 import type {
@@ -61,12 +62,21 @@ interface AdAccountFormProps {
   platforms: Platform[];
   advertisers: User[];
   liveMetaAccounts?: MetaLiveBreakdownResponse['accounts'];
+  liveMetaError?: string | null;
+  liveMetaLoading?: boolean;
   metaIntegrationConfig?: AdsIntegrationConfig | null;
+  onRefreshMetaRegistry?: () => void;
   liveGoogleAccounts?: GoogleAdsLiveBreakdownResponse['accounts'];
+  liveGoogleError?: string | null;
+  liveGoogleLoading?: boolean;
   googleIntegrationConfig?: GoogleAdsIntegrationConfig | null;
+  onRefreshGoogleRegistry?: () => void;
   liveTikTokAdvertisers?: TikTokAdvertiser[];
   liveTikTokBusinessCenters?: TikTokBusinessCenter[];
+  liveTikTokError?: string | null;
+  liveTikTokLoading?: boolean;
   tiktokIntegrationConfig?: TikTokAdsIntegrationConfig | null;
+  onRefreshTikTokRegistry?: () => void;
   onSubmit: (data: any) => void;
   onCancel: () => void;
 }
@@ -82,12 +92,21 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
   platforms,
   advertisers,
   liveMetaAccounts = [],
+  liveMetaError,
+  liveMetaLoading = false,
   metaIntegrationConfig,
+  onRefreshMetaRegistry,
   liveGoogleAccounts = [],
+  liveGoogleError,
+  liveGoogleLoading = false,
   googleIntegrationConfig,
+  onRefreshGoogleRegistry,
   liveTikTokAdvertisers = [],
   liveTikTokBusinessCenters = [],
+  liveTikTokError,
+  liveTikTokLoading = false,
   tiktokIntegrationConfig,
+  onRefreshTikTokRegistry,
   onSubmit,
   onCancel,
 }) => {
@@ -120,6 +139,9 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
   const showMetaMapping = isPlatformName(selectedPlatform, 'meta') || isPlatformName(selectedPlatform, 'facebook');
   const showGoogleMapping = isPlatformName(selectedPlatform, 'google');
   const showTikTokMapping = isPlatformName(selectedPlatform, 'tiktok');
+  const hasMetaRegistry = liveMetaAccounts.length > 0;
+  const hasGoogleRegistry = liveGoogleAccounts.length > 0;
+  const hasTikTokRegistry = liveTikTokAdvertisers.length > 0;
 
   return (
     <Form {...form}>
@@ -206,161 +228,307 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
         />
 
         {showMetaMapping ? (
-          <FormField
-            control={form.control}
-            name="liveMetaAccountId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Akun Meta Live</FormLabel>
-                <Select
-                  value={field.value || NONE_VALUE}
-                  onValueChange={(value) => {
-                    const nextValue = value === NONE_VALUE ? '' : value;
-                    const account = liveMetaAccounts.find((row) => row.id === nextValue);
-                    field.onChange(nextValue);
-                    form.setValue('liveMetaAccountName', account?.name || '');
-                    form.setValue('liveMetaBusinessManagerId', account?.businessId || '');
-                    form.setValue('liveMetaBusinessManagerName', account?.businessName || '');
-                  }}
-                >
-                  <FormControl>
-                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                      <SelectValue placeholder="Pilih akun Meta live" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                    <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
-                    {liveMetaAccounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>
-                        {account.name} - {account.businessName || 'Tanpa Business Manager'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription className="text-xs">
-                  Dipakai untuk mencocokkan snapshot API Meta ke akun internal.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ) : null}
-
-        {showGoogleMapping ? (
-          <FormField
-            control={form.control}
-            name="liveGoogleCustomerId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Akun Google Ads Live</FormLabel>
-                <Select
-                  value={field.value || NONE_VALUE}
-                  onValueChange={(value) => {
-                    const nextValue = value === NONE_VALUE ? '' : value;
-                    const account = liveGoogleAccounts.find((row) => row.customerId === nextValue);
-                    field.onChange(nextValue);
-                    form.setValue('liveGoogleCustomerName', account?.customerName || account?.name || '');
-                    form.setValue('liveGoogleManagerCustomerId', account?.managerCustomerId || '');
-                    form.setValue('liveGoogleManagerCustomerName', account?.managerCustomerName || '');
-                  }}
-                >
-                  <FormControl>
-                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                      <SelectValue placeholder="Pilih customer Google Ads" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                    <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
-                    {liveGoogleAccounts.map((account) => (
-                      <SelectItem key={account.customerId} value={account.customerId}>
-                        {account.customerName || account.name} - {account.managerCustomerName || 'Direct Access'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription className="text-xs">
-                  Kalau daftar kosong, cek token OAuth Google Ads di server.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ) : null}
-
-        {showTikTokMapping ? (
-          <>
+          hasMetaRegistry ? (
             <FormField
               control={form.control}
-              name="liveTikTokBusinessCenterId"
+              name="liveMetaAccountId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Business Center TikTok</FormLabel>
+                  <FormLabel>Akun Meta Live</FormLabel>
                   <Select
                     value={field.value || NONE_VALUE}
                     onValueChange={(value) => {
                       const nextValue = value === NONE_VALUE ? '' : value;
-                      const businessCenter = liveTikTokBusinessCenters.find((row) => row.bcId === nextValue);
+                      const account = liveMetaAccounts.find((row) => row.id === nextValue);
                       field.onChange(nextValue);
-                      form.setValue('liveTikTokBusinessCenterName', businessCenter?.bcName || '');
+                      form.setValue('liveMetaAccountName', account?.name || '');
+                      form.setValue('liveMetaBusinessManagerId', account?.businessId || '');
+                      form.setValue('liveMetaBusinessManagerName', account?.businessName || '');
                     }}
                   >
                     <FormControl>
                       <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                        <SelectValue placeholder="Pilih Business Center" />
+                        <SelectValue placeholder="Pilih akun Meta live" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
                       <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
-                      {liveTikTokBusinessCenters.map((businessCenter) => (
-                        <SelectItem key={businessCenter.bcId} value={businessCenter.bcId}>
-                          {businessCenter.bcName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="liveTikTokAdvertiserId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Advertiser TikTok Live</FormLabel>
-                  <Select
-                    value={field.value || NONE_VALUE}
-                    onValueChange={(value) => {
-                      const nextValue = value === NONE_VALUE ? '' : value;
-                      const advertiser = liveTikTokAdvertisers.find((row) => row.advertiserId === nextValue);
-                      field.onChange(nextValue);
-                      form.setValue('liveTikTokAdvertiserName', advertiser?.advertiserName || '');
-                      form.setValue('liveTikTokBusinessCenterId', advertiser?.bcId || form.getValues('liveTikTokBusinessCenterId') || '');
-                      form.setValue('liveTikTokBusinessCenterName', advertiser?.bcName || form.getValues('liveTikTokBusinessCenterName') || '');
-                    }}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                        <SelectValue placeholder="Pilih advertiser TikTok" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                      <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
-                      {liveTikTokAdvertisers.map((advertiser) => (
-                        <SelectItem key={advertiser.advertiserId} value={advertiser.advertiserId}>
-                          {advertiser.advertiserName} - {advertiser.bcName || 'Tanpa Business Center'}
+                      {liveMetaAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.name} - {account.businessName || 'Tanpa Business Manager'}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <FormDescription className="text-xs">
-                    Kalau daftar kosong, token OAuth TikTok belum tersedia atau perlu authorize ulang.
+                    Dipakai untuk mencocokkan snapshot API Meta ke akun internal.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Registry API Meta kosong</p>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                    Refresh setelah token aktif, atau isi ID akun Meta manual sementara.
+                  </p>
+                  {liveMetaError ? <p className="mt-1 text-xs font-semibold text-rose-500">{liveMetaError}</p> : null}
+                </div>
+                {onRefreshMetaRegistry ? (
+                  <Button type="button" size="sm" variant="outline" disabled={liveMetaLoading} onClick={onRefreshMetaRegistry}>
+                    <RefreshCw className={liveMetaLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                    Refresh
+                  </Button>
+                ) : null}
+              </div>
+              <div className="grid gap-3">
+                <FormField
+                  control={form.control}
+                  name="liveMetaAccountId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ID Akun Meta</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Contoh: act_123456789 atau 123456789" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="liveMetaAccountName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nama Akun Meta</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opsional, untuk label tampilan" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          )
+        ) : null}
+
+        {showGoogleMapping ? (
+          hasGoogleRegistry ? (
+            <FormField
+              control={form.control}
+              name="liveGoogleCustomerId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Akun Google Ads Live</FormLabel>
+                  <Select
+                    value={field.value || NONE_VALUE}
+                    onValueChange={(value) => {
+                      const nextValue = value === NONE_VALUE ? '' : value;
+                      const account = liveGoogleAccounts.find((row) => row.customerId === nextValue);
+                      field.onChange(nextValue);
+                      form.setValue('liveGoogleCustomerName', account?.customerName || account?.name || '');
+                      form.setValue('liveGoogleManagerCustomerId', account?.managerCustomerId || '');
+                      form.setValue('liveGoogleManagerCustomerName', account?.managerCustomerName || '');
+                    }}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                        <SelectValue placeholder="Pilih customer Google Ads" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                      <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
+                      {liveGoogleAccounts.map((account) => (
+                        <SelectItem key={account.customerId} value={account.customerId}>
+                          {account.customerName || account.name} - {account.managerCustomerName || 'Direct Access'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription className="text-xs">
+                    Dipakai untuk mencocokkan snapshot API Google Ads ke akun internal.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">Registry API Google Ads kosong</p>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                    Refresh setelah OAuth aktif, atau isi Customer ID manual sementara.
+                  </p>
+                  {liveGoogleError ? <p className="mt-1 text-xs font-semibold text-rose-500">{liveGoogleError}</p> : null}
+                </div>
+                {onRefreshGoogleRegistry ? (
+                  <Button type="button" size="sm" variant="outline" disabled={liveGoogleLoading} onClick={onRefreshGoogleRegistry}>
+                    <RefreshCw className={liveGoogleLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                    Refresh
+                  </Button>
+                ) : null}
+              </div>
+              <div className="grid gap-3">
+                <FormField
+                  control={form.control}
+                  name="liveGoogleCustomerId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Customer ID Google Ads</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Contoh: 123-456-7890" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="liveGoogleCustomerName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nama Customer</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Opsional, untuk label tampilan" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          )
+        ) : null}
+
+        {showTikTokMapping ? (
+          <>
+            {liveTikTokBusinessCenters.length > 0 ? (
+              <FormField
+                control={form.control}
+                name="liveTikTokBusinessCenterId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Business Center TikTok</FormLabel>
+                    <Select
+                      value={field.value || NONE_VALUE}
+                      onValueChange={(value) => {
+                        const nextValue = value === NONE_VALUE ? '' : value;
+                        const businessCenter = liveTikTokBusinessCenters.find((row) => row.bcId === nextValue);
+                        field.onChange(nextValue);
+                        form.setValue('liveTikTokBusinessCenterName', businessCenter?.bcName || '');
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                          <SelectValue placeholder="Pilih Business Center" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                        <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
+                        {liveTikTokBusinessCenters.map((businessCenter) => (
+                          <SelectItem key={businessCenter.bcId} value={businessCenter.bcId}>
+                            {businessCenter.bcName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+
+            {hasTikTokRegistry ? (
+              <FormField
+                control={form.control}
+                name="liveTikTokAdvertiserId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Advertiser TikTok Live</FormLabel>
+                    <Select
+                      value={field.value || NONE_VALUE}
+                      onValueChange={(value) => {
+                        const nextValue = value === NONE_VALUE ? '' : value;
+                        const advertiser = liveTikTokAdvertisers.find((row) => row.advertiserId === nextValue);
+                        field.onChange(nextValue);
+                        form.setValue('liveTikTokAdvertiserName', advertiser?.advertiserName || '');
+                        form.setValue('liveTikTokBusinessCenterId', advertiser?.bcId || form.getValues('liveTikTokBusinessCenterId') || '');
+                        form.setValue('liveTikTokBusinessCenterName', advertiser?.bcName || form.getValues('liveTikTokBusinessCenterName') || '');
+                      }}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                          <SelectValue placeholder="Pilih advertiser TikTok" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                        <SelectItem value={NONE_VALUE}>Tidak dipasangkan</SelectItem>
+                        {liveTikTokAdvertisers.map((advertiser) => (
+                          <SelectItem key={advertiser.advertiserId} value={advertiser.advertiserId}>
+                            {advertiser.advertiserName} - {advertiser.bcName || 'Tanpa Business Center'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription className="text-xs">
+                      Dipakai untuk mencocokkan snapshot API TikTok ke akun internal.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Registry API TikTok kosong</p>
+                    <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                      Refresh setelah OAuth aktif, atau isi Advertiser ID manual sementara.
+                    </p>
+                    {liveTikTokError ? <p className="mt-1 text-xs font-semibold text-rose-500">{liveTikTokError}</p> : null}
+                  </div>
+                  {onRefreshTikTokRegistry ? (
+                    <Button type="button" size="sm" variant="outline" disabled={liveTikTokLoading} onClick={onRefreshTikTokRegistry}>
+                      <RefreshCw className={liveTikTokLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+                      Refresh
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="grid gap-3">
+                  <FormField
+                    control={form.control}
+                    name="liveTikTokAdvertiserId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Advertiser ID TikTok</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Contoh: 1234567890123456789" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="liveTikTokAdvertiserName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nama Advertiser</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Opsional, untuk label tampilan" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            )}
           </>
         ) : null}
 
@@ -436,14 +604,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
           )}
         />
 
-        <DialogFooter className="mt-6">
-          <Button type="button" variant="outline" onClick={onCancel} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-            Batal
-          </Button>
-          <Button type="submit" className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-            Simpan Akun Iklan
-          </Button>
-        </DialogFooter>
+        <MasterDataFormActions onCancel={onCancel} saveLabel="Simpan Akun Iklan" />
       </form>
     </Form>
   );

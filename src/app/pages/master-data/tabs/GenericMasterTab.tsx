@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Edit, Trash2,
-  LucideIcon, CheckCircle2, XCircle
+  LucideIcon
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import {
@@ -23,11 +23,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog"
 import { Badge } from '../../../components/ui/badge';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableText } from '../../../components/ui/data-table';
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
+import { MobileCardActions } from '../../../components/ui/master-data-ui';
+import { PlatformLogo } from '../../../components/ui/platform-logo';
 import { OperationalEmptyState, OperationalTableCard } from '../../../components/ui/operational-page';
 import { Role } from '../data';
 import { toast } from 'sonner';
@@ -38,18 +40,19 @@ import { GenericForm } from '../forms/GenericForm';
 import { MasterDataDetailDialog } from './MasterDataDetailDialog';
 import { cn } from '../../../components/ui/utils';
 import { getVehicleNameValidationMessage, normalizeVehicleName } from '../vehicleValidation';
+import { deletePlatformLogo, uploadPlatformLogo } from '@/app/services/platformLogoService';
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 300];
 
 interface GenericMasterTabProps {
   currentRole: Role;
   title: string;
-  type: 'simple' | 'vehicle' | 'payment' | 'sub_channel' | 'vendor';
+  type: 'simple' | 'vehicle' | 'payment' | 'sub_channel' | 'vendor' | 'platform';
   initialData?: any[];
   data?: any[]; // Optional controlled data
-  onAdd?: (item: any) => void; // Optional controlled handler
-  onUpdate?: (item: any) => void; // Optional controlled handler
-  onDelete?: (id: string) => void; // Optional controlled handler
+  onAdd?: (item: any) => void | Promise<void>; // Optional controlled handler
+  onUpdate?: (item: any) => void | Promise<void>; // Optional controlled handler
+  onDelete?: (id: string) => void | Promise<void>; // Optional controlled handler
   onImport?: () => void; // Optional import handler
   icon: LucideIcon;
   hideDescription?: boolean;
@@ -81,6 +84,7 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [deletingItem, setDeletingItem] = useState<any | null>(null);
   const [viewingItem, setViewingItem] = useState<any | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
@@ -123,6 +127,8 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
     const cleanData: any = {
       status: formData.status
     };
+    let uploadedLogoPath: string | null = null;
+    let previousLogoToDelete: string | null = null;
 
     if (type === 'vehicle') {
       const vehicleName = normalizeVehicleName(formData.name);
@@ -144,6 +150,10 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
         cleanData.name = formData.name;
         cleanData.phone = formData.phone;
         cleanData.address = formData.address;
+    } else if (type === 'platform') {
+      cleanData.name = formData.name;
+      cleanData.description = formData.description;
+      cleanData.logoPath = editingItem?.logoPath || null;
     } else {
       cleanData.name = formData.name;
       cleanData.description = formData.description;
@@ -151,11 +161,31 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
 
     try {
       if (editingItem) {
+        if (type === 'platform') {
+          if (formData.removeLogo && editingItem.logoPath) {
+            cleanData.logoPath = null;
+            previousLogoToDelete = editingItem.logoPath;
+          }
+          if (formData.logoFile instanceof File) {
+            cleanData.logoPath = await uploadPlatformLogo(editingItem.id, formData.logoFile, editingItem.logoPath, {
+              removePrevious: false,
+            });
+            uploadedLogoPath = cleanData.logoPath;
+            if (editingItem.logoPath && editingItem.logoPath !== cleanData.logoPath) {
+              previousLogoToDelete = editingItem.logoPath;
+            }
+          }
+        }
         const updatePayload = { ...cleanData, id: editingItem.id };
         if (onUpdate) {
           await onUpdate(updatePayload);
         } else {
           setLocalData(prev => prev.map(item => item.id === editingItem.id ? { ...item, ...updatePayload } : item));
+        }
+        if (previousLogoToDelete) {
+          await deletePlatformLogo(previousLogoToDelete).catch((error) => {
+            console.warn('Gagal membersihkan logo platform lama:', error);
+          });
         }
         toast.success(`${title} berhasil diperbarui`);
         if (currentUser) {
@@ -167,8 +197,13 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
           );
         }
       } else {
+        const newId = Math.random().toString(36).substr(2, 9);
+        if (type === 'platform' && formData.logoFile instanceof File) {
+          cleanData.logoPath = await uploadPlatformLogo(newId, formData.logoFile, null);
+          uploadedLogoPath = cleanData.logoPath;
+        }
         const newItem = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: newId,
           ...cleanData
         };
         if (onAdd) {
@@ -190,20 +225,30 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       setIsAddOpen(false);
       setEditingItem(null);
     } catch (error: any) {
+      if (!editingItem && uploadedLogoPath) {
+        await deletePlatformLogo(uploadedLogoPath).catch(() => undefined);
+      } else if (editingItem && uploadedLogoPath && uploadedLogoPath !== editingItem.logoPath) {
+        await deletePlatformLogo(uploadedLogoPath).catch(() => undefined);
+      }
       console.error("Form submission error:", error);
       toast.error(`Terjadi kesalahan: ${error.message || "Gagal menyimpan data"}`); 
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    const deletedItem = filteredData.find(item => item.id === id);
+    if (type === 'platform' && deletedItem?.logoPath) {
+      await deletePlatformLogo(deletedItem.logoPath).catch((error) => {
+        console.warn('Gagal menghapus logo platform:', error);
+      });
+    }
     if (onDelete) {
-      onDelete(id);
+      await onDelete(id);
     } else {
       setLocalData(prev => prev.filter(item => item.id !== id));
     }
     toast.success("Data berhasil dihapus");
     if (currentUser) {
-      const deletedItem = filteredData.find(item => item.id === id);
       logActivity(
         { id: currentUser.id, name: currentUser.name, role: currentUser.role },
         'DELETE', `Master Data`,
@@ -228,28 +273,23 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
 
     return (
       <div className="mb-8 last:mb-0">
-        <div className="flex items-center gap-2 mb-4 px-1">
-            <div className={cn("p-1.5 rounded-lg", variant === 'active' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400")}>
-                {variant === 'active' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-            </div>
-            <h3 className="font-semibold text-slate-800 dark:text-slate-200">{sectionTitle}</h3>
-            <Badge variant="secondary" className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500">
-                {totalCount}
-            </Badge>
-        </div>
+        <MasterDataTableTitle
+          title={sectionTitle}
+          count={totalCount}
+          variant={variant}
+        />
 
         <OperationalTableCard>
           {/* Desktop Table */}
           <div className="hidden md:block">
-            <DataTable actionWidth={112} cellY={12} minWidth={columns?.length ? 980 + columns.length * 120 : 760} rowMinHeight={64}>
+            <DataTable
+              actionWidth={82}
+              cellY={12}
+              columns={[72, 260, ...(columns?.map(() => 220) || []), 90, (canEdit || canDelete) ? 82 : null]}
+              minWidth={columns?.length ? 504 + columns.length * 220 : 504}
+              rowMinHeight={64}
+            >
             <table>
-              <colgroup>
-                <col style={{ width: 72 }} />
-                <col style={{ width: 260 }} />
-                {columns?.map((_, idx) => <col key={idx} style={{ width: 220 }} />)}
-                <col style={{ width: 130 }} />
-                {(canEdit || canDelete) && <col style={{ width: 112 }} />}
-              </colgroup>
               <thead>
                 <tr>
                   <th className="text-center">No</th>
@@ -268,58 +308,44 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                     className="cursor-pointer"
                     onClick={() => setViewingItem(item)}
                   >
-                    <td className="text-center">
+                    <td className="monoCell text-center">
                       {rowNumber}
                     </td>
                     <td>
-                      <TableText primary={item.name || item.bankName} />
+                      {type === 'platform' ? (
+                        <div className="platformLogoTableCell">
+                          <PlatformLogo density="compact" logoPath={item.logoPath} name={item.name || item.bankName} size="sm" />
+                          <TableText primary={item.name || item.bankName} />
+                        </div>
+                      ) : (
+                        <TableText primary={item.name || item.bankName} />
+                      )}
                     </td>
                     {columns?.map((col, idx) => (
                       <td key={idx}>
                         <TableText primary={col.render ? col.render(item) : item[col.accessor]} />
                       </td>
                     ))}
-                    <td>
-                      <Badge 
-                        variant="outline"
-                        className={item.status === 'active' || !item.status
-                          ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm" 
-                          : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm"}
-                      >
-                        {item.status === 'active' || !item.status ? 'AKTIF' : 'NON AKTIF'}
-                      </Badge>
-                    </td>
+                    <TableStatusCell>
+                      <TableStatusIcon
+                        label={item.status === 'active' || !item.status ? 'Aktif' : 'Non aktif'}
+                        tone={item.status === 'active' || !item.status ? 'active' : 'inactive'}
+                      />
+                    </TableStatusCell>
                     {(canEdit || canDelete) && (
                       <TableActionCell onClick={(e) => e.stopPropagation()}>
+                        <TableActionMenu>
                           {canEdit && (
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label={`Edit ${title}`}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <TableActionMenuItem icon={Edit} onClick={() => openEdit(item)}>
+                                Edit {title}
+                            </TableActionMenuItem>
                           )}
                           {canDelete && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" aria-label={`Hapus ${title}`}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle className="dark:text-slate-200">Hapus {title}</AlertDialogTitle>
-                                  <AlertDialogDescription className="dark:text-slate-400">
-                                    Apakah anda yakin ingin menghapus {title.toLowerCase()} <strong>{item.name || item.bankName}</strong>?
-                                    <br/>Tindakan ini tidak dapat dibatalkan.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600">Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-700" onClick={() => handleDelete(item.id)}>
-                                    Hapus
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
+                                Hapus
+                            </TableActionMenuItem>
                           )}
+                        </TableActionMenu>
                       </TableActionCell>
                     )}
                   </tr>
@@ -342,23 +368,23 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                              <span className="flex h-7 min-w-7 items-center justify-center rounded-md bg-slate-100 px-2 text-xs font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                                 {rowNumber}
                              </span>
-                             <div className={cn("p-2 rounded-lg", variant === 'active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500")}>
-                                <Icon className="w-5 h-5" />
-                             </div>
+                             {type === 'platform' ? (
+                                <PlatformLogo logoPath={item.logoPath} name={item.name || item.bankName} />
+                             ) : (
+                               <div className={cn("p-2 rounded-lg", variant === 'active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500")}>
+                                  <Icon className="w-5 h-5" />
+                               </div>
+                             )}
                              <div>
                                 <h4 className="font-bold text-slate-900 dark:text-slate-100 text-base">
                                     {item.name || item.bankName}
                                 </h4>
-                                <Badge 
-                                  variant="outline"
-                                  className={cn("mt-1 text-[10px] px-1.5 py-0 h-4 border-0",
-                                    item.status === 'active' || !item.status
-                                      ? "bg-emerald-50 text-emerald-600" 
-                                      : "bg-slate-100 text-slate-500"
-                                  )}
-                                >
-                                  {item.status === 'active' || !item.status ? 'Active' : 'Non-Active'}
-                                </Badge>
+                                <div className="mt-1">
+                                  <TableStatusIcon
+                                    label={item.status === 'active' || !item.status ? 'Aktif' : 'Non aktif'}
+                                    tone={item.status === 'active' || !item.status ? 'active' : 'inactive'}
+                                  />
+                                </div>
                              </div>
                         </div>
                     </div>
@@ -377,50 +403,22 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                     )}
 
                     {(canEdit || canDelete) && (
-                       <div className="pl-[52px] flex gap-2 pt-2">
-                           {canEdit && (
-                           <Button 
-                               variant="outline" 
-                               size="sm" 
-                               className="flex-1 text-xs h-8 text-blue-600 border-slate-200 dark:border-slate-700"
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 openEdit(item);
-                               }}
-                           >
-                               <Edit className="w-3 h-3 mr-2" />
-                               Edit
-                           </Button>
-                           )}
-                           {canDelete && (
-                           <AlertDialog>
-                               <AlertDialogTrigger asChild>
-                                  <Button 
-                                     variant="outline" 
-                                     size="sm" 
-                                     className="w-8 px-0 text-red-600 border-slate-200 dark:border-slate-700 h-8 shrink-0"
-                                     onClick={(e) => e.stopPropagation()}
-                                  >
-                                     <Trash2 className="w-3 h-3" />
-                                  </Button>
-                               </AlertDialogTrigger>
-                               <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                  <AlertDialogHeader>
-                                     <AlertDialogTitle className="dark:text-slate-200">Hapus {title}</AlertDialogTitle>
-                                     <AlertDialogDescription className="dark:text-slate-400">
-                                       Apakah anda yakin ingin menghapus {title.toLowerCase()} <strong>{item.name || item.bankName}</strong>?
-                                     </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                     <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
-                                     <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(item.id)}>
-                                       Hapus
-                                     </AlertDialogAction>
-                                  </AlertDialogFooter>
-                               </AlertDialogContent>
-                            </AlertDialog>
-                           )}
-                       </div>
+                      <MobileCardActions
+                        className="ml-[52px]"
+                        actions={[
+                          ...(canEdit ? [{
+                            icon: Edit,
+                            label: 'Edit',
+                            onClick: () => openEdit(item),
+                          }] : []),
+                          ...(canDelete ? [{
+                            danger: true,
+                            icon: Trash2,
+                            label: 'Hapus',
+                            onClick: () => setDeletingItem(item),
+                          }] : []),
+                        ]}
+                      />
                     )}
                 </div>
              ))}
@@ -558,6 +556,34 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(deletingItem)} onOpenChange={(open) => {
+        if (!open) setDeletingItem(null);
+      }}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Hapus {title}</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              Apakah anda yakin ingin menghapus {title.toLowerCase()} <strong>{deletingItem?.name || deletingItem?.bankName}</strong>?
+              <br />Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-600">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (deletingItem) handleDelete(deletingItem.id);
+                setDeletingItem(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Detail Dialog */}
       <MasterDataDetailDialog 

@@ -248,11 +248,13 @@ interface MasterDataContextType {
     csId: string;
     subChannelId?: string | null;
     startDate: string;
+    notes?: string | null;
   }) => Promise<void>;
   assignAdAccountOwner: (assignment: {
     adAccountId: string;
     advertiserId: string;
     startDate: string;
+    notes?: string | null;
   }) => Promise<void>;
   updateAdAccountOwnerAssignment: (assignment: AdAccountOwnerAssignment) => void;
   deleteAdAccountOwnerAssignment: (id: string) => void;
@@ -484,11 +486,27 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     }
   };
 
+  const isAssignmentSchemaCacheError = (table: string, error: any) =>
+    (table === 'ad_account_assignments' || table === 'ad_account_owner_assignments') &&
+    String(error?.message || '').toLowerCase().includes('notes') &&
+    String(error?.message || '').toLowerCase().includes('schema cache');
+
+  const withoutAssignmentDraftColumns = (payload: any) => {
+    if (!payload || typeof payload !== 'object') return payload;
+    const { notes: _notes, ...rest } = payload;
+    return rest;
+  };
+
   // Generic CRUD Helpers
   const addItem = async (table: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>, dbMapper?: (item: any) => any, uiMapper?: (item: any) => any, options?: MutationOptions) => {
     try {
       const payload = dbMapper ? dbMapper(item) : item;
-      const { data, error } = await supabase.from(table).insert(payload).select().single();
+      let { data, error } = await supabase.from(table).insert(payload).select().single();
+      if (error && isAssignmentSchemaCacheError(table, error)) {
+        const retry = await supabase.from(table).insert(withoutAssignmentDraftColumns(payload)).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
       if (error) throw error;
       if (data) {
          const uiItem = uiMapper ? uiMapper(data) : data;
@@ -527,7 +545,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const updateItem = async (table: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>, dbMapper?: (item: any) => any, uiMapper?: (item: any) => any) => {
     try {
       const payload = dbMapper ? dbMapper(item) : item;
-      const { data, error } = await supabase.from(table).update(payload).eq('id', item.id).select().single();
+      let { data, error } = await supabase.from(table).update(payload).eq('id', item.id).select().single();
+      if (error && isAssignmentSchemaCacheError(table, error)) {
+        const retry = await supabase.from(table).update(withoutAssignmentDraftColumns(payload)).eq('id', item.id).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
       if (error) throw error;
       if (data) {
          const uiItem = uiMapper ? uiMapper(data) : data;
@@ -1084,11 +1107,13 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const assignAdAccountOwner = async ({
     adAccountId,
     advertiserId,
+    notes,
     startDate,
   }: {
     adAccountId: string;
     advertiserId: string;
     startDate: string;
+    notes?: string | null;
   }) => {
     const normalizedStartDate = startDate || getTodayDateKey();
 
@@ -1104,6 +1129,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           startDate: normalizedStartDate,
           endDate: null,
           status: 'active',
+          notes: notes?.trim() || null,
         } satisfies AdAccountOwnerAssignment,
         setAdAccountOwnerAssignments,
         mapAdAccountOwnerAssignmentToDB,
@@ -1123,6 +1149,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const assignAdAccountCs = async ({
     adAccountId,
     csId,
+    notes,
     subChannelId,
     startDate,
   }: {
@@ -1130,6 +1157,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     csId: string;
     subChannelId?: string | null;
     startDate: string;
+    notes?: string | null;
   }) => {
     const normalizedStartDate = startDate || getTodayDateKey();
     const previousEndDate = getPreviousDateKey(normalizedStartDate);
@@ -1172,6 +1200,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           startDate: normalizedStartDate,
           endDate: null,
           status: 'active',
+          notes: notes?.trim() || null,
         } satisfies AdAccountAssignment,
         setAdAccountAssignments,
         mapAdAccountAssignmentToDB,

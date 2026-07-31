@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
 import {
@@ -11,10 +10,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../../../components/ui/select';
-import { DialogFooter } from '../../../components/ui/dialog';
+import { MasterDataFormActions } from '../../../components/ui/master-data-ui';
 import { Branch } from '../data';
 import { MapCard, BranchPoint } from '../../../components/ui/MapCard';
-import { Loader2 } from 'lucide-react';
 
 const formSchema = z.object({
   name: z.string().min(1, "Nama cabang wajib diisi"),
@@ -365,12 +363,7 @@ export const BranchForm: React.FC<BranchFormProps> = ({ item, existingBranches =
           </div>
         )}
 
-        <DialogFooter className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>Batal</Button>
-          <Button type="submit" className="bg-blue-600 hover:bg-blue-700 min-w-[100px]" disabled={isSubmitting}>
-            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan</> : "Simpan"}
-          </Button>
-        </DialogFooter>
+        <MasterDataFormActions isSubmitting={isSubmitting} onCancel={onCancel} />
       </form>
     </Form>
   );

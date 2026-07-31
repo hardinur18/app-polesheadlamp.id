@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableText } from '../../../components/ui/data-table';
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
@@ -18,7 +19,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog"
 import {
   Tooltip,
@@ -43,6 +43,7 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Branch | null>(null);
+  const [deletingItem, setDeletingItem] = useState<Branch | null>(null);
 
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
@@ -99,49 +100,48 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
     setIsAddOpen(true);
   };
 
-  const renderBranchTable = (data: Branch[], title: string, icon: any, variant: 'active' | 'other') => {
+  const renderBranchTable = (data: Branch[], title: string, variant: 'active' | 'other') => {
     if (data.length === 0) return null;
 
     return (
       <div className="mb-8 last:mb-0">
-        <div className="flex items-center gap-2 mb-4 px-1">
-            <div className={cn("p-1.5 rounded-lg", variant === 'active' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400")}>
-                {icon}
-            </div>
-            <h3 className="font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
-            <Badge variant="secondary" className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500">
-                {data.length}
-            </Badge>
-        </div>
+        <MasterDataTableTitle
+          title={title}
+          count={data.length}
+          variant={variant === 'active' ? 'active' : 'inactive'}
+          icon={variant === 'active' ? Building2 : Clock}
+        />
 
         <div className="tablePanel">
           {/* Desktop Table */}
           <div className="hidden md:block">
-          <DataTable actionWidth={112} cellY={12} minWidth={1180} rowMinHeight={66}>
+          <DataTable
+            actionWidth={82}
+            cellY={12}
+            className="masterDataBranchTable"
+            columns={[64, 230, 300, 190, 110, 150, 90, (canEdit || canDelete) ? 82 : null]}
+            minWidth={canEdit || canDelete ? 1216 : 1134}
+            rowMinHeight={66}
+          >
             <table>
-              <colgroup>
-                <col style={{ width: 230 }} />
-                <col style={{ width: 300 }} />
-                <col style={{ width: 190 }} />
-                <col style={{ width: 110 }} />
-                <col style={{ width: 150 }} />
-                <col style={{ width: 130 }} />
-                {(canEdit || canDelete) && <col style={{ width: 112 }} />}
-              </colgroup>
               <thead>
                 <tr>
+                  <th className="text-center">No</th>
                   <th>Nama Cabang</th>
                   <th>Lokasi</th>
                   <th>Koordinat</th>
-                  <th>Maps</th>
+                  <th className="text-center">Maps</th>
                   <th>Coverage</th>
-                  <th>Status</th>
+                  <th className="text-center">Status</th>
                   {(canEdit || canDelete) && <TableActionHeader />}
                 </tr>
               </thead>
               <tbody>
-                {data.map((item) => (
+                {data.map((item, index) => (
                   <tr key={item.id}>
+                    <td className="monoCell text-center">
+                      {index + 1}
+                    </td>
                     <td>
                       <TableText primary={item.name} secondary={item.code || '-'} />
                     </td>
@@ -155,7 +155,7 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                          <TableText primary="-" />
                        )}
                     </td>
-                    <td>
+                    <td className="tableIconCell text-center">
                       {item.mapsUrl ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -163,7 +163,7 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                                 href={item.mapsUrl} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="iconButton ghostButton mx-auto"
+                                className="iconButton ghostButton"
                               >
                                 <MapPin className="h-4 w-4" />
                               </a>
@@ -179,57 +179,33 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                     <td>
                       <TableText primary={item.radius ? `${item.radius} KM` : (item.geofence ? 'Geofence' : '-')} />
                     </td>
-                    <td>
-                      <div className="flex flex-col items-center gap-1">
-                        <Badge 
-                          variant="outline"
-                          className={cn("uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm",
-                             item.status === 'active' 
-                            ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800" 
-                            : item.status === 'coming_soon'
-                            ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-800"
-                            : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600"
-                          )}
-                        >
-                          {item.status === 'active' ? 'AKTIF' : item.status === 'coming_soon' ? 'COMING SOON' : 'NON AKTIF'}
-                        </Badge>
+                    <TableStatusCell>
+                      <div className="dataStatusIconWrap">
+                        <TableStatusIcon
+                          label={item.status === 'active' ? 'Aktif' : item.status === 'coming_soon' ? 'Coming soon' : 'Non aktif'}
+                          tone={item.status === 'active' ? 'active' : item.status === 'coming_soon' ? 'soon' : 'inactive'}
+                        />
                         {item.status === 'coming_soon' && item.openingDate && (
                              <span className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                 Est. {new Date(item.openingDate).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' })}
                              </span>
                           )}
                       </div>
-                    </td>
+                    </TableStatusCell>
                     {(canEdit || canDelete) && (
                       <TableActionCell>
+                        <TableActionMenu>
                           {canEdit && (
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(item)} aria-label="Edit cabang">
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <TableActionMenuItem icon={Edit} onClick={() => openEdit(item)}>
+                              Edit Cabang
+                            </TableActionMenuItem>
                           )}
                           {canDelete && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" aria-label="Hapus cabang">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle className="dark:text-slate-200">Hapus Cabang</AlertDialogTitle>
-                                  <AlertDialogDescription className="dark:text-slate-400">
-                                    Hapus cabang <strong>{item.name}</strong> secara permanen?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(item.id)}>
-                                    Hapus
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
+                              Hapus
+                            </TableActionMenuItem>
                           )}
+                        </TableActionMenu>
                       </TableActionCell>
                     )}
                   </tr>
@@ -251,14 +227,10 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
                              <div>
                                 <h4 className="font-bold text-slate-900 dark:text-slate-100 text-base">{item.name}</h4>
                                 <div className="flex items-center gap-2 mt-0.5">
-                                    <Badge 
-                                        variant="outline"
-                                        className={cn("text-[10px] px-1.5 py-0 h-4 border-0", 
-                                            item.status === 'active' ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
-                                        )}
-                                    >
-                                        {item.status === 'active' ? 'Active' : 'Coming Soon'}
-                                    </Badge>
+                                    <TableStatusIcon
+                                        label={item.status === 'active' ? 'Aktif' : item.status === 'coming_soon' ? 'Coming soon' : 'Non aktif'}
+                                        tone={item.status === 'active' ? 'active' : item.status === 'coming_soon' ? 'soon' : 'inactive'}
+                                    />
                                     <span className="text-xs text-slate-400">|</span>
                                     <span className="text-xs text-slate-500">{item.code}</span>
                                 </div>
@@ -335,8 +307,8 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
       {/* Render Sections */}
       {filteredData.length > 0 ? (
           <>
-            {renderBranchTable(activeBranches, 'Cabang Operasional', <Building2 className="w-5 h-5" />, 'active')}
-            {renderBranchTable(otherBranches, 'Coming Soon / Non-Aktif', <Clock className="w-5 h-5" />, 'other')}
+            {renderBranchTable(activeBranches, 'Cabang Operasional', 'active')}
+            {renderBranchTable(otherBranches, 'Coming Soon / Non-Aktif', 'other')}
           </>
       ) : (
           <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
@@ -372,6 +344,29 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Hapus Cabang</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              Hapus cabang <strong>{deletingItem?.name}</strong> secara permanen?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (deletingItem) void handleDelete(deletingItem.id);
+                setDeletingItem(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

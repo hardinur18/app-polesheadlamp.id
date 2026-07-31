@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
+import {
   AlertCircle,
-  Search, Plus, Edit, Trash2, CheckCircle2, XCircle, 
+  Plus, Edit, Trash2, CheckCircle2, XCircle,
   Clock, RefreshCw, Building2, Loader2, Wallet, Eye, ReceiptText, Upload, ExternalLink
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon } from '../../../components/ui/data-table';
+import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
+import { NoticeStack } from '../../../components/ui/notice-stack';
+import {
+  TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../../../components/ui/table';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
@@ -27,13 +30,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog"
 import { Badge } from '../../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Label } from '../../../components/ui/label';
 import { Textarea } from '../../../components/ui/textarea';
-import { Switch } from '../../../components/ui/switch';
 import { Role } from '../data';
 import { toast } from 'sonner';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -42,13 +43,13 @@ import { uploadProofAssetImage } from '@/app/services/proofAssets';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { cn } from '../../../components/ui/utils';
+import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import { useMasterData } from '../context';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
 import { logActivity } from '@/app/services/auditService';
 import { DEFAULT_OPERATIONAL_EXPENSE_ONLY_ACCOUNTS } from '@/app/data/operationalExpenseAccounts';
 import {
   OperationalEmptyState,
-  OperationalFilterPanel,
   OperationalKpiCard,
   OperationalKpiGrid,
   OperationalPageHeader,
@@ -217,6 +218,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const [activeTab, setActiveTab] = useState<ExpenseTab>('unpaid');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringExpense | null>(null);
+  const [deletingItem, setDeletingItem] = useState<RecurringExpense | null>(null);
   const [viewingItem, setViewingItem] = useState<RecurringExpense | null>(null);
   const [viewingPayment, setViewingPayment] = useState<RecurringExpensePayment | null>(null);
   const [paymentItem, setPaymentItem] = useState<RecurringExpense | null>(null);
@@ -975,7 +977,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                  <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting} className={isMobile ? "w-full" : ""}>
                     Batal
                  </Button>
-                 <Button type="submit" className={cn("bg-blue-600 hover:bg-blue-700", isMobile ? "w-full" : "")} disabled={isSubmitting}>
+                 <Button type="submit" className={cn(isMobile ? "w-full" : "")} disabled={isSubmitting}>
                      {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menyimpan...</> : 'Simpan'}
                  </Button>
              </div>
@@ -1099,29 +1101,24 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
             {branchName || '-'}
           </div>
         </TableCell>
-        <TableCell className="py-4">
-          <div className="flex min-w-[112px] items-center gap-2">
-            <Switch
-              checked={item.status === 'active'}
-              onCheckedChange={(checked) => handleToggleStatus(item, checked)}
-              disabled={!canEdit || isStatusUpdating}
-              aria-label={`${item.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'} ${item.name}`}
-            />
-            <Badge
-              variant="outline"
-              className={cn(
-                "whitespace-nowrap text-xs",
-                item.status === 'active'
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-slate-200 bg-slate-50 text-slate-500",
-              )}
-            >
-              {isStatusUpdating ? 'Update...' : item.status === 'active' ? 'Aktif' : 'Nonaktif'}
-            </Badge>
-          </div>
-        </TableCell>
-        <TableCell className="py-4 pr-6 text-right">
-          <div className="flex justify-end gap-2 items-center">
+        <TableStatusCell>
+          <TableStatusIcon
+            className={cn(canEdit && !isStatusUpdating && 'cursor-pointer')}
+            label={
+              isStatusUpdating
+                ? 'Update status'
+                : item.status === 'active'
+                  ? 'Aktif'
+                  : 'Non aktif'
+            }
+            onClick={() => {
+              if (!canEdit || isStatusUpdating) return;
+              void handleToggleStatus(item, item.status !== 'active');
+            }}
+            tone={isStatusUpdating ? 'soon' : item.status === 'active' ? 'active' : 'inactive'}
+          />
+        </TableStatusCell>
+        <TableActionCell>
             {isPaid ? (
               <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700" variant="outline">
                 <CheckCircle2 className="mr-1.5 h-3 w-3" />
@@ -1135,7 +1132,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                   "h-8 px-3 text-xs",
                   paymentActionDisabled
                     ? "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-50"
-                    : "bg-emerald-600 text-white hover:bg-emerald-700",
+                    : "",
                 )}
                 disabled={paymentActionDisabled}
                 onClick={() => openPaymentDialog(item)}
@@ -1154,41 +1151,28 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
               </Button>
             ) : null}
 
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => setViewingItem(item)}>
-              <Eye className="h-4 w-4" />
-            </Button>
-
-            {canEdit && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50" onClick={() => {
-                  setEditingItem(item);
-                  setIsAddOpen(true);
-              }}>
-                <Edit className="h-4 w-4" />
-              </Button>
-            )}
-            {canDelete && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Hapus Data</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Yakin hapus pengeluaran rutin <strong>{item.name}</strong>?
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Batal</AlertDialogCancel>
-                    <AlertDialogAction className="bg-red-600" onClick={() => handleDelete(item.id)}>Hapus</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-        </TableCell>
+            <TableActionMenu contentClassName="w-48">
+                <TableActionMenuItem icon={Eye} onClick={() => setViewingItem(item)}>
+                  Lihat Detail
+                </TableActionMenuItem>
+                {canEdit && (
+                  <TableActionMenuItem
+                    icon={Edit}
+                    onClick={() => {
+                      setEditingItem(item);
+                      setIsAddOpen(true);
+                    }}
+                  >
+                    Edit Data
+                  </TableActionMenuItem>
+                )}
+                {canDelete && (
+                  <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
+                    Hapus
+                  </TableActionMenuItem>
+                )}
+            </TableActionMenu>
+        </TableActionCell>
       </TableRow>
     );
   };
@@ -1198,19 +1182,21 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
 
     return (
       <div className="mb-8 last:mb-0">
-        <div className="flex items-center gap-2 mb-4 px-1">
-            <div className={cn("p-1.5 rounded-lg", variant === 'active' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400")}>
-                {variant === 'active' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-            </div>
-            <h3 className="font-semibold text-slate-800 dark:text-slate-200">{sectionTitle}</h3>
-            <Badge variant="secondary" className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500">
-                {items.length}
-            </Badge>
-        </div>
+        <MasterDataTableTitle
+          title={sectionTitle}
+          count={items.length}
+          variant={variant}
+        />
 
         <OperationalTableCard>
-          <div className="overflow-x-auto">
-            <Table>
+          <DataTable
+            actionWidth={82}
+            cellY={12}
+            columns={[64, 230, 180, 150, 220, 150, 120, 145, 175, 160, 120, 82]}
+            minWidth={1798}
+            rowMinHeight={82}
+          >
+            <table>
               <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
                 <TableRow className="border-b border-slate-100 dark:border-slate-700">
                   <TableHead className="w-[50px] font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6">No</TableHead>
@@ -1223,15 +1209,15 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Jatuh Tempo</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan Selanjutnya</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Cabang</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Status</TableHead>
-                  <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pr-6">Aksi</TableHead>
+                  <TableHead className="text-center font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Status</TableHead>
+                  <TableActionHeader />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.map((item, index) => renderExpenseRow(item, index))}
               </TableBody>
-            </Table>
-          </div>
+            </table>
+          </DataTable>
         </OperationalTableCard>
       </div>
     );
@@ -1255,8 +1241,14 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           description="Pembayaran yang sudah dicatat ada di tab Sudah Dibayar."
         />
       ) : (
-        <div className="overflow-x-auto">
-          <Table>
+        <DataTable
+          actionWidth={82}
+          cellY={12}
+          columns={[64, 230, 180, 150, 220, 150, 120, 145, 175, 160, 120, 82]}
+          minWidth={1798}
+          rowMinHeight={82}
+        >
+          <table>
             <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
               <TableRow className="border-b border-slate-100 dark:border-slate-700">
                 <TableHead className="w-[50px] font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6">No</TableHead>
@@ -1269,15 +1261,15 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                 <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Jatuh Tempo</TableHead>
                 <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan Selanjutnya</TableHead>
                 <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Cabang</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Status</TableHead>
-                <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pr-6">Aksi</TableHead>
+                <TableHead className="text-center font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Status</TableHead>
+                <TableActionHeader />
               </TableRow>
             </TableHeader>
             <TableBody>
               {unpaidItems.map((item, index) => renderExpenseRow(item, index))}
             </TableBody>
-          </Table>
-        </div>
+          </table>
+        </DataTable>
       )}
     </OperationalTableCard>
   );
@@ -1300,8 +1292,14 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           description="Pembayaran akan muncul di sini setelah form Bayar disimpan."
         />
       ) : (
-        <div className="overflow-x-auto">
-          <Table>
+        <DataTable
+          actionWidth={82}
+          cellY={12}
+          columns={[250, 145, 160, 175, 220, 170, 150, 120, 160, 82]}
+          minWidth={1632}
+          rowMinHeight={82}
+        >
+          <table>
             <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
                 <TableRow className="border-b border-slate-100 dark:border-slate-700">
                   <TableHead className="pl-6 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan</TableHead>
@@ -1313,7 +1311,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nominal</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Bukti</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Input Oleh</TableHead>
-                  <TableHead className="pr-6 text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Aksi</TableHead>
+                  <TableActionHeader />
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -1387,8 +1385,8 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                 );
               })}
             </TableBody>
-          </Table>
-        </div>
+          </table>
+        </DataTable>
       )}
     </OperationalTableCard>
   );
@@ -1405,43 +1403,29 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
       : null;
 
   return (
-    <div className="space-y-4">
+    <div className="masterDataTabSurface">
       <OperationalPageHeader
         title="Pengeluaran Rutin"
         eyebrow="Finance"
         icon={ReceiptText}
         subtitle={`Periode ${currentPeriodKey}. Kelola tagihan rutin, history pembayaran, dan sinkron Biaya Operasional.`}
-        actions={
-          <>
-            <Button variant="outline" onClick={fetchExpenses} disabled={loading} className="h-9 gap-2">
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              Refresh
-            </Button>
-            {canAdd && (
-              <Button
-                className="h-9 gap-2"
-                onClick={() => {
-                  setEditingItem(null);
-                  setIsAddOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Tambah Pengeluaran
-              </Button>
-            )}
-          </>
-        }
       />
 
-      {paymentHistoryError && (
-        <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div>
-            <div className="font-semibold">Integrasi history pembayaran belum aktif di backend.</div>
-            <div className="mt-0.5 text-amber-700 dark:text-amber-300">{paymentHistoryError}</div>
-          </div>
-        </div>
-      )}
+      <NoticeStack
+        className="masterDataFloatingNotices"
+        notices={
+          paymentHistoryError
+            ? [
+                {
+                  id: 'payment-history',
+                  tone: 'warning',
+                  title: 'Integrasi history pembayaran belum aktif di backend.',
+                  message: paymentHistoryError,
+                },
+              ]
+            : []
+        }
+      />
 
       <OperationalKpiGrid>
         <OperationalKpiCard
@@ -1470,21 +1454,35 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
         />
       </OperationalKpiGrid>
 
-      <OperationalFilterPanel className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full max-w-xl">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                placeholder="Cari nama, kategori, rekening, atau catatan..."
-                className="h-10 pl-9"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+      <ControlPanel aria-label="Filter biaya berulang">
+        <ControlRow className="masterDataControlRow">
+          <SearchBox
+            placeholder="Cari nama, kategori, rekening, atau catatan..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="masterDataControlActions">
+            <Button variant="outline" className="masterDataActionButton secondary" onClick={() => setSearch('')} disabled={!search.trim()}>
+              Reset
+            </Button>
+            <Button variant="outline" className="masterDataActionButton secondary" onClick={fetchExpenses} disabled={loading}>
+              <RefreshCw className={cn(loading && 'animate-spin')} />
+              Refresh
+            </Button>
+            {canAdd && (
+              <Button
+                className="masterDataActionButton"
+                onClick={() => {
+                  setEditingItem(null);
+                  setIsAddOpen(true);
+                }}
+              >
+                <Plus />
+                Tambah Pengeluaran
+              </Button>
+            )}
           </div>
-          <Button variant="outline" className="h-10 shrink-0" onClick={() => setSearch('')} disabled={!search.trim()}>
-            Reset
-          </Button>
-        </div>
+        </ControlRow>
 
         <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
           {[
@@ -1498,7 +1496,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
               className={cn(
                 'inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors',
                 activeTab === tab.id
-                  ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                  ? 'border-primary bg-primary text-primary-foreground shadow-sm'
                   : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
               )}
             >
@@ -1514,7 +1512,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
             </button>
           ))}
         </div>
-      </OperationalFilterPanel>
+      </ControlPanel>
 
       {loading ? (
           <OperationalTableCard>
@@ -1762,7 +1760,6 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
             <Button
               onClick={handleSubmitPayment}
               disabled={isPaying || isUploadingProof || !canPay || !canCreateOperationalExpense}
-              className="bg-emerald-600 hover:bg-emerald-700"
             >
               {isPaying ? (
                 <>
@@ -1784,6 +1781,31 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(deletingItem)} onOpenChange={(open) => {
+        if (!open) setDeletingItem(null);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Data</AlertDialogTitle>
+            <AlertDialogDescription>
+              Yakin hapus pengeluaran rutin <strong>{deletingItem?.name}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (deletingItem) void handleDelete(deletingItem.id);
+                setDeletingItem(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Payment Detail Modal */}
       <Dialog open={!!viewingPayment} onOpenChange={(open) => !open && setViewingPayment(null)}>

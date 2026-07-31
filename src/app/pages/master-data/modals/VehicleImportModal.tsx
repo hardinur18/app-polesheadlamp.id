@@ -282,7 +282,7 @@ export function VehicleImportModal({ isOpen, onClose, onConfirm }: VehicleImport
             
             <div className="flex justify-end gap-3 pt-2">
                <Button variant="outline" onClick={onClose} disabled={isProcessing}>Batal</Button>
-               <Button onClick={handleSubmit} disabled={isProcessing} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+               <Button onClick={handleSubmit} disabled={isProcessing}>
                   {isProcessing ? "Menyimpan..." : (
                     <>
                       <CheckCircle2 className="w-4 h-4 mr-2" />

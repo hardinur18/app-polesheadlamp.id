@@ -1,14 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
-  Plus, Filter, Edit, Trash2,
-  Monitor, CheckCircle2, XCircle, UserCheck, Users
+  Plus, Edit, Trash2,
+  History, Link2, Monitor, RefreshCw, Unlink, UserCheck, Users
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
+import { MobileCardActions } from '../../../components/ui/master-data-ui';
+import type { NoticeItem } from '../../../components/ui/notice-stack';
+import { PlatformLogo } from '../../../components/ui/platform-logo';
 import { Input } from '../../../components/ui/input';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../../../components/ui/table';
+import { Textarea } from '../../../components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
@@ -21,10 +25,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog"
-import { Badge } from '../../../components/ui/badge';
-import { Checkbox } from '../../../components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -67,12 +68,29 @@ import {
   type TikTokAdvertiser,
   type TikTokBusinessCenter,
 } from '@/app/services/tiktokAdsLiveService';
+import {
+  deleteAdApiAccount,
+  fetchAdAccountApiMappings,
+  fetchAdApiAccounts,
+  getCachedAdAccountApiMappings,
+  getCachedAdApiAccounts,
+  removeAdAccountApiMapping,
+  saveAdApiAccount,
+  saveAdAccountApiMapping,
+  upsertAdApiAccounts,
+  type AdAccountApiMapping,
+  type AdApiAccount,
+  type AdsPlatformKey,
+} from '@/app/services/adApiIntegrationService';
 
 interface AdAccountTabProps {
   currentRole: Role;
+  setPageNotices?: (notices: NoticeItem[]) => void;
 }
 
-export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _currentRole }) => {
+type AccountView = 'all' | 'api' | 'live' | 'unmatched' | 'assignment';
+
+export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _currentRole, setPageNotices }) => {
   const {
     adAccounts,
     adAccountAssignments,
@@ -88,8 +106,11 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const [search, setSearch] = useState('');
+  const [accountView, setAccountView] = useState<AccountView>('all');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AdAccount | null>(null);
+  const [deletingItem, setDeletingItem] = useState<AdAccount | null>(null);
+  const [historyItem, setHistoryItem] = useState<AdAccount | null>(null);
   const [liveMetaData, setLiveMetaData] = useState<MetaLiveBreakdownResponse | null>(
     () => getCachedMetaLiveRegistry(),
   );
@@ -120,11 +141,67 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const [assignmentCsId, setAssignmentCsId] = useState('');
   const [assignmentSubChannelId, setAssignmentSubChannelId] = useState('none');
   const [assignmentStartDate, setAssignmentStartDate] = useState(() => getTodayDateKey());
+  const [assignmentNotes, setAssignmentNotes] = useState('');
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [ownerDialogItem, setOwnerDialogItem] = useState<AdAccount | null>(null);
   const [ownerAdvertiserId, setOwnerAdvertiserId] = useState('');
   const [ownerStartDate, setOwnerStartDate] = useState(() => getTodayDateKey());
+  const [ownerNotes, setOwnerNotes] = useState('');
   const [ownerSaving, setOwnerSaving] = useState(false);
+  const [apiAccounts, setApiAccounts] = useState<AdApiAccount[]>(() => getCachedAdApiAccounts());
+  const [apiMappings, setApiMappings] = useState<AdAccountApiMapping[]>(() => getCachedAdAccountApiMappings());
+  const [apiSyncing, setApiSyncing] = useState(false);
+  const [apiMappingDialogAccount, setApiMappingDialogAccount] = useState<AdApiAccount | null>(null);
+  const [apiMappingInternalId, setApiMappingInternalId] = useState('');
+  const [apiMappingNotes, setApiMappingNotes] = useState('');
+  const [apiMappingSaving, setApiMappingSaving] = useState(false);
+  const [apiAccountDialogItem, setApiAccountDialogItem] = useState<AdApiAccount | null>(null);
+  const [isApiAccountDialogOpen, setIsApiAccountDialogOpen] = useState(false);
+  const [apiAccountPlatformKey, setApiAccountPlatformKey] = useState<AdsPlatformKey>('meta');
+  const [apiAccountExternalId, setApiAccountExternalId] = useState('');
+  const [apiAccountExternalName, setApiAccountExternalName] = useState('');
+  const [apiAccountGroupId, setApiAccountGroupId] = useState('');
+  const [apiAccountGroupName, setApiAccountGroupName] = useState('');
+  const [apiAccountStatus, setApiAccountStatus] = useState('manual');
+  const [apiAccountCurrency, setApiAccountCurrency] = useState('IDR');
+  const [selectedBackendApiKey, setSelectedBackendApiKey] = useState('manual-entry');
+  const [apiAccountSaving, setApiAccountSaving] = useState(false);
+  const [apiDeletingAccount, setApiDeletingAccount] = useState<AdApiAccount | null>(null);
+
+  useEffect(() => {
+    setPageNotices?.([
+      ...(liveMetaError
+        ? [{
+            id: 'live-meta',
+            tone: liveMetaData?.cacheStatus === 'stale' ? 'warning' as const : 'danger' as const,
+            message: `Live Meta sedang tidak aktif: ${liveMetaError}`,
+          }]
+        : []),
+      ...(liveGoogleError
+        ? [{
+            id: 'live-google',
+            tone: liveGoogleData?.cacheStatus === 'stale' ? 'warning' as const : 'danger' as const,
+            message: `Live Google Ads sedang tidak aktif: ${liveGoogleError}`,
+          }]
+        : []),
+      ...(liveTikTokError
+        ? [{
+            id: 'live-tiktok',
+            tone: 'danger' as const,
+            message: `Live TikTok Ads sedang tidak aktif: ${liveTikTokError}`,
+          }]
+        : []),
+    ]);
+
+    return () => setPageNotices?.([]);
+  }, [
+    liveGoogleData?.cacheStatus,
+    liveGoogleError,
+    liveMetaData?.cacheStatus,
+    liveMetaError,
+    liveTikTokError,
+    setPageNotices,
+  ]);
 
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
@@ -158,9 +235,19 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const tiktokPlatform = platforms.find(p => isTikTokPlatformName(p.name));
 
   const getPlatformName = (id: string) => platforms.find(p => p.id === id)?.name || 'Unknown';
+  const getPlatform = (id: string) => platforms.find(p => p.id === id);
+  const getPlatformByKey = (key: AdsPlatformKey) => {
+    if (key === 'google') return googlePlatform;
+    if (key === 'tiktok') return tiktokPlatform;
+    return metaPlatform;
+  };
+  const getPlatformLabelByKey = (key: AdsPlatformKey) =>
+    key === 'google' ? 'Google Ads' : key === 'tiktok' ? 'TikTok Ads' : 'Meta Ads';
   const getAdvertiserName = (id: string) => users.find(u => u.id === id)?.name || 'Unknown';
   const getUserName = (id?: string | null) => users.find(u => u.id === id)?.name || 'Belum diset';
   const getSubChannelName = (id?: string | null) => subChannels.find(s => s.id === id)?.name || '-';
+  const formatAssignmentPeriod = (startDate: string, endDate?: string | null) =>
+    `${startDate} - ${endDate || 'Sekarang'}`;
   const normalizeLookupKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
   const getTrailingNumberKey = (value: string) => value.match(/(\d+)\s*$/)?.[1] || '';
   const buildFlexibleLookupKeys = React.useCallback((value: string) => {
@@ -214,10 +301,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     let cancelled = false;
 
     const load = async () => {
-      const [configs, googleConfigs, tiktokConfigs] = await Promise.all([
+      const [configs, googleConfigs, tiktokConfigs, storedApiAccounts, storedApiMappings] = await Promise.all([
         fetchAdsIntegrationConfigs(),
         fetchGoogleAdsIntegrationConfigs(),
         fetchTikTokAdsIntegrationConfigs(),
+        fetchAdApiAccounts(),
+        fetchAdAccountApiMappings(),
       ]);
       if (!cancelled) {
         setIntegrationConfigs(
@@ -241,6 +330,8 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             {},
           ),
         );
+        setApiAccounts(storedApiAccounts);
+        setApiMappings(storedApiMappings);
       }
     };
 
@@ -466,18 +557,25 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
   const isIntegrationEnabled = React.useCallback(
     (item: AdAccount) => {
+      const mapped = apiMappings.some((mapping) =>
+        mapping.status === 'active' &&
+        mapping.internalAdAccountId === item.id
+      );
+      if (mapped) return true;
+
       const platformName = getPlatformName(item.platformId);
       if (isGooglePlatformName(platformName)) {
-        return googleIntegrationConfigs[item.id]?.enabled ?? item.status === 'active';
+        return googleIntegrationConfigs[item.id]?.enabled ?? false;
       }
 
       if (isTikTokPlatformName(platformName)) {
-        return tiktokIntegrationConfigs[item.id]?.enabled ?? item.status === 'active';
+        return tiktokIntegrationConfigs[item.id]?.enabled ?? false;
       }
 
-      return integrationConfigs[item.id]?.enabled ?? item.status === 'active';
+      return integrationConfigs[item.id]?.enabled ?? false;
     },
     [
+      apiMappings,
       getPlatformName,
       googleIntegrationConfigs,
       integrationConfigs,
@@ -487,14 +585,54 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     ],
   );
 
-  const filteredData = adAccounts.filter(item => 
+  const hasLiveMapping = React.useCallback(
+    (item: AdAccount) => {
+      const mapped = apiMappings.some((mapping) =>
+        mapping.status === 'active' &&
+        mapping.internalAdAccountId === item.id
+      );
+      if (mapped) return true;
+
+      const platformName = getPlatformName(item.platformId);
+      if (isGooglePlatformName(platformName)) {
+        const config = googleIntegrationConfigs[item.id];
+        return Boolean(config?.enabled && config.liveGoogleCustomerId);
+      }
+
+      if (isTikTokPlatformName(platformName)) {
+        const config = tiktokIntegrationConfigs[item.id];
+        return Boolean(config?.enabled && config.liveTikTokAdvertiserId);
+      }
+
+      const config = integrationConfigs[item.id];
+      return Boolean(config?.enabled && config.liveMetaAccountId);
+    },
+    [
+      apiMappings,
+      getPlatformName,
+      googleIntegrationConfigs,
+      integrationConfigs,
+      isGooglePlatformName,
+      isTikTokPlatformName,
+      tiktokIntegrationConfigs,
+    ],
+  );
+
+  const isUnmatchedAccount = React.useCallback(
+    (item: AdAccount) => getBusinessManagerLabel(item) === 'Belum match live',
+    [getBusinessManagerLabel],
+  );
+
+  const hasAssignmentIssue = React.useCallback(
+    (item: AdAccount) => !getActiveOwnerAssignment(item.id) || !getActiveAssignment(item.id),
+    [getActiveAssignment, getActiveOwnerAssignment],
+  );
+
+  const rawFilteredData = adAccounts.filter(item => 
     item.accountName.toLowerCase().includes(search.toLowerCase()) ||
     getAdvertiserName(item.advertiserId).toLowerCase().includes(search.toLowerCase()) ||
     getBusinessManagerLabel(item).toLowerCase().includes(search.toLowerCase())
   );
-
-  const activeData = filteredData.filter(item => item.status === 'active');
-  const inactiveData = filteredData.filter(item => item.status !== 'active');
 
   const liveRegistryRows = useMemo(() => {
     const lowerSearch = search.trim().toLowerCase();
@@ -521,6 +659,605 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       .sort((left, right) => right.spend - left.spend);
   }, [adAccounts, getAdvertiserName, liveMetaData, search]);
 
+  const registryApiAccounts = useMemo<AdApiAccount[]>(() => {
+    const syncedAt = new Date().toISOString();
+    const metaRows: AdApiAccount[] = (liveMetaData?.accounts || []).map((account) => ({
+      id: `meta:${account.id}`,
+      platformKey: 'meta',
+      externalAccountId: account.id,
+      externalAccountName: account.name,
+      externalGroupId: account.businessId,
+      externalGroupName: account.businessName,
+      externalAccountStatus: account.accountStatus !== null ? String(account.accountStatus) : null,
+      currencyCode: account.currency,
+      raw: account as unknown as Record<string, unknown>,
+      lastSyncedAt: syncedAt,
+    }));
+
+    const googleRows: AdApiAccount[] = (liveGoogleData?.accounts || []).map((account) => ({
+      id: `google:${account.customerId}`,
+      platformKey: 'google',
+      externalAccountId: account.customerId,
+      externalAccountName: account.customerName || account.name,
+      externalGroupId: account.managerCustomerId,
+      externalGroupName: account.managerCustomerName,
+      externalAccountStatus: account.status,
+      currencyCode: account.currencyCode,
+      raw: account as unknown as Record<string, unknown>,
+      lastSyncedAt: syncedAt,
+    }));
+
+    const tiktokRows: AdApiAccount[] = liveTikTokAdvertisers.map((advertiser) => ({
+      id: `tiktok:${advertiser.advertiserId}`,
+      platformKey: 'tiktok',
+      externalAccountId: advertiser.advertiserId,
+      externalAccountName: advertiser.advertiserName,
+      externalGroupId: advertiser.bcId,
+      externalGroupName: advertiser.bcName,
+      externalAccountStatus: advertiser.status,
+      currencyCode: advertiser.currency,
+      raw: advertiser as unknown as Record<string, unknown>,
+      lastSyncedAt: syncedAt,
+    }));
+
+    return [...metaRows, ...googleRows, ...tiktokRows];
+  }, [liveGoogleData, liveMetaData, liveTikTokAdvertisers]);
+
+  const registryApiAccountSignature = useMemo(
+    () => registryApiAccounts.map((account) => `${account.platformKey}:${account.externalAccountId}`).sort().join('|'),
+    [registryApiAccounts],
+  );
+
+  useEffect(() => {
+    if (!registryApiAccountSignature) return;
+
+    let cancelled = false;
+    const sync = async () => {
+      setApiSyncing(true);
+      try {
+        const rows = await upsertAdApiAccounts(registryApiAccounts);
+        if (!cancelled) setApiAccounts(rows);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Gagal menyimpan registry API Ads.');
+      } finally {
+        if (!cancelled) setApiSyncing(false);
+      }
+    };
+
+    void sync();
+    return () => {
+      cancelled = true;
+    };
+  }, [registryApiAccountSignature]);
+
+  const allApiAccounts = useMemo(() => {
+    const map = new Map<string, AdApiAccount>();
+    for (const account of apiAccounts) {
+      map.set(`${account.platformKey}:${account.externalAccountId}`, account);
+    }
+    for (const account of registryApiAccounts) {
+      const existing = map.get(`${account.platformKey}:${account.externalAccountId}`);
+      map.set(`${account.platformKey}:${account.externalAccountId}`, {
+        ...account,
+        id: existing?.id || account.id,
+      });
+    }
+    return Array.from(map.values()).sort((left, right) =>
+      left.platformKey.localeCompare(right.platformKey) ||
+      left.externalAccountName.localeCompare(right.externalAccountName),
+    );
+  }, [apiAccounts, registryApiAccounts]);
+
+  const legacyIntegrationPairs = useMemo(() => {
+    const pairs: Array<{ internalAdAccountId: string; apiAccount: AdApiAccount }> = [];
+    const syncedAt = new Date().toISOString();
+
+    for (const account of adAccounts) {
+      const platformName = getPlatformName(account.platformId);
+
+      if (isGooglePlatformName(platformName)) {
+        const config = googleIntegrationConfigs[account.id];
+        if (!config?.enabled || !config.liveGoogleCustomerId) continue;
+        pairs.push({
+          internalAdAccountId: account.id,
+          apiAccount: {
+            id: `legacy-google:${config.liveGoogleCustomerId}`,
+            platformKey: 'google',
+            externalAccountId: config.liveGoogleCustomerId,
+            externalAccountName: config.liveGoogleCustomerName || account.accountName,
+            externalGroupId: config.managerCustomerId || null,
+            externalGroupName: config.managerCustomerName || null,
+            externalAccountStatus: config.enabled ? 'ENABLED' : 'DISABLED',
+            currencyCode: 'IDR',
+            raw: { source: 'legacy-integration-config' },
+            lastSyncedAt: syncedAt,
+          },
+        });
+        continue;
+      }
+
+      if (isTikTokPlatformName(platformName)) {
+        const config = tiktokIntegrationConfigs[account.id];
+        if (!config?.enabled || !config.liveTikTokAdvertiserId) continue;
+        pairs.push({
+          internalAdAccountId: account.id,
+          apiAccount: {
+            id: `legacy-tiktok:${config.liveTikTokAdvertiserId}`,
+            platformKey: 'tiktok',
+            externalAccountId: config.liveTikTokAdvertiserId,
+            externalAccountName: config.liveTikTokAdvertiserName || account.accountName,
+            externalGroupId: config.businessCenterId || null,
+            externalGroupName: config.businessCenterName || null,
+            externalAccountStatus: config.enabled ? 'ENABLED' : 'DISABLED',
+            currencyCode: 'IDR',
+            raw: { source: 'legacy-integration-config' },
+            lastSyncedAt: syncedAt,
+          },
+        });
+        continue;
+      }
+
+      const config = integrationConfigs[account.id];
+      if (!config?.enabled || !config.liveMetaAccountId) continue;
+      pairs.push({
+        internalAdAccountId: account.id,
+        apiAccount: {
+          id: `legacy-meta:${config.liveMetaAccountId}`,
+          platformKey: 'meta',
+          externalAccountId: config.liveMetaAccountId,
+          externalAccountName: config.liveMetaAccountName || account.accountName,
+          externalGroupId: config.businessManagerId || null,
+          externalGroupName: config.businessManagerName || null,
+          externalAccountStatus: config.enabled ? 'ENABLED' : 'DISABLED',
+          currencyCode: 'IDR',
+          raw: { source: 'legacy-integration-config' },
+          lastSyncedAt: syncedAt,
+        },
+      });
+    }
+
+    return pairs;
+  }, [
+    adAccounts,
+    getPlatformName,
+    googleIntegrationConfigs,
+    integrationConfigs,
+    isGooglePlatformName,
+    isTikTokPlatformName,
+    tiktokIntegrationConfigs,
+  ]);
+
+  const legacyIntegrationSignature = useMemo(
+    () => legacyIntegrationPairs
+      .map((pair) => `${pair.internalAdAccountId}:${pair.apiAccount.platformKey}:${pair.apiAccount.externalAccountId}`)
+      .sort()
+      .join('|'),
+    [legacyIntegrationPairs],
+  );
+
+  useEffect(() => {
+    if (!legacyIntegrationSignature) return;
+
+    let cancelled = false;
+    const mirrorLegacyConfigs = async () => {
+      try {
+        const storedAccounts = await upsertAdApiAccounts(legacyIntegrationPairs.map((pair) => pair.apiAccount));
+        if (cancelled) return;
+        setApiAccounts(storedAccounts);
+
+        const accountByExternalKey = new Map(
+          storedAccounts.map((account) => [`${account.platformKey}:${account.externalAccountId}`, account]),
+        );
+
+        const missingPairs = legacyIntegrationPairs.filter((pair) => {
+          return !apiMappings.some((mapping) =>
+            mapping.status === 'active' &&
+            mapping.internalAdAccountId === pair.internalAdAccountId &&
+            mapping.platformKey === pair.apiAccount.platformKey &&
+            mapping.externalAccountId === pair.apiAccount.externalAccountId
+          );
+        });
+
+        if (missingPairs.length === 0) return;
+
+        const savedMappings = await Promise.all(
+          missingPairs.map((pair) => {
+            const storedAccount =
+              accountByExternalKey.get(`${pair.apiAccount.platformKey}:${pair.apiAccount.externalAccountId}`) ||
+              pair.apiAccount;
+
+            return saveAdAccountApiMapping({
+              internalAdAccountId: pair.internalAdAccountId,
+              apiAccount: storedAccount,
+              notes: 'Migrasi otomatis dari config integrasi lama.',
+            });
+          }),
+        );
+
+        if (cancelled) return;
+        setApiMappings(prev => [
+          ...savedMappings,
+          ...prev.filter((mapping) =>
+            !savedMappings.some((saved) =>
+              saved.internalAdAccountId === mapping.internalAdAccountId ||
+              (saved.platformKey === mapping.platformKey && saved.externalAccountId === mapping.externalAccountId)
+            )
+          ),
+        ]);
+      } catch (error) {
+        console.warn('[AdAccountTab] gagal mirror config integrasi lama', error);
+      }
+    };
+
+    void mirrorLegacyConfigs();
+    return () => {
+      cancelled = true;
+    };
+  }, [legacyIntegrationSignature]);
+
+  const getApiMappingForAccount = React.useCallback(
+    (account: AdApiAccount) =>
+      apiMappings.find((mapping) =>
+        mapping.status === 'active' &&
+        mapping.platformKey === account.platformKey &&
+        mapping.externalAccountId === account.externalAccountId
+      ),
+    [apiMappings],
+  );
+
+  const getApiMappingForInternalAccount = React.useCallback(
+    (internalAdAccountId: string) =>
+      apiMappings.find((mapping) =>
+        mapping.status === 'active' &&
+        mapping.internalAdAccountId === internalAdAccountId
+      ),
+    [apiMappings],
+  );
+
+  const getInternalAdAccount = React.useCallback(
+    (id?: string | null) => adAccounts.find((account) => account.id === id),
+    [adAccounts],
+  );
+
+  const apiFilteredAccounts = useMemo(() => {
+    const lowerSearch = search.trim().toLowerCase();
+    return allApiAccounts.filter((account) => {
+      if (!lowerSearch) return true;
+      const mapping = getApiMappingForAccount(account);
+      const internalAccount = getInternalAdAccount(mapping?.internalAdAccountId);
+      return (
+        getPlatformLabelByKey(account.platformKey).toLowerCase().includes(lowerSearch) ||
+        account.externalAccountName.toLowerCase().includes(lowerSearch) ||
+        account.externalAccountId.toLowerCase().includes(lowerSearch) ||
+        (account.externalGroupName || '').toLowerCase().includes(lowerSearch) ||
+        (internalAccount?.accountName || '').toLowerCase().includes(lowerSearch)
+      );
+    });
+  }, [allApiAccounts, getApiMappingForAccount, getInternalAdAccount, search]);
+
+  const apiMappingCandidates = useMemo(() => {
+    if (!apiMappingDialogAccount) return [];
+    return adAccounts
+      .filter((account) => {
+        const platformName = getPlatformName(account.platformId);
+        if (apiMappingDialogAccount.platformKey === 'google') return isGooglePlatformName(platformName);
+        if (apiMappingDialogAccount.platformKey === 'tiktok') return isTikTokPlatformName(platformName);
+        return isMetaPlatformName(platformName) || platformName.toLowerCase().includes('facebook');
+      })
+      .sort((left, right) => left.accountName.localeCompare(right.accountName));
+  }, [adAccounts, apiMappingDialogAccount, getPlatformName, isGooglePlatformName, isTikTokPlatformName]);
+
+  const apiAccountBackendOptions = useMemo(
+    () => allApiAccounts
+      .filter((account) => account.externalAccountId && account.externalAccountName)
+      .sort((left, right) =>
+        left.platformKey.localeCompare(right.platformKey) ||
+        left.externalAccountName.localeCompare(right.externalAccountName),
+      ),
+    [allApiAccounts],
+  );
+
+  const apiAccountStatusOptions = useMemo(
+    () => Array.from(new Set([
+      'manual',
+      'ENABLED',
+      'DISABLED',
+      'PAUSED',
+      'UNKNOWN',
+      ...allApiAccounts.map((account) => account.externalAccountStatus || '').filter(Boolean),
+    ])),
+    [allApiAccounts],
+  );
+
+  const apiAccountCurrencyOptions = useMemo(
+    () => Array.from(new Set([
+      'IDR',
+      'USD',
+      'MYR',
+      'SGD',
+      ...allApiAccounts.map((account) => account.currencyCode || '').filter(Boolean),
+    ])),
+    [allApiAccounts],
+  );
+
+  const viewTabs = [
+    { id: 'all' as const, label: 'Semua', count: rawFilteredData.length },
+    { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.length },
+    { id: 'live' as const, label: 'Live Ads ON', count: rawFilteredData.filter(isIntegrationEnabled).length },
+    { id: 'unmatched' as const, label: 'Belum Match API', count: rawFilteredData.filter(isUnmatchedAccount).length },
+    { id: 'assignment' as const, label: 'Perlu Assignment', count: rawFilteredData.filter(hasAssignmentIssue).length },
+  ];
+
+  const filteredData = rawFilteredData.filter((item) => {
+    if (accountView === 'live') return isIntegrationEnabled(item);
+    if (accountView === 'unmatched') return isUnmatchedAccount(item);
+    if (accountView === 'assignment') return hasAssignmentIssue(item);
+    return true;
+  });
+
+  const activeData = filteredData.filter(item => item.status === 'active');
+  const inactiveData = filteredData.filter(item => item.status !== 'active');
+
+  const openApiMappingDialog = (apiAccount: AdApiAccount) => {
+    const existingMapping = getApiMappingForAccount(apiAccount);
+    setApiMappingDialogAccount(apiAccount);
+    setApiMappingInternalId(existingMapping?.internalAdAccountId || '');
+    setApiMappingNotes(existingMapping?.notes || '');
+  };
+
+  const fillApiAccountForm = (account: AdApiAccount) => {
+    setApiAccountPlatformKey(account.platformKey);
+    setApiAccountExternalId(account.externalAccountId);
+    setApiAccountExternalName(account.externalAccountName);
+    setApiAccountGroupId(account.externalGroupId || '');
+    setApiAccountGroupName(account.externalGroupName || '');
+    setApiAccountStatus(account.externalAccountStatus || 'ENABLED');
+    setApiAccountCurrency(account.currencyCode || 'IDR');
+  };
+
+  const handleSelectBackendApiAccount = (value: string) => {
+    setSelectedBackendApiKey(value);
+    if (value === 'manual-entry') {
+      setApiAccountPlatformKey('meta');
+      setApiAccountExternalId('');
+      setApiAccountExternalName('');
+      setApiAccountGroupId('');
+      setApiAccountGroupName('');
+      setApiAccountStatus('manual');
+      setApiAccountCurrency('IDR');
+      return;
+    }
+
+    const selected = allApiAccounts.find(
+      (account) => `${account.platformKey}:${account.externalAccountId}` === value,
+    );
+    if (selected) fillApiAccountForm(selected);
+  };
+
+  const mergeApiAccountIntoState = (account: AdApiAccount) => {
+    setApiAccounts(prev => {
+      const key = `${account.platformKey}:${account.externalAccountId}`;
+      return [
+        ...prev.filter((item) => `${item.platformKey}:${item.externalAccountId}` !== key),
+        account,
+      ].sort((left, right) =>
+        left.platformKey.localeCompare(right.platformKey) ||
+        left.externalAccountName.localeCompare(right.externalAccountName),
+      );
+    });
+  };
+
+  const openAddApiAccountDialog = () => {
+    setApiAccountDialogItem(null);
+    setSelectedBackendApiKey('manual-entry');
+    setApiAccountPlatformKey('meta');
+    setApiAccountExternalId('');
+    setApiAccountExternalName('');
+    setApiAccountGroupId('');
+    setApiAccountGroupName('');
+    setApiAccountStatus('manual');
+    setApiAccountCurrency('IDR');
+    setIsApiAccountDialogOpen(true);
+  };
+
+  const openEditApiAccountDialog = (account: AdApiAccount) => {
+    setApiAccountDialogItem(account);
+    setSelectedBackendApiKey('manual-entry');
+    fillApiAccountForm(account);
+    setIsApiAccountDialogOpen(true);
+  };
+
+  const handleSaveApiAccount = async () => {
+    if (!apiAccountExternalName.trim()) {
+      toast.error('Nama akun API wajib diisi.');
+      return;
+    }
+
+    if (!apiAccountExternalId.trim()) {
+      toast.error('ID akun API wajib diisi.');
+      return;
+    }
+
+    setApiAccountSaving(true);
+    try {
+      const saved = await saveAdApiAccount({
+        id: apiAccountDialogItem?.id,
+        platformKey: apiAccountPlatformKey,
+        externalAccountId: apiAccountExternalId,
+        externalAccountName: apiAccountExternalName,
+        externalGroupId: apiAccountGroupId || null,
+        externalGroupName: apiAccountGroupName || null,
+        externalAccountStatus: apiAccountStatus || null,
+        currencyCode: apiAccountCurrency || null,
+        raw: {
+          source:
+            selectedBackendApiKey !== 'manual-entry'
+              ? 'backend-registry'
+              : apiAccountDialogItem?.raw?.source || 'manual',
+          manualEntry: selectedBackendApiKey === 'manual-entry',
+        },
+        lastSyncedAt: apiAccountDialogItem?.lastSyncedAt,
+      });
+
+      mergeApiAccountIntoState(saved);
+      toast.success(apiAccountDialogItem ? 'Akun API berhasil diperbarui.' : 'Akun API berhasil ditambahkan.');
+      setIsApiAccountDialogOpen(false);
+      setApiAccountDialogItem(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal menyimpan akun API.');
+    } finally {
+      setApiAccountSaving(false);
+    }
+  };
+
+  const handleDeleteApiAccount = async (account: AdApiAccount) => {
+    try {
+      const activeMappings = apiMappings.filter(
+        (item) =>
+          item.status === 'active' &&
+          item.platformKey === account.platformKey &&
+          item.externalAccountId === account.externalAccountId,
+      );
+      await Promise.all(activeMappings.map(disableLegacyIntegrationConfigFromMapping));
+      await deleteAdApiAccount(account);
+      setApiAccounts(prev => prev.filter(
+        (item) => !(item.platformKey === account.platformKey && item.externalAccountId === account.externalAccountId),
+      ));
+      setApiMappings(prev => prev.filter(
+        (item) => !(item.platformKey === account.platformKey && item.externalAccountId === account.externalAccountId),
+      ));
+      toast.success('Akun API dan pairing aktifnya sudah dihapus.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal menghapus akun API.');
+    } finally {
+      setApiDeletingAccount(null);
+    }
+  };
+
+  const refreshApiFoundation = React.useCallback(async () => {
+    setApiSyncing(true);
+    try {
+      await Promise.allSettled([loadMetaRegistry(), loadGoogleRegistry(), loadTikTokRegistry()]);
+      const [storedApiAccounts, storedApiMappings] = await Promise.all([
+        fetchAdApiAccounts(),
+        fetchAdAccountApiMappings(),
+      ]);
+      setApiAccounts(storedApiAccounts);
+      setApiMappings(storedApiMappings);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal refresh integrasi API.');
+    } finally {
+      setApiSyncing(false);
+    }
+  }, [loadGoogleRegistry, loadMetaRegistry, loadTikTokRegistry]);
+
+  const saveLegacyIntegrationConfigFromMapping = async (internalAdAccountId: string, apiAccount: AdApiAccount) => {
+    if (apiAccount.platformKey === 'google') {
+      const saved = await saveGoogleAdsIntegrationConfig(internalAdAccountId, true, {
+        managerCustomerId: apiAccount.externalGroupId || undefined,
+        managerCustomerName: apiAccount.externalGroupName || undefined,
+        liveGoogleCustomerId: apiAccount.externalAccountId,
+        liveGoogleCustomerName: apiAccount.externalAccountName,
+      });
+      setGoogleIntegrationConfigs(prev => ({ ...prev, [internalAdAccountId]: saved }));
+      return;
+    }
+
+    if (apiAccount.platformKey === 'tiktok') {
+      const saved = await saveTikTokAdsIntegrationConfig(internalAdAccountId, true, {
+        businessCenterId: apiAccount.externalGroupId || undefined,
+        businessCenterName: apiAccount.externalGroupName || undefined,
+        liveTikTokAdvertiserId: apiAccount.externalAccountId,
+        liveTikTokAdvertiserName: apiAccount.externalAccountName,
+      });
+      setTikTokIntegrationConfigs(prev => ({ ...prev, [internalAdAccountId]: saved }));
+      return;
+    }
+
+    const saved = await saveAdsIntegrationConfig(internalAdAccountId, true, {
+      businessManagerId: apiAccount.externalGroupId || undefined,
+      businessManagerName: apiAccount.externalGroupName || undefined,
+      liveMetaAccountId: apiAccount.externalAccountId,
+      liveMetaAccountName: apiAccount.externalAccountName,
+    });
+    setIntegrationConfigs(prev => ({ ...prev, [internalAdAccountId]: saved }));
+  };
+
+  const disableLegacyIntegrationConfigFromMapping = async (mapping: AdAccountApiMapping) => {
+    if (mapping.platformKey === 'google') {
+      const saved = await saveGoogleAdsIntegrationConfig(mapping.internalAdAccountId, false, {
+        managerCustomerId: undefined,
+        managerCustomerName: undefined,
+        liveGoogleCustomerId: undefined,
+        liveGoogleCustomerName: undefined,
+      });
+      setGoogleIntegrationConfigs(prev => ({ ...prev, [mapping.internalAdAccountId]: saved }));
+      return;
+    }
+
+    if (mapping.platformKey === 'tiktok') {
+      const saved = await saveTikTokAdsIntegrationConfig(mapping.internalAdAccountId, false, {
+        businessCenterId: undefined,
+        businessCenterName: undefined,
+        liveTikTokAdvertiserId: undefined,
+        liveTikTokAdvertiserName: undefined,
+      });
+      setTikTokIntegrationConfigs(prev => ({ ...prev, [mapping.internalAdAccountId]: saved }));
+      return;
+    }
+
+    const saved = await saveAdsIntegrationConfig(mapping.internalAdAccountId, false, {
+      businessManagerId: undefined,
+      businessManagerName: undefined,
+      liveMetaAccountId: undefined,
+      liveMetaAccountName: undefined,
+    });
+    setIntegrationConfigs(prev => ({ ...prev, [mapping.internalAdAccountId]: saved }));
+  };
+
+  const handleSaveApiMapping = async () => {
+    if (!apiMappingDialogAccount) return;
+    if (!apiMappingInternalId) {
+      toast.error('Pilih akun internal yang akan dipasangkan.');
+      return;
+    }
+
+    setApiMappingSaving(true);
+    try {
+      const saved = await saveAdAccountApiMapping({
+        internalAdAccountId: apiMappingInternalId,
+        apiAccount: apiMappingDialogAccount,
+        notes: apiMappingNotes,
+      });
+      await saveLegacyIntegrationConfigFromMapping(apiMappingInternalId, apiMappingDialogAccount);
+      setApiMappings(prev => [
+        saved,
+        ...prev.filter((mapping) =>
+          mapping.internalAdAccountId !== apiMappingInternalId &&
+          !(mapping.platformKey === apiMappingDialogAccount.platformKey &&
+            mapping.externalAccountId === apiMappingDialogAccount.externalAccountId)
+        ),
+      ]);
+      toast.success('Akun API berhasil dipasangkan ke akun internal.');
+      setApiMappingDialogAccount(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal menyimpan pairing API.');
+    } finally {
+      setApiMappingSaving(false);
+    }
+  };
+
+  const handleRemoveApiMapping = async (mapping: AdAccountApiMapping) => {
+    try {
+      await removeAdAccountApiMapping(mapping);
+      await disableLegacyIntegrationConfigFromMapping(mapping);
+      setApiMappings(prev => prev.filter((item) => item.id !== mapping.id));
+      toast.success('Pairing API dilepas.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal melepas pairing API.');
+    }
+  };
+
   const handleSubmit = async (formData: any) => {
     const {
       liveMetaBusinessManagerId,
@@ -537,6 +1274,9 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       liveTikTokAdvertiserName,
       ...payload
     } = formData;
+    const hasSelectedMetaLiveAccount = Boolean(liveMetaAccountId);
+    const hasSelectedGoogleLiveAccount = Boolean(liveGoogleCustomerId);
+    const hasSelectedTikTokLiveAdvertiser = Boolean(liveTikTokAdvertiserId);
 
     if (editingItem) {
       if (!canEdit) {
@@ -563,7 +1303,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         if (isGooglePlatformName(getPlatformName(updatedItem.platformId))) {
           const savedConfig = await saveGoogleAdsIntegrationConfig(
             updatedItem.id,
-            isIntegrationEnabled(updatedItem),
+            hasSelectedGoogleLiveAccount || isIntegrationEnabled(updatedItem),
             {
               managerCustomerId: liveGoogleManagerCustomerId,
               managerCustomerName: liveGoogleManagerCustomerName,
@@ -578,7 +1318,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         } else if (isTikTokPlatformName(getPlatformName(updatedItem.platformId))) {
           const savedConfig = await saveTikTokAdsIntegrationConfig(
             updatedItem.id,
-            isIntegrationEnabled(updatedItem),
+            hasSelectedTikTokLiveAdvertiser || isIntegrationEnabled(updatedItem),
             {
               businessCenterId: liveTikTokBusinessCenterId,
               businessCenterName: liveTikTokBusinessCenterName,
@@ -593,7 +1333,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         } else {
           const savedConfig = await saveAdsIntegrationConfig(
             updatedItem.id,
-            isIntegrationEnabled(updatedItem),
+            hasSelectedMetaLiveAccount || isIntegrationEnabled(updatedItem),
             {
               businessManagerId: liveMetaBusinessManagerId,
               businessManagerName: liveMetaBusinessManagerName,
@@ -636,7 +1376,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         if (isGooglePlatformName(getPlatformName(newItem.platformId))) {
           const savedConfig = await saveGoogleAdsIntegrationConfig(
             newItem.id,
-            newItem.status === 'active',
+            hasSelectedGoogleLiveAccount,
             {
               managerCustomerId: liveGoogleManagerCustomerId,
               managerCustomerName: liveGoogleManagerCustomerName,
@@ -651,7 +1391,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         } else if (isTikTokPlatformName(getPlatformName(newItem.platformId))) {
           const savedConfig = await saveTikTokAdsIntegrationConfig(
             newItem.id,
-            newItem.status === 'active',
+            hasSelectedTikTokLiveAdvertiser,
             {
               businessCenterId: liveTikTokBusinessCenterId,
               businessCenterName: liveTikTokBusinessCenterName,
@@ -666,7 +1406,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         } else {
           const savedConfig = await saveAdsIntegrationConfig(
             newItem.id,
-            newItem.status === 'active',
+            hasSelectedMetaLiveAccount,
             {
               businessManagerId: liveMetaBusinessManagerId,
               businessManagerName: liveMetaBusinessManagerName,
@@ -728,13 +1468,115 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         }));
       }
       toast.success(
-        enabled ? 'Akun ditampilkan di Integrasi Iklan' : 'Akun disembunyikan dari Integrasi Iklan',
+        enabled ? 'Akun ditampilkan di Live Ads' : 'Akun disembunyikan dari Live Ads',
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Gagal menyimpan checklist integrasi.');
     } finally {
       setSavingConfigId(null);
     }
+  };
+
+  const renderIntegrationControl = (item: AdAccount) => {
+    const enabled = isIntegrationEnabled(item);
+    const unmatched = isUnmatchedAccount(item);
+    const saving = savingConfigId === item.id;
+    const tone = saving ? 'saving' : enabled ? (unmatched ? 'warning' : 'live') : 'off';
+    const label = saving ? 'Sync' : enabled ? (unmatched ? 'Belum Match' : 'Live ON') : 'OFF';
+
+    return (
+      <button
+        type="button"
+        className={cn('integrationStatusPill', `is-${tone}`)}
+        disabled={!canEdit || saving}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (enabled && unmatched) {
+            toast.info('Pilih akun live/API yang sesuai agar status menjadi Live ON.');
+            openEdit(item);
+            return;
+          }
+
+          if (!enabled && !hasLiveMapping(item)) {
+            toast.info('Hubungkan akun ini ke akun live/API dulu.');
+            openEdit(item);
+            return;
+          }
+
+          void handleToggleIntegration(item, !enabled);
+        }}
+        title={enabled && unmatched ? 'Klik untuk hubungkan akun live/API' : enabled ? 'Klik untuk mematikan Live Ads akun ini' : 'Klik untuk mengaktifkan atau menghubungkan Live Ads akun ini'}
+      >
+        <span className="integrationStatusDot" />
+        <span>{label}</span>
+      </button>
+    );
+  };
+
+  const renderAssignmentControl = (item: AdAccount) => {
+    const activeOwner = getActiveOwnerAssignment(item.id);
+    const activeAssignment = getActiveAssignment(item.id);
+    const ownerReady = Boolean(activeOwner);
+    const csReady = Boolean(activeAssignment);
+    const complete = ownerReady && csReady;
+    const empty = !ownerReady && !csReady;
+    const tone = complete ? 'ready' : empty ? 'empty' : 'partial';
+    const label = complete ? 'Siap' : empty ? 'Belum' : 'Kurang';
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={cn('assignmentStatusPill', `is-${tone}`)}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="assignmentStatusDot" />
+            <span>{label}</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="center" className="assignmentStatusPopover">
+          <div className="assignmentStatusPopoverHeader">
+            <strong>Assignment Aktif</strong>
+            <span>{item.accountName}</span>
+          </div>
+
+          <div className="assignmentStatusRows">
+            <div>
+              <span>Advertiser</span>
+              <strong>{activeOwner ? getAdvertiserName(activeOwner.advertiserId) : 'Belum diset'}</strong>
+              {activeOwner && <small>Sejak {activeOwner.startDate}</small>}
+            </div>
+            <div>
+              <span>CS</span>
+              <strong>{activeAssignment ? getUserName(activeAssignment.csId) : 'Belum diset'}</strong>
+              {activeAssignment && (
+                <small>
+                  Sejak {activeAssignment.startDate}
+                  {activeAssignment.subChannelId ? ` / ${getSubChannelName(activeAssignment.subChannelId)}` : ''}
+                </small>
+              )}
+            </div>
+          </div>
+
+          <div className="assignmentStatusActions">
+            {canEdit && (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => openOwnerDialog(item)}>
+                  Ganti Advertiser
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => openAssignmentDialog(item)}>
+                  Ganti CS
+                </Button>
+              </>
+            )}
+            <Button type="button" variant="ghost" size="sm" onClick={() => setHistoryItem(item)}>
+              Riwayat
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
   };
 
   const refreshLiveRegistries = React.useCallback(async () => {
@@ -753,6 +1595,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     setAssignmentCsId(activeAssignment?.csId || '');
     setAssignmentSubChannelId(activeAssignment?.subChannelId || 'none');
     setAssignmentStartDate(getTodayDateKey());
+    setAssignmentNotes('');
   };
 
   const openOwnerDialog = (item: AdAccount) => {
@@ -760,6 +1603,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     setOwnerDialogItem(item);
     setOwnerAdvertiserId(activeOwner?.advertiserId || item.advertiserId || '');
     setOwnerStartDate(getTodayDateKey());
+    setOwnerNotes('');
   };
 
   const handleSaveOwner = async () => {
@@ -779,6 +1623,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         adAccountId: ownerDialogItem.id,
         advertiserId: ownerAdvertiserId,
         startDate: ownerStartDate,
+        notes: ownerNotes,
       });
       toast.success('Riwayat advertiser akun iklan berhasil diperbarui.');
       setOwnerDialogItem(null);
@@ -823,6 +1668,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         csId: assignmentCsId,
         subChannelId: normalizedSubChannelId,
         startDate: assignmentStartDate,
+        notes: assignmentNotes,
       });
       toast.success('Riwayat CS akun iklan berhasil diperbarui.');
       setAssignmentDialogItem(null);
@@ -843,151 +1689,128 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
     return (
       <div className="mb-8 last:mb-0">
-         <div className="flex items-center gap-2 mb-4 px-1">
-            <div className={cn("p-1.5 rounded-lg", variant === 'active' ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400")}>
-                {variant === 'active' ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-            </div>
-            <h3 className="font-semibold text-slate-800 dark:text-slate-200">{title}</h3>
-            <Badge variant="secondary" className="ml-2 bg-slate-100 dark:bg-slate-800 text-slate-500">
-                {items.length}
-            </Badge>
-        </div>
+        <MasterDataTableTitle title={title} count={items.length} variant={variant} />
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="tablePanel">
           {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6">Platform</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Business / Manager</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nama Akun</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Advertiser</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">CS Aktif</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Integrasi</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">PPN</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Fee</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 text-center">Status</TableHead>
-                  {(canEdit || canDelete) && <TableHead className="text-right font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pr-6">Aksi</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => {
+          <div className="hidden md:block">
+            <DataTable
+              actionWidth={82}
+              cellY={12}
+              columns={[64, 260, 220, 190, 190, 118, 142, 88, 82, 90, (canEdit || canDelete) ? 82 : null]}
+              minWidth={canEdit || canDelete ? 1556 : 1474}
+              rowMinHeight={76}
+            >
+              <table>
+                <thead>
+                  <tr>
+                    <th className="text-center">No</th>
+                    <th>Nama Akun</th>
+                    <th>Business / Manager</th>
+                    <th>Advertiser</th>
+                    <th>CS Aktif</th>
+                    <th className="text-center">Assignment</th>
+                    <th className="text-center">Live Ads</th>
+                    <th className="text-center">PPN</th>
+                    <th className="text-center">Fee</th>
+                    <th className="text-center">Status</th>
+                    {(canEdit || canDelete) && <TableActionHeader />}
+                  </tr>
+                </thead>
+                <tbody>
+                {items.map((item, index) => {
                   const activeAssignment = getActiveAssignment(item.id);
                   const activeOwner = getActiveOwnerAssignment(item.id);
                   const effectiveAdvertiserId = activeOwner?.advertiserId || item.advertiserId;
+                  const businessManagerLabel = getBusinessManagerLabel(item);
+                  const platform = getPlatform(item.platformId);
 
                   return (
-                  <TableRow key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
-                    <TableCell className="py-4 pl-6">
-                      <div className="flex items-center space-x-3">
-                        <div className="h-8 w-8 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400">
-                          <Monitor className="h-4 w-4" />
-                        </div>
-                        <span className="font-semibold text-slate-900 dark:text-slate-200 text-sm">{getPlatformName(item.platformId)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400">
-                      {getBusinessManagerLabel(item) === 'Belum match live' ? (
-                        <span className="text-slate-400 dark:text-slate-500">Belum match live</span>
-                      ) : (
-                        getBusinessManagerLabel(item)
-                      )}
-                    </TableCell>
-                    <TableCell className="py-4 font-medium text-slate-900 dark:text-slate-200 text-sm">{item.accountName}</TableCell>
-                    <TableCell className="py-4 text-sm">
-                      <div className="flex flex-col gap-1">
-                        <span className="font-semibold text-slate-900 dark:text-slate-200">
-                          {getAdvertiserName(effectiveAdvertiserId)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {activeOwner ? `Sejak ${activeOwner.startDate}` : 'Belum ada histori'}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-sm">
-                      <div className="flex flex-col gap-1">
-                        <span className={activeAssignment ? 'font-semibold text-slate-900 dark:text-slate-200' : 'text-amber-600 dark:text-amber-300'}>
-                          {activeAssignment ? getUserName(activeAssignment.csId) : 'Belum diset'}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {activeAssignment
-                            ? `Sejak ${activeAssignment.startDate}${activeAssignment.subChannelId ? ` / ${getSubChannelName(activeAssignment.subChannelId)}` : ''}`
-                            : 'Set agar CS View historis akurat'}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-center">
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={isIntegrationEnabled(item)}
-                          disabled={!canEdit || savingConfigId === item.id}
-                          onCheckedChange={(checked) => void handleToggleIntegration(item, checked === true)}
+                  <tr key={item.id}>
+                    <td className="monoCell text-center">{index + 1}</td>
+                    <td>
+                      <div className="platformLogoTableCell">
+                        <PlatformLogo
+                          density="compact"
+                          logoPath={platform?.logoPath}
+                          name={platform?.name || item.accountName}
+                          size="sm"
                         />
+                        <TableText primary={item.accountName} />
                       </div>
-                    </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-900 dark:text-slate-200 text-center">{item.ppn ?? 0}%</TableCell>
-                    <TableCell className="py-4 text-sm text-slate-900 dark:text-slate-200 text-center">{item.fee ?? 0}%</TableCell>
-                    <TableCell className="py-4 text-center">
-                      <Badge 
-                        variant="outline"
-                        className={item.status === 'active' 
-                          ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm" 
-                          : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm"}
-                      >
-                        {item.status === 'active' ? 'AKTIF' : 'NON AKTIF'}
-                      </Badge>
-                    </TableCell>
+                    </td>
+                    <td>
+                      <TableText
+                        primary={businessManagerLabel}
+                        primaryClassName={businessManagerLabel === 'Belum match live' ? 'text-slate-400 dark:text-slate-500' : undefined}
+                      />
+                    </td>
+                    <td>
+                      <TableText
+                        primary={getAdvertiserName(effectiveAdvertiserId)}
+                        secondary={activeOwner ? `Sejak ${activeOwner.startDate}` : 'Belum ada histori'}
+                      />
+                    </td>
+                    <td>
+                      <TableText
+                        primary={activeAssignment ? getUserName(activeAssignment.csId) : 'Belum diset'}
+                        secondary={
+                          activeAssignment
+                            ? `Sejak ${activeAssignment.startDate}${activeAssignment.subChannelId ? ` / ${getSubChannelName(activeAssignment.subChannelId)}` : ''}`
+                            : 'Set agar CS View historis akurat'
+                        }
+                        primaryClassName={!activeAssignment ? 'text-amber-600 dark:text-amber-300' : undefined}
+                      />
+                    </td>
+                    <td className="tableIconCell text-center">
+                      {renderAssignmentControl(item)}
+                    </td>
+                    <td className="tableIconCell text-center">
+                      {renderIntegrationControl(item)}
+                    </td>
+                    <td className="monoCell text-center">{item.ppn ?? 0}%</td>
+                    <td className="monoCell text-center">{item.fee ?? 0}%</td>
+                    <TableStatusCell>
+                      <TableStatusIcon
+                        label={item.status === 'active' ? 'Aktif' : 'Non aktif'}
+                        tone={item.status === 'active' ? 'active' : 'inactive'}
+                      />
+                    </TableStatusCell>
                     {(canEdit || canDelete) && (
-                      <TableCell className="py-4 pr-6 text-right">
-                        <div className="flex justify-end gap-1">
+                      <TableActionCell>
+                        <TableActionMenu contentClassName="w-48">
                           {canEdit && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:text-indigo-300 dark:hover:bg-indigo-900/30" onClick={() => openOwnerDialog(item)} title="Ganti advertiser akun">
-                              <Users className="h-4 w-4" />
-                            </Button>
+                            <TableActionMenuItem icon={Users} onClick={() => openOwnerDialog(item)}>
+                              Ganti Advertiser
+                            </TableActionMenuItem>
                           )}
                           {canEdit && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-emerald-900/30" onClick={() => openAssignmentDialog(item)} title="Ganti CS akun">
-                              <UserCheck className="h-4 w-4" />
-                            </Button>
+                            <TableActionMenuItem icon={UserCheck} onClick={() => openAssignmentDialog(item)}>
+                              Ganti CS
+                            </TableActionMenuItem>
                           )}
+                          <TableActionMenuItem icon={History} onClick={() => setHistoryItem(item)}>
+                            Riwayat Assignment
+                          </TableActionMenuItem>
                           {canEdit && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/30" onClick={() => openEdit(item)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <TableActionMenuItem icon={Edit} onClick={() => openEdit(item)}>
+                              Edit Akun
+                            </TableActionMenuItem>
                           )}
                           {canDelete && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/30">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle className="dark:text-slate-200">Hapus Akun Iklan</AlertDialogTitle>
-                                  <AlertDialogDescription className="dark:text-slate-400">
-                                    Apakah anda yakin ingin menghapus akun <strong>{item.accountName}</strong>?
-                                    <br/>Tindakan ini tidak dapat dibatalkan.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
-                                  <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(item.id)}>
-                                    Hapus
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
+                              Hapus
+                            </TableActionMenuItem>
                           )}
-                        </div>
-                      </TableCell>
+                        </TableActionMenu>
+                      </TableActionCell>
                     )}
-                  </TableRow>
+                  </tr>
                   );
                 })}
-              </TableBody>
-            </Table>
+                </tbody>
+              </table>
+            </DataTable>
           </div>
 
           {/* Mobile Card List */}
@@ -995,27 +1818,27 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
              {items.map((item) => {
                 const activeOwner = getActiveOwnerAssignment(item.id);
                 const effectiveAdvertiserId = activeOwner?.advertiserId || item.advertiserId;
+                const platform = getPlatform(item.platformId);
 
                 return (
                 <div key={item.id} className="p-4 bg-white dark:bg-slate-800">
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-3">
-                           <div className={cn("p-2 rounded-lg", variant === 'active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500")}>
-                                <Monitor className="w-5 h-5" />
-                           </div>
+                           <PlatformLogo
+                             density="compact"
+                             logoPath={platform?.logoPath}
+                             name={platform?.name || item.accountName}
+                             size="sm"
+                           />
                            <div className="flex flex-col">
                               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">{item.accountName}</h3>
                               <p className="text-xs text-slate-500 dark:text-slate-400">{getPlatformName(item.platformId)}</p>
                            </div>
                         </div>
-                        <Badge 
-                          variant="outline"
-                          className={item.status === 'active' 
-                            ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800 text-[10px] px-1.5 py-0.5 h-5" 
-                            : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-600 text-[10px] px-1.5 py-0.5 h-5"}
-                        >
-                          {item.status === 'active' ? 'AKTIF' : 'NON AKTIF'}
-                        </Badge>
+                        <TableStatusIcon
+                          label={item.status === 'active' ? 'Aktif' : 'Non aktif'}
+                          tone={item.status === 'active' ? 'active' : 'inactive'}
+                        />
                     </div>
                     
                     <div className="pl-[52px] space-y-1 mb-3">
@@ -1046,77 +1869,216 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                       );
                     })()}
 
-                    <div className="pl-[52px] flex items-center gap-2 mb-3">
-                      <Checkbox
-                        checked={isIntegrationEnabled(item)}
-                        disabled={!canEdit || savingConfigId === item.id}
-                        onCheckedChange={(checked) => void handleToggleIntegration(item, checked === true)}
-                      />
-                      <span className="text-xs text-slate-600 dark:text-slate-400">Tampilkan di Integrasi Iklan</span>
+                    <div className="pl-[52px] mb-3">
+                      <div className="flex flex-wrap gap-2">
+                        {renderAssignmentControl(item)}
+                        {renderIntegrationControl(item)}
+                      </div>
                     </div>
 
                     {(canEdit || canDelete) && (
-                       <div className="pl-[52px] flex gap-2 pt-2">
-                           {canEdit && (
-                             <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 text-xs h-8 text-indigo-600 border-slate-200 dark:border-slate-700"
-                                onClick={() => openOwnerDialog(item)}
-                             >
-                                <Users className="w-3 h-3 mr-2" />
-                                Adv
-                             </Button>
-                           )}
-                           {canEdit && (
-                             <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 text-xs h-8 text-emerald-600 border-slate-200 dark:border-slate-700"
-                                onClick={() => openAssignmentDialog(item)}
-                             >
-                                <UserCheck className="w-3 h-3 mr-2" />
-                                CS
-                             </Button>
-                           )}
-                           {canEdit && (
-                             <Button 
-                                variant="outline" 
-                                size="sm" 
-                                className="flex-1 text-xs h-8 text-blue-600 border-slate-200 dark:border-slate-700"
-                                onClick={() => openEdit(item)}
-                             >
-                                <Edit className="w-3 h-3 mr-2" />
-                                Edit
-                             </Button>
-                           )}
-                           {canDelete && (
-                             <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                   <Button variant="outline" size="sm" className="w-8 px-0 text-red-600 border-slate-200 dark:border-slate-700 h-8 shrink-0">
-                                      <Trash2 className="w-3 h-3" />
-                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
-                                   <AlertDialogHeader>
-                                      <AlertDialogTitle className="dark:text-slate-200">Hapus Akun Iklan</AlertDialogTitle>
-                                      <AlertDialogDescription className="dark:text-slate-400">
-                                        Apakah anda yakin ingin menghapus akun <strong>{item.accountName}</strong>?
-                                      </AlertDialogDescription>
-                                   </AlertDialogHeader>
-                                   <AlertDialogFooter>
-                                      <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">Batal</AlertDialogCancel>
-                                      <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(item.id)}>
-                                        Hapus
-                                      </AlertDialogAction>
-                                   </AlertDialogFooter>
-                                </AlertDialogContent>
-                             </AlertDialog>
-                           )}
-                       </div>
+                      <MobileCardActions
+                        className="ml-[52px]"
+                        actions={[
+                          ...(canEdit ? [
+                            { icon: Users, label: 'Atur Advertiser', onClick: () => openOwnerDialog(item) },
+                            { icon: UserCheck, label: 'Atur CS', onClick: () => openAssignmentDialog(item) },
+                            { icon: History, label: 'Riwayat', onClick: () => setHistoryItem(item) },
+                            { icon: Edit, label: 'Edit Akun', onClick: () => openEdit(item) },
+                          ] : []),
+                          ...(!canEdit ? [{ icon: History, label: 'Riwayat', onClick: () => setHistoryItem(item) }] : []),
+                          ...(canDelete ? [{ danger: true, icon: Trash2, label: 'Hapus', onClick: () => setDeletingItem(item) }] : []),
+                        ]}
+                      />
                     )}
                 </div>
              );})}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderApiIntegrationTable = () => {
+    if (apiFilteredAccounts.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+          <div className="p-4 rounded-full bg-slate-50 dark:bg-slate-900 mb-4">
+            <Link2 className="w-8 h-8 text-slate-300" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">Belum ada registry API Ads</h3>
+          <p className="text-slate-500 text-sm max-w-sm mx-auto mt-1">
+            Klik refresh setelah token Meta, Google Ads, atau TikTok Ads aktif agar akun live masuk ke registry.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {canCreate && (
+              <Button className="masterDataActionButton" onClick={openAddApiAccountDialog}>
+                <Plus /> Tambah Akun API
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
+              <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
+              Refresh API
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-8 last:mb-0">
+        <div className="flex items-center justify-between gap-3">
+          <MasterDataTableTitle title="Akun API Terintegrasi" count={apiFilteredAccounts.length} variant="active" />
+          <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
+            <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
+            Refresh API
+          </Button>
+        </div>
+
+        <div className="tablePanel">
+          <div className="hidden md:block">
+            <DataTable
+              actionWidth={82}
+              cellY={12}
+              columns={[64, 190, 300, 240, 260, 140, canEdit ? 82 : null]}
+              minWidth={canEdit ? 1276 : 1194}
+              rowMinHeight={76}
+            >
+              <table>
+                <thead>
+                  <tr>
+                    <th className="text-center">No</th>
+                    <th>Platform</th>
+                    <th>Akun API</th>
+                    <th>Business / Manager</th>
+                    <th>Akun Internal</th>
+                    <th className="text-center">Pairing</th>
+                    {canEdit && <TableActionHeader />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {apiFilteredAccounts.map((apiAccount, index) => {
+                    const platform = getPlatformByKey(apiAccount.platformKey);
+                    const mapping = getApiMappingForAccount(apiAccount);
+                    const internalAccount = getInternalAdAccount(mapping?.internalAdAccountId);
+
+                    return (
+                      <tr key={`${apiAccount.platformKey}:${apiAccount.externalAccountId}`}>
+                        <td className="monoCell text-center">{index + 1}</td>
+                        <td>
+                          <div className="platformLogoTableCell">
+                            <PlatformLogo
+                              density="compact"
+                              logoPath={platform?.logoPath}
+                              name={platform?.name || getPlatformLabelByKey(apiAccount.platformKey)}
+                              size="sm"
+                            />
+                            <TableText primary={platform?.name || getPlatformLabelByKey(apiAccount.platformKey)} />
+                          </div>
+                        </td>
+                        <td>
+                          <TableText primary={apiAccount.externalAccountName} secondary={`ID API: ${apiAccount.externalAccountId}`} />
+                        </td>
+                        <td>
+                          <TableText
+                            primary={apiAccount.externalGroupName || 'Tanpa manager'}
+                            secondary={apiAccount.externalGroupId ? `BM ID: ${apiAccount.externalGroupId}` : apiAccount.currencyCode ? `Mata uang: ${apiAccount.currencyCode}` : undefined}
+                          />
+                        </td>
+                        <td>
+                          <TableText
+                            primary={internalAccount?.accountName || 'Belum dipasangkan'}
+                            secondary={internalAccount ? `Master internal: ${getAdvertiserName(internalAccount.advertiserId)}` : 'Belum ada relasi ke master akun iklan'}
+                            primaryClassName={!internalAccount ? 'text-amber-600 dark:text-amber-300' : undefined}
+                          />
+                        </td>
+                        <td className="tableIconCell text-center">
+                          <span className={cn('assignmentStatusPill', mapping ? 'is-ready' : 'is-partial')}>
+                            <span className="assignmentStatusDot" />
+                            <span>{mapping ? 'Paired' : 'Belum'}</span>
+                          </span>
+                        </td>
+                        {canEdit && (
+                          <TableActionCell>
+                            <TableActionMenu contentClassName="w-44">
+                            <TableActionMenuItem icon={Link2} onClick={() => openApiMappingDialog(apiAccount)}>
+                              {mapping ? 'Ganti Pairing' : 'Pasangkan'}
+                            </TableActionMenuItem>
+                            <TableActionMenuItem icon={Edit} onClick={() => openEditApiAccountDialog(apiAccount)}>
+                              Edit Akun API
+                            </TableActionMenuItem>
+                            {mapping && (
+                              <TableActionMenuItem icon={Unlink} onClick={() => void handleRemoveApiMapping(mapping)}>
+                                Lepas Pairing
+                              </TableActionMenuItem>
+                            )}
+                            {canDelete && (
+                              <TableActionMenuItem icon={Trash2} danger onClick={() => setApiDeletingAccount(apiAccount)}>
+                                Hapus Akun API
+                              </TableActionMenuItem>
+                            )}
+                          </TableActionMenu>
+                        </TableActionCell>
+                      )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </DataTable>
+          </div>
+
+          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
+            {apiFilteredAccounts.map((apiAccount) => {
+              const platform = getPlatformByKey(apiAccount.platformKey);
+              const mapping = getApiMappingForAccount(apiAccount);
+              const internalAccount = getInternalAdAccount(mapping?.internalAdAccountId);
+
+              return (
+                <div key={`${apiAccount.platformKey}:${apiAccount.externalAccountId}`} className="p-4 bg-white dark:bg-slate-800">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <PlatformLogo
+                        density="compact"
+                        logoPath={platform?.logoPath}
+                        name={platform?.name || getPlatformLabelByKey(apiAccount.platformKey)}
+                        size="sm"
+                      />
+                      <div>
+                        <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">{apiAccount.externalAccountName}</h3>
+                        <p className="text-xs text-slate-500">{getPlatformLabelByKey(apiAccount.platformKey)} / ID API: {apiAccount.externalAccountId}</p>
+                      </div>
+                    </div>
+                    <span className={cn('assignmentStatusPill', mapping ? 'is-ready' : 'is-partial')}>
+                      <span className="assignmentStatusDot" />
+                      <span>{mapping ? 'Paired' : 'Belum'}</span>
+                    </span>
+                  </div>
+
+                  <div className="pl-[52px] mt-3 space-y-1">
+                    <p className="text-xs text-slate-500 uppercase font-medium">Akun Internal</p>
+                    <p className={cn('text-sm font-semibold', internalAccount ? 'text-slate-800 dark:text-slate-200' : 'text-amber-600')}>
+                      {internalAccount?.accountName || 'Belum dipasangkan'}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {apiAccount.externalGroupName || 'Tanpa manager'}{apiAccount.externalGroupId ? ` / BM ID: ${apiAccount.externalGroupId}` : ''}
+                    </p>
+                  </div>
+
+                  {canEdit && (
+                    <MobileCardActions
+                      className="ml-[52px] mt-3"
+                      actions={[
+                        { icon: Link2, label: mapping ? 'Ganti Pairing' : 'Pasangkan', onClick: () => openApiMappingDialog(apiAccount) },
+                        { icon: Edit, label: 'Edit API', onClick: () => openEditApiAccountDialog(apiAccount) },
+                        ...(mapping ? [{ icon: Unlink, label: 'Lepas', onClick: () => void handleRemoveApiMapping(mapping) }] : []),
+                        ...(canDelete ? [{ danger: true, icon: Trash2, label: 'Hapus API', onClick: () => setApiDeletingAccount(apiAccount) }] : []),
+                      ]}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1134,57 +2096,60 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          {canCreate && (
+          {(canCreate || accountView === 'api') && (
             <div className="masterDataControlActions">
-            <Button 
-              className="masterDataActionButton"
-              onClick={() => {
-                setEditingItem(null);
-                setIsAddOpen(true);
-                void refreshLiveRegistries();
-              }}
-            >
-              <Plus /> Tambah Akun
-            </Button>
+            {accountView === 'api' && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void refreshApiFoundation()}
+                disabled={apiSyncing}
+              >
+                <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} /> Refresh API
+              </Button>
+            )}
+            {canCreate && (
+              accountView === 'api' ? (
+                <Button className="masterDataActionButton" onClick={openAddApiAccountDialog}>
+                  <Plus /> Tambah Akun API
+                </Button>
+              ) : (
+                <Button 
+                  className="masterDataActionButton"
+                  onClick={() => {
+                    setEditingItem(null);
+                    setIsAddOpen(true);
+                    void refreshLiveRegistries();
+                  }}
+                >
+                  <Plus /> Tambah Akun
+                </Button>
+              )
+            )}
             </div>
               )}
         </ControlRow>
       </ControlPanel>
 
-      {liveMetaError ? (
-        <div className={cn(
-          "rounded-xl px-4 py-3 text-sm",
-          liveMetaData?.cacheStatus === 'stale'
-            ? "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
-            : "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300",
-        )}>
-          Live Meta sedang tidak aktif: {liveMetaError}
-        </div>
-      ) : null}
+      <div className="adAccountViewSwitch" role="tablist" aria-label="Tampilan akun iklan">
+        {viewTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={accountView === tab.id}
+            className={cn('adAccountViewSwitchItem', accountView === tab.id && 'isActive')}
+            onClick={() => setAccountView(tab.id)}
+          >
+            <span>{tab.label}</span>
+            <strong>{tab.count}</strong>
+          </button>
+        ))}
+      </div>
 
-      {liveGoogleError ? (
-        <div className={cn(
-          "rounded-xl px-4 py-3 text-sm",
-          liveGoogleData?.cacheStatus === 'stale'
-            ? "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
-            : "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300",
-        )}>
-          Live Google Ads sedang tidak aktif: {liveGoogleError}
-        </div>
-      ) : null}
-
-      {liveTikTokError ? (
-        <div
-          className={cn(
-            "rounded-xl px-4 py-3 text-sm",
-            "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300",
-          )}
-        >
-          Live TikTok Ads sedang tidak aktif: {liveTikTokError}
-        </div>
-      ) : null}
-
-      {filteredData.length > 0 ? (
+      {accountView === 'api' ? (
+        renderApiIntegrationTable()
+      ) : filteredData.length > 0 ? (
          <>
            {renderTable(activeData, "Akun Aktif", 'active')}
            {renderTable(inactiveData, "Akun Non-Aktif", 'inactive')}
@@ -1200,6 +2165,251 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                </p>
           </div>
       )}
+
+      <Dialog open={isApiAccountDialogOpen} onOpenChange={(open) => {
+        setIsApiAccountDialogOpen(open);
+        if (!open) setApiAccountDialogItem(null);
+      }}>
+        <DialogContent className="sm:max-w-[520px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+              <Link2 className="h-5 w-5 text-blue-600" />
+              {apiAccountDialogItem ? 'Edit Akun API' : 'Tambah Akun API'}
+            </DialogTitle>
+            <DialogDescription>
+              Registry akun ads live untuk dipasangkan ke master akun iklan internal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            {!apiAccountDialogItem && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Ambil dari Backend/API
+                </label>
+                <Select value={selectedBackendApiKey} onValueChange={handleSelectBackendApiAccount}>
+                  <SelectTrigger className="bg-white dark:bg-slate-900">
+                    <SelectValue placeholder="Pilih akun backend yang sudah sync" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-slate-900">
+                    <SelectItem value="manual-entry">Input manual akun baru</SelectItem>
+                    {apiAccountBackendOptions.map((account) => {
+                      const value = `${account.platformKey}:${account.externalAccountId}`;
+                      return (
+                        <SelectItem key={value} value={value}>
+                          {getPlatformLabelByKey(account.platformKey)} - {account.externalAccountName} / {account.externalAccountId}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs font-semibold text-slate-500">
+                  Pilih data backend supaya ID, status, dan mata uang terisi otomatis.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Platform <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={apiAccountPlatformKey}
+                  onValueChange={(value) => setApiAccountPlatformKey(value as AdsPlatformKey)}
+                  disabled={Boolean(apiAccountDialogItem) || selectedBackendApiKey !== 'manual-entry'}
+                >
+                  <SelectTrigger className="bg-white dark:bg-slate-900">
+                    <SelectValue placeholder="Pilih platform" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-slate-900">
+                    <SelectItem value="meta">Meta Ads</SelectItem>
+                    <SelectItem value="google">Google Ads</SelectItem>
+                    <SelectItem value="tiktok">TikTok Ads</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  ID Akun API <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  value={apiAccountExternalId}
+                  onChange={(event) => setApiAccountExternalId(event.target.value)}
+                  placeholder="Contoh: act_123 / 987654321"
+                  className="bg-white dark:bg-slate-900"
+                  disabled={Boolean(apiAccountDialogItem) || selectedBackendApiKey !== 'manual-entry'}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Nama Akun API <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={apiAccountExternalName}
+                onChange={(event) => setApiAccountExternalName(event.target.value)}
+                placeholder="Contoh: Google Ads 2"
+                className="bg-white dark:bg-slate-900"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">ID Business / Manager</label>
+                <Input
+                  value={apiAccountGroupId}
+                  onChange={(event) => setApiAccountGroupId(event.target.value)}
+                  placeholder="Opsional"
+                  className="bg-white dark:bg-slate-900"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nama Business / Manager</label>
+                <Input
+                  value={apiAccountGroupName}
+                  onChange={(event) => setApiAccountGroupName(event.target.value)}
+                  placeholder="Opsional"
+                  className="bg-white dark:bg-slate-900"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status API</label>
+                <Select value={apiAccountStatus || 'UNKNOWN'} onValueChange={setApiAccountStatus}>
+                  <SelectTrigger className="bg-white dark:bg-slate-900">
+                    <SelectValue placeholder="Pilih status API" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-slate-900">
+                    {apiAccountStatusOptions.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status === 'manual' ? 'Manual' : status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mata Uang</label>
+                <Select value={apiAccountCurrency || 'IDR'} onValueChange={setApiAccountCurrency}>
+                  <SelectTrigger className="bg-white dark:bg-slate-900">
+                    <SelectValue placeholder="Pilih mata uang" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-slate-900">
+                    {apiAccountCurrencyOptions.map((currency) => (
+                      <SelectItem key={currency} value={currency}>
+                        {currency}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setIsApiAccountDialogOpen(false)} disabled={apiAccountSaving}>
+              Batal
+            </Button>
+            <Button onClick={handleSaveApiAccount} disabled={apiAccountSaving}>
+              {apiAccountSaving ? 'Menyimpan...' : 'Simpan Akun API'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(apiMappingDialogAccount)} onOpenChange={(open) => {
+        if (!open) setApiMappingDialogAccount(null);
+      }}>
+        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+              <Link2 className="h-5 w-5 text-blue-600" />
+              Pasangkan Akun API
+            </DialogTitle>
+            <DialogDescription>
+              Hubungkan {apiMappingDialogAccount?.externalAccountName || 'akun API'} ke master akun internal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Akun API</p>
+              <div className="mt-2 flex items-center gap-3">
+                {apiMappingDialogAccount && (
+                  <PlatformLogo
+                    density="compact"
+                    logoPath={getPlatformByKey(apiMappingDialogAccount.platformKey)?.logoPath}
+                    name={getPlatformByKey(apiMappingDialogAccount.platformKey)?.name || getPlatformLabelByKey(apiMappingDialogAccount.platformKey)}
+                    size="sm"
+                  />
+                )}
+                <div>
+                  <strong className="block text-sm font-bold text-slate-900 dark:text-slate-100">
+                    {apiMappingDialogAccount?.externalAccountName || '-'}
+                  </strong>
+                  <span className="text-xs font-semibold text-slate-500">
+                    {apiMappingDialogAccount ? `${getPlatformLabelByKey(apiMappingDialogAccount.platformKey)} / ${apiMappingDialogAccount.externalAccountId}` : '-'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Akun Internal <span className="text-red-500">*</span>
+              </label>
+              <Select value={apiMappingInternalId} onValueChange={setApiMappingInternalId}>
+                <SelectTrigger className="bg-white dark:bg-slate-900">
+                  <SelectValue placeholder="Pilih akun internal" />
+                </SelectTrigger>
+                <SelectContent className="bg-white dark:bg-slate-900">
+                  {apiMappingCandidates.map((account) => {
+                    const existingMapping = getApiMappingForInternalAccount(account.id);
+                    return (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.accountName}{existingMapping ? ' - sudah ada pairing' : ''}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {apiMappingCandidates.length === 0 && (
+                <p className="text-xs font-semibold text-amber-600">
+                  Belum ada akun internal dengan platform yang sesuai.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Catatan Pairing
+              </label>
+              <Textarea
+                value={apiMappingNotes}
+                onChange={(event) => setApiMappingNotes(event.target.value)}
+                placeholder="Contoh: match manual karena nama akun live berbeda dengan master data."
+                className="min-h-[84px] bg-white dark:bg-slate-900"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setApiMappingDialogAccount(null)} disabled={apiMappingSaving}>
+              Batal
+            </Button>
+            <Button onClick={handleSaveApiMapping} disabled={apiMappingSaving || apiMappingCandidates.length === 0}>
+              Simpan Pairing
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(ownerDialogItem)} onOpenChange={(open) => {
         if (!open) setOwnerDialogItem(null);
@@ -1246,13 +2456,25 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                 Data sebelum tanggal ini tetap mengikuti advertiser lama saat proses rekap.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Catatan Perpindahan
+              </label>
+              <Textarea
+                value={ownerNotes}
+                onChange={(event) => setOwnerNotes(event.target.value)}
+                placeholder="Contoh: advertiser resign, pindah PIC, atau koreksi ownership."
+                className="min-h-[84px] bg-white dark:bg-slate-900"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setOwnerDialogItem(null)} disabled={ownerSaving}>
               Batal
             </Button>
-            <Button onClick={handleSaveOwner} disabled={ownerSaving} className="bg-indigo-600 hover:bg-indigo-700">
+            <Button onClick={handleSaveOwner} disabled={ownerSaving}>
               Simpan Advertiser
             </Button>
           </div>
@@ -1324,18 +2546,152 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                 Data sebelum tanggal ini tetap mengikuti CS lama.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Catatan Perpindahan
+              </label>
+              <Textarea
+                value={assignmentNotes}
+                onChange={(event) => setAssignmentNotes(event.target.value)}
+                placeholder="Contoh: CS resign, rolling shift, atau akun dialihkan ke CS lain."
+                className="min-h-[84px] bg-white dark:bg-slate-900"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setAssignmentDialogItem(null)} disabled={assignmentSaving}>
               Batal
             </Button>
-            <Button onClick={handleSaveAssignment} disabled={assignmentSaving} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button onClick={handleSaveAssignment} disabled={assignmentSaving}>
               Simpan CS
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(historyItem)} onOpenChange={(open) => {
+        if (!open) setHistoryItem(null);
+      }}>
+        <DialogContent className="sm:max-w-[760px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+              <History className="h-5 w-5 text-blue-600" />
+              Riwayat Assignment Akun
+            </DialogTitle>
+            <DialogDescription>
+              Jejak perpindahan advertiser dan CS untuk {historyItem?.accountName || 'akun iklan'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          {historyItem && (
+            <div className="assignmentHistoryGrid">
+              <div className="assignmentHistoryPanel">
+                <div className="assignmentHistoryHeading">
+                  <Users className="h-4 w-4" />
+                  <span>Advertiser</span>
+                </div>
+                <div className="assignmentHistoryList">
+                  {adAccountOwnerAssignments
+                    .filter((assignment) => assignment.adAccountId === historyItem.id)
+                    .sort((left, right) => right.startDate.localeCompare(left.startDate))
+                    .map((assignment) => (
+                      <div key={assignment.id} className="assignmentHistoryItem">
+                        <strong>{getAdvertiserName(assignment.advertiserId)}</strong>
+                        <span>{formatAssignmentPeriod(assignment.startDate, assignment.endDate)}</span>
+                        {assignment.notes && <p>{assignment.notes}</p>}
+                      </div>
+                    ))}
+                  {!adAccountOwnerAssignments.some((assignment) => assignment.adAccountId === historyItem.id) && (
+                    <div className="assignmentHistoryEmpty">Belum ada riwayat advertiser.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="assignmentHistoryPanel">
+                <div className="assignmentHistoryHeading">
+                  <UserCheck className="h-4 w-4" />
+                  <span>CS</span>
+                </div>
+                <div className="assignmentHistoryList">
+                  {adAccountAssignments
+                    .filter((assignment) => assignment.adAccountId === historyItem.id)
+                    .sort((left, right) => right.startDate.localeCompare(left.startDate))
+                    .map((assignment) => (
+                      <div key={assignment.id} className="assignmentHistoryItem">
+                        <strong>{getUserName(assignment.csId)}</strong>
+                        <span>
+                          {formatAssignmentPeriod(assignment.startDate, assignment.endDate)}
+                          {assignment.subChannelId ? ` / ${getSubChannelName(assignment.subChannelId)}` : ''}
+                        </span>
+                        {assignment.notes && <p>{assignment.notes}</p>}
+                      </div>
+                    ))}
+                  {!adAccountAssignments.some((assignment) => assignment.adAccountId === historyItem.id) && (
+                    <div className="assignmentHistoryEmpty">Belum ada riwayat CS.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(apiDeletingAccount)} onOpenChange={(open) => {
+        if (!open) setApiDeletingAccount(null);
+      }}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Hapus Akun API</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              Akun <strong>{apiDeletingAccount?.externalAccountName}</strong> akan dihapus dari registry API.
+              Pairing aktif yang memakai akun ini juga akan dilepas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (apiDeletingAccount) void handleDeleteApiAccount(apiDeletingAccount);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(deletingItem)} onOpenChange={(open) => {
+        if (!open) setDeletingItem(null);
+      }}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Hapus Akun Iklan</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              Apakah anda yakin ingin menghapus akun <strong>{deletingItem?.accountName}</strong>?
+              <br />Tindakan ini tidak dapat dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (deletingItem) void handleDelete(deletingItem.id);
+                setDeletingItem(null);
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Add/Edit Modal */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
@@ -1355,18 +2711,27 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
               platforms={activePlatforms}
               advertisers={advertisers}
               liveMetaAccounts={liveMetaData?.accounts || []}
+              liveMetaError={liveMetaError}
+              liveMetaLoading={liveMetaLoading}
               metaIntegrationConfig={
                 editingItem ? integrationConfigs[editingItem.id] || null : null
               }
+              onRefreshMetaRegistry={() => void loadMetaRegistry()}
               liveGoogleAccounts={liveGoogleData?.accounts || []}
+              liveGoogleError={liveGoogleError}
+              liveGoogleLoading={liveGoogleLoading}
               googleIntegrationConfig={
                 editingItem ? googleIntegrationConfigs[editingItem.id] || null : null
               }
+              onRefreshGoogleRegistry={() => void loadGoogleRegistry()}
               liveTikTokAdvertisers={liveTikTokAdvertisers}
               liveTikTokBusinessCenters={liveTikTokBusinessCenters}
+              liveTikTokError={liveTikTokError}
+              liveTikTokLoading={liveTikTokLoading}
               tiktokIntegrationConfig={
                 editingItem ? tiktokIntegrationConfigs[editingItem.id] || null : null
               }
+              onRefreshTikTokRegistry={() => void loadTikTokRegistry()}
               onSubmit={handleSubmit}
               onCancel={() => setIsAddOpen(false)}
             />

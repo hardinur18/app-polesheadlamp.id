@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import {
   Form,
@@ -20,13 +19,15 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
-import { DialogFooter } from '../../../components/ui/dialog';
+import { Button } from '../../../components/ui/button';
+import { MasterDataFormActions } from '../../../components/ui/master-data-ui';
+import { PlatformLogo } from '../../../components/ui/platform-logo';
 import { SimpleMasterItem, VehicleType, PaymentMethod, Platform } from '../data';
-import { Loader2 } from 'lucide-react';
 import { getVehicleNameValidationMessage } from '../vehicleValidation';
+import { validatePlatformLogoFile } from '@/app/services/platformLogoService';
 
 interface GenericFormProps {
-  type: 'vehicle' | 'payment' | 'simple' | 'sub_channel' | 'vendor'; // To determine extra fields
+  type: 'vehicle' | 'payment' | 'simple' | 'sub_channel' | 'vendor' | 'platform'; // To determine extra fields
   item?: SimpleMasterItem | VehicleType | PaymentMethod | any | null;
   label?: string;
   onSubmit: (data: any) => void;
@@ -36,6 +37,7 @@ interface GenericFormProps {
 }
 
 export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onSubmit, onCancel, hideDescription, platforms }) => {
+  const logoInputId = React.useId();
   
   const formSchema = useMemo(() => {
     let schema = z.object({
@@ -48,6 +50,8 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onS
       platformId: z.string().optional(),
       phone: z.string().optional(),
       address: z.string().optional(),
+      logoFile: z.any().optional(),
+      removeLogo: z.boolean().optional(),
     });
 
     if (type === 'vehicle') {
@@ -101,6 +105,13 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onS
   });
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [logoPreviewUrl, setLogoPreviewUrl] = React.useState('');
+
+  React.useEffect(() => {
+    return () => {
+      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+    };
+  }, [logoPreviewUrl]);
 
   const handleSubmit = async (values: GenericFormValues) => {
     setIsSubmitting(true);
@@ -127,6 +138,70 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onS
             </FormItem>
           )}
         />
+
+        {type === 'platform' && (
+          <FormField
+            control={form.control}
+            name="logoFile"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Logo Platform</FormLabel>
+                <div className="platformLogoUploader">
+                  <PlatformLogo
+                    logoPath={logoPreviewUrl || (form.watch('removeLogo') ? '' : (item as any)?.logoPath)}
+                    name={form.watch('name') || (item as any)?.name || 'Platform'}
+                  />
+                  <div className="platformLogoUploaderText">
+                    <strong>{field.value ? field.value.name : (item as any)?.logoPath && !form.watch('removeLogo') ? 'Logo sudah tersimpan' : 'Belum ada logo'}</strong>
+                    <span>PNG, JPG, atau WebP. Maksimal 1.5 MB. File akan replace logo lama, bukan menambah duplikat.</span>
+                    <div className="platformLogoUploaderActions">
+                      <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById(logoInputId)?.click()}>
+                        Pilih Logo
+                      </Button>
+                      {(field.value || ((item as any)?.logoPath && !form.watch('removeLogo'))) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+                            setLogoPreviewUrl('');
+                            field.onChange(undefined);
+                            form.setValue('removeLogo', true as never, { shouldDirty: true });
+                          }}
+                        >
+                          Hapus Logo
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <input
+                    id={logoInputId}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (!file) return;
+                      const validationMessage = validatePlatformLogoFile(file);
+                      if (validationMessage) {
+                        form.setError('logoFile' as never, { message: validationMessage });
+                        return;
+                      }
+                      if (logoPreviewUrl) URL.revokeObjectURL(logoPreviewUrl);
+                      setLogoPreviewUrl(URL.createObjectURL(file));
+                      form.clearErrors('logoFile' as never);
+                      form.setValue('removeLogo', false as never, { shouldDirty: true });
+                      field.onChange(file);
+                    }}
+                  />
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         {type === 'sub_channel' && platforms && (
           <FormField
@@ -282,14 +357,11 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onS
           )}
         />
 
-        <DialogFooter className="mt-6">
-          <Button type="button" variant="outline" onClick={onCancel} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50" disabled={isSubmitting}>
-            Batal
-          </Button>
-          <Button type="submit" className="bg-blue-600 hover:bg-blue-700 shadow-sm" disabled={isSubmitting}>
-            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan</> : "Simpan Data"}
-          </Button>
-        </DialogFooter>
+        <MasterDataFormActions
+          isSubmitting={isSubmitting}
+          onCancel={onCancel}
+          saveLabel="Simpan Data"
+        />
       </form>
     </Form>
   );

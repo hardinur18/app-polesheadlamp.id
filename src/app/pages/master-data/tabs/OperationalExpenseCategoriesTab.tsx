@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle,
   Edit,
   Loader2,
   Plus,
@@ -16,6 +15,9 @@ import { DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS } from '@/app/data/operationalExpe
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
+import type { NoticeItem } from '../../../components/ui/notice-stack';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import {
@@ -36,18 +38,9 @@ import {
   DialogTitle,
 } from '../../../components/ui/dialog';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../../components/ui/table';
-import {
   OperationalEmptyState,
   OperationalKpiCard,
   OperationalKpiGrid,
-  OperationalPageHeader,
   OperationalTableCard,
   RequiredLabel,
 } from '../../../components/ui/operational-page';
@@ -105,7 +98,11 @@ async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T
   return payload as T;
 }
 
-export function OperationalExpenseCategoriesTab() {
+type OperationalExpenseCategoriesTabProps = {
+  setPageNotices?: (notices: NoticeItem[]) => void;
+};
+
+export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalExpenseCategoriesTabProps) {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
@@ -121,6 +118,16 @@ export function OperationalExpenseCategoriesTab() {
   const [deleteItem, setDeleteItem] = useState<OperationalExpenseCategory | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
+  useEffect(() => {
+    setPageNotices?.(
+      loadError
+        ? [{ id: 'category-session', tone: 'warning', message: loadError }]
+        : [],
+    );
+
+    return () => setPageNotices?.([]);
+  }, [loadError, setPageNotices]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -132,7 +139,7 @@ export function OperationalExpenseCategoriesTab() {
       const message = error instanceof Error ? error.message : 'Gagal memuat master kategori biaya';
       if (message.includes('Endpoint master kategori biaya')) {
         setItems(DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS);
-        setLoadError('Server belum siap. Menampilkan Chart of Accounts default sementara.');
+        setLoadError('Server belum siap. Menampilkan daftar akun biaya default sementara.');
       } else {
         setLoadError(message);
       }
@@ -251,40 +258,7 @@ export function OperationalExpenseCategoriesTab() {
   };
 
   return (
-    <div className="space-y-5">
-      <OperationalPageHeader
-        eyebrow="Biaya Operasional"
-        icon={ReceiptText}
-        title="Chart of Accounts"
-        subtitle="Kategori, nama akun, kode, tipe, dan deskripsi."
-        actions={
-          <>
-            <Button variant="outline" className="h-9 gap-2" onClick={loadData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button className="h-9 gap-2" onClick={openCreate} disabled={!canCreate}>
-              <Plus className="h-4 w-4" />
-              Akun Baru
-            </Button>
-          </>
-        }
-      >
-
-        {loadError && (
-          <div className="mx-4 mt-4 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{loadError}</span>
-          </div>
-        )}
-
-        <OperationalKpiGrid className="p-4 sm:grid-cols-3 xl:grid-cols-3">
-          <OperationalKpiCard label="Kategori Aktif" value={categoryCount.toLocaleString('id-ID')} />
-          <OperationalKpiCard label="Akun Aktif" value={activeCount.toLocaleString('id-ID')} tone="emerald" />
-          <OperationalKpiCard label="Nonaktif" value={inactiveCount.toLocaleString('id-ID')} />
-        </OperationalKpiGrid>
-      </OperationalPageHeader>
-
+    <div className="masterDataTabSurface">
       <ControlPanel aria-label="Filter kategori biaya">
         <ControlRow className="masterDataControlRow">
           <SearchBox
@@ -296,9 +270,29 @@ export function OperationalExpenseCategoriesTab() {
             <Badge variant="outline" className="masterDataCountBadge">
               {filteredItems.length.toLocaleString('id-ID')} data
             </Badge>
+            <Button variant="outline" className="masterDataActionButton secondary" onClick={loadData} disabled={loading}>
+              <RefreshCw className={loading ? 'animate-spin' : ''} />
+              Refresh
+            </Button>
+            <Button className="masterDataActionButton" onClick={openCreate} disabled={!canCreate}>
+              <Plus />
+              Akun Baru
+            </Button>
           </div>
         </ControlRow>
       </ControlPanel>
+
+      <OperationalKpiGrid className="sm:grid-cols-3 xl:grid-cols-3">
+        <OperationalKpiCard label="Kategori Aktif" value={categoryCount.toLocaleString('id-ID')} />
+        <OperationalKpiCard label="Akun Aktif" value={activeCount.toLocaleString('id-ID')} tone="emerald" />
+        <OperationalKpiCard label="Nonaktif" value={inactiveCount.toLocaleString('id-ID')} />
+      </OperationalKpiGrid>
+
+      <MasterDataTableTitle
+        title="Daftar Akun Biaya"
+        count={filteredItems.length}
+        icon={ReceiptText}
+      />
 
       {loading ? (
         <OperationalTableCard className="flex h-40 items-center justify-center">
@@ -313,83 +307,99 @@ export function OperationalExpenseCategoriesTab() {
           />
         </OperationalTableCard>
       ) : (
-        <OperationalTableCard>
-          <div className="overflow-x-auto">
-            <Table className="min-w-[1120px] table-fixed">
-              <TableHeader>
-                <TableRow className="border-b border-slate-100 bg-slate-50/70 hover:bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:bg-slate-950/40">
-                  <TableHead className="h-10 w-[260px] text-xs font-semibold uppercase tracking-wide text-slate-500">Kategori</TableHead>
-                  <TableHead className="h-10 w-[260px] text-xs font-semibold uppercase tracking-wide text-slate-500">Nama Akun</TableHead>
-                  <TableHead className="h-10 w-[110px] text-xs font-semibold uppercase tracking-wide text-slate-500">Kode</TableHead>
-                  <TableHead className="h-10 w-[140px] text-xs font-semibold uppercase tracking-wide text-slate-500">Tipe</TableHead>
-                  <TableHead className="h-10 text-xs font-semibold uppercase tracking-wide text-slate-500">Deskripsi</TableHead>
-                  <TableHead className="h-10 w-[120px] text-xs font-semibold uppercase tracking-wide text-slate-500">Status</TableHead>
-                  {(canEdit || canDelete) && <TableHead className="h-10 w-[110px] text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Aksi</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(groupedItems).flatMap(([category, rows]) => [
-                  <TableRow key={`group-${category}`} className="border-b border-slate-100 bg-slate-50/50 hover:bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/30">
-                    <TableCell colSpan={canEdit || canDelete ? 7 : 6} className="h-11 px-4 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{category}</span>
-                        <Badge variant="secondary" className="border-0 bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {rows.filter((row) => row.is_active).length} aktif
-                        </Badge>
-                      </div>
-                    </TableCell>
-                  </TableRow>,
-                  ...rows.map((item, index) => (
-                    <TableRow key={item.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 dark:border-slate-800 dark:hover:bg-slate-800/40">
-                      <TableCell className="py-3 text-sm text-slate-500">
-                        {index === 0 ? category : ''}
-                      </TableCell>
-                      <TableCell className="py-3 text-sm font-medium text-slate-900 dark:text-slate-100">{item.subcategory}</TableCell>
-                      <TableCell className="py-3 text-sm text-slate-600 dark:text-slate-300">{item.account_code || '-'}</TableCell>
-                      <TableCell className="py-3">
-                        <Badge
-                          variant="outline"
-                          className={item.account_type === 'income'
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
-                            : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-300'}
-                        >
-                          {item.account_type === 'income' ? 'Penghasilan' : item.account_type === 'cogs' ? 'HPP' : 'Pengeluaran'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="truncate py-3 text-sm text-slate-500">{item.description || '-'}</TableCell>
-                      <TableCell className="py-3">
-                        <Badge
-                          variant="outline"
-                          className={item.is_active
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
-                            : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'}
-                        >
-                          {item.is_active ? 'Aktif' : 'Nonaktif'}
-                        </Badge>
-                      </TableCell>
-                      {(canEdit || canDelete) && (
-                        <TableCell className="py-3">
-                          <div className="flex justify-end gap-1">
-                            {canEdit && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => openEdit(item)}>
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {canDelete && item.is_active && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600" onClick={() => setDeleteItem(item)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  )),
-                ])}
-              </TableBody>
-            </Table>
-          </div>
-        </OperationalTableCard>
+        <div className="tablePanel">
+          <DataTable
+            actionWidth={82}
+            cellY={12}
+            columns={[64, 220, 250, 112, 150, 320, 92, (canEdit || canDelete) ? 82 : null]}
+            minWidth={canEdit || canDelete ? 1290 : 1208}
+            rowMinHeight={64}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>Kategori</th>
+                  <th>Nama Akun</th>
+                  <th>Kode</th>
+                  <th>Tipe</th>
+                  <th>Deskripsi</th>
+                  <th className="text-center">Status</th>
+                  {(canEdit || canDelete) && <TableActionHeader />}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(groupedItems).map(([category, rows]) => (
+                  <React.Fragment key={category}>
+                    <tr className="bg-slate-50/45 hover:bg-slate-50/45 dark:bg-slate-950/30 dark:hover:bg-slate-950/30">
+                      <td colSpan={canEdit || canDelete ? 8 : 7}>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+                            {category}
+                          </span>
+                          <Badge variant="secondary" className="masterDataCountBadge h-7 px-3 text-xs">
+                            {rows.filter((row) => row.is_active).length} aktif
+                          </Badge>
+                        </div>
+                      </td>
+                    </tr>
+                    {rows.map((item) => (
+                      <tr key={item.id}>
+                        <td className="monoCell text-center">
+                          {filteredItems.findIndex((row) => row.id === item.id) + 1}
+                        </td>
+                        <td>
+                          <TableText primary={item.category} />
+                        </td>
+                        <td>
+                          <TableText primary={item.subcategory} />
+                        </td>
+                        <td>
+                          <TableText primary={item.account_code || '-'} />
+                        </td>
+                        <td>
+                          <Badge
+                            variant="outline"
+                            className={item.account_type === 'income'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
+                              : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}
+                          >
+                            {item.account_type === 'income' ? 'Penghasilan' : item.account_type === 'cogs' ? 'HPP' : 'Pengeluaran'}
+                          </Badge>
+                        </td>
+                        <td>
+                          <TableText primary={item.description || '-'} />
+                        </td>
+                        <TableStatusCell>
+                          <TableStatusIcon
+                            label={item.is_active ? 'Aktif' : 'Non aktif'}
+                            tone={item.is_active ? 'active' : 'inactive'}
+                          />
+                        </TableStatusCell>
+                        {(canEdit || canDelete) && (
+                          <TableActionCell>
+                            <TableActionMenu>
+                              {canEdit && (
+                                <TableActionMenuItem icon={Edit} onClick={() => openEdit(item)}>
+                                  Edit Akun
+                                </TableActionMenuItem>
+                              )}
+                              {canDelete && item.is_active && (
+                                <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteItem(item)}>
+                                  Nonaktifkan
+                                </TableActionMenuItem>
+                              )}
+                            </TableActionMenu>
+                          </TableActionCell>
+                        )}
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
+        </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -468,7 +478,7 @@ export function OperationalExpenseCategoriesTab() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={saving} className="bg-red-600 hover:bg-red-700">
+            <AlertDialogAction onClick={handleDelete} disabled={saving} className="dangerButton">
               {saving ? 'Memproses...' : 'Nonaktifkan'}
             </AlertDialogAction>
           </AlertDialogFooter>

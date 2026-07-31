@@ -306,7 +306,7 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
                                                         <Switch 
                                                             checked={isSelected}
                                                             onCheckedChange={() => handleTogglePlatform(platform.id)}
-                                                            className="data-[state=checked]:bg-blue-600"
+                                                            className="data-[state=checked]:bg-primary"
                                                         />
                                                     </div>
                                                     
@@ -456,17 +456,15 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
             <Button variant="outline" onClick={onClose} disabled={isSaving} className="h-10 px-6">
                 Batal
             </Button>
-            <Button onClick={handleSave} disabled={isSaving} className="h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-lg shadow-blue-200/50 dark:shadow-none">
+            <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                icon={isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            >
                 {isSaving ? (
-                    <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Menyimpan...
-                    </>
+                    'Menyimpan...'
                 ) : (
-                    <>
-                        <Save className="w-4 h-4" />
-                        Simpan Konfigurasi
-                    </>
+                    'Simpan Konfigurasi'
                 )}
             </Button>
         </DialogFooter>

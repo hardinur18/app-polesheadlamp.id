@@ -3,7 +3,9 @@ import {
   Building2, Users, Database, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '../../components/ui/tabs';
+import { NoticeStack, type NoticeItem } from '../../components/ui/notice-stack';
 import { OperationalPageHeader, OperationalPageShell } from '../../components/ui/operational-page';
+import { PlatformLogo } from '../../components/ui/platform-logo';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { AdAccountTab } from './tabs/AdAccountTab';
@@ -74,6 +76,7 @@ const MasterDataContent: React.FC<{
   } = useMasterData();
 
   const [isImportVehicleOpen, setIsImportVehicleOpen] = useState(false);
+  const [headerNotices, setHeaderNotices] = useState<NoticeItem[]>([]);
 
   React.useEffect(() => {
     const queryTab = new URLSearchParams(window.location.search).get('tab');
@@ -84,6 +87,7 @@ const MasterDataContent: React.FC<{
 
   const handleTabChange = (nextTab: string) => {
     setActiveTab(nextTab);
+    setHeaderNotices([]);
 
     const url = new URL(window.location.href);
     if (nextTab === 'branches') {
@@ -143,7 +147,12 @@ const MasterDataContent: React.FC<{
     <OperationalPageShell>
       <OperationalPageHeader
         title="Master Data"
-        subtitle="Kelola data referensi operasional RHI untuk cabang, area, layanan, iklan, pembayaran, biaya, dan role."
+        subtitle={
+          <span className="masterDataHeaderLine">
+            <span>Kelola data referensi operasional RHI untuk cabang, area, layanan, iklan, pembayaran, biaya, dan role.</span>
+            <NoticeStack className="masterDataHeaderNotices" notices={headerNotices} />
+          </span>
+        }
         eyebrow="Data & Admin"
         icon={Database}
       />
@@ -191,7 +200,7 @@ const MasterDataContent: React.FC<{
           </TabsContent>
 
           <TabsContent value="ad-accounts" className="mt-0 focus-visible:ring-0">
-            <AdAccountTab currentRole={currentRole} />
+            <AdAccountTab currentRole={currentRole} setPageNotices={setHeaderNotices} />
           </TabsContent>
 
           {/* Generic Tabs */}
@@ -216,7 +225,7 @@ const MasterDataContent: React.FC<{
             <GenericMasterTab 
               currentRole={currentRole} 
               title="Platform Iklan" 
-              type="simple"
+              type="platform"
               data={platforms}
               onAdd={addPlatform}
               onUpdate={updatePlatform}
@@ -245,7 +254,14 @@ const MasterDataContent: React.FC<{
                   width: 'w-1/3', 
                   render: (item) => {
                     const p = platforms.find(pl => pl.id === item.platformId);
-                    return <span className="capitalize">{p?.name || '-'}</span>;
+                    if (!p) return '-';
+
+                    return (
+                      <div className="platformLogoTableCell isInline">
+                        <PlatformLogo density="compact" logoPath={p.logoPath} name={p.name} size="sm" />
+                        <span className="capitalize">{p.name}</span>
+                      </div>
+                    );
                   } 
                 }
               ]}
@@ -270,7 +286,7 @@ const MasterDataContent: React.FC<{
           </TabsContent>
 
           <TabsContent value="operational-expense-categories" className="mt-0 focus-visible:ring-0">
-            <OperationalExpenseCategoriesTab />
+            <OperationalExpenseCategoriesTab setPageNotices={setHeaderNotices} />
           </TabsContent>
 
           <TabsContent value="roles" className="mt-0 focus-visible:ring-0">

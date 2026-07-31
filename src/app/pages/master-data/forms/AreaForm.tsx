@@ -16,7 +16,7 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from '../../../components/ui/popover';
-import { DialogFooter } from '../../../components/ui/dialog';
+import { MasterDataFormActions } from '../../../components/ui/master-data-ui';
 import { Area, Branch, MOCK_BRANCHES } from '../data';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '../../../components/ui/utils';
@@ -162,14 +162,7 @@ export const AreaForm: React.FC<AreaFormProps> = ({ item, branches, onSubmit, on
           </div>
         </div>
 
-        <DialogFooter className="mt-6 pt-0 border-0">
-          <Button type="button" variant="outline" onClick={onCancel} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-            Batal
-          </Button>
-          <Button type="submit" className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-            Simpan Data
-          </Button>
-        </DialogFooter>
+        <MasterDataFormActions onCancel={onCancel} saveLabel="Simpan Data" />
       </form>
     </Form>
   );

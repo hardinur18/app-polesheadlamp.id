@@ -1,7 +1,8 @@
 import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
-import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
+import { TableStatusIcon } from '../../../components/ui/data-table';
+import { MasterDataDialogBody } from '../../../components/ui/master-data-ui';
 
 interface MasterDataDetailDialogProps {
   open: boolean;
@@ -34,20 +35,20 @@ export const MasterDataDetailDialog: React.FC<MasterDataDetailDialogProps> = ({
           <DialogDescription>Informasi lengkap mengenai data {title.toLowerCase()}.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1 py-2">
+        <MasterDataDialogBody compact>
+          <div className="masterDataDetailRows">
             {/* Common Fields */}
             <DetailRow label={`Nama ${title}`} value={item.name || item.bankName} />
             <DetailRow label="ID" value={item.id} />
             
-            <div className="flex justify-between py-3 border-b border-slate-100 dark:border-slate-700 items-center">
-                <span className="text-slate-500 text-sm">Status</span>
-                <Badge variant={item.status === 'active' ? 'default' : 'secondary'} 
-                    className={item.status === 'active' 
-                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200" 
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-100 border-slate-200"}
-                >
-                    {item.status === 'active' ? 'AKTIF' : 'NON AKTIF'}
-                </Badge>
+            <div className="masterDataDetailRow">
+                <span className="masterDataDetailLabel">Status</span>
+                <span className="masterDataDetailValue">
+                <TableStatusIcon
+                    label={item.status === 'active' || !item.status ? 'Aktif' : 'Non aktif'}
+                    tone={item.status === 'active' || !item.status ? 'active' : 'inactive'}
+                />
+                </span>
             </div>
 
             {/* Specific Fields */}
@@ -64,9 +65,9 @@ export const MasterDataDetailDialog: React.FC<MasterDataDetailDialogProps> = ({
 
             {/* Description if available */}
              {item.description && (
-                <div className="py-3 border-b border-slate-100 dark:border-slate-700">
-                    <span className="text-slate-500 text-sm block mb-1">Deskripsi</span>
-                    <p className="text-slate-900 dark:text-slate-200 text-sm leading-relaxed">{item.description}</p>
+                <div className="masterDataDetailDescription">
+                    <span className="masterDataDetailLabel">Deskripsi</span>
+                    <p>{item.description}</p>
                 </div>
             )}
 
@@ -74,27 +75,28 @@ export const MasterDataDetailDialog: React.FC<MasterDataDetailDialogProps> = ({
              {columns?.map((col, idx) => {
                  if (['name', 'status', 'description', 'category', 'accountNumber', 'accountHolder'].includes(col.accessor)) return null;
                  return (
-                     <div key={idx} className="flex justify-between py-3 border-b border-slate-100 dark:border-slate-700 items-center">
-                         <span className="text-slate-500 text-sm">{col.header}</span>
-                         <div className="text-slate-900 dark:text-slate-200 text-sm font-medium text-right">
+                     <div key={idx} className="masterDataDetailRow">
+                         <span className="masterDataDetailLabel">{col.header}</span>
+                         <div className="masterDataDetailValue">
                              {col.render ? col.render(item) : item[col.accessor]}
                          </div>
                      </div>
                  )
              })}
-        </div>
+          </div>
         
         <div className="flex justify-end pt-4">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Tutup</Button>
         </div>
+        </MasterDataDialogBody>
       </DialogContent>
     </Dialog>
   );
 };
 
 const DetailRow = ({ label, value, capitalize = false }: { label: string, value: React.ReactNode, capitalize?: boolean }) => (
-    <div className="flex justify-between py-3 border-b border-slate-100 dark:border-slate-700 items-center">
-        <span className="text-slate-500 text-sm">{label}</span>
-        <span className={`text-slate-900 dark:text-slate-200 text-sm font-medium ${capitalize ? 'capitalize' : ''}`}>{value || '-'}</span>
+    <div className="masterDataDetailRow">
+        <span className="masterDataDetailLabel">{label}</span>
+        <span className={`masterDataDetailValue ${capitalize ? 'capitalize' : ''}`}>{value || '-'}</span>
     </div>
 );
