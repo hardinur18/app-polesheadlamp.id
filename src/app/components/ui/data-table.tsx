@@ -284,3 +284,44 @@ export function TableStatusIcon({
     </Tooltip>
   );
 }
+
+type TableStatusSwitchProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  checked: boolean;
+  loading?: boolean;
+  offLabel?: string;
+  onLabel?: string;
+};
+
+export function TableStatusSwitch({
+  checked,
+  className,
+  disabled,
+  loading,
+  offLabel = 'OFF',
+  onLabel = 'ON',
+  ...props
+}: TableStatusSwitchProps) {
+  const label = loading ? 'Sync' : checked ? onLabel : offLabel;
+
+  return (
+    <button
+      type="button"
+      aria-checked={checked}
+      aria-label={checked ? onLabel : offLabel}
+      className={cn(
+        'dataStatusSwitch',
+        checked ? 'isOn' : 'isOff',
+        loading && 'isLoading',
+        className,
+      )}
+      disabled={disabled || loading}
+      role="switch"
+      {...props}
+    >
+      <span className="dataStatusSwitchTrack">
+        <span className="dataStatusSwitchThumb" />
+      </span>
+      <span className="dataStatusSwitchLabel">{label}</span>
+    </button>
+  );
+}

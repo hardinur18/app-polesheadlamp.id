@@ -4252,6 +4252,247 @@ body {
   margin-top: -1px;
 }
 
+.dataStatusSwitch {
+  display: inline-flex;
+  min-width: 76px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid #dbe3ef;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 0 10px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.dataStatusSwitch:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.09);
+}
+
+.dataStatusSwitch:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.dataStatusSwitchTrack {
+  position: relative;
+  display: inline-flex;
+  width: 28px;
+  height: 16px;
+  align-items: center;
+  border-radius: 999px;
+  background: #e2e8f0;
+  transition: background-color 160ms ease;
+}
+
+.dataStatusSwitchThumb {
+  position: absolute;
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: transform 160ms ease;
+}
+
+.dataStatusSwitch.isOn {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #10b981;
+}
+
+.dataStatusSwitch.isOn .dataStatusSwitchTrack {
+  background: #bbf7d0;
+}
+
+.dataStatusSwitch.isOn .dataStatusSwitchThumb {
+  transform: translateX(12px);
+}
+
+.dataStatusSwitch.isOff {
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.dataStatusSwitch.isOff .dataStatusSwitchTrack {
+  background: #fecdd3;
+}
+
+.dataStatusSwitch.isLoading {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.dataStatusSwitchLabel {
+  min-width: 22px;
+  text-align: left;
+}
+
+.adAccountTableHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.adAccountBulkModeSwitch {
+  min-width: 96px;
+  background: #ffffff;
+}
+
+.adAccountBulkModeSwitch.isOn {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.adAccountBulkModeSwitch.isOn .dataStatusSwitchTrack {
+  background: #bfdbfe;
+}
+
+.dataTableSoftCheckbox {
+  width: 18px;
+  height: 18px;
+  border-color: #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05) !important;
+}
+
+.dataTableSoftCheckbox:hover {
+  border-color: #93c5fd !important;
+}
+
+.dataTableSoftCheckbox[data-state='checked'],
+.dataTableSoftCheckbox[data-state='indeterminate'] {
+  border-color: #2563eb !important;
+  background: linear-gradient(135deg, #0ea5e9, #0f55bd) !important;
+  color: #ffffff !important;
+}
+
+.dataTableSoftCheckbox svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 3;
+}
+
+.adAccountBulkBar {
+  position: sticky;
+  top: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 12px 0 14px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.11);
+  backdrop-filter: blur(18px);
+}
+
+.adAccountBulkSummary {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.adAccountBulkCount {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0ea5e9, #0f55bd);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(14, 165, 233, 0.24);
+}
+
+.adAccountBulkSummary small {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 680;
+}
+
+.adAccountBulkActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adAccountBulkButton {
+  height: 34px;
+  border-radius: 999px;
+  padding-inline: 14px;
+  font-size: 0.78rem;
+  font-weight: 780;
+}
+
+.adAccountBulkButton.isOn {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #059669;
+  box-shadow: none;
+}
+
+.adAccountBulkButton.isOn:hover {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.adAccountBulkButton.isOff {
+  border: 1px solid #fecdd3;
+  background: #fff1f2;
+  color: #e11d48;
+  box-shadow: none;
+}
+
+.adAccountBulkButton.isOff:hover {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.adAccountBulkButton.isGhost {
+  color: #64748b;
+}
+
+@media (max-width: 767px) {
+  .adAccountBulkBar {
+    position: static;
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 18px;
+  }
+
+  .adAccountBulkSummary,
+  .adAccountBulkActions {
+    justify-content: center;
+  }
+}
+
 .masterDataDialogBody {
   padding: 18px 24px 22px;
 }

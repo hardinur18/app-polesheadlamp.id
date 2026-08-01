@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { 
+import {
   Plus, Edit, Trash2,
   History, Link2, Monitor, RefreshCw, Unlink, UserCheck, Users
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusSwitch, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   MasterDataFieldLabel,
@@ -18,6 +18,7 @@ import type { NoticeItem } from '../../../components/ui/notice-stack';
 import { PlatformLogo } from '../../../components/ui/platform-logo';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
+import { Checkbox } from '../../../components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
@@ -116,6 +117,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AdAccount | null>(null);
   const [deletingItem, setDeletingItem] = useState<AdAccount | null>(null);
+  const [statusToggleItem, setStatusToggleItem] = useState<AdAccount | null>(null);
+  const [bulkStatusTarget, setBulkStatusTarget] = useState<AdAccount['status'] | null>(null);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  const [isBulkSelectMode, setIsBulkSelectMode] = useState(false);
+  const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
+  const [bulkStatusSaving, setBulkStatusSaving] = useState(false);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const [historyItem, setHistoryItem] = useState<AdAccount | null>(null);
   const [liveMetaData, setLiveMetaData] = useState<MetaLiveBreakdownResponse | null>(
@@ -1075,8 +1082,10 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const apiFilteredAccounts = useMemo(() => {
     const lowerSearch = search.trim().toLowerCase();
     return allApiAccounts.filter((account) => {
-      if (!lowerSearch) return true;
       const mapping = getApiMappingForAccount(account);
+      if (!mapping) return false;
+
+      if (!lowerSearch) return true;
       const internalAccount = getInternalAdAccount(mapping?.internalAdAccountId);
       return (
         getPlatformLabelByKey(account.platformKey).toLowerCase().includes(lowerSearch) ||
@@ -1174,7 +1183,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
   const viewTabs = [
     { id: 'all' as const, label: 'Semua', count: rawFilteredData.length },
-    { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.length },
+    { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.filter(getApiMappingForAccount).length },
     { id: 'live' as const, label: 'Live Ads ON', count: rawFilteredData.filter(isIntegrationEnabled).length },
     { id: 'unmatched' as const, label: 'Belum Match API', count: rawFilteredData.filter(isUnmatchedAccount).length },
     { id: 'assignment' as const, label: 'Perlu Assignment', count: rawFilteredData.filter(hasAssignmentIssue).length },
@@ -1186,6 +1195,17 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     if (accountView === 'assignment') return hasAssignmentIssue(item);
     return true;
   });
+
+  const visibleAccountIdSignature = filteredData.map((item) => item.id).join('|');
+  const visibleAccountIds = useMemo(() => new Set(filteredData.map((item) => item.id)), [visibleAccountIdSignature]);
+
+  useEffect(() => {
+    setSelectedAccountIds((prev) => prev.filter((id) => visibleAccountIds.has(id)));
+  }, [visibleAccountIds]);
+
+  useEffect(() => {
+    if (!isBulkSelectMode) setSelectedAccountIds([]);
+  }, [isBulkSelectMode]);
 
   const activeData = filteredData.filter(item => item.status === 'active');
   const inactiveData = filteredData.filter(item => item.status !== 'active');
@@ -1732,6 +1752,161 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     await deleteAdAccount(id);
   };
 
+  const updateAccountStatus = async (item: AdAccount, status: AdAccount['status']) => {
+    if (!canEdit) {
+      toast.error('Anda tidak memiliki izin untuk mengubah status akun iklan');
+      return;
+    }
+
+    setSavingStatusId(item.id);
+    try {
+      await updateAdAccount({ ...item, status });
+      toast.success(status === 'active' ? 'Akun iklan diaktifkan.' : 'Akun iklan dinonaktifkan.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal mengubah status akun iklan.');
+    } finally {
+      setSavingStatusId(null);
+    }
+  };
+
+  const requestAccountStatusToggle = (item: AdAccount) => {
+    if (item.status === 'active') {
+      setStatusToggleItem(item);
+      return;
+    }
+
+    void updateAccountStatus(item, 'active');
+  };
+
+  const renderAccountStatusSwitch = (item: AdAccount) => (
+    <TableStatusSwitch
+      checked={item.status === 'active'}
+      disabled={!canEdit}
+      loading={savingStatusId === item.id}
+      offLabel="OFF"
+      onClick={(event) => {
+        event.stopPropagation();
+        requestAccountStatusToggle(item);
+      }}
+      onLabel="ON"
+      title={item.status === 'active' ? 'Klik untuk nonaktifkan akun' : 'Klik untuk aktifkan akun'}
+    />
+  );
+
+  const selectedAccounts = useMemo(
+    () => adAccounts.filter((item) => selectedAccountIds.includes(item.id)),
+    [adAccounts, selectedAccountIds],
+  );
+  const selectedActiveCount = selectedAccounts.filter((item) => item.status === 'active').length;
+  const selectedInactiveCount = selectedAccounts.length - selectedActiveCount;
+
+  const toggleAccountSelection = (id: string, checked: boolean) => {
+    setSelectedAccountIds((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      return prev.filter((itemId) => itemId !== id);
+    });
+  };
+
+  const toggleSectionSelection = (items: AdAccount[], checked: boolean) => {
+    const itemIds = items.map((item) => item.id);
+    setSelectedAccountIds((prev) => {
+      if (!checked) return prev.filter((id) => !itemIds.includes(id));
+      return Array.from(new Set([...prev, ...itemIds]));
+    });
+  };
+
+  const applyBulkStatus = async (status: AdAccount['status']) => {
+    if (!canEdit) {
+      toast.error('Anda tidak memiliki izin untuk mengubah status akun iklan');
+      return;
+    }
+
+    const targetAccounts = selectedAccounts.filter((item) => item.status !== status);
+    if (targetAccounts.length === 0) {
+      toast.info(status === 'active' ? 'Semua akun terpilih sudah ON.' : 'Semua akun terpilih sudah OFF.');
+      setBulkStatusTarget(null);
+      return;
+    }
+
+    setBulkStatusSaving(true);
+    try {
+      await Promise.all(targetAccounts.map((item) => updateAdAccount({ ...item, status })));
+      toast.success(
+        status === 'active'
+          ? `${targetAccounts.length} akun iklan diaktifkan.`
+          : `${targetAccounts.length} akun iklan dinonaktifkan.`,
+      );
+      setSelectedAccountIds([]);
+      setBulkStatusTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal mengubah status akun iklan secara massal.');
+    } finally {
+      setBulkStatusSaving(false);
+    }
+  };
+
+  const requestBulkStatus = (status: AdAccount['status']) => {
+    if (selectedAccountIds.length === 0) {
+      toast.info('Pilih akun iklan dulu.');
+      return;
+    }
+
+    if (status === 'inactive') {
+      setBulkStatusTarget(status);
+      return;
+    }
+
+    void applyBulkStatus(status);
+  };
+
+  const renderBulkActionBar = () => {
+    if (!isBulkSelectMode) return null;
+
+    return (
+      <div className="adAccountBulkBar">
+        <div className="adAccountBulkSummary">
+          <span className="adAccountBulkCount">{selectedAccounts.length}</span>
+          <span>{selectedAccounts.length > 0 ? 'akun dipilih' : 'mode pilih massal'}</span>
+          <small>
+            {selectedAccounts.length > 0
+              ? `${selectedActiveCount} ON / ${selectedInactiveCount} OFF`
+              : 'centang akun yang ingin diubah'}
+          </small>
+        </div>
+        <div className="adAccountBulkActions">
+          <Button
+            className="adAccountBulkButton isOn"
+            disabled={bulkStatusSaving || selectedAccounts.length === 0}
+            onClick={() => requestBulkStatus('active')}
+            type="button"
+          >
+            Aktifkan
+          </Button>
+          <Button
+            className="adAccountBulkButton isOff"
+            disabled={bulkStatusSaving || selectedAccounts.length === 0}
+            onClick={() => requestBulkStatus('inactive')}
+            type="button"
+          >
+            Nonaktifkan
+          </Button>
+          <Button
+            className="adAccountBulkButton isGhost"
+            disabled={bulkStatusSaving}
+            onClick={() => {
+              setSelectedAccountIds([]);
+              setIsBulkSelectMode(false);
+            }}
+            type="button"
+            variant="ghost"
+          >
+            Tutup
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   const handleToggleIntegration = async (item: AdAccount, enabled: boolean) => {
     setSavingConfigId(item.id);
     try {
@@ -1986,21 +2161,66 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
     return (
       <div className="mb-8 last:mb-0">
-        <MasterDataTableTitle title={title} count={items.length} variant={variant} />
+        <div className="adAccountTableHeaderRow">
+          <MasterDataTableTitle title={title} count={items.length} variant={variant} />
+          {canEdit && (
+            <TableStatusSwitch
+              checked={isBulkSelectMode}
+              className="adAccountBulkModeSwitch"
+              offLabel="Pilih"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsBulkSelectMode((value) => !value);
+              }}
+              onLabel="Massal"
+              title={isBulkSelectMode ? 'Tutup mode pilih massal' : 'Aktifkan mode pilih massal'}
+            />
+          )}
+        </div>
+        {renderBulkActionBar()}
 
         <div className="tablePanel">
           {/* Desktop Table */}
           <div className="hidden md:block">
+            {(() => {
+              const selectedInSection = items.filter((item) => selectedAccountIds.includes(item.id)).length;
+              const allSelected = selectedInSection === items.length;
+              const partiallySelected = selectedInSection > 0 && !allSelected;
+              return (
             <DataTable
               actionWidth={82}
               cellY={12}
-              columns={[64, 260, 220, 190, 190, 118, 142, 88, 82, 90, (canEdit || canDelete) ? 82 : null]}
-              minWidth={canEdit || canDelete ? 1556 : 1474}
+              columns={[
+                isBulkSelectMode ? 54 : null,
+                64,
+                260,
+                220,
+                190,
+                190,
+                118,
+                142,
+                88,
+                82,
+                90,
+                (canEdit || canDelete) ? 82 : null,
+              ]}
+              minWidth={canEdit || canDelete ? (isBulkSelectMode ? 1610 : 1556) : (isBulkSelectMode ? 1528 : 1474)}
               rowMinHeight={76}
             >
               <table>
                 <thead>
                   <tr>
+                    {isBulkSelectMode && (
+                      <th className="text-center">
+                        <Checkbox
+                          aria-label={`Pilih semua ${title}`}
+                          checked={allSelected ? true : partiallySelected ? 'indeterminate' : false}
+                          className="dataTableSoftCheckbox"
+                          disabled={!canEdit}
+                          onCheckedChange={(checked) => toggleSectionSelection(items, checked === true)}
+                        />
+                      </th>
+                    )}
                     <th className="text-center">No</th>
                     <th>Nama Akun</th>
                     <th>Business / Manager</th>
@@ -2021,9 +2241,21 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                   const effectiveAdvertiserId = activeOwner?.advertiserId || item.advertiserId;
                   const businessManagerLabel = getBusinessManagerLabel(item);
                   const platform = getPlatform(item.platformId);
+                  const selected = selectedAccountIds.includes(item.id);
 
                   return (
                   <tr key={item.id}>
+                    {isBulkSelectMode && (
+                      <td className="tableIconCell text-center">
+                        <Checkbox
+                          aria-label={`Pilih ${item.accountName}`}
+                          checked={selected}
+                          className="dataTableSoftCheckbox"
+                          disabled={!canEdit}
+                          onCheckedChange={(checked) => toggleAccountSelection(item.id, checked === true)}
+                        />
+                      </td>
+                    )}
                     <td className="monoCell text-center">{index + 1}</td>
                     <td>
                       <div className="platformLogoTableCell">
@@ -2068,10 +2300,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                     <td className="monoCell text-center">{item.ppn ?? 0}%</td>
                     <td className="monoCell text-center">{item.fee ?? 0}%</td>
                     <TableStatusCell>
-                      <TableStatusIcon
-                        label={item.status === 'active' ? 'Aktif' : 'Non aktif'}
-                        tone={item.status === 'active' ? 'active' : 'inactive'}
-                      />
+                      {renderAccountStatusSwitch(item)}
                     </TableStatusCell>
                     {(canEdit || canDelete) && (
                       <TableActionCell>
@@ -2108,6 +2337,8 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                 </tbody>
               </table>
             </DataTable>
+              );
+            })()}
           </div>
 
           {/* Mobile Card List */}
@@ -2116,11 +2347,21 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                 const activeOwner = getActiveOwnerAssignment(item.id);
                 const effectiveAdvertiserId = activeOwner?.advertiserId || item.advertiserId;
                 const platform = getPlatform(item.platformId);
+                const selected = selectedAccountIds.includes(item.id);
 
                 return (
                 <div key={item.id} className="p-4 bg-white dark:bg-slate-800">
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-3">
+                           {isBulkSelectMode && (
+                             <Checkbox
+                               aria-label={`Pilih ${item.accountName}`}
+                               checked={selected}
+                               className="dataTableSoftCheckbox"
+                               disabled={!canEdit}
+                               onCheckedChange={(checked) => toggleAccountSelection(item.id, checked === true)}
+                             />
+                           )}
                            <PlatformLogo
                              density="compact"
                              logoPath={platform?.logoPath}
@@ -2132,10 +2373,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                               <p className="text-xs text-slate-500 dark:text-slate-400">{getPlatformName(item.platformId)}</p>
                            </div>
                         </div>
-                        <TableStatusIcon
-                          label={item.status === 'active' ? 'Aktif' : 'Non aktif'}
-                          tone={item.status === 'active' ? 'active' : 'inactive'}
-                        />
+                        {renderAccountStatusSwitch(item)}
                     </div>
                     
                     <div className="pl-[52px] space-y-1 mb-3">
@@ -3092,6 +3330,60 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
               }}
             >
               Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(statusToggleItem)} onOpenChange={(open) => {
+        if (!open) setStatusToggleItem(null);
+      }}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Nonaktifkan Akun Iklan</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              Akun <strong>{statusToggleItem?.accountName}</strong> akan dipindahkan ke status OFF.
+              Akun tidak hilang, dan bisa diaktifkan kembali dari switch ini.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              onClick={() => {
+                if (statusToggleItem) void updateAccountStatus(statusToggleItem, 'inactive');
+                setStatusToggleItem(null);
+              }}
+            >
+              Nonaktifkan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={bulkStatusTarget === 'inactive'} onOpenChange={(open) => {
+        if (!open) setBulkStatusTarget(null);
+      }}>
+        <AlertDialogContent className="bg-white dark:bg-slate-800 dark:border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="dark:text-slate-200">Nonaktifkan Akun Terpilih</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-slate-400">
+              {selectedAccounts.length} akun iklan akan dipindahkan ke status OFF.
+              Data, histori, assignment, dan pairing API tetap tersimpan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="dangerButton"
+              disabled={bulkStatusSaving}
+              onClick={() => void applyBulkStatus('inactive')}
+            >
+              {bulkStatusSaving ? 'Memproses...' : 'Nonaktifkan'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
