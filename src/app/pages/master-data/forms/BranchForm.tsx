@@ -32,11 +32,12 @@ type FormValues = z.infer<typeof formSchema>;
 interface BranchFormProps {
   item?: Branch | null;
   existingBranches?: Branch[];
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: FormValues) => Promise<void> | void;
   onCancel: () => void;
 }
 
-export const BranchForm: React.FC<BranchFormProps> = ({ item, existingBranches = [], onSubmit, onCancel }) => {
+export const BranchForm: React.FC<BranchFormProps> = ({ item, existingBranches = [], onDirtyChange, onSubmit, onCancel }) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -61,6 +62,10 @@ export const BranchForm: React.FC<BranchFormProps> = ({ item, existingBranches =
   
   // Watch Maps URL for auto-extraction
   const mapsUrlValue = form.watch("mapsUrl");
+
+  useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   useEffect(() => {
     if (mapsUrlValue) {
@@ -363,7 +368,7 @@ export const BranchForm: React.FC<BranchFormProps> = ({ item, existingBranches =
           </div>
         )}
 
-        <MasterDataFormActions isSubmitting={isSubmitting} onCancel={onCancel} />
+        <MasterDataFormActions confirmOnCancel={form.formState.isDirty} isSubmitting={isSubmitting} onCancel={onCancel} />
       </form>
     </Form>
   );

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Dialog, 
-  DialogContent, 
   DialogHeader, 
   DialogTitle, 
   DialogDescription,
@@ -21,6 +20,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../co
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { isCsRole } from '@/app/data/roleHelpers';
+import {
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
 
 interface AdvertiserAccessModalProps {
   isOpen: boolean;
@@ -46,6 +50,18 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
+  const [initialSnapshot, setInitialSnapshot] = useState('');
+
+  const currentSnapshot = JSON.stringify({
+    platformIds: Array.from(selectedPlatforms).sort(),
+    subChannelIds: Array.from(selectedSubChannels).sort(),
+    csIds: Array.from(selectedCsIds).sort(),
+  });
+
+  const closeGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: Boolean(initialSnapshot) && currentSnapshot !== initialSnapshot,
+    onClose,
+  });
 
   // Load permissions and CS links when modal opens or advertiser changes
   useEffect(() => {
@@ -77,6 +93,11 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
       setSelectedPlatforms(platformIds);
       setSelectedSubChannels(new Set(data.subChannelIds || []));
       setSelectedCsIds(new Set(data.csIds || []));
+      setInitialSnapshot(JSON.stringify({
+        platformIds: Array.from(platformIds).sort(),
+        subChannelIds: [...(data.subChannelIds || [])].sort(),
+        csIds: [...(data.csIds || [])].sort(),
+      }));
       
       // Auto expand selected platforms
       setExpandedPlatforms(platformIds);
@@ -182,6 +203,7 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
       // However, we removed the direct Profile update which caused the error.
 
       toast.success("Konfigurasi advertiser berhasil diperbarui");
+      setInitialSnapshot(currentSnapshot);
       onClose();
       window.location.reload(); // Simple way to refresh context for now, or use context method if available
       
@@ -207,8 +229,13 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
   );
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl bg-slate-50 dark:bg-slate-950 rounded-xl border-slate-200 dark:border-slate-800 p-0 overflow-hidden flex flex-col h-[80vh]">
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) closeGuard.requestClose();
+    }}>
+      <MasterDataFormDialogContent
+        size="wide"
+        className="sm:max-w-4xl bg-slate-50 dark:bg-slate-950 p-0 overflow-hidden flex flex-col h-[80vh]"
+      >
         {/* Header */}
         <DialogHeader className="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10 shadow-sm shrink-0">
           <div className="flex items-center gap-4">
@@ -453,7 +480,7 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
                 <AlertCircle className="w-4 h-4 text-blue-500" />
                 <span>Semua perubahan akan langsung diterapkan setelah disimpan.</span>
             </div>
-            <Button variant="outline" onClick={onClose} disabled={isSaving} className="h-10 px-6">
+            <Button variant="outline" onClick={closeGuard.requestClose} disabled={isSaving} className="h-10 px-6">
                 Batal
             </Button>
             <Button
@@ -468,7 +495,12 @@ export const AdvertiserAccessModal: React.FC<AdvertiserAccessModalProps> = ({
                 )}
             </Button>
         </DialogFooter>
-      </DialogContent>
+      </MasterDataFormDialogContent>
+      <MasterDataUnsavedChangesDialog
+        open={closeGuard.isConfirmOpen}
+        onCancel={closeGuard.cancelClose}
+        onConfirm={closeGuard.confirmClose}
+      />
     </Dialog>
   );
 };

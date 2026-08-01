@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -32,11 +32,12 @@ type FormValues = z.infer<typeof formSchema>;
 interface AreaFormProps {
   item?: Area | null;
   branches: Branch[];
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: FormValues) => void;
   onCancel: () => void;
 }
 
-export const AreaForm: React.FC<AreaFormProps> = ({ item, branches, onSubmit, onCancel }) => {
+export const AreaForm: React.FC<AreaFormProps> = ({ item, branches, onDirtyChange, onSubmit, onCancel }) => {
   const [open, setOpen] = useState(false);
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -52,6 +53,10 @@ export const AreaForm: React.FC<AreaFormProps> = ({ item, branches, onSubmit, on
   const activeBranches = useMemo(() => {
     return branches.filter(b => b.status === 'active');
   }, [branches]);
+
+  useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   return (
     <Form {...form}>
@@ -162,7 +167,7 @@ export const AreaForm: React.FC<AreaFormProps> = ({ item, branches, onSubmit, on
           </div>
         </div>
 
-        <MasterDataFormActions onCancel={onCancel} saveLabel="Simpan Data" />
+        <MasterDataFormActions confirmOnCancel={form.formState.isDirty} onCancel={onCancel} saveLabel="Simpan Data" />
       </form>
     </Form>
   );

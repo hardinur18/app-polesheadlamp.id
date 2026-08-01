@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+  Dialog, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
 import {
   AlertDialog,
@@ -28,7 +28,12 @@ import { Badge } from '../../../components/ui/badge';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
-import { MobileCardActions } from '../../../components/ui/master-data-ui';
+import {
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  MobileCardActions,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
 import { PlatformLogo } from '../../../components/ui/platform-logo';
 import { OperationalEmptyState, OperationalTableCard } from '../../../components/ui/operational-page';
 import { Role } from '../data';
@@ -84,6 +89,7 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [deletingItem, setDeletingItem] = useState<any | null>(null);
   const [viewingItem, setViewingItem] = useState<any | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -93,6 +99,24 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
 
   const canAdd = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
+
+  const closeFormDialog = React.useCallback(() => {
+    setIsFormDirty(false);
+    setIsAddOpen(false);
+  }, []);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
+
+  const requestFormDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setIsAddOpen(true);
+      return;
+    }
+    formCloseGuard.requestClose();
+  };
   const canDelete = hasPermission('master_data.delete');
 
   // Use controlled data if provided, otherwise local data
@@ -532,8 +556,8 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       )}
 
       {/* Add/Edit Modal */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 border-none shadow-2xl p-0 overflow-hidden rounded-2xl max-h-[90vh] flex flex-col">
+      <Dialog open={isAddOpen} onOpenChange={requestFormDialogOpenChange}>
+        <MasterDataFormDialogContent>
           <DialogHeader className="px-6 py-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shrink-0">
             <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Icon className="w-5 h-5 text-blue-600" />
@@ -549,12 +573,18 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
               item={editingItem}
               label={title}
               onSubmit={handleSubmit}
-              onCancel={() => setIsAddOpen(false)}
+              onDirtyChange={setIsFormDirty}
+              onCancel={formCloseGuard.requestClose}
               hideDescription={hideDescription}
               platforms={platforms}
             />
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={formCloseGuard.isConfirmOpen}
+          onCancel={formCloseGuard.cancelClose}
+          onConfirm={formCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <AlertDialog open={Boolean(deletingItem)} onOpenChange={(open) => {

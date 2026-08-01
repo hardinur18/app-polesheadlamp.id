@@ -23,11 +23,12 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface TechnicianTeamFormProps {
   item?: TechnicianTeam | null;
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: FormValues) => void;
   onCancel: () => void;
 }
 
-export const TechnicianTeamForm: React.FC<TechnicianTeamFormProps> = ({ item, onSubmit, onCancel }) => {
+export const TechnicianTeamForm: React.FC<TechnicianTeamFormProps> = ({ item, onDirtyChange, onSubmit, onCancel }) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -42,6 +43,10 @@ export const TechnicianTeamForm: React.FC<TechnicianTeamFormProps> = ({ item, on
   const technicians = MOCK_USERS.filter(u => u.role === 'Teknisi');
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -141,7 +146,7 @@ export const TechnicianTeamForm: React.FC<TechnicianTeamFormProps> = ({ item, on
           )}
         />
 
-        <MasterDataFormActions isSubmitting={isSubmitting} onCancel={onCancel} />
+        <MasterDataFormActions confirmOnCancel={form.formState.isDirty} isSubmitting={isSubmitting} onCancel={onCancel} />
       </form>
     </Form>
   );

@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2, FileText } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+  Dialog, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
 import { Badge } from '../../../components/ui/badge';
 import { Role, MOCK_SOURCES, MOCK_AD_ACCOUNTS } from '../data';
@@ -23,7 +23,12 @@ import {
   AlertDialogTitle,
 } from "../../../components/ui/alert-dialog";
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
-import { MobileCardActions } from '../../../components/ui/master-data-ui';
+import {
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  MobileCardActions,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
 
 interface SourcesTabProps {
   currentRole: Role;
@@ -36,11 +41,30 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ currentRole }) => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [deletingItem, setDeletingItem] = useState<any | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
 
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
   const canDelete = hasPermission('master_data.delete');
   const canManage = canCreate || canEdit || canDelete;
+
+  const closeFormDialog = React.useCallback(() => {
+    setIsFormDirty(false);
+    setIsAddOpen(false);
+  }, []);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
+
+  const requestFormDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setIsAddOpen(true);
+      return;
+    }
+    formCloseGuard.requestClose();
+  };
 
   const getAdAccountName = (id: string) => {
     const acc = adAccounts.find(a => a.id === id);
@@ -236,8 +260,8 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ currentRole }) => {
         </div>
       </div>
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 p-0 overflow-hidden rounded-xl">
+      <Dialog open={isAddOpen} onOpenChange={requestFormDialogOpenChange}>
+        <MasterDataFormDialogContent>
           <DialogHeader className="px-6 py-4 bg-slate-50 border-b border-slate-100 dark:border-slate-800">
             <DialogTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">{editingItem ? 'Edit Sumber Iklan' : 'Tambah Sumber Iklan'}</DialogTitle>
             <DialogDescription className="sr-only">Form untuk sumber iklan</DialogDescription>
@@ -246,10 +270,16 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ currentRole }) => {
             <AdSourceForm 
               item={editingItem}
               onSubmit={handleSubmit}
-              onCancel={() => setIsAddOpen(false)}
+              onDirtyChange={setIsFormDirty}
+              onCancel={formCloseGuard.requestClose}
             />
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={formCloseGuard.isConfirmOpen}
+          onCancel={formCloseGuard.cancelClose}
+          onConfirm={formCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>

@@ -77,6 +77,7 @@ interface AdAccountFormProps {
   liveTikTokLoading?: boolean;
   tiktokIntegrationConfig?: TikTokAdsIntegrationConfig | null;
   onRefreshTikTokRegistry?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: any) => void;
   onCancel: () => void;
 }
@@ -107,6 +108,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
   liveTikTokLoading = false,
   tiktokIntegrationConfig,
   onRefreshTikTokRegistry,
+  onDirtyChange,
   onSubmit,
   onCancel,
 }) => {
@@ -143,89 +145,117 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
   const hasGoogleRegistry = liveGoogleAccounts.length > 0;
   const hasTikTokRegistry = liveTikTokAdvertisers.length > 0;
 
+  React.useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-        <FormField
-          control={form.control}
-          name="platformId"
-          render={({field}) => (
-            <FormItem>
-              <FormLabel>Platform <span className="text-red-500">*</span></FormLabel>
-              <Select
-                onValueChange={(value) => {
-                  field.onChange(value);
-                  form.setValue('liveMetaBusinessManagerId', '');
-                  form.setValue('liveMetaBusinessManagerName', '');
-                  form.setValue('liveMetaAccountId', '');
-                  form.setValue('liveMetaAccountName', '');
-                  form.setValue('liveGoogleManagerCustomerId', '');
-                  form.setValue('liveGoogleManagerCustomerName', '');
-                  form.setValue('liveGoogleCustomerId', '');
-                  form.setValue('liveGoogleCustomerName', '');
-                  form.setValue('liveTikTokBusinessCenterId', '');
-                  form.setValue('liveTikTokBusinessCenterName', '');
-                  form.setValue('liveTikTokAdvertiserId', '');
-                  form.setValue('liveTikTokAdvertiserName', '');
-                }}
-                defaultValue={field.value}
-              >
-                <FormControl>
-                  <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                    <SelectValue placeholder="Pilih Platform" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                  {platforms.map((p) => (
-                    <SelectItem key={p.id} value={p.id} className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 py-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="platformId"
+            render={({field}) => (
+              <FormItem>
+                <FormLabel>Platform <span className="text-red-500">*</span></FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    field.onChange(value);
+                    form.setValue('liveMetaBusinessManagerId', '');
+                    form.setValue('liveMetaBusinessManagerName', '');
+                    form.setValue('liveMetaAccountId', '');
+                    form.setValue('liveMetaAccountName', '');
+                    form.setValue('liveGoogleManagerCustomerId', '');
+                    form.setValue('liveGoogleManagerCustomerName', '');
+                    form.setValue('liveGoogleCustomerId', '');
+                    form.setValue('liveGoogleCustomerName', '');
+                    form.setValue('liveTikTokBusinessCenterId', '');
+                    form.setValue('liveTikTokBusinessCenterName', '');
+                    form.setValue('liveTikTokAdvertiserId', '');
+                    form.setValue('liveTikTokAdvertiserName', '');
+                  }}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                      <SelectValue placeholder="Pilih Platform" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                    {platforms.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <FormField
-          control={form.control}
-          name="accountName"
-          render={({field}) => (
-            <FormItem>
-              <FormLabel>Nama Akun <span className="text-red-500">*</span></FormLabel>
-              <FormControl>
-                <Input placeholder="Contoh: Akun FB Utama" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="advertiserId"
-          render={({field}) => (
-            <FormItem>
-              <FormLabel>Advertiser Name <span className="text-red-500">*</span></FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+          <FormField
+            control={form.control}
+            name="accountName"
+            render={({field}) => (
+              <FormItem>
+                <FormLabel>Nama Akun <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
-                  <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                    <SelectValue placeholder="Pilih Advertiser" />
-                  </SelectTrigger>
+                  <Input placeholder="Contoh: Akun FB Utama" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
                 </FormControl>
-                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                  {advertisers.map((advertiser) => (
-                    <SelectItem key={advertiser.id} value={advertiser.id} className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">
-                      {advertiser.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="advertiserId"
+            render={({field}) => (
+              <FormItem>
+                <FormLabel>Advertiser Name <span className="text-red-500">*</span></FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                      <SelectValue placeholder="Pilih Advertiser" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                    {advertisers.map((advertiser) => (
+                      <SelectItem key={advertiser.id} value={advertiser.id} className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">
+                        {advertiser.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="status"
+            render={({field}) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                    <SelectItem value="active" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Aktif</SelectItem>
+                    <SelectItem value="inactive" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Non Aktif</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         {showMetaMapping ? (
           hasMetaRegistry ? (
@@ -582,29 +612,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
           />
         </div>
 
-        <FormField
-          control={form.control}
-          name="status"
-          render={({field}) => (
-            <FormItem>
-              <FormLabel>Status</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                  <SelectItem value="active" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Aktif</SelectItem>
-                  <SelectItem value="inactive" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Non Aktif</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <MasterDataFormActions onCancel={onCancel} saveLabel="Simpan Akun Iklan" />
+        <MasterDataFormActions confirmOnCancel={form.formState.isDirty} onCancel={onCancel} saveLabel="Simpan Akun Iklan" />
       </form>
     </Form>
   );

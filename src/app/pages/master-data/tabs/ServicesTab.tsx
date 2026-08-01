@@ -6,9 +6,14 @@ import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
-import { MobileCardActions } from '../../../components/ui/master-data-ui';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  MobileCardActions,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
+import {
+  Dialog, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
 import {
   AlertDialog,
@@ -39,10 +44,29 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [deletingItem, setDeletingItem] = useState<any | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
 
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
   const canDelete = hasPermission('master_data.delete');
+
+  const closeFormDialog = React.useCallback(() => {
+    setIsFormDirty(false);
+    setIsAddOpen(false);
+  }, []);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
+
+  const requestFormDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setIsAddOpen(true);
+      return;
+    }
+    formCloseGuard.requestClose();
+  };
 
   const filteredData = services.filter(item => 
     item.name.toLowerCase().includes(search.toLowerCase())
@@ -248,8 +272,8 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
           </div>
       )}
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 border-none shadow-2xl p-0 overflow-hidden rounded-2xl max-h-[90vh] flex flex-col">
+      <Dialog open={isAddOpen} onOpenChange={requestFormDialogOpenChange}>
+        <MasterDataFormDialogContent>
           <DialogHeader className="px-6 py-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shrink-0">
             <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Activity className="w-5 h-5 text-blue-600" />
@@ -263,10 +287,16 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
             <ServiceTypeForm 
               item={editingItem}
               onSubmit={handleSubmit}
-              onCancel={() => setIsAddOpen(false)}
+              onDirtyChange={setIsFormDirty}
+              onCancel={formCloseGuard.requestClose}
             />
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={formCloseGuard.isConfirmOpen}
+          onCancel={formCloseGuard.cancelClose}
+          onConfirm={formCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>

@@ -7,7 +7,13 @@ import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
-import { MobileCardActions } from '../../../components/ui/master-data-ui';
+import {
+  MasterDataFieldLabel,
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  MobileCardActions,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
 import type { NoticeItem } from '../../../components/ui/notice-stack';
 import { PlatformLogo } from '../../../components/ui/platform-logo';
 import { Input } from '../../../components/ui/input';
@@ -110,6 +116,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AdAccount | null>(null);
   const [deletingItem, setDeletingItem] = useState<AdAccount | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [historyItem, setHistoryItem] = useState<AdAccount | null>(null);
   const [liveMetaData, setLiveMetaData] = useState<MetaLiveBreakdownResponse | null>(
     () => getCachedMetaLiveRegistry(),
@@ -165,8 +172,89 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const [apiAccountStatus, setApiAccountStatus] = useState('manual');
   const [apiAccountCurrency, setApiAccountCurrency] = useState('IDR');
   const [selectedBackendApiKey, setSelectedBackendApiKey] = useState('manual-entry');
+  const [apiAccountInternalId, setApiAccountInternalId] = useState('none');
   const [apiAccountSaving, setApiAccountSaving] = useState(false);
   const [apiDeletingAccount, setApiDeletingAccount] = useState<AdApiAccount | null>(null);
+
+  const isApiAccountFormDirty = useMemo(() => {
+    if (!isApiAccountDialogOpen) return false;
+    if (apiAccountDialogItem) {
+      return (
+        apiAccountPlatformKey !== apiAccountDialogItem.platformKey ||
+        apiAccountExternalId !== apiAccountDialogItem.externalAccountId ||
+        apiAccountExternalName !== apiAccountDialogItem.externalAccountName ||
+        apiAccountGroupId !== (apiAccountDialogItem.externalGroupId || '') ||
+        apiAccountGroupName !== (apiAccountDialogItem.externalGroupName || '') ||
+        apiAccountStatus !== (apiAccountDialogItem.externalAccountStatus || 'manual') ||
+        apiAccountCurrency !== (apiAccountDialogItem.currencyCode || 'IDR')
+      );
+    }
+
+    return (
+      selectedBackendApiKey !== 'manual-entry' ||
+      apiAccountInternalId !== 'none' ||
+      apiAccountPlatformKey !== 'meta' ||
+      Boolean(apiAccountExternalId.trim()) ||
+      Boolean(apiAccountExternalName.trim()) ||
+      Boolean(apiAccountGroupId.trim()) ||
+      Boolean(apiAccountGroupName.trim()) ||
+      apiAccountStatus !== 'manual' ||
+      apiAccountCurrency !== 'IDR'
+    );
+  }, [
+    apiAccountCurrency,
+    apiAccountDialogItem,
+    apiAccountExternalId,
+    apiAccountExternalName,
+    apiAccountGroupId,
+    apiAccountGroupName,
+    apiAccountInternalId,
+    apiAccountPlatformKey,
+    apiAccountStatus,
+    isApiAccountDialogOpen,
+    selectedBackendApiKey,
+  ]);
+  const isApiMappingFormDirty = Boolean(apiMappingInternalId || apiMappingNotes.trim());
+  const isOwnerFormDirty = Boolean(ownerAdvertiserId || ownerNotes.trim() || ownerStartDate !== getTodayDateKey());
+  const isAssignmentFormDirty = Boolean(assignmentCsId || assignmentNotes.trim() || assignmentStartDate !== getTodayDateKey());
+
+  const closeApiAccountDialog = React.useCallback(() => {
+    setIsApiAccountDialogOpen(false);
+    setApiAccountDialogItem(null);
+    setApiAccountInternalId('none');
+  }, []);
+
+  const apiAccountCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isApiAccountFormDirty,
+    onClose: closeApiAccountDialog,
+  });
+
+  const closeApiMappingDialog = React.useCallback(() => {
+    setApiMappingDialogAccount(null);
+  }, []);
+
+  const apiMappingCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isApiMappingFormDirty,
+    onClose: closeApiMappingDialog,
+  });
+
+  const closeOwnerDialog = React.useCallback(() => {
+    setOwnerDialogItem(null);
+  }, []);
+
+  const ownerCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isOwnerFormDirty,
+    onClose: closeOwnerDialog,
+  });
+
+  const closeAssignmentDialog = React.useCallback(() => {
+    setAssignmentDialogItem(null);
+  }, []);
+
+  const assignmentCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isAssignmentFormDirty,
+    onClose: closeAssignmentDialog,
+  });
 
   useEffect(() => {
     setPageNotices?.([
@@ -207,6 +295,24 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const canEdit = hasPermission('master_data.edit');
   const canDelete = hasPermission('master_data.delete');
 
+  const closeFormDialog = React.useCallback(() => {
+    setIsFormDirty(false);
+    setIsAddOpen(false);
+  }, []);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
+
+  const requestFormDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setIsAddOpen(true);
+      return;
+    }
+    formCloseGuard.requestClose();
+  };
+
   const advertisers = useMemo(() => {
     const activeAdvertisers = users.filter(u => isAdvertiserRole(u.role) && u.status === 'active');
     const referencedAdvertiserIds = new Set([
@@ -230,6 +336,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const isMetaPlatformName = (name: string) => name.toLowerCase().replace(/\s+/g, '').includes('meta');
   const isGooglePlatformName = (name: string) => name.toLowerCase().replace(/\s+/g, '').includes('google');
   const isTikTokPlatformName = (name: string) => name.toLowerCase().replace(/\s+/g, '').includes('tiktok');
+  const getPlatformKeyByName = (name: string): AdsPlatformKey | null => {
+    if (isGooglePlatformName(name)) return 'google';
+    if (isTikTokPlatformName(name)) return 'tiktok';
+    if (isMetaPlatformName(name) || name.toLowerCase().includes('facebook')) return 'meta';
+    return null;
+  };
   const metaPlatform = platforms.find(p => isMetaPlatformName(p.name));
   const googlePlatform = platforms.find(p => isGooglePlatformName(p.name));
   const tiktokPlatform = platforms.find(p => isTikTokPlatformName(p.name));
@@ -242,7 +354,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     return metaPlatform;
   };
   const getPlatformLabelByKey = (key: AdsPlatformKey) =>
-    key === 'google' ? 'Google Ads' : key === 'tiktok' ? 'TikTok Ads' : 'Meta Ads';
+    getPlatformByKey(key)?.name || (key === 'google' ? 'Google Ads' : key === 'tiktok' ? 'TikTok Ads' : 'Meta Ads');
   const getAdvertiserName = (id: string) => users.find(u => u.id === id)?.name || 'Unknown';
   const getUserName = (id?: string | null) => users.find(u => u.id === id)?.name || 'Belum diset';
   const getSubChannelName = (id?: string | null) => subChannels.find(s => s.id === id)?.name || '-';
@@ -343,7 +455,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   }, []);
 
   const loadMetaRegistry = React.useCallback(async () => {
-    if (!metaPlatform) return;
+    if (!metaPlatform) return null;
 
     setLiveMetaLoading(true);
     try {
@@ -353,8 +465,10 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       const payload = await fetchMetaLiveBreakdown({ from, to });
       setLiveMetaData(payload);
       setLiveMetaError(payload.cacheStatus === 'stale' ? payload.cacheMessage || null : null);
+      return payload;
     } catch (error) {
       setLiveMetaError(error instanceof Error ? error.message : 'Gagal memuat registry Meta live.');
+      return null;
     } finally {
       setLiveMetaLoading(false);
     }
@@ -365,7 +479,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   }, [loadMetaRegistry]);
 
   const loadGoogleRegistry = React.useCallback(async () => {
-    if (!googlePlatform) return;
+    if (!googlePlatform) return null;
 
     setLiveGoogleLoading(true);
     try {
@@ -375,10 +489,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       const payload = await fetchGoogleAdsLiveBreakdown({ from, to });
       setLiveGoogleData(payload);
       setLiveGoogleError(payload.cacheStatus === 'stale' ? payload.cacheMessage || null : null);
+      return payload;
     } catch (error) {
       setLiveGoogleError(
         error instanceof Error ? error.message : 'Gagal memuat registry Google Ads live.',
       );
+      return null;
     } finally {
       setLiveGoogleLoading(false);
     }
@@ -389,7 +505,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   }, [loadGoogleRegistry]);
 
   const loadTikTokRegistry = React.useCallback(async () => {
-    if (!tiktokPlatform) return;
+    if (!tiktokPlatform) return null;
 
     setLiveTikTokLoading(true);
     try {
@@ -400,10 +516,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       setLiveTikTokBusinessCenters(businessCenters);
       setLiveTikTokAdvertisers(advertisers);
       setLiveTikTokError(null);
+      return advertisers;
     } catch (error) {
       setLiveTikTokError(
         error instanceof Error ? error.message : 'Gagal memuat registry TikTok Ads live.',
       );
+      return null;
     } finally {
       setLiveTikTokLoading(false);
     }
@@ -486,8 +604,42 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     return map;
   }, [liveTikTokBusinessCenters]);
 
+  const activeApiMappingByInternalAccountId = useMemo(() => {
+    const map = new Map<string, AdAccountApiMapping>();
+    for (const mapping of apiMappings) {
+      if (mapping.status !== 'active') continue;
+      map.set(mapping.internalAdAccountId, mapping);
+    }
+    return map;
+  }, [apiMappings]);
+
+  const apiAccountByProviderExternalId = useMemo(() => {
+    const map = new Map<string, AdApiAccount>();
+    for (const account of apiAccounts) {
+      map.set(`${account.platformKey}:${account.externalAccountId}`, account);
+    }
+    return map;
+  }, [apiAccounts]);
+
+  const getMappedApiAccountForInternal = React.useCallback(
+    (internalAdAccountId: string) => {
+      const mapping = activeApiMappingByInternalAccountId.get(internalAdAccountId);
+      if (!mapping) return null;
+      return (
+        apiAccountByProviderExternalId.get(`${mapping.platformKey}:${mapping.externalAccountId}`) ||
+        null
+      );
+    },
+    [activeApiMappingByInternalAccountId, apiAccountByProviderExternalId],
+  );
+
   const getBusinessManagerLabel = React.useCallback(
     (item: AdAccount) => {
+      const mappedApiAccount = getMappedApiAccountForInternal(item.id);
+      if (mappedApiAccount) {
+        return mappedApiAccount.externalGroupName || 'Tanpa Business / Manager';
+      }
+
       const platformName = getPlatformName(item.platformId);
 
       if (isGooglePlatformName(platformName)) {
@@ -539,6 +691,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     },
     [
       getPlatformName,
+      getMappedApiAccountForInternal,
       googleIntegrationConfigs,
       integrationConfigs,
       isGooglePlatformName,
@@ -980,6 +1133,45 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     [allApiAccounts],
   );
 
+  const apiPlatformOptions = useMemo(() => {
+    const masterOptions = activePlatforms
+      .map((platform) => {
+        const key = getPlatformKeyByName(platform.name);
+        return key ? { key, label: platform.name } : null;
+      })
+      .filter((option): option is { key: AdsPlatformKey; label: string } => Boolean(option));
+
+    const dedupedOptions = Array.from(
+      new Map(masterOptions.map((option) => [option.key, option])).values(),
+    );
+
+    const options = dedupedOptions.length > 0
+      ? dedupedOptions
+      : [
+          { key: 'meta' as const, label: 'Meta Ads' },
+          { key: 'google' as const, label: 'Google Ads' },
+          { key: 'tiktok' as const, label: 'TikTok Ads' },
+        ];
+
+    return options.sort((left, right) => left.label.localeCompare(right.label));
+  }, [activePlatforms]);
+
+  const apiAccountInternalOptions = useMemo(() => {
+    return adAccounts
+      .filter((account) => {
+        const platformName = getPlatformName(account.platformId);
+        const platformKey = getPlatformKeyByName(platformName);
+        if (platformKey !== apiAccountPlatformKey) return false;
+        if (apiAccountDialogItem) return true;
+
+        return !apiMappings.some((mapping) =>
+          mapping.status === 'active' &&
+          mapping.internalAdAccountId === account.id
+        );
+      })
+      .sort((left, right) => left.accountName.localeCompare(right.accountName));
+  }, [adAccounts, apiAccountDialogItem, apiAccountPlatformKey, apiMappings, getPlatformName]);
+
   const viewTabs = [
     { id: 'all' as const, label: 'Semua', count: rawFilteredData.length },
     { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.length },
@@ -1018,6 +1210,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const handleSelectBackendApiAccount = (value: string) => {
     setSelectedBackendApiKey(value);
     if (value === 'manual-entry') {
+      setApiAccountInternalId('none');
       setApiAccountPlatformKey('meta');
       setApiAccountExternalId('');
       setApiAccountExternalName('');
@@ -1032,6 +1225,21 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       (account) => `${account.platformKey}:${account.externalAccountId}` === value,
     );
     if (selected) fillApiAccountForm(selected);
+  };
+
+  const handleSelectApiAccountInternal = (value: string) => {
+    setApiAccountInternalId(value);
+    if (value === 'none') return;
+
+    const internalAccount = adAccounts.find((account) => account.id === value);
+    if (!internalAccount) return;
+
+    const platformKey = getPlatformKeyByName(getPlatformName(internalAccount.platformId));
+    if (platformKey) setApiAccountPlatformKey(platformKey);
+
+    if (selectedBackendApiKey === 'manual-entry' && !apiAccountExternalName.trim()) {
+      setApiAccountExternalName(internalAccount.accountName);
+    }
   };
 
   const mergeApiAccountIntoState = (account: AdApiAccount) => {
@@ -1050,6 +1258,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const openAddApiAccountDialog = () => {
     setApiAccountDialogItem(null);
     setSelectedBackendApiKey('manual-entry');
+    setApiAccountInternalId('none');
     setApiAccountPlatformKey('meta');
     setApiAccountExternalId('');
     setApiAccountExternalName('');
@@ -1063,6 +1272,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const openEditApiAccountDialog = (account: AdApiAccount) => {
     setApiAccountDialogItem(account);
     setSelectedBackendApiKey('manual-entry');
+    setApiAccountInternalId('none');
     fillApiAccountForm(account);
     setIsApiAccountDialogOpen(true);
   };
@@ -1100,9 +1310,35 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       });
 
       mergeApiAccountIntoState(saved);
-      toast.success(apiAccountDialogItem ? 'Akun API berhasil diperbarui.' : 'Akun API berhasil ditambahkan.');
+      if (!apiAccountDialogItem && apiAccountInternalId !== 'none') {
+        const mapping = await saveAdAccountApiMapping({
+          internalAdAccountId: apiAccountInternalId,
+          apiAccount: saved,
+          notes:
+            selectedBackendApiKey !== 'manual-entry'
+              ? 'Pairing dibuat dari akun backend/API.'
+              : 'Pairing dibuat dari input manual registry API.',
+        });
+        await saveLegacyIntegrationConfigFromMapping(apiAccountInternalId, saved);
+        setApiMappings(prev => [
+          mapping,
+          ...prev.filter((item) =>
+            item.internalAdAccountId !== apiAccountInternalId &&
+            !(item.platformKey === saved.platformKey && item.externalAccountId === saved.externalAccountId)
+          ),
+        ]);
+      }
+
+      toast.success(
+        apiAccountDialogItem
+          ? 'Akun API berhasil diperbarui.'
+          : apiAccountInternalId !== 'none'
+            ? 'Akun API berhasil ditambahkan dan dipasangkan.'
+            : 'Akun API berhasil ditambahkan.',
+      );
       setIsApiAccountDialogOpen(false);
       setApiAccountDialogItem(null);
+      setApiAccountInternalId('none');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Gagal menyimpan akun API.');
     } finally {
@@ -1137,13 +1373,74 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const refreshApiFoundation = React.useCallback(async () => {
     setApiSyncing(true);
     try {
-      await Promise.allSettled([loadMetaRegistry(), loadGoogleRegistry(), loadTikTokRegistry()]);
+      const [metaResult, googleResult, tiktokResult] = await Promise.allSettled([
+        loadMetaRegistry(),
+        loadGoogleRegistry(),
+        loadTikTokRegistry(),
+      ]);
+
+      const syncedAt = new Date().toISOString();
+      const refreshedApiAccounts: AdApiAccount[] = [];
+      const metaPayload = metaResult.status === 'fulfilled' ? metaResult.value : null;
+      const googlePayload = googleResult.status === 'fulfilled' ? googleResult.value : null;
+      const tiktokAdvertisersPayload = tiktokResult.status === 'fulfilled' ? tiktokResult.value : null;
+
+      for (const account of metaPayload?.accounts || []) {
+        refreshedApiAccounts.push({
+          id: `meta:${account.id}`,
+          platformKey: 'meta',
+          externalAccountId: account.id,
+          externalAccountName: account.name,
+          externalGroupId: account.businessId,
+          externalGroupName: account.businessName,
+          externalAccountStatus: account.accountStatus !== null ? String(account.accountStatus) : null,
+          currencyCode: account.currency,
+          raw: account as unknown as Record<string, unknown>,
+          lastSyncedAt: syncedAt,
+        });
+      }
+
+      for (const account of googlePayload?.accounts || []) {
+        refreshedApiAccounts.push({
+          id: `google:${account.customerId}`,
+          platformKey: 'google',
+          externalAccountId: account.customerId,
+          externalAccountName: account.customerName || account.name,
+          externalGroupId: account.managerCustomerId,
+          externalGroupName: account.managerCustomerName,
+          externalAccountStatus: account.status,
+          currencyCode: account.currencyCode,
+          raw: account as unknown as Record<string, unknown>,
+          lastSyncedAt: syncedAt,
+        });
+      }
+
+      for (const advertiser of tiktokAdvertisersPayload || []) {
+        refreshedApiAccounts.push({
+          id: `tiktok:${advertiser.advertiserId}`,
+          platformKey: 'tiktok',
+          externalAccountId: advertiser.advertiserId,
+          externalAccountName: advertiser.advertiserName,
+          externalGroupId: advertiser.bcId,
+          externalGroupName: advertiser.bcName,
+          externalAccountStatus: advertiser.status,
+          currencyCode: advertiser.currency,
+          raw: advertiser as unknown as Record<string, unknown>,
+          lastSyncedAt: syncedAt,
+        });
+      }
+
       const [storedApiAccounts, storedApiMappings] = await Promise.all([
-        fetchAdApiAccounts(),
+        refreshedApiAccounts.length > 0 ? upsertAdApiAccounts(refreshedApiAccounts) : fetchAdApiAccounts(),
         fetchAdAccountApiMappings(),
       ]);
       setApiAccounts(storedApiAccounts);
       setApiMappings(storedApiMappings);
+      toast.success(
+        refreshedApiAccounts.length > 0
+          ? `${refreshedApiAccounts.length} akun API tersimpan ke database.`
+          : 'Registry API sudah dimuat dari database.',
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Gagal refresh integrasi API.');
     } finally {
@@ -2167,10 +2464,13 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       )}
 
       <Dialog open={isApiAccountDialogOpen} onOpenChange={(open) => {
-        setIsApiAccountDialogOpen(open);
-        if (!open) setApiAccountDialogItem(null);
+        if (open) {
+          setIsApiAccountDialogOpen(true);
+          return;
+        }
+        apiAccountCloseGuard.requestClose();
       }}>
-        <DialogContent className="sm:max-w-[520px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+        <MasterDataFormDialogContent size="wide">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <Link2 className="h-5 w-5 text-blue-600" />
@@ -2183,57 +2483,102 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
           <div className="grid gap-4 py-2">
             {!apiAccountDialogItem && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Ambil dari Backend/API
-                </label>
-                <Select value={selectedBackendApiKey} onValueChange={handleSelectBackendApiAccount}>
-                  <SelectTrigger className="bg-white dark:bg-slate-900">
-                    <SelectValue placeholder="Pilih akun backend yang sudah sync" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900">
-                    <SelectItem value="manual-entry">Input manual akun baru</SelectItem>
-                    {apiAccountBackendOptions.map((account) => {
-                      const value = `${account.platformKey}:${account.externalAccountId}`;
-                      return (
-                        <SelectItem key={value} value={value}>
-                          {getPlatformLabelByKey(account.platformKey)} - {account.externalAccountName} / {account.externalAccountId}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-2">
+                  <MasterDataFieldLabel
+                    info={{
+                      title: 'Akun API dari Backend',
+                      description: 'Pilih akun yang sudah tersimpan di registry API. ID, status, business manager, dan mata uang akan terisi otomatis. Jika akun belum ada, pilih input manual.',
+                    }}
+                  >
+                    Akun API dari Backend
+                  </MasterDataFieldLabel>
+                  <Select value={selectedBackendApiKey} onValueChange={handleSelectBackendApiAccount}>
+                    <SelectTrigger className="bg-white dark:bg-slate-900">
+                      <SelectValue placeholder="Pilih akun backend yang sudah sync" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-slate-900">
+                      <SelectItem value="manual-entry">Input manual akun baru</SelectItem>
+                      {apiAccountBackendOptions.map((account) => {
+                        const value = `${account.platformKey}:${account.externalAccountId}`;
+                        return (
+                          <SelectItem key={value} value={value}>
+                            {getPlatformLabelByKey(account.platformKey)} - {account.externalAccountName} / {account.externalAccountId}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <MasterDataFieldLabel
+                    info={{
+                      title: 'Pasangkan ke Akun Internal',
+                      description: 'Daftar ini berasal dari Master Data Akun Iklan. Jika dipilih, registry API akan langsung dibuat dan dipasangkan ke akun internal saat form disimpan.',
+                    }}
+                  >
+                    Pasangkan ke Akun Internal
+                  </MasterDataFieldLabel>
+                  <Select value={apiAccountInternalId} onValueChange={handleSelectApiAccountInternal}>
+                    <SelectTrigger className="bg-white dark:bg-slate-900">
+                      <SelectValue placeholder="Pilih master akun iklan" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-slate-900">
+                      <SelectItem value="none">Belum dipasangkan</SelectItem>
+                      {apiAccountInternalOptions.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.accountName} - {getPlatformName(account.platformId)}
                         </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs font-semibold text-slate-500">
-                  Pilih data backend supaya ID, status, dan mata uang terisi otomatis.
-                </p>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Platform <span className="text-red-500">*</span>
-                </label>
+                <MasterDataFieldLabel
+                  required
+                  info={{
+                    title: 'Platform',
+                    description: 'Platform diambil dari Master Data Platform, lalu dibatasi ke platform yang sudah punya konektor API: Meta, Google, dan Tiktok.',
+                  }}
+                >
+                  Platform
+                </MasterDataFieldLabel>
                 <Select
                   value={apiAccountPlatformKey}
-                  onValueChange={(value) => setApiAccountPlatformKey(value as AdsPlatformKey)}
+                  onValueChange={(value) => {
+                    setApiAccountPlatformKey(value as AdsPlatformKey);
+                    setApiAccountInternalId('none');
+                  }}
                   disabled={Boolean(apiAccountDialogItem) || selectedBackendApiKey !== 'manual-entry'}
                 >
                   <SelectTrigger className="bg-white dark:bg-slate-900">
                     <SelectValue placeholder="Pilih platform" />
                   </SelectTrigger>
                   <SelectContent className="bg-white dark:bg-slate-900">
-                    <SelectItem value="meta">Meta Ads</SelectItem>
-                    <SelectItem value="google">Google Ads</SelectItem>
-                    <SelectItem value="tiktok">TikTok Ads</SelectItem>
+                    {apiPlatformOptions.map((option) => (
+                      <SelectItem key={option.key} value={option.key}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  ID Akun API <span className="text-red-500">*</span>
-                </label>
+                <MasterDataFieldLabel
+                  required
+                  info={{
+                    title: 'ID Akun API',
+                    description: 'ID akun asli dari platform ads. Contoh Meta memakai act_..., Google memakai customer ID, dan Tiktok memakai advertiser ID.',
+                  }}
+                >
+                  ID Akun API
+                </MasterDataFieldLabel>
                 <Input
                   value={apiAccountExternalId}
                   onChange={(event) => setApiAccountExternalId(event.target.value)}
@@ -2245,9 +2590,15 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Nama Akun API <span className="text-red-500">*</span>
-              </label>
+              <MasterDataFieldLabel
+                required
+                info={{
+                  title: 'Nama Akun API',
+                  description: 'Nama ini berasal dari backend/API jika dipilih dari registry. Jika input manual, isi nama akun seperti yang tampil di platform ads.',
+                }}
+              >
+                Nama Akun API
+              </MasterDataFieldLabel>
               <Input
                 value={apiAccountExternalName}
                 onChange={(event) => setApiAccountExternalName(event.target.value)}
@@ -2280,7 +2631,14 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Status API</label>
+                <MasterDataFieldLabel
+                  info={{
+                    title: 'Status API',
+                    description: 'Status dari akun platform. Manual berarti akun dibuat dari input manual, bukan hasil sync live langsung.',
+                  }}
+                >
+                  Status API
+                </MasterDataFieldLabel>
                 <Select value={apiAccountStatus || 'UNKNOWN'} onValueChange={setApiAccountStatus}>
                   <SelectTrigger className="bg-white dark:bg-slate-900">
                     <SelectValue placeholder="Pilih status API" />
@@ -2296,7 +2654,14 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Mata Uang</label>
+                <MasterDataFieldLabel
+                  info={{
+                    title: 'Mata Uang',
+                    description: 'Mata uang/currency akun ads. Ini bukan threshold billing atau limit spending.',
+                  }}
+                >
+                  Mata Uang
+                </MasterDataFieldLabel>
                 <Select value={apiAccountCurrency || 'IDR'} onValueChange={setApiAccountCurrency}>
                   <SelectTrigger className="bg-white dark:bg-slate-900">
                     <SelectValue placeholder="Pilih mata uang" />
@@ -2314,20 +2679,30 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setIsApiAccountDialogOpen(false)} disabled={apiAccountSaving}>
+            <Button
+              variant="outline"
+              onClick={apiAccountCloseGuard.requestClose}
+              disabled={apiAccountSaving}
+            >
               Batal
             </Button>
             <Button onClick={handleSaveApiAccount} disabled={apiAccountSaving}>
               {apiAccountSaving ? 'Menyimpan...' : 'Simpan Akun API'}
             </Button>
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={apiAccountCloseGuard.isConfirmOpen}
+          onCancel={apiAccountCloseGuard.cancelClose}
+          onConfirm={apiAccountCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <Dialog open={Boolean(apiMappingDialogAccount)} onOpenChange={(open) => {
-        if (!open) setApiMappingDialogAccount(null);
+        if (open) return;
+        apiMappingCloseGuard.requestClose();
       }}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+        <MasterDataFormDialogContent size="wide">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <Link2 className="h-5 w-5 text-blue-600" />
@@ -2401,20 +2776,30 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setApiMappingDialogAccount(null)} disabled={apiMappingSaving}>
+            <Button
+              variant="outline"
+              onClick={apiMappingCloseGuard.requestClose}
+              disabled={apiMappingSaving}
+            >
               Batal
             </Button>
             <Button onClick={handleSaveApiMapping} disabled={apiMappingSaving || apiMappingCandidates.length === 0}>
               Simpan Pairing
             </Button>
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={apiMappingCloseGuard.isConfirmOpen}
+          onCancel={apiMappingCloseGuard.cancelClose}
+          onConfirm={apiMappingCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <Dialog open={Boolean(ownerDialogItem)} onOpenChange={(open) => {
-        if (!open) setOwnerDialogItem(null);
+        if (open) return;
+        ownerCloseGuard.requestClose();
       }}>
-        <DialogContent className="sm:max-w-[460px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+        <MasterDataFormDialogContent size="wide">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <Users className="h-5 w-5 text-indigo-600" />
@@ -2471,20 +2856,30 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setOwnerDialogItem(null)} disabled={ownerSaving}>
+            <Button
+              variant="outline"
+              onClick={ownerCloseGuard.requestClose}
+              disabled={ownerSaving}
+            >
               Batal
             </Button>
             <Button onClick={handleSaveOwner} disabled={ownerSaving}>
               Simpan Advertiser
             </Button>
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={ownerCloseGuard.isConfirmOpen}
+          onCancel={ownerCloseGuard.cancelClose}
+          onConfirm={ownerCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <Dialog open={Boolean(assignmentDialogItem)} onOpenChange={(open) => {
-        if (!open) setAssignmentDialogItem(null);
+        if (open) return;
+        assignmentCloseGuard.requestClose();
       }}>
-        <DialogContent className="sm:max-w-[460px] bg-white dark:bg-slate-900 border-none shadow-2xl rounded-2xl">
+        <MasterDataFormDialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
               <UserCheck className="h-5 w-5 text-emerald-600" />
@@ -2561,14 +2956,23 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setAssignmentDialogItem(null)} disabled={assignmentSaving}>
+            <Button
+              variant="outline"
+              onClick={assignmentCloseGuard.requestClose}
+              disabled={assignmentSaving}
+            >
               Batal
             </Button>
             <Button onClick={handleSaveAssignment} disabled={assignmentSaving}>
               Simpan CS
             </Button>
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={assignmentCloseGuard.isConfirmOpen}
+          onCancel={assignmentCloseGuard.cancelClose}
+          onConfirm={assignmentCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <Dialog open={Boolean(historyItem)} onOpenChange={(open) => {
@@ -2694,8 +3098,8 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       </AlertDialog>
 
       {/* Add/Edit Modal */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900 border-none shadow-2xl p-0 overflow-hidden rounded-2xl max-h-[90vh] flex flex-col">
+      <Dialog open={isAddOpen} onOpenChange={requestFormDialogOpenChange}>
+        <MasterDataFormDialogContent size="wide">
           <DialogHeader className="px-6 py-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shrink-0">
             <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Monitor className="w-5 h-5 text-blue-600" />
@@ -2733,10 +3137,16 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
               }
               onRefreshTikTokRegistry={() => void loadTikTokRegistry()}
               onSubmit={handleSubmit}
-              onCancel={() => setIsAddOpen(false)}
+              onDirtyChange={setIsFormDirty}
+              onCancel={formCloseGuard.requestClose}
             />
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={formCloseGuard.isConfirmOpen}
+          onCancel={formCloseGuard.cancelClose}
+          onConfirm={formCloseGuard.confirmClose}
+        />
       </Dialog>
     </div>
   );

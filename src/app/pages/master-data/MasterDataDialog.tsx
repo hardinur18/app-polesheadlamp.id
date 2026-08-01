@@ -1,5 +1,10 @@
 import React from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { Dialog, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import {
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  useMasterDataFormCloseGuard,
+} from '../../components/ui/master-data-ui';
 import { MasterTabId, MasterDataItem } from './data';
 import { BranchForm } from './forms/BranchForm';
 import { AreaForm } from './forms/AreaForm';
@@ -30,6 +35,17 @@ export const MasterDataDialog: React.FC<MasterDataDialogProps> = ({
   onSubmit,
   dependencies = {}
 }) => {
+  const [isFormDirty, setIsFormDirty] = React.useState(false);
+
+  const closeFormDialog = React.useCallback(() => {
+    setIsFormDirty(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
   
   const getTitle = () => {
     const action = item ? 'Edit' : 'Tambah';
@@ -58,11 +74,11 @@ export const MasterDataDialog: React.FC<MasterDataDialogProps> = ({
   const renderForm = () => {
     switch (activeTab) {
       case 'branches':
-        return <BranchForm item={item as any} onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <BranchForm item={item as any} onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'areas':
-        return <AreaForm item={item as any} branches={dependencies.branches || []} onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <AreaForm item={item as any} branches={dependencies.branches || []} onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'services':
-        return <ServiceTypeForm item={item as any} onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <ServiceTypeForm item={item as any} onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'ad_accounts':
         return (
           <AdAccountForm
@@ -70,33 +86,40 @@ export const MasterDataDialog: React.FC<MasterDataDialogProps> = ({
             platforms={dependencies.platforms || []}
             advertisers={dependencies.advertisers || []}
             onSubmit={handleFormSubmit}
-            onCancel={() => onOpenChange(false)}
+            onDirtyChange={setIsFormDirty}
+            onCancel={formCloseGuard.requestClose}
           />
         );
       case 'sources':
-        return <AdSourceForm item={item as any} onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <AdSourceForm item={item as any} onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'teams':
-        return <TechnicianTeamForm item={item as any} onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <TechnicianTeamForm item={item as any} onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'vehicles':
-        return <GenericForm type="vehicle" item={item as any} label="Tipe Mobil" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="vehicle" item={item as any} label="Tipe Mobil" onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'payments':
-        return <GenericForm type="payment" item={item as any} label="Metode Pembayaran" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="payment" item={item as any} label="Metode Pembayaran" onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'platforms':
-        return <GenericForm type="platform" item={item as any} label="Platform" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="platform" item={item as any} label="Platform" onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'staff_status':
-        return <GenericForm type="simple" item={item as any} label="Status Staff" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="simple" item={item as any} label="Status Staff" onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'employment':
-        return <GenericForm type="simple" item={item as any} label="Tipe Kerja" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="simple" item={item as any} label="Tipe Kerja" onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       case 'banks':
-        return <GenericForm type="simple" item={item as any} label="Bank" onSubmit={handleFormSubmit} onCancel={() => onOpenChange(false)} />;
+        return <GenericForm type="simple" item={item as any} label="Bank" onDirtyChange={setIsFormDirty} onSubmit={handleFormSubmit} onCancel={formCloseGuard.requestClose} />;
       default:
         return <div>Form belum tersedia</div>;
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`sm:max-w-[500px] ${activeTab === 'branches' ? 'sm:max-w-[650px]' : ''}`}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (nextOpen) {
+        onOpenChange(true);
+        return;
+      }
+      formCloseGuard.requestClose();
+    }}>
+      <MasterDataFormDialogContent size={activeTab === 'branches' ? 'wide' : 'default'}>
         <DialogHeader>
           <DialogTitle>{getTitle()}</DialogTitle>
           <DialogDescription>
@@ -104,7 +127,12 @@ export const MasterDataDialog: React.FC<MasterDataDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         {renderForm()}
-      </DialogContent>
+      </MasterDataFormDialogContent>
+      <MasterDataUnsavedChangesDialog
+        open={formCloseGuard.isConfirmOpen}
+        onCancel={formCloseGuard.cancelClose}
+        onConfirm={formCloseGuard.confirmClose}
+      />
     </Dialog>
   );
 };

@@ -32,11 +32,15 @@ import {
 } from '../../../components/ui/alert-dialog';
 import {
   Dialog,
-  DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../../../components/ui/dialog';
+import {
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
 import {
   OperationalEmptyState,
   OperationalKpiCard,
@@ -117,6 +121,27 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<OperationalExpenseCategory | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [initialForm, setInitialForm] = useState<FormState>(EMPTY_FORM);
+
+  const isFormDirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(initialForm), [form, initialForm]);
+
+  const closeFormDialog = React.useCallback(() => {
+    setDialogOpen(false);
+    setInitialForm(EMPTY_FORM);
+  }, []);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
+
+  const requestFormDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setDialogOpen(true);
+      return;
+    }
+    formCloseGuard.requestClose();
+  };
 
   useEffect(() => {
     setPageNotices?.(
@@ -179,12 +204,14 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
   }, [filteredItems]);
 
   const openCreate = () => {
-    setForm({ ...EMPTY_FORM, sort_order: String((items.length + 1) * 10) });
+    const nextForm = { ...EMPTY_FORM, sort_order: String((items.length + 1) * 10) };
+    setForm(nextForm);
+    setInitialForm(nextForm);
     setDialogOpen(true);
   };
 
   const openEdit = (item: OperationalExpenseCategory) => {
-    setForm({
+    const nextForm = {
       id: item.id,
       category: item.category,
       subcategory: item.subcategory,
@@ -193,7 +220,9 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
       description: item.description || '',
       sort_order: String(item.sort_order || 0),
       is_active: item.is_active,
-    });
+    };
+    setForm(nextForm);
+    setInitialForm(nextForm);
     setDialogOpen(true);
   };
 
@@ -229,7 +258,7 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
       );
 
       toast.success(form.id ? 'Kategori biaya diperbarui.' : 'Kategori biaya ditambahkan.');
-      setDialogOpen(false);
+      closeFormDialog();
       await loadData();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal menyimpan master kategori biaya';
@@ -402,8 +431,8 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[560px]">
+      <Dialog open={dialogOpen} onOpenChange={requestFormDialogOpenChange}>
+        <MasterDataFormDialogContent size="wide">
           <DialogHeader>
             <DialogTitle>{form.id ? 'Edit Akun' : 'Tambah Akun'}</DialogTitle>
           </DialogHeader>
@@ -459,13 +488,26 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
             </label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Batal</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                formCloseGuard.requestClose();
+              }}
+              disabled={saving}
+            >
+              Batal
+            </Button>
             <Button onClick={handleSave} disabled={saving || (form.id ? !canEdit : !canCreate)}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={formCloseGuard.isConfirmOpen}
+          onCancel={formCloseGuard.cancelClose}
+          onConfirm={formCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <AlertDialog open={Boolean(deleteItem)} onOpenChange={(open) => !open && setDeleteItem(null)}>

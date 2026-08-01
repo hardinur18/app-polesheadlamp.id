@@ -30,13 +30,14 @@ interface GenericFormProps {
   type: 'vehicle' | 'payment' | 'simple' | 'sub_channel' | 'vendor' | 'platform'; // To determine extra fields
   item?: SimpleMasterItem | VehicleType | PaymentMethod | any | null;
   label?: string;
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: any) => void;
   onCancel: () => void;
   hideDescription?: boolean;
   platforms?: Platform[];
 }
 
-export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onSubmit, onCancel, hideDescription, platforms }) => {
+export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onDirtyChange, onSubmit, onCancel, hideDescription, platforms }) => {
   const logoInputId = React.useId();
   
   const formSchema = useMemo(() => {
@@ -106,6 +107,10 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onS
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [logoPreviewUrl, setLogoPreviewUrl] = React.useState('');
+
+  React.useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   React.useEffect(() => {
     return () => {
@@ -360,6 +365,7 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onS
         <MasterDataFormActions
           isSubmitting={isSubmitting}
           onCancel={onCancel}
+          confirmOnCancel={form.formState.isDirty}
           saveLabel="Simpan Data"
         />
       </form>

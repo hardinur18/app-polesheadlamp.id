@@ -23,11 +23,12 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface AdSourceFormProps {
   item?: AdSource | null;
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: FormValues) => void;
   onCancel: () => void;
 }
 
-export const AdSourceForm: React.FC<AdSourceFormProps> = ({ item, onSubmit, onCancel }) => {
+export const AdSourceForm: React.FC<AdSourceFormProps> = ({ item, onDirtyChange, onSubmit, onCancel }) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -42,6 +43,10 @@ export const AdSourceForm: React.FC<AdSourceFormProps> = ({ item, onSubmit, onCa
   const csUsers = MOCK_USERS.filter(u => u.role === 'CS');
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -141,7 +146,7 @@ export const AdSourceForm: React.FC<AdSourceFormProps> = ({ item, onSubmit, onCa
           )}
         />
 
-        <MasterDataFormActions isSubmitting={isSubmitting} onCancel={onCancel} />
+        <MasterDataFormActions confirmOnCancel={form.formState.isDirty} isSubmitting={isSubmitting} onCancel={onCancel} />
       </form>
     </Form>
   );

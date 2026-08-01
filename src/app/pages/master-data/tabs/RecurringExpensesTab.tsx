@@ -13,13 +13,7 @@ import {
   TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../../../components/ui/table';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
-} from '../../../components/ui/sheet';
-import {
-  Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription
-} from '../../../components/ui/drawer';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "../../../components/ui/dialog";
 import {
   AlertDialog,
@@ -55,6 +49,12 @@ import {
   OperationalPageHeader,
   OperationalTableCard,
 } from '../../../components/ui/operational-page';
+import {
+  MasterDataFormActions,
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  useMasterDataFormCloseGuard,
+} from '../../../components/ui/master-data-ui';
 
 interface RecurringExpense {
   id: string;
@@ -218,6 +218,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const [activeTab, setActiveTab] = useState<ExpenseTab>('unpaid');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringExpense | null>(null);
+  const [expenseFormDirty, setExpenseFormDirty] = useState(false);
   const [deletingItem, setDeletingItem] = useState<RecurringExpense | null>(null);
   const [viewingItem, setViewingItem] = useState<RecurringExpense | null>(null);
   const [viewingPayment, setViewingPayment] = useState<RecurringExpensePayment | null>(null);
@@ -231,6 +232,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     notes: '',
     proof_url: '',
   });
+  const [paymentInitialSnapshot, setPaymentInitialSnapshot] = useState('');
   const [isPaying, setIsPaying] = useState(false);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [statusUpdatingIds, setStatusUpdatingIds] = useState<Set<string>>(() => new Set());
@@ -245,6 +247,31 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const canPay = hasPermission('recurring_expenses.pay');
   const canCreateOperationalExpense = hasPermission('operational_expenses.create');
   const currentPeriodKey = getPeriodKey();
+
+  const closeExpenseFormDialog = useCallback(() => {
+    setIsAddOpen(false);
+    setEditingItem(null);
+    setExpenseFormDirty(false);
+  }, []);
+
+  const expenseFormCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: expenseFormDirty,
+    onClose: closeExpenseFormDialog,
+  });
+
+  const closePaymentDialog = useCallback(() => {
+    setPaymentItem(null);
+    setPaymentInitialSnapshot('');
+  }, []);
+
+  const paymentFormCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: Boolean(
+      paymentItem &&
+      paymentInitialSnapshot &&
+      JSON.stringify(paymentForm) !== paymentInitialSnapshot
+    ),
+    onClose: closePaymentDialog,
+  });
 
   const paymentByPeriod = useMemo(() => {
     const rows = new Map<string, RecurringExpensePayment>();
@@ -645,7 +672,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
 
     const defaultAccount = getDefaultOperationalAccount(item.category);
     setPaymentItem(item);
-    setPaymentForm({
+    const nextPaymentForm = {
       paid_at: todayDateInput(),
       amount: String(item.amount || ''),
       payment_source: item.bank_name ? `Transfer ${item.bank_name}` : '',
@@ -653,7 +680,9 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
       operational_subcategory: defaultAccount?.subcategory || 'Biaya Utilitas',
       notes: '',
       proof_url: '',
-    });
+    };
+    setPaymentForm(nextPaymentForm);
+    setPaymentInitialSnapshot(JSON.stringify(nextPaymentForm));
   };
 
   const handleSubmitPayment = async () => {
@@ -712,6 +741,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
 
       toast.success('Pembayaran tersimpan dan masuk ke Biaya Operasional.');
       setPaymentItem(null);
+      setPaymentInitialSnapshot('');
       await fetchExpenses();
 
       if (currentUser) {
@@ -731,8 +761,18 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     }
   };
 
-  const ExpenseForm = ({ item, onClose }: { item?: RecurringExpense | null, onClose: () => void }) => {
-     const [formData, setFormData] = useState<Partial<RecurringExpense>>({
+  const ExpenseForm = ({
+    item,
+    onClose,
+    onDirtyChange,
+    onSaved,
+  }: {
+    item?: RecurringExpense | null;
+    onClose: () => void;
+    onDirtyChange: (dirty: boolean) => void;
+    onSaved: () => void;
+  }) => {
+     const initialFormData = useMemo<Partial<RecurringExpense>>(() => ({
          name: item?.name || '',
          category: item?.category || 'operational',
          amount: item?.amount || 0,
@@ -745,9 +785,16 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
          account_number: item?.account_number || '',
          account_name: item?.account_name || '',
          status: item?.status || 'active'
-     });
+     }), [item]);
+
+     const [formData, setFormData] = useState<Partial<RecurringExpense>>(initialFormData);
 
      const [isSubmitting, setIsSubmitting] = useState(false);
+     const isDirty = JSON.stringify(formData) !== JSON.stringify(initialFormData);
+
+     useEffect(() => {
+       onDirtyChange(isDirty);
+     }, [isDirty, onDirtyChange]);
      
      // Filter active branches
      const activeBranches = branches.filter((b: any) => !b.status || b.status === 'active');
@@ -804,7 +851,8 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                     );
                  }
              }
-             onClose();
+             onDirtyChange(false);
+             onSaved();
          } catch (err: any) {
              console.error(err);
              toast.error("Gagal menyimpan: " + err.message);
@@ -973,14 +1021,12 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                  />
              </div>
 
-             <div className={cn("flex gap-3 pt-4", isMobile ? "flex-col-reverse" : "justify-end")}>
-                 <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting} className={isMobile ? "w-full" : ""}>
-                    Batal
-                 </Button>
-                 <Button type="submit" className={cn(isMobile ? "w-full" : "")} disabled={isSubmitting}>
-                     {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Menyimpan...</> : 'Simpan'}
-                 </Button>
-             </div>
+             <MasterDataFormActions
+               onCancel={onClose}
+               saveLabel={item ? 'Simpan Perubahan' : 'Simpan Pengeluaran'}
+               isSubmitting={isSubmitting}
+               className={cn(isMobile && "flex-col-reverse")}
+             />
          </form>
      );
   };
@@ -1160,6 +1206,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                     icon={Edit}
                     onClick={() => {
                       setEditingItem(item);
+                      setExpenseFormDirty(false);
                       setIsAddOpen(true);
                     }}
                   >
@@ -1474,6 +1521,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                 className="masterDataActionButton"
                 onClick={() => {
                   setEditingItem(null);
+                  setExpenseFormDirty(false);
                   setIsAddOpen(true);
                 }}
               >
@@ -1540,39 +1588,36 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           </OperationalTableCard>
       )}
 
-      {/* Responsive Form Container */}
-      {isMobile ? (
-        <Drawer open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DrawerContent>
-                <DrawerHeader className="text-left">
-                    <DrawerTitle>{editingItem ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'}</DrawerTitle>
-                    <DrawerDescription>
-                        Data ini akan digunakan untuk reminder tagihan.
-                    </DrawerDescription>
-                </DrawerHeader>
-                <div className="px-4 pb-4 overflow-y-auto max-h-[70vh]">
-                     <ExpenseForm item={editingItem} onClose={() => setIsAddOpen(false)} />
-                </div>
-            </DrawerContent>
-        </Drawer>
-      ) : (
-        <Sheet open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-                <SheetHeader>
-                    <SheetTitle>{editingItem ? 'Edit Pengeluaran' : 'Tambah Pengeluaran Rutin'}</SheetTitle>
-                    <SheetDescription>
-                        Kelola data pengeluaran rutin untuk estimasi cashflow dan reminder.
-                    </SheetDescription>
-                </SheetHeader>
-                <div className="mt-6">
-                    <ExpenseForm item={editingItem} onClose={() => setIsAddOpen(false)} />
-                </div>
-            </SheetContent>
-        </Sheet>
-      )}
+      <Dialog open={isAddOpen} onOpenChange={(open) => {
+        if (!open) expenseFormCloseGuard.requestClose();
+      }}>
+        <MasterDataFormDialogContent size="wide">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? 'Edit Pengeluaran Rutin' : 'Tambah Pengeluaran Rutin'}</DialogTitle>
+            <DialogDescription>
+              Kelola data pengeluaran rutin untuk estimasi cashflow dan reminder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-6">
+            <ExpenseForm
+              item={editingItem}
+              onClose={expenseFormCloseGuard.requestClose}
+              onDirtyChange={setExpenseFormDirty}
+              onSaved={closeExpenseFormDialog}
+            />
+          </div>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={expenseFormCloseGuard.isConfirmOpen}
+          onCancel={expenseFormCloseGuard.cancelClose}
+          onConfirm={expenseFormCloseGuard.confirmClose}
+        />
+      </Dialog>
 
-      <Dialog open={!!paymentItem} onOpenChange={(open) => !open && !isPaying && !isUploadingProof && setPaymentItem(null)}>
-        <DialogContent className="sm:max-w-[560px]">
+      <Dialog open={!!paymentItem} onOpenChange={(open) => {
+        if (!open && !isPaying && !isUploadingProof) paymentFormCloseGuard.requestClose();
+      }}>
+        <MasterDataFormDialogContent size="wide">
           <DialogHeader>
             <DialogTitle>Catat Pembayaran Rutin</DialogTitle>
             <DialogDescription>
@@ -1753,33 +1798,40 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentItem(null)} disabled={isPaying || isUploadingProof}>
+          <div className="masterDataFormActions">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={paymentFormCloseGuard.requestClose}
+              disabled={isPaying || isUploadingProof}
+            >
               Batal
             </Button>
             <Button
+              type="button"
               onClick={handleSubmitPayment}
               disabled={isPaying || isUploadingProof || !canPay || !canCreateOperationalExpense}
+              icon={
+                isPaying || isUploadingProof
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <CheckCircle2 className="h-4 w-4" />
+              }
             >
               {isPaying ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Menyimpan...
-                </>
+                'Menyimpan...'
               ) : isUploadingProof ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Upload Bukti...
-                </>
+                'Upload Bukti...'
               ) : (
-                <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Simpan Pembayaran
-                </>
+                'Simpan Pembayaran'
               )}
             </Button>
-          </DialogFooter>
-        </DialogContent>
+          </div>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog
+          open={paymentFormCloseGuard.isConfirmOpen}
+          onCancel={paymentFormCloseGuard.cancelClose}
+          onConfirm={paymentFormCloseGuard.confirmClose}
+        />
       </Dialog>
 
       <AlertDialog open={Boolean(deletingItem)} onOpenChange={(open) => {

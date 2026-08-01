@@ -23,11 +23,12 @@ type FormValues = z.infer<typeof formSchema>;
 
 interface ServiceTypeFormProps {
   item?: ServiceType | null;
+  onDirtyChange?: (isDirty: boolean) => void;
   onSubmit: (data: FormValues) => void;
   onCancel: () => void;
 }
 
-export const ServiceTypeForm: React.FC<ServiceTypeFormProps> = ({ item, onSubmit, onCancel }) => {
+export const ServiceTypeForm: React.FC<ServiceTypeFormProps> = ({ item, onDirtyChange, onSubmit, onCancel }) => {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -39,6 +40,10 @@ export const ServiceTypeForm: React.FC<ServiceTypeFormProps> = ({ item, onSubmit
   });
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   const handleSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -131,7 +136,7 @@ export const ServiceTypeForm: React.FC<ServiceTypeFormProps> = ({ item, onSubmit
           )}
         />
 
-        <MasterDataFormActions isSubmitting={isSubmitting} onCancel={onCancel} />
+        <MasterDataFormActions confirmOnCancel={form.formState.isDirty} isSubmitting={isSubmitting} onCancel={onCancel} />
       </form>
     </Form>
   );
