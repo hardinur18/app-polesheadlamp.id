@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Edit,
+  Layers3,
   Loader2,
   Plus,
   ReceiptText,
@@ -8,18 +9,24 @@ import {
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
-import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
+import { supabase } from '@/lib/supabaseClient';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS } from '@/app/data/operationalExpenseAccounts';
-import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import {
+  DataTable,
+  TableActionCell,
+  TableActionHeader,
+  TableActionMenu,
+  TableActionMenuItem,
+  TableStatusCell,
+  TableStatusIcon,
+  TableText,
+} from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import type { NoticeItem } from '../../../components/ui/notice-stack';
 import { Input } from '../../../components/ui/input';
-import { Label } from '../../../components/ui/label';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,76 +37,127 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../../components/ui/alert-dialog';
+import { Dialog, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import {
-  Dialog,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../../components/ui/dialog';
-import {
+  MasterDataFieldLabel,
+  MasterDataFormActions,
   MasterDataFormDialogContent,
   MasterDataUnsavedChangesDialog,
   useMasterDataFormCloseGuard,
 } from '../../../components/ui/master-data-ui';
 import {
   OperationalEmptyState,
-  OperationalKpiCard,
-  OperationalKpiGrid,
   OperationalTableCard,
-  RequiredLabel,
 } from '../../../components/ui/operational-page';
 
-type OperationalExpenseCategory = {
+type FinanceType = 'income' | 'expense' | 'cogs';
+
+type FinanceCategory = {
   id: string;
-  category: string;
-  subcategory: string;
-  account_code: string;
-  account_type: 'income' | 'expense' | 'cogs';
-  description: string;
+  name: string;
+  type: FinanceType;
+  active: boolean;
   sort_order: number;
-  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
-type FormState = {
+type FinanceAccount = {
+  id: string;
+  category_id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+type CategoryFormState = {
   id?: string;
-  category: string;
-  subcategory: string;
-  account_code: string;
-  account_type: 'income' | 'expense' | 'cogs';
-  description: string;
+  name: string;
+  type: FinanceType;
+  active: boolean;
   sort_order: string;
-  is_active: boolean;
 };
 
-const CATEGORIES_URL = buildMakeServerUrl('/finance/operational-expense-categories');
-const EMPTY_FORM: FormState = {
-  category: '',
-  subcategory: '',
-  account_code: '',
-  account_type: 'expense',
+type AccountFormState = {
+  id?: string;
+  category_id: string;
+  name: string;
+  code: string;
+  description: string;
+  active: boolean;
+};
+
+type DeleteTarget =
+  | { kind: 'category'; item: FinanceCategory }
+  | { kind: 'account'; item: FinanceAccount };
+
+const TYPE_LABEL: Record<FinanceType, string> = {
+  income: 'Income',
+  expense: 'Expense',
+  cogs: 'HPP',
+};
+
+const EMPTY_CATEGORY_FORM: CategoryFormState = {
+  name: '',
+  type: 'expense',
+  active: true,
+  sort_order: '10',
+};
+
+const EMPTY_ACCOUNT_FORM: AccountFormState = {
+  category_id: '',
+  name: '',
+  code: '',
   description: '',
-  sort_order: '0',
-  is_active: true,
+  active: true,
 };
 
-async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: await getSessionBackedEdgeHeaders({
-      includeJsonContentType: Boolean(options.body),
-      headers: options.headers,
-    }),
+function slugFinanceId(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80);
+}
+
+function buildCategoryId(type: FinanceType, name: string) {
+  return `cat_${type}_${slugFinanceId(name) || 'kategori'}`;
+}
+
+function buildAccountId(categoryId: string, name: string) {
+  return `acc_${slugFinanceId(categoryId) || 'category'}_${slugFinanceId(name) || 'subkategori'}`;
+}
+
+function categoryFallback(): FinanceCategory[] {
+  const rows = new Map<string, FinanceCategory>();
+  DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS.forEach((account) => {
+    const id = account.finance_category_id || buildCategoryId(account.account_type, account.category);
+    if (rows.has(id)) return;
+    rows.set(id, {
+      id,
+      name: account.category,
+      type: account.account_type,
+      active: DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS.some((item) => (item.finance_category_id || '') === id && item.is_active),
+      sort_order: Math.floor(account.sort_order / 100) * 10 || account.sort_order,
+    });
   });
+  return Array.from(rows.values()).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+}
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error('Endpoint master kategori biaya belum tersedia di server.');
-    }
-    throw new Error(payload?.error || `HTTP ${response.status}`);
-  }
-
-  return payload as T;
+function accountFallback(): FinanceAccount[] {
+  return DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS.map((account) => ({
+    id: account.finance_account_id || buildAccountId(account.finance_category_id || '', account.subcategory),
+    category_id: account.finance_category_id || buildCategoryId(account.account_type, account.category),
+    name: account.subcategory,
+    code: account.account_code,
+    description: account.description,
+    active: account.is_active,
+  }));
 }
 
 type OperationalExpenseCategoriesTabProps = {
@@ -113,40 +171,49 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
   const canDelete = hasPermission('master_data.delete');
 
   const lastLoadErrorRef = useRef('');
-  const [items, setItems] = useState<OperationalExpenseCategory[]>([]);
+  const [activeView, setActiveView] = useState<'categories' | 'accounts'>('categories');
+  const [categories, setCategories] = useState<FinanceCategory[]>([]);
+  const [accounts, setAccounts] = useState<FinanceAccount[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteItem, setDeleteItem] = useState<OperationalExpenseCategory | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [initialForm, setInitialForm] = useState<FormState>(EMPTY_FORM);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState>(EMPTY_CATEGORY_FORM);
+  const [initialCategoryForm, setInitialCategoryForm] = useState<CategoryFormState>(EMPTY_CATEGORY_FORM);
+  const [accountForm, setAccountForm] = useState<AccountFormState>(EMPTY_ACCOUNT_FORM);
+  const [initialAccountForm, setInitialAccountForm] = useState<AccountFormState>(EMPTY_ACCOUNT_FORM);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
-  const isFormDirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(initialForm), [form, initialForm]);
+  const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const isCategoryFormDirty = useMemo(() => JSON.stringify(categoryForm) !== JSON.stringify(initialCategoryForm), [categoryForm, initialCategoryForm]);
+  const isAccountFormDirty = useMemo(() => JSON.stringify(accountForm) !== JSON.stringify(initialAccountForm), [accountForm, initialAccountForm]);
 
-  const closeFormDialog = React.useCallback(() => {
-    setDialogOpen(false);
-    setInitialForm(EMPTY_FORM);
+  const closeCategoryDialog = React.useCallback(() => {
+    setCategoryDialogOpen(false);
+    setInitialCategoryForm(EMPTY_CATEGORY_FORM);
   }, []);
 
-  const formCloseGuard = useMasterDataFormCloseGuard({
-    hasUnsavedChanges: isFormDirty,
-    onClose: closeFormDialog,
+  const closeAccountDialog = React.useCallback(() => {
+    setAccountDialogOpen(false);
+    setInitialAccountForm(EMPTY_ACCOUNT_FORM);
+  }, []);
+
+  const categoryCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isCategoryFormDirty,
+    onClose: closeCategoryDialog,
   });
 
-  const requestFormDialogOpenChange = (open: boolean) => {
-    if (open) {
-      setDialogOpen(true);
-      return;
-    }
-    formCloseGuard.requestClose();
-  };
+  const accountCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isAccountFormDirty,
+    onClose: closeAccountDialog,
+  });
 
   useEffect(() => {
     setPageNotices?.(
       loadError
-        ? [{ id: 'category-session', tone: 'warning', message: loadError }]
+        ? [{ id: 'finance-category-load', tone: 'warning', message: loadError }]
         : [],
     );
 
@@ -156,18 +223,23 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await requestJson<OperationalExpenseCategory[]>(`${CATEGORIES_URL}?includeInactive=true`);
-      setItems(data);
+      const [categoryResult, accountResult] = await Promise.all([
+        supabase.from('finance_categories').select('*').order('sort_order', { ascending: true }).order('name', { ascending: true }),
+        supabase.from('finance_accounts').select('*').order('category_id', { ascending: true }).order('code', { ascending: true }).order('name', { ascending: true }),
+      ]);
+
+      if (categoryResult.error) throw categoryResult.error;
+      if (accountResult.error) throw accountResult.error;
+
+      setCategories((categoryResult.data || []) as FinanceCategory[]);
+      setAccounts((accountResult.data || []) as FinanceAccount[]);
       setLoadError(null);
       lastLoadErrorRef.current = '';
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Gagal memuat master kategori biaya';
-      if (message.includes('Endpoint master kategori biaya')) {
-        setItems(DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS);
-        setLoadError('Server belum siap. Menampilkan daftar akun biaya default sementara.');
-      } else {
-        setLoadError(message);
-      }
+      const message = error instanceof Error ? error.message : 'Gagal memuat kategori finance.';
+      setCategories(categoryFallback());
+      setAccounts(accountFallback());
+      setLoadError('Database finance belum siap. Menampilkan data fallback sementara.');
       if (message !== lastLoadErrorRef.current) {
         toast.error(message);
         lastLoadErrorRef.current = message;
@@ -182,57 +254,131 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredItems = useMemo(() => {
+  const filteredCategories = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) =>
-      `${item.category} ${item.subcategory} ${item.account_code} ${item.description}`.toLowerCase().includes(q),
+    return categories.filter((category) =>
+      !q || `${category.name} ${category.type} ${category.id}`.toLowerCase().includes(q),
     );
-  }, [items, search]);
+  }, [categories, search]);
 
-  const activeCount = items.filter((item) => item.is_active).length;
-  const inactiveCount = items.length - activeCount;
-  const categoryCount = new Set(items.filter((item) => item.is_active).map((item) => item.category)).size;
+  const filteredAccounts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return accounts.filter((account) => {
+      const category = categoryById.get(account.category_id);
+      return !q || `${account.name} ${account.code} ${account.description || ''} ${account.id} ${category?.name || ''} ${category?.type || ''}`.toLowerCase().includes(q);
+    });
+  }, [accounts, categoryById, search]);
 
-  const groupedItems = useMemo(() => {
-    return filteredItems.reduce<Record<string, OperationalExpenseCategory[]>>((acc, item) => {
-      const key = item.category || 'Tanpa Kategori';
-      acc[key] = acc[key] || [];
-      acc[key].push(item);
-      return acc;
-    }, {});
-  }, [filteredItems]);
+  const visibleRows = activeView === 'categories' ? filteredCategories : filteredAccounts;
+  const syncOperationalExpenseBridge = async (nextCategories = categories, nextAccounts = accounts) => {
+    if (!nextCategories.length || !nextAccounts.length) return;
+    const nextCategoryById = new Map(nextCategories.map((category) => [category.id, category]));
+    const rows = nextAccounts.map((account, index) => {
+      const category = nextCategoryById.get(account.category_id);
+      return {
+        category: category?.name || 'Tanpa Kategori',
+        subcategory: account.name,
+        account_code: account.code,
+        account_type: category?.type || 'expense',
+        description: account.description || '',
+        sort_order: (category?.sort_order || 0) * 100 + index + 1,
+        is_active: Boolean(account.active && category?.active),
+        finance_category_id: account.category_id,
+        finance_account_id: account.id,
+      };
+    });
 
-  const openCreate = () => {
-    const nextForm = { ...EMPTY_FORM, sort_order: String((items.length + 1) * 10) };
-    setForm(nextForm);
-    setInitialForm(nextForm);
-    setDialogOpen(true);
+    const { error } = await supabase
+      .from('operational_expense_categories')
+      .upsert(rows, { onConflict: 'finance_account_id' });
+    if (error) throw error;
   };
 
-  const openEdit = (item: OperationalExpenseCategory) => {
+  const openCreateCategory = () => {
+    const nextForm = { ...EMPTY_CATEGORY_FORM, sort_order: String((categories.length + 1) * 10) };
+    setCategoryForm(nextForm);
+    setInitialCategoryForm(nextForm);
+    setCategoryDialogOpen(true);
+  };
+
+  const openEditCategory = (category: FinanceCategory) => {
     const nextForm = {
-      id: item.id,
-      category: item.category,
-      subcategory: item.subcategory,
-      account_code: item.account_code || '',
-      account_type: item.account_type || 'expense',
-      description: item.description || '',
-      sort_order: String(item.sort_order || 0),
-      is_active: item.is_active,
+      id: category.id,
+      name: category.name,
+      type: category.type,
+      active: category.active,
+      sort_order: String(category.sort_order || 0),
     };
-    setForm(nextForm);
-    setInitialForm(nextForm);
-    setDialogOpen(true);
+    setCategoryForm(nextForm);
+    setInitialCategoryForm(nextForm);
+    setCategoryDialogOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!form.category.trim() || !form.subcategory.trim() || !form.account_code.trim()) {
-      toast.error('Kategori, nama akun, dan kode wajib diisi.');
+  const openCreateAccount = () => {
+    const firstCategory = categories.find((category) => category.active) || categories[0];
+    const nextForm = { ...EMPTY_ACCOUNT_FORM, category_id: firstCategory?.id || '' };
+    setAccountForm(nextForm);
+    setInitialAccountForm(nextForm);
+    setAccountDialogOpen(true);
+  };
+
+  const openEditAccount = (account: FinanceAccount) => {
+    const nextForm = {
+      id: account.id,
+      category_id: account.category_id,
+      name: account.name,
+      code: account.code,
+      description: account.description || '',
+      active: account.active,
+    };
+    setAccountForm(nextForm);
+    setInitialAccountForm(nextForm);
+    setAccountDialogOpen(true);
+  };
+
+  const handleSaveCategory = async () => {
+    if (!categoryForm.name.trim()) {
+      toast.error('Nama kategori utama wajib diisi.');
       return;
     }
 
-    if (!/^\d{5}$/.test(form.account_code.trim())) {
+    setSaving(true);
+    try {
+      const payload = {
+        id: categoryForm.id || buildCategoryId(categoryForm.type, categoryForm.name.trim()),
+        name: categoryForm.name.trim(),
+        type: categoryForm.type,
+        active: categoryForm.active,
+        sort_order: Number(categoryForm.sort_order) || 0,
+        updated_at: new Date().toISOString(),
+      };
+
+      const result = categoryForm.id
+        ? await supabase.from('finance_categories').update(payload).eq('id', categoryForm.id).select().single()
+        : await supabase.from('finance_categories').insert(payload).select().single();
+      if (result.error) throw result.error;
+
+      const nextCategories = categoryForm.id
+        ? categories.map((item) => (item.id === categoryForm.id ? result.data as FinanceCategory : item))
+        : [...categories, result.data as FinanceCategory];
+      await syncOperationalExpenseBridge(nextCategories, accounts);
+
+      toast.success(categoryForm.id ? 'Kategori utama diperbarui.' : 'Kategori utama ditambahkan.');
+      closeCategoryDialog();
+      await loadData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal menyimpan kategori utama.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAccount = async () => {
+    if (!accountForm.category_id || !accountForm.name.trim() || !accountForm.code.trim()) {
+      toast.error('Kategori utama, nama sub kategori, dan kode wajib diisi.');
+      return;
+    }
+    if (!/^\d{5}$/.test(accountForm.code.trim())) {
       toast.error('Kode akun wajib 5 digit angka.');
       return;
     }
@@ -240,47 +386,54 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
     setSaving(true);
     try {
       const payload = {
-        category: form.category.trim(),
-        subcategory: form.subcategory.trim(),
-        account_code: form.account_code.trim(),
-        account_type: form.account_type,
-        description: form.description.trim(),
-        sort_order: Number(form.sort_order) || 0,
-        is_active: form.is_active,
+        id: accountForm.id || buildAccountId(accountForm.category_id, accountForm.name.trim()),
+        category_id: accountForm.category_id,
+        name: accountForm.name.trim(),
+        code: accountForm.code.trim(),
+        description: accountForm.description.trim() || null,
+        active: accountForm.active,
+        updated_at: new Date().toISOString(),
       };
 
-      await requestJson<{ data: OperationalExpenseCategory }>(
-        form.id ? `${CATEGORIES_URL}/${form.id}` : CATEGORIES_URL,
-        {
-          method: form.id ? 'PUT' : 'POST',
-          body: JSON.stringify(payload),
-        },
-      );
+      const result = accountForm.id
+        ? await supabase.from('finance_accounts').update(payload).eq('id', accountForm.id).select().single()
+        : await supabase.from('finance_accounts').insert(payload).select().single();
+      if (result.error) throw result.error;
 
-      toast.success(form.id ? 'Kategori biaya diperbarui.' : 'Kategori biaya ditambahkan.');
-      closeFormDialog();
+      const nextAccounts = accountForm.id
+        ? accounts.map((item) => (item.id === accountForm.id ? result.data as FinanceAccount : item))
+        : [...accounts, result.data as FinanceAccount];
+      await syncOperationalExpenseBridge(categories, nextAccounts);
+
+      toast.success(accountForm.id ? 'Sub kategori diperbarui.' : 'Sub kategori ditambahkan.');
+      closeAccountDialog();
       await loadData();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Gagal menyimpan master kategori biaya';
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : 'Gagal menyimpan sub kategori.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteItem) return;
+    if (!deleteTarget) return;
     setSaving(true);
     try {
-      await requestJson<{ data: OperationalExpenseCategory }>(`${CATEGORIES_URL}/${deleteItem.id}`, {
-        method: 'DELETE',
-      });
-      toast.success('Kategori biaya dinonaktifkan.');
-      setDeleteItem(null);
+      if (deleteTarget.kind === 'category') {
+        await supabase.from('operational_expense_categories').delete().eq('finance_category_id', deleteTarget.item.id);
+        const { error } = await supabase.from('finance_categories').delete().eq('id', deleteTarget.item.id);
+        if (error) throw error;
+        toast.success('Kategori utama dihapus.');
+      } else {
+        await supabase.from('operational_expense_categories').delete().eq('finance_account_id', deleteTarget.item.id);
+        const { error } = await supabase.from('finance_accounts').delete().eq('id', deleteTarget.item.id);
+        if (error) throw error;
+        toast.success('Sub kategori dihapus.');
+      }
+      setDeleteTarget(null);
       await loadData();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Gagal menonaktifkan kategori biaya';
-      toast.error(message);
+      toast.error(error instanceof Error ? error.message : 'Gagal menghapus data finance.');
     } finally {
       setSaving(false);
     }
@@ -288,240 +441,300 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
 
   return (
     <div className="masterDataTabSurface">
-      <ControlPanel aria-label="Filter kategori biaya">
+      <ControlPanel aria-label="Filter kategori finance">
         <ControlRow className="masterDataControlRow">
           <SearchBox
-            placeholder="Cari akun..."
+            placeholder="Cari kategori, sub kategori, kode akun..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <div className="masterDataControlActions">
-            <Badge variant="outline" className="masterDataCountBadge">
-              {filteredItems.length.toLocaleString('id-ID')} data
-            </Badge>
             <Button variant="outline" className="masterDataActionButton secondary" onClick={loadData} disabled={loading}>
               <RefreshCw className={loading ? 'animate-spin' : ''} />
               Refresh
             </Button>
-            <Button className="masterDataActionButton" onClick={openCreate} disabled={!canCreate}>
+            <Button
+              className="masterDataActionButton"
+              onClick={activeView === 'categories' ? openCreateCategory : openCreateAccount}
+              disabled={!canCreate}
+            >
               <Plus />
-              Akun Baru
+              {activeView === 'categories' ? 'Tambah Kategori' : 'Tambah Sub Kategori'}
             </Button>
           </div>
         </ControlRow>
       </ControlPanel>
 
-      <OperationalKpiGrid className="sm:grid-cols-3 xl:grid-cols-3">
-        <OperationalKpiCard label="Kategori Aktif" value={categoryCount.toLocaleString('id-ID')} />
-        <OperationalKpiCard label="Akun Aktif" value={activeCount.toLocaleString('id-ID')} tone="emerald" />
-        <OperationalKpiCard label="Nonaktif" value={inactiveCount.toLocaleString('id-ID')} />
-      </OperationalKpiGrid>
+      <div className="adAccountViewSwitch" role="tablist" aria-label="Kategori finance">
+        <button
+          type="button"
+          className={`adAccountViewSwitchItem ${activeView === 'categories' ? 'isActive' : ''}`}
+          onClick={() => setActiveView('categories')}
+          role="tab"
+          aria-selected={activeView === 'categories'}
+        >
+          <span>Kategori Utama</span>
+          <strong>{filteredCategories.length}</strong>
+        </button>
+        <button
+          type="button"
+          className={`adAccountViewSwitchItem ${activeView === 'accounts' ? 'isActive' : ''}`}
+          onClick={() => setActiveView('accounts')}
+          role="tab"
+          aria-selected={activeView === 'accounts'}
+        >
+          <span>Sub Kategori</span>
+          <strong>{filteredAccounts.length}</strong>
+        </button>
+      </div>
 
       <MasterDataTableTitle
-        title="Daftar Akun Biaya"
-        count={filteredItems.length}
-        icon={ReceiptText}
+        title={activeView === 'categories' ? 'Kategori Utama Finance' : 'Sub Kategori Finance'}
+        count={visibleRows.length}
+        icon={activeView === 'categories' ? Layers3 : ReceiptText}
       />
 
       {loading ? (
         <OperationalTableCard className="flex h-40 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
         </OperationalTableCard>
-      ) : filteredItems.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <OperationalTableCard className="border-dashed">
           <OperationalEmptyState
-            icon={ReceiptText}
-            title="Belum ada akun"
-            description="Tambahkan chart of accounts sebelum input transaksi."
+            icon={activeView === 'categories' ? Layers3 : ReceiptText}
+            title={activeView === 'categories' ? 'Belum ada kategori utama' : 'Belum ada sub kategori'}
+            description={activeView === 'categories' ? 'Tambahkan kategori finance utama.' : 'Tambahkan sub kategori finance sebelum input transaksi.'}
           />
         </OperationalTableCard>
-      ) : (
+      ) : activeView === 'categories' ? (
         <div className="tablePanel">
-          <DataTable
-            actionWidth={82}
-            cellY={12}
-            columns={[64, 220, 250, 112, 150, 320, 92, (canEdit || canDelete) ? 82 : null]}
-            minWidth={canEdit || canDelete ? 1290 : 1208}
-            rowMinHeight={64}
-          >
+          <DataTable actionWidth={82} cellY={12} columns={[72, 360, 180, 140, 104, (canEdit || canDelete) ? 82 : null]} minWidth={canEdit || canDelete ? 938 : 856} rowMinHeight={64}>
             <table>
               <thead>
                 <tr>
                   <th className="text-center">No</th>
-                  <th>Kategori</th>
-                  <th>Nama Akun</th>
-                  <th>Kode</th>
+                  <th>Nama Kategori Finance</th>
                   <th>Tipe</th>
+                  <th className="text-center">Urutan</th>
+                  <th className="text-center">Status</th>
+                  {(canEdit || canDelete) && <TableActionHeader />}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCategories.map((category, index) => (
+                  <tr key={category.id}>
+                    <td className="monoCell text-center">{index + 1}</td>
+                    <td>
+                      <TableText primary={category.name} secondary={category.id} />
+                    </td>
+                    <td>
+                      <TableText primary={TYPE_LABEL[category.type]} />
+                    </td>
+                    <td className="monoCell text-center">{category.sort_order || 0}</td>
+                    <TableStatusCell>
+                      <TableStatusIcon label={category.active ? 'Aktif' : 'Non aktif'} tone={category.active ? 'active' : 'inactive'} />
+                    </TableStatusCell>
+                    {(canEdit || canDelete) && (
+                      <TableActionCell>
+                        <TableActionMenu>
+                          {canEdit && (
+                            <TableActionMenuItem icon={Edit} onClick={() => openEditCategory(category)}>
+                              Edit Kategori
+                            </TableActionMenuItem>
+                          )}
+                          {canDelete && (
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteTarget({ kind: 'category', item: category })}>
+                              Hapus
+                            </TableActionMenuItem>
+                          )}
+                        </TableActionMenu>
+                      </TableActionCell>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
+        </div>
+      ) : (
+        <div className="tablePanel">
+          <DataTable actionWidth={82} cellY={12} columns={[72, 320, 260, 120, 360, 104, (canEdit || canDelete) ? 82 : null]} minWidth={canEdit || canDelete ? 1318 : 1236} rowMinHeight={64}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>Sub Kategori Finance</th>
+                  <th>Kategori Utama</th>
+                  <th>Kode</th>
                   <th>Deskripsi</th>
                   <th className="text-center">Status</th>
                   {(canEdit || canDelete) && <TableActionHeader />}
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(groupedItems).map(([category, rows]) => (
-                  <React.Fragment key={category}>
-                    <tr className="bg-slate-50/45 hover:bg-slate-50/45 dark:bg-slate-950/30 dark:hover:bg-slate-950/30">
-                      <td colSpan={canEdit || canDelete ? 8 : 7}>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
-                            {category}
-                          </span>
-                          <Badge variant="secondary" className="masterDataCountBadge h-7 px-3 text-xs">
-                            {rows.filter((row) => row.is_active).length} aktif
-                          </Badge>
-                        </div>
+                {filteredAccounts.map((account, index) => {
+                  const category = categoryById.get(account.category_id);
+                  return (
+                    <tr key={account.id}>
+                      <td className="monoCell text-center">{index + 1}</td>
+                      <td>
+                        <TableText primary={account.name} secondary={account.id} />
                       </td>
+                      <td>
+                        <TableText primary={category?.name || 'Kategori tidak ditemukan'} secondary={category ? TYPE_LABEL[category.type] : account.category_id} />
+                      </td>
+                      <td>
+                        <TableText primary={account.code || '-'} />
+                      </td>
+                      <td>
+                        <TableText primary={account.description || '-'} />
+                      </td>
+                      <TableStatusCell>
+                        <TableStatusIcon
+                          label={account.active && category?.active !== false ? 'Aktif' : 'Non aktif'}
+                          tone={account.active && category?.active !== false ? 'active' : 'inactive'}
+                        />
+                      </TableStatusCell>
+                      {(canEdit || canDelete) && (
+                        <TableActionCell>
+                          <TableActionMenu>
+                            {canEdit && (
+                              <TableActionMenuItem icon={Edit} onClick={() => openEditAccount(account)}>
+                                Edit Sub Kategori
+                              </TableActionMenuItem>
+                            )}
+                            {canDelete && (
+                              <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteTarget({ kind: 'account', item: account })}>
+                                Hapus
+                              </TableActionMenuItem>
+                            )}
+                          </TableActionMenu>
+                        </TableActionCell>
+                      )}
                     </tr>
-                    {rows.map((item) => (
-                      <tr key={item.id}>
-                        <td className="monoCell text-center">
-                          {filteredItems.findIndex((row) => row.id === item.id) + 1}
-                        </td>
-                        <td>
-                          <TableText primary={item.category} />
-                        </td>
-                        <td>
-                          <TableText primary={item.subcategory} />
-                        </td>
-                        <td>
-                          <TableText primary={item.account_code || '-'} />
-                        </td>
-                        <td>
-                          <Badge
-                            variant="outline"
-                            className={item.account_type === 'income'
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
-                              : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}
-                          >
-                            {item.account_type === 'income' ? 'Penghasilan' : item.account_type === 'cogs' ? 'HPP' : 'Pengeluaran'}
-                          </Badge>
-                        </td>
-                        <td>
-                          <TableText primary={item.description || '-'} />
-                        </td>
-                        <TableStatusCell>
-                          <TableStatusIcon
-                            label={item.is_active ? 'Aktif' : 'Non aktif'}
-                            tone={item.is_active ? 'active' : 'inactive'}
-                          />
-                        </TableStatusCell>
-                        {(canEdit || canDelete) && (
-                          <TableActionCell>
-                            <TableActionMenu>
-                              {canEdit && (
-                                <TableActionMenuItem icon={Edit} onClick={() => openEdit(item)}>
-                                  Edit Akun
-                                </TableActionMenuItem>
-                              )}
-                              {canDelete && item.is_active && (
-                                <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteItem(item)}>
-                                  Nonaktifkan
-                                </TableActionMenuItem>
-                              )}
-                            </TableActionMenu>
-                          </TableActionCell>
-                        )}
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </DataTable>
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={requestFormDialogOpenChange}>
-        <MasterDataFormDialogContent size="wide">
-          <DialogHeader>
-            <DialogTitle>{form.id ? 'Edit Akun' : 'Tambah Akun'}</DialogTitle>
+      <Dialog open={categoryDialogOpen} onOpenChange={(open) => (open ? setCategoryDialogOpen(true) : categoryCloseGuard.requestClose())}>
+        <MasterDataFormDialogContent>
+          <DialogHeader className="px-6 py-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-slate-100">
+              <Layers3 className="h-5 w-5 text-blue-600" />
+              {categoryForm.id ? 'Edit Kategori Utama' : 'Tambah Kategori Utama'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <Label><RequiredLabel>Kategori</RequiredLabel></Label>
-              <Input value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label><RequiredLabel>Nama Akun</RequiredLabel></Label>
-              <Input value={form.subcategory} onChange={(event) => setForm((prev) => ({ ...prev, subcategory: event.target.value }))} />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSaveCategory();
+            }}
+          >
+            <div className="grid gap-4 bg-slate-50/50 px-6 py-5 dark:bg-slate-950">
               <div className="space-y-2">
-                <Label><RequiredLabel>Kode</RequiredLabel></Label>
-                <Input
-                  value={form.account_code}
-                  inputMode="numeric"
-                  maxLength={5}
-                  placeholder="5 digit"
-                  onChange={(event) => setForm((prev) => ({ ...prev, account_code: event.target.value.replace(/\D/g, '') }))}
-                />
+                <MasterDataFieldLabel required>Nama Kategori</MasterDataFieldLabel>
+                <Input value={categoryForm.name} placeholder="Contoh: Beban Operasional" onChange={(event) => setCategoryForm((prev) => ({ ...prev, name: event.target.value }))} />
               </div>
-              <div className="space-y-2">
-                <Label><RequiredLabel>Tipe</RequiredLabel></Label>
-                <select
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 dark:border-slate-800 dark:bg-slate-900"
-                  value={form.account_type}
-                  onChange={(event) => setForm((prev) => ({ ...prev, account_type: event.target.value as FormState['account_type'] }))}
-                >
-                  <option value="income">Penghasilan</option>
-                  <option value="expense">Pengeluaran</option>
-                  <option value="cogs">HPP</option>
-                </select>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <MasterDataFieldLabel required>Tipe</MasterDataFieldLabel>
+                  <select className="uiSelectTrigger" value={categoryForm.type} onChange={(event) => setCategoryForm((prev) => ({ ...prev, type: event.target.value as FinanceType }))}>
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                    <option value="cogs">HPP</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <MasterDataFieldLabel>Urutan</MasterDataFieldLabel>
+                  <Input type="number" value={categoryForm.sort_order} onChange={(event) => setCategoryForm((prev) => ({ ...prev, sort_order: event.target.value }))} />
+                </div>
               </div>
+              <label className="masterDataToggleField">
+                <span>
+                  <strong>Status Aktif</strong>
+                  <small>Nonaktif membuat kategori dan sub kategorinya tidak muncul di pilihan transaksi baru.</small>
+                </span>
+                <input type="checkbox" checked={categoryForm.active} onChange={(event) => setCategoryForm((prev) => ({ ...prev, active: event.target.checked }))} />
+              </label>
             </div>
-            <div className="space-y-2">
-              <Label>Deskripsi</Label>
-              <Input value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-            <Label>Urutan</Label>
-              <Input type="number" value={form.sort_order} onChange={(event) => setForm((prev) => ({ ...prev, sort_order: event.target.value }))} />
-            </div>
-            <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={form.is_active}
-                onChange={(event) => setForm((prev) => ({ ...prev, is_active: event.target.checked }))}
-              />
-              <span className="font-medium text-slate-700 dark:text-slate-200">Aktif</span>
-            </label>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                formCloseGuard.requestClose();
-              }}
-              disabled={saving}
-            >
-              Batal
-            </Button>
-            <Button onClick={handleSave} disabled={saving || (form.id ? !canEdit : !canCreate)}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Simpan
-            </Button>
-          </DialogFooter>
+            <MasterDataFormActions isSubmitting={saving} onCancel={categoryCloseGuard.requestClose} saveLabel="Simpan Kategori" submitDisabled={categoryForm.id ? !canEdit : !canCreate} />
+          </form>
         </MasterDataFormDialogContent>
-        <MasterDataUnsavedChangesDialog
-          open={formCloseGuard.isConfirmOpen}
-          onCancel={formCloseGuard.cancelClose}
-          onConfirm={formCloseGuard.confirmClose}
-        />
+        <MasterDataUnsavedChangesDialog open={categoryCloseGuard.isConfirmOpen} onCancel={categoryCloseGuard.cancelClose} onConfirm={categoryCloseGuard.confirmClose} />
       </Dialog>
 
-      <AlertDialog open={Boolean(deleteItem)} onOpenChange={(open) => !open && setDeleteItem(null)}>
+      <Dialog open={accountDialogOpen} onOpenChange={(open) => (open ? setAccountDialogOpen(true) : accountCloseGuard.requestClose())}>
+        <MasterDataFormDialogContent size="wide">
+          <DialogHeader className="px-6 py-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-slate-100">
+              <ReceiptText className="h-5 w-5 text-blue-600" />
+              {accountForm.id ? 'Edit Sub Kategori' : 'Tambah Sub Kategori'}
+            </DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSaveAccount();
+            }}
+          >
+            <div className="grid gap-4 bg-slate-50/50 px-6 py-5 dark:bg-slate-950">
+              <div className="space-y-2">
+                <MasterDataFieldLabel required>Kategori Utama</MasterDataFieldLabel>
+                <select className="uiSelectTrigger" value={accountForm.category_id} onChange={(event) => setAccountForm((prev) => ({ ...prev, category_id: event.target.value }))}>
+                  <option value="">Pilih kategori</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name} - {TYPE_LABEL[category.type]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-[1fr_160px]">
+                <div className="space-y-2">
+                  <MasterDataFieldLabel required>Nama Sub Kategori</MasterDataFieldLabel>
+                  <Input value={accountForm.name} placeholder="Contoh: Biaya Iklan" onChange={(event) => setAccountForm((prev) => ({ ...prev, name: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <MasterDataFieldLabel required>Kode Akun</MasterDataFieldLabel>
+                  <Input value={accountForm.code} inputMode="numeric" maxLength={5} placeholder="5 digit" onChange={(event) => setAccountForm((prev) => ({ ...prev, code: event.target.value.replace(/\D/g, '') }))} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <MasterDataFieldLabel>Deskripsi</MasterDataFieldLabel>
+                <Input value={accountForm.description} placeholder="Keterangan penggunaan sub kategori" onChange={(event) => setAccountForm((prev) => ({ ...prev, description: event.target.value }))} />
+              </div>
+              <label className="masterDataToggleField">
+                <span>
+                  <strong>Status Aktif</strong>
+                  <small>Nonaktif tidak muncul di pilihan transaksi baru.</small>
+                </span>
+                <input type="checkbox" checked={accountForm.active} onChange={(event) => setAccountForm((prev) => ({ ...prev, active: event.target.checked }))} />
+              </label>
+            </div>
+            <MasterDataFormActions isSubmitting={saving} onCancel={accountCloseGuard.requestClose} saveLabel="Simpan Sub Kategori" submitDisabled={accountForm.id ? !canEdit : !canCreate} />
+          </form>
+        </MasterDataFormDialogContent>
+        <MasterDataUnsavedChangesDialog open={accountCloseGuard.isConfirmOpen} onCancel={accountCloseGuard.cancelClose} onConfirm={accountCloseGuard.confirmClose} />
+      </Dialog>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Nonaktifkan subkategori?</AlertDialogTitle>
+            <AlertDialogTitle>Hapus data finance?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteItem ? `${deleteItem.category} - ${deleteItem.subcategory}` : 'Data ini'} tidak akan muncul di pilihan transaksi baru.
+              {deleteTarget?.kind === 'category'
+                ? `Kategori ${deleteTarget.item.name} dan sub kategorinya akan dihapus.`
+                : `Sub kategori ${deleteTarget?.item.name || ''} akan dihapus.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} disabled={saving} className="dangerButton">
-              {saving ? 'Memproses...' : 'Nonaktifkan'}
+              {saving ? 'Memproses...' : 'Hapus'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

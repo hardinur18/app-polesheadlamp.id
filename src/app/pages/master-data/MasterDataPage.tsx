@@ -139,7 +139,7 @@ const MasterDataContent: React.FC<{
     { id: 'sub-channels', label: 'Sub Channel', icon: Share2 },
     { id: 'ad-accounts', label: 'Akun Iklan', icon: Monitor },
     { id: 'payments', label: 'Akun Bank', icon: Wallet },
-    { id: 'operational-expense-categories', label: 'Kategori Biaya', icon: ReceiptText },
+    { id: 'operational-expense-categories', label: 'Kategori Finance', icon: ReceiptText },
     { id: 'roles', label: 'Role', icon: Users },
   ];
 

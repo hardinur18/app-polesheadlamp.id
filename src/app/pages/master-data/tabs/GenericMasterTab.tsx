@@ -46,6 +46,8 @@ import { MasterDataDetailDialog } from './MasterDataDetailDialog';
 import { cn } from '../../../components/ui/utils';
 import { getVehicleNameValidationMessage, normalizeVehicleName } from '../vehicleValidation';
 import { deletePlatformLogo, uploadPlatformLogo } from '@/app/services/platformLogoService';
+import { BankLogo } from '../../../components/ui/bank-logo';
+import { deleteBankLogo, uploadBankLogo } from '@/app/services/bankLogoService';
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 300];
 
@@ -167,6 +169,7 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       cleanData.bankName = formData.name;
       cleanData.accountNumber = formData.accountNumber;
       cleanData.accountHolder = formData.accountHolder;
+      cleanData.logoPath = editingItem?.logoPath || null;
     } else if (type === 'sub_channel') {
       cleanData.name = formData.name;
       cleanData.platformId = formData.platformId;
@@ -185,13 +188,14 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
 
     try {
       if (editingItem) {
-        if (type === 'platform') {
+        if (type === 'platform' || type === 'payment') {
+          const uploadLogo = type === 'payment' ? uploadBankLogo : uploadPlatformLogo;
           if (formData.removeLogo && editingItem.logoPath) {
             cleanData.logoPath = null;
             previousLogoToDelete = editingItem.logoPath;
           }
           if (formData.logoFile instanceof File) {
-            cleanData.logoPath = await uploadPlatformLogo(editingItem.id, formData.logoFile, editingItem.logoPath, {
+            cleanData.logoPath = await uploadLogo(editingItem.id, formData.logoFile, editingItem.logoPath, {
               removePrevious: false,
             });
             uploadedLogoPath = cleanData.logoPath;
@@ -207,8 +211,9 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
           setLocalData(prev => prev.map(item => item.id === editingItem.id ? { ...item, ...updatePayload } : item));
         }
         if (previousLogoToDelete) {
-          await deletePlatformLogo(previousLogoToDelete).catch((error) => {
-            console.warn('Gagal membersihkan logo platform lama:', error);
+          const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
+          await deleteLogo(previousLogoToDelete).catch((error) => {
+            console.warn(`Gagal membersihkan logo ${type === 'payment' ? 'bank' : 'platform'} lama:`, error);
           });
         }
         toast.success(`${title} berhasil diperbarui`);
@@ -222,8 +227,9 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
         }
       } else {
         const newId = Math.random().toString(36).substr(2, 9);
-        if (type === 'platform' && formData.logoFile instanceof File) {
-          cleanData.logoPath = await uploadPlatformLogo(newId, formData.logoFile, null);
+        if ((type === 'platform' || type === 'payment') && formData.logoFile instanceof File) {
+          const uploadLogo = type === 'payment' ? uploadBankLogo : uploadPlatformLogo;
+          cleanData.logoPath = await uploadLogo(newId, formData.logoFile, null);
           uploadedLogoPath = cleanData.logoPath;
         }
         const newItem = {
@@ -250,9 +256,11 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       setEditingItem(null);
     } catch (error: any) {
       if (!editingItem && uploadedLogoPath) {
-        await deletePlatformLogo(uploadedLogoPath).catch(() => undefined);
+        const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
+        await deleteLogo(uploadedLogoPath).catch(() => undefined);
       } else if (editingItem && uploadedLogoPath && uploadedLogoPath !== editingItem.logoPath) {
-        await deletePlatformLogo(uploadedLogoPath).catch(() => undefined);
+        const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
+        await deleteLogo(uploadedLogoPath).catch(() => undefined);
       }
       console.error("Form submission error:", error);
       toast.error(`Terjadi kesalahan: ${error.message || "Gagal menyimpan data"}`); 
@@ -261,9 +269,10 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
 
   const handleDelete = async (id: string) => {
     const deletedItem = filteredData.find(item => item.id === id);
-    if (type === 'platform' && deletedItem?.logoPath) {
-      await deletePlatformLogo(deletedItem.logoPath).catch((error) => {
-        console.warn('Gagal menghapus logo platform:', error);
+    if ((type === 'platform' || type === 'payment') && deletedItem?.logoPath) {
+      const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
+      await deleteLogo(deletedItem.logoPath).catch((error) => {
+        console.warn(`Gagal menghapus logo ${type === 'payment' ? 'bank' : 'platform'}:`, error);
       });
     }
     if (onDelete) {
@@ -336,9 +345,13 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                       {rowNumber}
                     </td>
                     <td>
-                      {type === 'platform' ? (
+                      {type === 'platform' || type === 'payment' ? (
                         <div className="platformLogoTableCell">
-                          <PlatformLogo density="compact" logoPath={item.logoPath} name={item.name || item.bankName} size="sm" />
+                          {type === 'payment' ? (
+                            <BankLogo density="compact" logoPath={item.logoPath} name={item.bankName || item.name} size="sm" />
+                          ) : (
+                            <PlatformLogo density="compact" logoPath={item.logoPath} name={item.name || item.bankName} size="sm" />
+                          )}
                           <TableText primary={item.name || item.bankName} />
                         </div>
                       ) : (
@@ -392,8 +405,12 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
                              <span className="flex h-7 min-w-7 items-center justify-center rounded-md bg-slate-100 px-2 text-xs font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                                 {rowNumber}
                              </span>
-                             {type === 'platform' ? (
-                                <PlatformLogo logoPath={item.logoPath} name={item.name || item.bankName} />
+                             {type === 'platform' || type === 'payment' ? (
+                                type === 'payment' ? (
+                                  <BankLogo logoPath={item.logoPath} name={item.bankName || item.name} />
+                                ) : (
+                                  <PlatformLogo logoPath={item.logoPath} name={item.name || item.bankName} />
+                                )
                              ) : (
                                <div className={cn("p-2 rounded-lg", variant === 'active' ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500")}>
                                   <Icon className="w-5 h-5" />
@@ -557,7 +574,7 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
 
       {/* Add/Edit Modal */}
       <Dialog open={isAddOpen} onOpenChange={requestFormDialogOpenChange}>
-        <MasterDataFormDialogContent>
+        <MasterDataFormDialogContent size={type === 'platform' || type === 'payment' ? 'wide' : 'default'}>
           <DialogHeader className="px-6 py-5 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shrink-0">
             <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <Icon className="w-5 h-5 text-blue-600" />

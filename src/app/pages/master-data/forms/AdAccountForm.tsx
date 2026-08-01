@@ -10,9 +10,7 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
-  FormDescription,
 } from '../../../components/ui/form';
 import {
   Select,
@@ -21,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
-import { MasterDataFormActions } from '../../../components/ui/master-data-ui';
-import { AdAccount, Platform, User } from '../data';
+import { MasterDataFieldLabel, MasterDataFormActions } from '../../../components/ui/master-data-ui';
+import { AdAccount, Platform, SubChannel, User } from '../data';
 import type { AdsIntegrationConfig, MetaLiveBreakdownResponse } from '@/app/services/liveAdsService';
 import type {
   GoogleAdsIntegrationConfig,
@@ -38,6 +36,7 @@ const adAccountSchema = z.object({
   accountName: z.string().min(1, "Nama akun wajib diisi"),
   platformId: z.string().min(1, "Platform wajib dipilih"),
   advertiserId: z.string().min(1, "Advertiser wajib dipilih"),
+  subChannelId: z.string().optional(),
   status: z.enum(['active', 'inactive']),
   ppn: z.coerce.number().min(0, "PPN minimal 0%").max(100, "PPN maksimal 100%").default(0),
   fee: z.coerce.number().min(0, "Fee minimal 0%").max(100, "Fee maksimal 100%").default(0),
@@ -60,6 +59,7 @@ type AdAccountFormValues = z.infer<typeof adAccountSchema>;
 interface AdAccountFormProps {
   item?: AdAccount | null;
   platforms: Platform[];
+  subChannels?: SubChannel[];
   advertisers: User[];
   liveMetaAccounts?: MetaLiveBreakdownResponse['accounts'];
   liveMetaError?: string | null;
@@ -91,6 +91,7 @@ function isPlatformName(platform: Platform | undefined, keyword: string) {
 export const AdAccountForm: React.FC<AdAccountFormProps> = ({
   item,
   platforms,
+  subChannels = [],
   advertisers,
   liveMetaAccounts = [],
   liveMetaError,
@@ -118,6 +119,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
       accountName: item?.accountName || '',
       platformId: item?.platformId || '',
       advertiserId: item?.advertiserId || '',
+      subChannelId: item?.subChannelId || '',
       status: item?.status || 'active',
       ppn: item?.ppn ?? 11, // Default PPN 11%
       fee: item?.fee ?? 0,
@@ -138,6 +140,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
 
   const selectedPlatformId = form.watch('platformId');
   const selectedPlatform = platforms.find((platform) => platform.id === selectedPlatformId);
+  const availableSubChannels = subChannels.filter((subChannel) => subChannel.status === 'active' && subChannel.platformId === selectedPlatformId);
   const showMetaMapping = isPlatformName(selectedPlatform, 'meta') || isPlatformName(selectedPlatform, 'facebook');
   const showGoogleMapping = isPlatformName(selectedPlatform, 'google');
   const showTikTokMapping = isPlatformName(selectedPlatform, 'tiktok');
@@ -158,10 +161,11 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             name="platformId"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Platform <span className="text-red-500">*</span></FormLabel>
+                <MasterDataFieldLabel required>Platform</MasterDataFieldLabel>
                 <Select
                   onValueChange={(value) => {
                     field.onChange(value);
+                    form.setValue('subChannelId', '');
                     form.setValue('liveMetaBusinessManagerId', '');
                     form.setValue('liveMetaBusinessManagerName', '');
                     form.setValue('liveMetaAccountId', '');
@@ -200,7 +204,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             name="accountName"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Nama Akun <span className="text-red-500">*</span></FormLabel>
+                <MasterDataFieldLabel required>Nama Akun</MasterDataFieldLabel>
                 <FormControl>
                   <Input placeholder="Contoh: Akun FB Utama" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
                 </FormControl>
@@ -214,7 +218,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             name="advertiserId"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Advertiser Name <span className="text-red-500">*</span></FormLabel>
+                <MasterDataFieldLabel required>Advertiser Name</MasterDataFieldLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
@@ -236,10 +240,47 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
 
           <FormField
             control={form.control}
+            name="subChannelId"
+            render={({ field }) => (
+              <FormItem>
+                <MasterDataFieldLabel
+                  info={{
+                    title: 'Sub Channel',
+                    description: 'Diambil dari Master Data Sub Channel dan otomatis difilter sesuai platform akun iklan.',
+                  }}
+                >
+                  Sub Channel
+                </MasterDataFieldLabel>
+                <Select
+                  value={field.value || NONE_VALUE}
+                  onValueChange={(value) => field.onChange(value === NONE_VALUE ? '' : value)}
+                  disabled={!selectedPlatformId || availableSubChannels.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                      <SelectValue placeholder={selectedPlatformId ? 'Pilih Sub Channel' : 'Pilih platform dulu'} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                    <SelectItem value={NONE_VALUE}>Tidak dikunci</SelectItem>
+                    {availableSubChannels.map((subChannel) => (
+                      <SelectItem key={subChannel.id} value={subChannel.id} className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">
+                        {subChannel.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="status"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Status</FormLabel>
+                <MasterDataFieldLabel>Status</MasterDataFieldLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
@@ -264,7 +305,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
               name="liveMetaAccountId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Akun Meta Live</FormLabel>
+                  <MasterDataFieldLabel
+                    info={{
+                      title: 'Akun Meta Live',
+                      description: 'Dipakai untuk mencocokkan snapshot API Meta ke akun internal.',
+                    }}
+                  >
+                    Akun Meta Live
+                  </MasterDataFieldLabel>
                   <Select
                     value={field.value || NONE_VALUE}
                     onValueChange={(value) => {
@@ -290,9 +338,6 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormDescription className="text-xs">
-                    Dipakai untuk mencocokkan snapshot API Meta ke akun internal.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -301,10 +346,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Registry API Meta kosong</p>
-                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
-                    Refresh setelah token aktif, atau isi ID akun Meta manual sementara.
-                  </p>
+                  <MasterDataFieldLabel
+                    info={{
+                      title: 'Registry API Meta kosong',
+                      description: 'Refresh setelah token aktif, atau isi ID akun Meta manual sementara.',
+                    }}
+                  >
+                    Registry API Meta kosong
+                  </MasterDataFieldLabel>
                   {liveMetaError ? <p className="mt-1 text-xs font-semibold text-rose-500">{liveMetaError}</p> : null}
                 </div>
                 {onRefreshMetaRegistry ? (
@@ -320,7 +369,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                   name="liveMetaAccountId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ID Akun Meta</FormLabel>
+                      <MasterDataFieldLabel>ID Akun Meta</MasterDataFieldLabel>
                       <FormControl>
                         <Input placeholder="Contoh: act_123456789 atau 123456789" {...field} />
                       </FormControl>
@@ -333,7 +382,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                   name="liveMetaAccountName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nama Akun Meta</FormLabel>
+                      <MasterDataFieldLabel>Nama Akun Meta</MasterDataFieldLabel>
                       <FormControl>
                         <Input placeholder="Opsional, untuk label tampilan" {...field} />
                       </FormControl>
@@ -353,7 +402,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
               name="liveGoogleCustomerId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Akun Google Ads Live</FormLabel>
+                  <MasterDataFieldLabel
+                    info={{
+                      title: 'Akun Google Ads Live',
+                      description: 'Dipakai untuk mencocokkan snapshot API Google Ads ke akun internal.',
+                    }}
+                  >
+                    Akun Google Ads Live
+                  </MasterDataFieldLabel>
                   <Select
                     value={field.value || NONE_VALUE}
                     onValueChange={(value) => {
@@ -379,9 +435,6 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormDescription className="text-xs">
-                    Dipakai untuk mencocokkan snapshot API Google Ads ke akun internal.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -390,10 +443,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Registry API Google Ads kosong</p>
-                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
-                    Refresh setelah OAuth aktif, atau isi Customer ID manual sementara.
-                  </p>
+                    <MasterDataFieldLabel
+                      info={{
+                        title: 'Registry API Google Ads kosong',
+                        description: 'Refresh setelah OAuth aktif, atau isi Customer ID manual sementara.',
+                      }}
+                    >
+                      Registry API Google Ads kosong
+                    </MasterDataFieldLabel>
                   {liveGoogleError ? <p className="mt-1 text-xs font-semibold text-rose-500">{liveGoogleError}</p> : null}
                 </div>
                 {onRefreshGoogleRegistry ? (
@@ -409,7 +466,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                   name="liveGoogleCustomerId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Customer ID Google Ads</FormLabel>
+                      <MasterDataFieldLabel>Customer ID Google Ads</MasterDataFieldLabel>
                       <FormControl>
                         <Input placeholder="Contoh: 123-456-7890" {...field} />
                       </FormControl>
@@ -422,7 +479,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                   name="liveGoogleCustomerName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nama Customer</FormLabel>
+                      <MasterDataFieldLabel>Nama Customer</MasterDataFieldLabel>
                       <FormControl>
                         <Input placeholder="Opsional, untuk label tampilan" {...field} />
                       </FormControl>
@@ -443,7 +500,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                 name="liveTikTokBusinessCenterId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Business Center TikTok</FormLabel>
+                    <MasterDataFieldLabel>Business Center TikTok</MasterDataFieldLabel>
                     <Select
                       value={field.value || NONE_VALUE}
                       onValueChange={(value) => {
@@ -479,7 +536,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                 name="liveTikTokAdvertiserId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Advertiser TikTok Live</FormLabel>
+                    <MasterDataFieldLabel
+                      info={{
+                        title: 'Advertiser TikTok Live',
+                        description: 'Dipakai untuk mencocokkan snapshot API TikTok ke akun internal.',
+                      }}
+                    >
+                      Advertiser TikTok Live
+                    </MasterDataFieldLabel>
                     <Select
                       value={field.value || NONE_VALUE}
                       onValueChange={(value) => {
@@ -505,9 +569,6 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormDescription className="text-xs">
-                      Dipakai untuk mencocokkan snapshot API TikTok ke akun internal.
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -516,10 +577,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-slate-900">Registry API TikTok kosong</p>
-                    <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
-                      Refresh setelah OAuth aktif, atau isi Advertiser ID manual sementara.
-                    </p>
+                    <MasterDataFieldLabel
+                      info={{
+                        title: 'Registry API TikTok kosong',
+                        description: 'Refresh setelah OAuth aktif, atau isi Advertiser ID manual sementara.',
+                      }}
+                    >
+                      Registry API TikTok kosong
+                    </MasterDataFieldLabel>
                     {liveTikTokError ? <p className="mt-1 text-xs font-semibold text-rose-500">{liveTikTokError}</p> : null}
                   </div>
                   {onRefreshTikTokRegistry ? (
@@ -535,7 +600,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                     name="liveTikTokAdvertiserId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Advertiser ID TikTok</FormLabel>
+                        <MasterDataFieldLabel>Advertiser ID TikTok</MasterDataFieldLabel>
                         <FormControl>
                           <Input placeholder="Contoh: 1234567890123456789" {...field} />
                         </FormControl>
@@ -548,7 +613,7 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                     name="liveTikTokAdvertiserName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nama Advertiser</FormLabel>
+                        <MasterDataFieldLabel>Nama Advertiser</MasterDataFieldLabel>
                         <FormControl>
                           <Input placeholder="Opsional, untuk label tampilan" {...field} />
                         </FormControl>
@@ -568,7 +633,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             name="ppn"
             render={({field}) => (
               <FormItem>
-                <FormLabel>PPN (%)</FormLabel>
+                <MasterDataFieldLabel
+                  info={{
+                    title: 'PPN',
+                    description: 'Pajak Pertambahan Nilai dalam persen.',
+                  }}
+                >
+                  PPN (%)
+                </MasterDataFieldLabel>
                 <FormControl>
                   <div className="relative">
                     <Input 
@@ -581,7 +653,6 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
                   </div>
                 </FormControl>
-                <FormDescription className="text-xs">Pajak Pertambahan Nilai</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -592,7 +663,14 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
             name="fee"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Fee (%)</FormLabel>
+                <MasterDataFieldLabel
+                  info={{
+                    title: 'Fee',
+                    description: 'Biaya layanan atau admin dalam persen.',
+                  }}
+                >
+                  Fee (%)
+                </MasterDataFieldLabel>
                 <FormControl>
                   <div className="relative">
                     <Input 
@@ -605,7 +683,6 @@ export const AdAccountForm: React.FC<AdAccountFormProps> = ({
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
                   </div>
                 </FormControl>
-                <FormDescription className="text-xs">Biaya layanan/admin</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

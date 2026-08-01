@@ -197,9 +197,8 @@ export type MasterDataFieldInfo = {
   description: string;
 };
 
-type MasterDataFieldLabelProps = {
+type MasterDataFieldLabelProps = React.LabelHTMLAttributes<HTMLLabelElement> & {
   children: ReactNode;
-  className?: string;
   info?: MasterDataFieldInfo;
   onInfo?: (info: MasterDataFieldInfo) => void;
   required?: boolean;
@@ -211,6 +210,7 @@ export function MasterDataFieldLabel({
   info,
   onInfo,
   required,
+  ...props
 }: MasterDataFieldLabelProps) {
   const [isInfoOpen, setIsInfoOpen] = React.useState(false);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -233,7 +233,10 @@ export function MasterDataFieldLabel({
   React.useEffect(() => cancelScheduledClose, [cancelScheduledClose]);
 
   return (
-    <label className={cn('flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300', className)}>
+    <label
+      className={cn('flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300', className)}
+      {...props}
+    >
       <span>
         {children}{required && <span className="text-red-500"> *</span>}
       </span>

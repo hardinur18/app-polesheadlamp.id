@@ -62,6 +62,7 @@ export const mapAdAccountFromDB = (a: any): AdAccount => ({
   accountName: a.account_name,
   platformId: a.platform_id,
   advertiserId: a.advertiser_id,
+  subChannelId: a.sub_channel_id || null,
   status: a.status,
   ppn: a.ppn ?? 0,
   fee: a.fee ?? 0,
@@ -72,6 +73,7 @@ export const mapAdAccountToDB = (a: AdAccount) => ({
   account_name: a.accountName,
   platform_id: a.platformId,
   advertiser_id: a.advertiserId,
+  sub_channel_id: a.subChannelId || null,
   status: a.status,
   ppn: a.ppn ?? 0,
   fee: a.fee ?? 0,
@@ -145,6 +147,7 @@ export const mapPaymentFromDB = (p: any): PaymentMethod => ({
   accountNumber: p.account_number,
   accountHolder: p.account_holder,
   status: p.status,
+  logoPath: p.logo_path || p.logoPath || null,
 });
 
 export const mapPaymentToDB = (p: PaymentMethod) => ({
@@ -153,6 +156,7 @@ export const mapPaymentToDB = (p: PaymentMethod) => ({
   account_number: p.accountNumber,
   account_holder: p.accountHolder,
   status: p.status,
+  logo_path: p.logoPath || null,
 });
 
 export const mapRoleFromDB = (r: any): RoleItem => ({

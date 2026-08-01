@@ -81,7 +81,7 @@ app.get("/make-server-f781cd00/finance/operational-expense-categories", async (c
 
   let query = supabase
     .from("operational_expense_categories")
-    .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active")
+    .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active, finance_category_id, finance_account_id")
     .order("sort_order", { ascending: true })
     .order("category", { ascending: true })
     .order("subcategory", { ascending: true });
@@ -111,7 +111,7 @@ app.post("/make-server-f781cd00/finance/operational-expense-categories", async (
     const { data, error } = await supabase
       .from("operational_expense_categories")
       .upsert(payload, { onConflict: "category,subcategory" })
-      .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active")
+      .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active, finance_category_id, finance_account_id")
       .single();
 
     if (error) throw error;
@@ -138,7 +138,7 @@ app.put("/make-server-f781cd00/finance/operational-expense-categories/:id", asyn
       .from("operational_expense_categories")
       .update(payload)
       .eq("id", id)
-      .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active")
+      .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active, finance_category_id, finance_account_id")
       .single();
 
     if (error) throw error;
@@ -162,7 +162,7 @@ app.delete("/make-server-f781cd00/finance/operational-expense-categories/:id", a
       .from("operational_expense_categories")
       .update({ is_active: false })
       .eq("id", id)
-      .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active")
+      .select("id, category, subcategory, account_code, account_type, description, sort_order, is_active, finance_category_id, finance_account_id")
       .single();
 
     if (error) throw error;
@@ -659,6 +659,8 @@ function buildOperationalExpenseCategoryPayload(body: Record<string, unknown>) {
     account_type: accountType,
     description: normalizeOperationalExpenseText(body.description),
     sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+    finance_category_id: normalizeOperationalExpenseText(body.finance_category_id || body.financeCategoryId),
+    finance_account_id: normalizeOperationalExpenseText(body.finance_account_id || body.financeAccountId),
     is_active: typeof body.is_active === "boolean"
       ? body.is_active
       : typeof body.isActive === "boolean"

@@ -42,7 +42,7 @@ export interface Branch {
   openingDate?: string; // Tanggal Rilis / Buka
   createdAt?: string; 
 }
-export interface AdAccount { id: string; platformId: string; advertiserId: string; accountName: string; status: 'active' | 'inactive'; ppn?: number; fee?: number; }
+export interface AdAccount { id: string; platformId: string; advertiserId: string; accountName: string; status: 'active' | 'inactive'; ppn?: number; fee?: number; subChannelId?: string | null; }
 export interface AdAccountOwnerAssignment {
   id: string;
   adAccountId: string;
@@ -70,7 +70,7 @@ export interface Area { id: string; name: string; branchId: string; status: 'act
 export interface ServiceType { id: string; name: string; category: string; description?: string; price: number; status: 'active' | 'inactive'; }
 export interface TechnicianTeam { id: string; name: string; branchId: string; leaderId?: string; memberIds?: string[]; status: 'active' | 'inactive'; }
 export interface AdSource { id: string; name: string; adAccountId: string; defaultCsName?: string; status: 'active' | 'inactive'; }
-export interface PaymentMethod { id: string; bankName: string; accountNumber: string; accountHolder: string; status: 'active' | 'inactive'; }
+export interface PaymentMethod { id: string; bankName: string; accountNumber: string; accountHolder: string; status: 'active' | 'inactive'; logoPath?: string | null; }
 export interface VehicleType { id: string; name: string; category: string; status: 'active' | 'inactive'; }
 export type LeadStatus = 'Pending' | 'Follow Up' | 'Booking' | 'Closing' | 'Cancel';
 export type LeadSocialPlatform = 'instagram' | 'tiktok';
@@ -650,8 +650,8 @@ export const MOCK_SOURCES: AdSource[] = [
 ];
 
 export const MOCK_PAYMENTS: PaymentMethod[] = [
-  { id: 'pm1', bankName: 'BCA', accountNumber: '8730123456', accountHolder: 'PT Restoration Headlamp', status: 'active' },
-  { id: 'pm2', bankName: 'Mandiri', accountNumber: '1230009876543', accountHolder: 'PT Restoration Headlamp', status: 'active' },
+  { id: 'pm1', bankName: 'BCA', accountNumber: '8730123456', accountHolder: 'PT Restoration Headlamp', status: 'active', logoPath: null },
+  { id: 'pm2', bankName: 'Mandiri', accountNumber: '1230009876543', accountHolder: 'PT Restoration Headlamp', status: 'active', logoPath: null },
 ];
 
 export const MOCK_STAFF_STATUS: SimpleMasterItem[] = [

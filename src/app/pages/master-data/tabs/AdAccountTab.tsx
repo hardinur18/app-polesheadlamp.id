@@ -95,7 +95,7 @@ interface AdAccountTabProps {
   setPageNotices?: (notices: NoticeItem[]) => void;
 }
 
-type AccountView = 'all' | 'api' | 'live' | 'unmatched' | 'assignment';
+type AccountView = 'all' | 'api' | 'live' | 'unmatched' | 'assignment' | 'cs-relations' | 'advertiser-relations';
 
 export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _currentRole, setPageNotices }) => {
   const {
@@ -125,6 +125,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const [bulkStatusSaving, setBulkStatusSaving] = useState(false);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const [historyItem, setHistoryItem] = useState<AdAccount | null>(null);
+  const [relationDetail, setRelationDetail] = useState<{
+    type: 'cs' | 'advertiser';
+    title: string;
+    subtitle: string;
+    accounts: AdAccount[];
+  } | null>(null);
   const [liveMetaData, setLiveMetaData] = useState<MetaLiveBreakdownResponse | null>(
     () => getCachedMetaLiveRegistry(),
   );
@@ -788,11 +794,20 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     [getActiveAssignment, getActiveOwnerAssignment],
   );
 
-  const rawFilteredData = adAccounts.filter(item => 
-    item.accountName.toLowerCase().includes(search.toLowerCase()) ||
-    getAdvertiserName(item.advertiserId).toLowerCase().includes(search.toLowerCase()) ||
-    getBusinessManagerLabel(item).toLowerCase().includes(search.toLowerCase())
-  );
+  const rawFilteredData = adAccounts.filter(item => {
+    const activeAssignment = getActiveAssignment(item.id);
+    const activeOwner = getActiveOwnerAssignment(item.id);
+    const searchText = [
+      item.accountName,
+      getPlatformName(item.platformId),
+      getSubChannelName(item.subChannelId || activeAssignment?.subChannelId),
+      getAdvertiserName(activeOwner?.advertiserId || item.advertiserId),
+      getUserName(activeAssignment?.csId),
+      getBusinessManagerLabel(item),
+    ].join(' ').toLowerCase();
+
+    return searchText.includes(search.toLowerCase());
+  });
 
   const liveRegistryRows = useMemo(() => {
     const lowerSearch = search.trim().toLowerCase();
@@ -1181,12 +1196,129 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
       .sort((left, right) => left.accountName.localeCompare(right.accountName));
   }, [adAccounts, apiAccountDialogItem, apiAccountPlatformKey, apiMappings, getPlatformName]);
 
+  const formatNameSet = (values: string[]) => {
+    const uniqueValues = Array.from(new Set(values.filter(Boolean)));
+    if (uniqueValues.length === 0) return '-';
+    const visibleValues = uniqueValues.slice(0, 3).join(', ');
+    return uniqueValues.length > 3 ? `${visibleValues} +${uniqueValues.length - 3}` : visibleValues;
+  };
+
+  const csRelationRows = useMemo(() => {
+    const grouped = new Map<string, {
+      id: string;
+      label: string;
+      secondary: string;
+      accounts: AdAccount[];
+      advertisers: string[];
+      platforms: string[];
+      subChannels: string[];
+      liveCount: number;
+      issueCount: number;
+    }>();
+
+    rawFilteredData.forEach((account) => {
+      const assignment = getActiveAssignment(account.id);
+      const owner = getActiveOwnerAssignment(account.id);
+      const key = assignment?.csId || 'unassigned-cs';
+      const current = grouped.get(key) || {
+        id: key,
+        label: assignment ? getUserName(assignment.csId) : 'Belum diset',
+        secondary: assignment ? 'CS aktif' : 'Perlu assignment',
+        accounts: [],
+        advertisers: [],
+        platforms: [],
+        subChannels: [],
+        liveCount: 0,
+        issueCount: 0,
+      };
+
+      current.accounts.push(account);
+      current.advertisers.push(getAdvertiserName(owner?.advertiserId || account.advertiserId));
+      current.platforms.push(getPlatformName(account.platformId));
+      current.subChannels.push(getSubChannelName(account.subChannelId || assignment?.subChannelId));
+      if (isIntegrationEnabled(account)) current.liveCount += 1;
+      if (hasAssignmentIssue(account) || isUnmatchedAccount(account)) current.issueCount += 1;
+      grouped.set(key, current);
+    });
+
+    return Array.from(grouped.values()).sort((left, right) =>
+      right.accounts.length - left.accounts.length || left.label.localeCompare(right.label),
+    );
+  }, [
+    rawFilteredData,
+    getActiveAssignment,
+    getActiveOwnerAssignment,
+    getAdvertiserName,
+    getPlatformName,
+    getSubChannelName,
+    getUserName,
+    hasAssignmentIssue,
+    isIntegrationEnabled,
+    isUnmatchedAccount,
+  ]);
+
+  const advertiserRelationRows = useMemo(() => {
+    const grouped = new Map<string, {
+      id: string;
+      label: string;
+      secondary: string;
+      accounts: AdAccount[];
+      csNames: string[];
+      platforms: string[];
+      subChannels: string[];
+      liveCount: number;
+      issueCount: number;
+    }>();
+
+    rawFilteredData.forEach((account) => {
+      const assignment = getActiveAssignment(account.id);
+      const owner = getActiveOwnerAssignment(account.id);
+      const key = owner?.advertiserId || account.advertiserId || 'unassigned-advertiser';
+      const current = grouped.get(key) || {
+        id: key,
+        label: getAdvertiserName(key),
+        secondary: owner ? 'Advertiser aktif' : 'Fallback master akun',
+        accounts: [],
+        csNames: [],
+        platforms: [],
+        subChannels: [],
+        liveCount: 0,
+        issueCount: 0,
+      };
+
+      current.accounts.push(account);
+      current.csNames.push(getUserName(assignment?.csId));
+      current.platforms.push(getPlatformName(account.platformId));
+      current.subChannels.push(getSubChannelName(account.subChannelId || assignment?.subChannelId));
+      if (isIntegrationEnabled(account)) current.liveCount += 1;
+      if (hasAssignmentIssue(account) || isUnmatchedAccount(account)) current.issueCount += 1;
+      grouped.set(key, current);
+    });
+
+    return Array.from(grouped.values()).sort((left, right) =>
+      right.accounts.length - left.accounts.length || left.label.localeCompare(right.label),
+    );
+  }, [
+    rawFilteredData,
+    getActiveAssignment,
+    getActiveOwnerAssignment,
+    getAdvertiserName,
+    getPlatformName,
+    getSubChannelName,
+    getUserName,
+    hasAssignmentIssue,
+    isIntegrationEnabled,
+    isUnmatchedAccount,
+  ]);
+
   const viewTabs = [
     { id: 'all' as const, label: 'Semua', count: rawFilteredData.length },
     { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.filter(getApiMappingForAccount).length },
     { id: 'live' as const, label: 'Live Ads ON', count: rawFilteredData.filter(isIntegrationEnabled).length },
     { id: 'unmatched' as const, label: 'Belum Match API', count: rawFilteredData.filter(isUnmatchedAccount).length },
     { id: 'assignment' as const, label: 'Perlu Assignment', count: rawFilteredData.filter(hasAssignmentIssue).length },
+    { id: 'cs-relations' as const, label: 'Relasi CS', count: csRelationRows.length },
+    { id: 'advertiser-relations' as const, label: 'Relasi Advertiser', count: advertiserRelationRows.length },
   ];
 
   const filteredData = rawFilteredData.filter((item) => {
@@ -2194,6 +2326,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                 isBulkSelectMode ? 54 : null,
                 64,
                 260,
+                180,
                 220,
                 190,
                 190,
@@ -2204,7 +2337,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                 90,
                 (canEdit || canDelete) ? 82 : null,
               ]}
-              minWidth={canEdit || canDelete ? (isBulkSelectMode ? 1610 : 1556) : (isBulkSelectMode ? 1528 : 1474)}
+              minWidth={canEdit || canDelete ? (isBulkSelectMode ? 1790 : 1736) : (isBulkSelectMode ? 1708 : 1654)}
               rowMinHeight={76}
             >
               <table>
@@ -2223,6 +2356,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                     )}
                     <th className="text-center">No</th>
                     <th>Nama Akun</th>
+                    <th>Sub Channel</th>
                     <th>Business / Manager</th>
                     <th>Advertiser</th>
                     <th>CS Aktif</th>
@@ -2267,6 +2401,12 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                         />
                         <TableText primary={item.accountName} />
                       </div>
+                    </td>
+                    <td>
+                      <TableText
+                        primary={item.subChannelId ? getSubChannelName(item.subChannelId) : 'Belum diset'}
+                        primaryClassName={!item.subChannelId ? 'text-slate-400 dark:text-slate-500' : undefined}
+                      />
                     </td>
                     <td>
                       <TableText
@@ -2376,6 +2516,13 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                         {renderAccountStatusSwitch(item)}
                     </div>
                     
+                    <div className="pl-[52px] space-y-1 mb-3">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-medium">Sub Channel</p>
+                        <p className={cn("text-sm font-semibold", item.subChannelId ? "text-slate-800 dark:text-slate-200" : "text-slate-400")}>
+                          {item.subChannelId ? getSubChannelName(item.subChannelId) : 'Belum diset'}
+                        </p>
+                    </div>
+
                     <div className="pl-[52px] space-y-1 mb-3">
                         <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-medium">Business / Manager</p>
                         <p className="text-sm text-slate-800 dark:text-slate-200 font-semibold">
@@ -2620,6 +2767,295 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     );
   };
 
+  const renderRelationEmptyState = (title: string, description: string) => (
+    <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+      <div className="p-4 rounded-full bg-slate-50 dark:bg-slate-900 mb-4">
+        <Users className="w-8 h-8 text-slate-300" />
+      </div>
+      <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300">{title}</h3>
+      <p className="text-slate-500 text-sm max-w-sm mx-auto mt-1">{description}</p>
+    </div>
+  );
+
+  const openRelationDetail = (
+    type: 'cs' | 'advertiser',
+    title: string,
+    subtitle: string,
+    accounts: AdAccount[],
+  ) => {
+    setRelationDetail({
+      type,
+      title,
+      subtitle,
+      accounts: [...accounts].sort((left, right) => left.accountName.localeCompare(right.accountName)),
+    });
+  };
+
+  const renderRelationDetailDialog = () => {
+    if (!relationDetail) return null;
+
+    const liveCount = relationDetail.accounts.filter(isIntegrationEnabled).length;
+    const issueCount = relationDetail.accounts.filter((account) =>
+      hasAssignmentIssue(account) || isUnmatchedAccount(account)
+    ).length;
+
+    return (
+      <Dialog open={Boolean(relationDetail)} onOpenChange={(open) => !open && setRelationDetail(null)}>
+        <DialogContent className="max-w-6xl rounded-[28px] border-slate-200 bg-white p-0 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-3 text-slate-950 dark:text-slate-50">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300">
+                  <Users className="h-5 w-5" />
+                </span>
+                <span>{relationDetail.title}</span>
+              </DialogTitle>
+              <DialogDescription>{relationDetail.subtitle}</DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="assignmentStatusPill is-ready">
+                <span className="assignmentStatusDot" />
+                <span>{relationDetail.accounts.length} akun</span>
+              </span>
+              <span className={cn('assignmentStatusPill', liveCount > 0 ? 'is-ready' : 'is-empty')}>
+                <span className="assignmentStatusDot" />
+                <span>{liveCount} live ON</span>
+              </span>
+              <span className={cn('assignmentStatusPill', issueCount > 0 ? 'is-partial' : 'is-ready')}>
+                <span className="assignmentStatusDot" />
+                <span>{issueCount} issue</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="max-h-[68vh] overflow-auto px-6 py-5">
+            <div className="tablePanel">
+              <DataTable
+                cellY={12}
+                columns={[64, 260, 190, 220, 220, 190, 130, 130]}
+                minWidth={1404}
+                rowMinHeight={72}
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th className="text-center">No</th>
+                      <th>Nama Akun</th>
+                      <th>Platform</th>
+                      <th>Advertiser</th>
+                      <th>CS Aktif</th>
+                      <th>Sub Channel</th>
+                      <th className="text-center">Live Ads</th>
+                      <th className="text-center">Issue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {relationDetail.accounts.map((account, index) => {
+                      const activeAssignment = getActiveAssignment(account.id);
+                      const activeOwner = getActiveOwnerAssignment(account.id);
+                      const platform = platforms.find((item) => item.id === account.platformId);
+                      const effectiveAdvertiserId = activeOwner?.advertiserId || account.advertiserId;
+                      const effectiveSubChannelId = account.subChannelId || activeAssignment?.subChannelId;
+                      const hasIssue = hasAssignmentIssue(account) || isUnmatchedAccount(account);
+
+                      return (
+                        <tr key={account.id}>
+                          <td className="monoCell text-center">{index + 1}</td>
+                          <td>
+                            <TableText
+                              primary={account.accountName}
+                              secondary={getBusinessManagerLabel(account)}
+                            />
+                          </td>
+                          <td>
+                            <div className="platformLogoTableCell">
+                              <PlatformLogo
+                                density="compact"
+                                logoPath={platform?.logoPath}
+                                name={platform?.name || getPlatformName(account.platformId)}
+                                size="sm"
+                              />
+                              <TableText primary={platform?.name || getPlatformName(account.platformId)} />
+                            </div>
+                          </td>
+                          <td>
+                            <TableText
+                              primary={getAdvertiserName(effectiveAdvertiserId)}
+                              secondary={activeOwner ? `Sejak ${activeOwner.startDate}` : 'Fallback master akun'}
+                              primaryClassName={!effectiveAdvertiserId ? 'text-amber-600 dark:text-amber-300' : undefined}
+                            />
+                          </td>
+                          <td>
+                            <TableText
+                              primary={activeAssignment ? getUserName(activeAssignment.csId) : 'Belum diset'}
+                              secondary={activeAssignment ? `Sejak ${activeAssignment.startDate}` : 'Perlu assignment'}
+                              primaryClassName={!activeAssignment ? 'text-amber-600 dark:text-amber-300' : undefined}
+                            />
+                          </td>
+                          <td>
+                            <TableText
+                              primary={effectiveSubChannelId ? getSubChannelName(effectiveSubChannelId) : 'Tidak dikunci'}
+                              primaryClassName={!effectiveSubChannelId ? 'text-slate-400 dark:text-slate-500' : undefined}
+                            />
+                          </td>
+                          <td className="tableIconCell text-center">
+                            <span className={cn('assignmentStatusPill', isIntegrationEnabled(account) ? 'is-ready' : 'is-empty')}>
+                              <span className="assignmentStatusDot" />
+                              <span>{isIntegrationEnabled(account) ? 'ON' : 'OFF'}</span>
+                            </span>
+                          </td>
+                          <td className="tableIconCell text-center">
+                            <span className={cn('assignmentStatusPill', hasIssue ? 'is-partial' : 'is-ready')}>
+                              <span className="assignmentStatusDot" />
+                              <span>{hasIssue ? 'Perlu cek' : 'Clear'}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </DataTable>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
+  const renderCsRelationTable = () => {
+    if (csRelationRows.length === 0) {
+      return renderRelationEmptyState('Belum ada relasi CS', 'Relasi CS akan muncul dari assignment akun iklan.');
+    }
+
+    return (
+      <div className="mb-8 last:mb-0">
+        <MasterDataTableTitle title="Relasi CS" count={csRelationRows.length} variant="active" />
+        <div className="tablePanel">
+          <DataTable
+            cellY={12}
+            columns={[72, 240, 120, 280, 220, 220, 120, 120]}
+            minWidth={1392}
+            rowMinHeight={72}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>CS</th>
+                  <th className="text-center">Akun</th>
+                  <th>Advertiser</th>
+                  <th>Platform</th>
+                  <th>Sub Channel</th>
+                  <th className="text-center">Live ON</th>
+                  <th className="text-center">Issue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {csRelationRows.map((row, index) => (
+                  <tr
+                    key={row.id}
+                    className="cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/60"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openRelationDetail('cs', row.label, `${row.accounts.length} akun terkait ${row.secondary.toLowerCase()}.`, row.accounts)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openRelationDetail('cs', row.label, `${row.accounts.length} akun terkait ${row.secondary.toLowerCase()}.`, row.accounts);
+                      }
+                    }}
+                  >
+                    <td className="monoCell text-center">{index + 1}</td>
+                    <td>
+                      <TableText
+                        primary={row.label}
+                        secondary={row.secondary}
+                        primaryClassName={row.id === 'unassigned-cs' ? 'text-amber-600 dark:text-amber-300' : undefined}
+                      />
+                    </td>
+                    <td className="monoCell text-center">{row.accounts.length}</td>
+                    <td><TableText primary={formatNameSet(row.advertisers)} /></td>
+                    <td><TableText primary={formatNameSet(row.platforms)} /></td>
+                    <td><TableText primary={formatNameSet(row.subChannels)} /></td>
+                    <td className="monoCell text-center">{row.liveCount}/{row.accounts.length}</td>
+                    <td className={cn('monoCell text-center', row.issueCount > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600')}>
+                      {row.issueCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAdvertiserRelationTable = () => {
+    if (advertiserRelationRows.length === 0) {
+      return renderRelationEmptyState('Belum ada relasi advertiser', 'Relasi advertiser akan muncul dari owner assignment akun iklan.');
+    }
+
+    return (
+      <div className="mb-8 last:mb-0">
+        <MasterDataTableTitle title="Relasi Advertiser" count={advertiserRelationRows.length} variant="active" />
+        <div className="tablePanel">
+          <DataTable
+            cellY={12}
+            columns={[72, 260, 120, 280, 220, 220, 120, 120]}
+            minWidth={1412}
+            rowMinHeight={72}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>Advertiser</th>
+                  <th className="text-center">Akun</th>
+                  <th>CS</th>
+                  <th>Platform</th>
+                  <th>Sub Channel</th>
+                  <th className="text-center">Live ON</th>
+                  <th className="text-center">Issue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {advertiserRelationRows.map((row, index) => (
+                  <tr
+                    key={row.id}
+                    className="cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/60"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openRelationDetail('advertiser', row.label, `${row.accounts.length} akun terkait ${row.secondary.toLowerCase()}.`, row.accounts)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openRelationDetail('advertiser', row.label, `${row.accounts.length} akun terkait ${row.secondary.toLowerCase()}.`, row.accounts);
+                      }
+                    }}
+                  >
+                    <td className="monoCell text-center">{index + 1}</td>
+                    <td><TableText primary={row.label} secondary={row.secondary} /></td>
+                    <td className="monoCell text-center">{row.accounts.length}</td>
+                    <td><TableText primary={formatNameSet(row.csNames)} /></td>
+                    <td><TableText primary={formatNameSet(row.platforms)} /></td>
+                    <td><TableText primary={formatNameSet(row.subChannels)} /></td>
+                    <td className="monoCell text-center">{row.liveCount}/{row.accounts.length}</td>
+                    <td className={cn('monoCell text-center', row.issueCount > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-600')}>
+                      {row.issueCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="masterDataTabSurface">
       {/* Search Toolbar */}
@@ -2684,6 +3120,10 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
 
       {accountView === 'api' ? (
         renderApiIntegrationTable()
+      ) : accountView === 'cs-relations' ? (
+        renderCsRelationTable()
+      ) : accountView === 'advertiser-relations' ? (
+        renderAdvertiserRelationTable()
       ) : filteredData.length > 0 ? (
          <>
            {renderTable(activeData, "Akun Aktif", 'active')}
@@ -2700,6 +3140,8 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
                </p>
           </div>
       )}
+
+      {renderRelationDetailDialog()}
 
       <Dialog open={isApiAccountDialogOpen} onOpenChange={(open) => {
         if (open) {
@@ -3405,6 +3847,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             <AdAccountForm 
               item={editingItem}
               platforms={activePlatforms}
+              subChannels={subChannels}
               advertisers={advertisers}
               liveMetaAccounts={liveMetaData?.accounts || []}
               liveMetaError={liveMetaError}

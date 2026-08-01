@@ -3751,6 +3751,100 @@ body {
   min-width: 148px;
 }
 
+.masterDataSegmentedTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.masterDataSegmentedTabs button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink-soft);
+  padding: 0 18px;
+  font-size: 0.86rem;
+  font-weight: 760;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  transition: transform 160ms ease, border-color 160ms ease, color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.masterDataSegmentedTabs button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.22);
+  color: var(--brand-700);
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+}
+
+.masterDataSegmentedTabs button.isActive {
+  border-color: rgba(37, 99, 235, 0.2);
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+  color: #fff;
+  box-shadow: 0 18px 38px rgba(37, 99, 235, 0.22);
+}
+
+.masterDataSegmentedTabs button span {
+  display: inline-flex;
+  min-width: 28px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.13);
+  color: inherit;
+  padding: 0 8px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.masterDataSegmentedTabs button.isActive span {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.masterDataToggleField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 14px 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+}
+
+.masterDataToggleField span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.masterDataToggleField strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 760;
+}
+
+.masterDataToggleField small {
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.masterDataToggleField input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--brand-600);
+}
+
 .masterDataCountBadge {
   display: inline-flex;
   min-width: 108px;
@@ -4501,6 +4595,17 @@ body {
   padding-block: 14px 18px;
 }
 
+.masterDataForm {
+  display: grid;
+  gap: 16px;
+}
+
+.masterDataFormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .masterDataFormActions {
   margin-top: 22px;
   gap: 10px;
@@ -4696,6 +4801,12 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+
+.platformLogoUploaderActions .uiButton {
+  min-height: 34px;
+  border-radius: 12px;
+  font-size: 0.78rem;
 }
 
 .assignmentHistoryGrid {
@@ -5174,6 +5285,16 @@ body {
 
   .masterDataDialogBody {
     padding: 14px 18px 18px;
+  }
+
+  .masterDataFormGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .platformLogoUploader {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
   }
 
   .masterDataFormActions {

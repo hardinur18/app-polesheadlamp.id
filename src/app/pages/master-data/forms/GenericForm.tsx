@@ -20,11 +20,13 @@ import {
 } from '../../../components/ui/select';
 import { Textarea } from '../../../components/ui/textarea';
 import { Button } from '../../../components/ui/button';
-import { MasterDataFormActions } from '../../../components/ui/master-data-ui';
+import { MasterDataFieldLabel, MasterDataFormActions } from '../../../components/ui/master-data-ui';
 import { PlatformLogo } from '../../../components/ui/platform-logo';
+import { BankLogo } from '../../../components/ui/bank-logo';
 import { SimpleMasterItem, VehicleType, PaymentMethod, Platform } from '../data';
 import { getVehicleNameValidationMessage } from '../vehicleValidation';
 import { validatePlatformLogoFile } from '@/app/services/platformLogoService';
+import { validateBankLogoFile } from '@/app/services/bankLogoService';
 
 interface GenericFormProps {
   type: 'vehicle' | 'payment' | 'simple' | 'sub_channel' | 'vendor' | 'platform'; // To determine extra fields
@@ -39,6 +41,12 @@ interface GenericFormProps {
 
 export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onDirtyChange, onSubmit, onCancel, hideDescription, platforms }) => {
   const logoInputId = React.useId();
+  const isMediaForm = type === 'platform' || type === 'payment';
+  const fieldLabel = label || (type === 'payment' ? 'Akun Bank' : 'Item');
+  const inputClassName = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm';
+  const selectClassName = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm';
+  const selectContentClassName = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]';
+  const selectItemClassName = 'focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer';
   
   const formSchema = useMemo(() => {
     let schema = z.object({
@@ -129,36 +137,63 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 py-4">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({field}) => (
-            <FormItem>
-              <FormLabel>Nama {label || 'Item'} <span className="text-red-500">*</span></FormLabel>
-              <FormControl>
-                <Input placeholder={`Nama ${label || 'Item'}...`} {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="masterDataForm">
+        <div className={type === 'payment' ? 'masterDataFormGrid' : undefined}>
+          <FormField
+            control={form.control}
+            name="name"
+            render={({field}) => (
+              <FormItem className={isMediaForm ? 'md:col-span-2' : undefined}>
+                <FormLabel asChild>
+                  <MasterDataFieldLabel
+                    required
+                    info={type === 'payment' ? {
+                      title: 'Nama akun bank',
+                      description: 'Isi nama bank atau label akun bank yang muncul di table pembayaran.',
+                    } : undefined}
+                  >
+                    Nama {fieldLabel}
+                  </MasterDataFieldLabel>
+                </FormLabel>
+                <FormControl>
+                  <Input placeholder={`Nama ${fieldLabel}...`} {...field} className={inputClassName} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        {type === 'platform' && (
+        {isMediaForm && (
           <FormField
             control={form.control}
             name="logoFile"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Logo Platform</FormLabel>
+              <FormItem className="md:col-span-2">
+                <FormLabel asChild>
+                  <MasterDataFieldLabel
+                    info={{
+                      title: `Logo ${type === 'payment' ? 'bank' : 'platform'}`,
+                      description: 'File baru akan mengganti logo lama pada path ID yang sama, sehingga storage tidak menumpuk gambar duplikat.',
+                    }}
+                  >
+                    Logo {type === 'payment' ? 'Bank' : 'Platform'}
+                  </MasterDataFieldLabel>
+                </FormLabel>
                 <div className="platformLogoUploader">
-                  <PlatformLogo
-                    logoPath={logoPreviewUrl || (form.watch('removeLogo') ? '' : (item as any)?.logoPath)}
-                    name={form.watch('name') || (item as any)?.name || 'Platform'}
-                  />
+                  {type === 'payment' ? (
+                    <BankLogo
+                      logoPath={logoPreviewUrl || (form.watch('removeLogo') ? '' : (item as any)?.logoPath)}
+                      name={form.watch('name') || (item as any)?.bankName || 'Bank'}
+                    />
+                  ) : (
+                    <PlatformLogo
+                      logoPath={logoPreviewUrl || (form.watch('removeLogo') ? '' : (item as any)?.logoPath)}
+                      name={form.watch('name') || (item as any)?.name || 'Platform'}
+                    />
+                  )}
                   <div className="platformLogoUploaderText">
                     <strong>{field.value ? field.value.name : (item as any)?.logoPath && !form.watch('removeLogo') ? 'Logo sudah tersimpan' : 'Belum ada logo'}</strong>
-                    <span>PNG, JPG, atau WebP. Maksimal 1.5 MB. File akan replace logo lama, bukan menambah duplikat.</span>
+                    <span>PNG, JPG, WebP, atau SVG. Maksimal 1.5 MB.</span>
                     <div className="platformLogoUploaderActions">
                       <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById(logoInputId)?.click()}>
                         Pilih Logo
@@ -183,13 +218,15 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
                   <input
                     id={logoInputId}
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
                     className="hidden"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       event.target.value = '';
                       if (!file) return;
-                      const validationMessage = validatePlatformLogoFile(file);
+                      const validationMessage = type === 'payment'
+                        ? validateBankLogoFile(file)
+                        : validatePlatformLogoFile(file);
                       if (validationMessage) {
                         form.setError('logoFile' as never, { message: validationMessage });
                         return;
@@ -217,13 +254,13 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
                 <FormLabel>Platform Iklan <span className="text-red-500">*</span></FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                    <SelectTrigger className={selectClassName}>
                       <SelectValue placeholder="Pilih Platform" />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
+                  <SelectContent className={selectContentClassName}>
                     {platforms.map((p) => (
-                      <SelectItem key={p.id} value={p.id} className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">
+                      <SelectItem key={p.id} value={p.id} className={selectItemClassName}>
                         {p.name}
                       </SelectItem>
                     ))}
@@ -244,16 +281,16 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
                 <FormLabel>Kategori Size <span className="text-red-500">*</span></FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                    <SelectTrigger className={selectClassName}>
                       <SelectValue placeholder="Pilih Kategori" />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                    <SelectItem value="small" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Small (City Car)</SelectItem>
-                    <SelectItem value="medium" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Medium (MPV/Sedan)</SelectItem>
-                    <SelectItem value="large" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Large (SUV)</SelectItem>
-                    <SelectItem value="luxury" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Luxury / Big MPV</SelectItem>
-                    <SelectItem value="motor" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Motorcycle</SelectItem>
+                  <SelectContent className={selectContentClassName}>
+                    <SelectItem value="small" className={selectItemClassName}>Small (City Car)</SelectItem>
+                    <SelectItem value="medium" className={selectItemClassName}>Medium (MPV/Sedan)</SelectItem>
+                    <SelectItem value="large" className={selectItemClassName}>Large (SUV)</SelectItem>
+                    <SelectItem value="luxury" className={selectItemClassName}>Luxury / Big MPV</SelectItem>
+                    <SelectItem value="motor" className={selectItemClassName}>Motorcycle</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -269,9 +306,19 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
               name="accountNumber"
               render={({field}) => (
                 <FormItem>
-                  <FormLabel>Nomor Rekening <span className="text-red-500">*</span></FormLabel>
+                  <FormLabel asChild>
+                    <MasterDataFieldLabel
+                      required
+                      info={{
+                        title: 'Nomor rekening',
+                        description: 'Nomor rekening disimpan sebagai referensi pembayaran internal. Gunakan angka tanpa spasi jika memungkinkan.',
+                      }}
+                    >
+                      Nomor Rekening
+                    </MasterDataFieldLabel>
+                  </FormLabel>
                   <FormControl>
-                    <Input placeholder="1234567890" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
+                    <Input inputMode="numeric" placeholder="1234567890" {...field} className={inputClassName} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -282,9 +329,19 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
               name="accountHolder"
               render={({field}) => (
                 <FormItem>
-                  <FormLabel>Atas Nama <span className="text-red-500">*</span></FormLabel>
+                  <FormLabel asChild>
+                    <MasterDataFieldLabel
+                      required
+                      info={{
+                        title: 'Pemilik rekening',
+                        description: 'Nama pemilik rekening yang dipakai untuk validasi transfer dan tampilan instruksi pembayaran.',
+                      }}
+                    >
+                      Atas Nama
+                    </MasterDataFieldLabel>
+                  </FormLabel>
                   <FormControl>
-                    <Input placeholder="PT RHI" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
+                    <Input placeholder="PT RHI" {...field} className={inputClassName} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -302,7 +359,7 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
                 <FormItem>
                   <FormLabel>No. Telepon / WA</FormLabel>
                   <FormControl>
-                    <Input placeholder="08123456789" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
+                    <Input placeholder="08123456789" {...field} className={inputClassName} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -315,7 +372,7 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
                 <FormItem>
                   <FormLabel>Alamat</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Alamat Lengkap" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
+                    <Textarea placeholder="Alamat Lengkap" {...field} className={inputClassName} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -324,7 +381,7 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
           </>
         )}
 
-        {!hideDescription && type !== 'vendor' && (
+        {!hideDescription && type !== 'vendor' && type !== 'payment' && (
         <FormField
           control={form.control}
           name="description"
@@ -332,7 +389,7 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
             <FormItem>
               <FormLabel>Deskripsi</FormLabel>
               <FormControl>
-                <Textarea placeholder="Deskripsi (Opsional)" {...field} className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm" />
+                <Textarea placeholder="Deskripsi (Opsional)" {...field} className={inputClassName} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -344,23 +401,24 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
           control={form.control}
           name="status"
           render={({field}) => (
-            <FormItem>
+            <FormItem className={isMediaForm ? 'md:col-span-2' : undefined}>
               <FormLabel>Status</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
-                  <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-slate-200 shadow-sm">
+                  <SelectTrigger className={selectClassName}>
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
-                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xl rounded-xl z-[9999]">
-                  <SelectItem value="active" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Aktif</SelectItem>
-                  <SelectItem value="inactive" className="focus:bg-slate-50 dark:focus:bg-slate-800 cursor-pointer">Non Aktif</SelectItem>
+                <SelectContent className={selectContentClassName}>
+                  <SelectItem value="active" className={selectItemClassName}>Aktif</SelectItem>
+                  <SelectItem value="inactive" className={selectItemClassName}>Non Aktif</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
             </FormItem>
           )}
         />
+        </div>
 
         <MasterDataFormActions
           isSubmitting={isSubmitting}
