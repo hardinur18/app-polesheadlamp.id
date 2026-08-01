@@ -12,7 +12,7 @@ import { getAppRouteByPath, getCanonicalAppPath } from '@/app/routing/appRouteRe
 const DEFAULT_AUTHENTICATED_PATH = '/dashboard/';
 const LOGIN_REDIRECT_STORAGE_KEY = 'app_post_login_redirect';
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
-const useLocalAuth = import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
+const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
 
 const createLocalSession = (): Session => {
   const email = localStorage.getItem('rhi-v2-local-email') || 'owner@polesheadlamp.id';

@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Loader2, CheckCircle2, XCircle, AlertCircle, Camera, Upload, Save, Eye, EyeOff } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, AlertCircle, Camera, Upload, Eye, EyeOff } from 'lucide-react';
 import {
   Form,
   FormControl,
@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
-import { DialogFooter } from '../../components/ui/dialog';
+import { MasterDataFieldLabel, MasterDataFormActions } from '../../components/ui/master-data-ui';
 import { User, Role, MOCK_ROLES, Branch } from '../master-data/data';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { supabase } from '../../../lib/supabaseClient';
@@ -58,11 +58,12 @@ interface UserFormProps {
   existingEmails?: string[]; // For client-side uniqueness check
   onSubmit: (data: any) => void;
   onCancel?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
   isSubmitting?: boolean;
   canResetPassword?: boolean;
 }
 
-export const UserForm: React.FC<UserFormProps> = ({ id, initialData, item, branches, existingEmails = [], onSubmit, onCancel, isSubmitting, canResetPassword = true }) => {
+export const UserForm: React.FC<UserFormProps> = ({ id, initialData, item, branches, existingEmails = [], onSubmit, onCancel, onDirtyChange, isSubmitting, canResetPassword = true }) => {
   // Use initialData or item
   const dataToEdit = initialData || item;
   
@@ -257,6 +258,10 @@ export const UserForm: React.FC<UserFormProps> = ({ id, initialData, item, branc
 
   const selectedRole = form.watch('role');
   const isCsRole = selectedRole === 'CS';
+
+  useEffect(() => {
+    onDirtyChange?.(form.formState.isDirty);
+  }, [form.formState.isDirty, onDirtyChange]);
 
   const handleFormSubmit = (values: UserFormValues) => {
     const payload =
@@ -600,7 +605,7 @@ export const UserForm: React.FC<UserFormProps> = ({ id, initialData, item, branc
              name="password"
              render={({field}) => (
                <FormItem>
-                 <FormLabel>Password <span className="text-red-500">*</span></FormLabel>
+                 <MasterDataFieldLabel required>Password</MasterDataFieldLabel>
                  <div className="relative">
                    <FormControl>
                      <Input 
@@ -637,7 +642,14 @@ export const UserForm: React.FC<UserFormProps> = ({ id, initialData, item, branc
              name="password"
              render={({field}) => (
                <FormItem>
-                 <FormLabel>Reset Password (Opsional)</FormLabel>
+                 <MasterDataFieldLabel
+                  info={{
+                    title: 'Reset Password',
+                    description: 'Isi hanya jika ingin mengganti password pengguna ini. Kosongkan agar password lama tetap dipakai.',
+                  }}
+                 >
+                  Reset Password
+                 </MasterDataFieldLabel>
                  <div className="relative">
                    <FormControl>
                      <Input 
@@ -662,22 +674,20 @@ export const UserForm: React.FC<UserFormProps> = ({ id, initialData, item, branc
                       )}
                     </Button>
                  </div>
-                 <p className="text-[10px] text-slate-500">Isi hanya jika ingin mereset password pengguna ini.</p>
                  <FormMessage />
                </FormItem>
              )}
            />
           )}
         
-        <DialogFooter className="mt-8 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={onCancel} className="h-10 px-6">
-                Batal
-            </Button>
-            <Button type="submit" disabled={isSubmitting || emailStatus === 'invalid' || emailStatus === 'taken'} className="h-10 px-6 bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]">
-                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                Simpan
-            </Button>
-        </DialogFooter>
+        {onCancel && (
+          <MasterDataFormActions
+            className="mt-8"
+            isSubmitting={isSubmitting}
+            onCancel={onCancel}
+            submitDisabled={emailStatus === 'invalid' || emailStatus === 'taken'}
+          />
+        )}
 
       </form>
     </Form>

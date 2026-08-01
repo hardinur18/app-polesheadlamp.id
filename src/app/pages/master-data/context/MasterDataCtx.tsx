@@ -135,7 +135,7 @@ type MutationOptions = {
 };
 
 const shouldUseLocalProfileFallback =
-  import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
+  import.meta.env.VITE_AUTH_MODE === 'local';
 
 const buildLocalProfileFallbackUser = (session: Session): User => ({
   id: session.user.id || 'local-owner',

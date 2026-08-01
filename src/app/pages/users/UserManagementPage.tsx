@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
-  Search, Plus, MoreVertical, Edit, Trash2, Lock, Shield, Calendar, Loader2, Users, Headphones, Wrench, Briefcase, Target, Banknote, UserCog, ShieldAlert, Crown, History, RotateCcw, Filter, Download, ChevronDown, ChevronUp, MapPin
+  Search, Plus, MoreVertical, Edit, Trash2, Lock, Shield, Users, Headphones, Wrench, Target, Banknote, UserCog, ShieldAlert, Crown, Filter, Download, ChevronDown, ChevronUp, Mail, Phone, Building2, IdCard
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../../components/ui/table';
+import { ControlPanel, ControlRow, SearchBox } from '../../components/ui/control-panel';
+import { DataTable, TableActionCell, TableActionHeader, TableText } from '../../components/ui/data-table';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  useMasterDataFormCloseGuard,
+} from '../../components/ui/master-data-ui';
+import { Tabs, TabsRail, TabsTrigger, TabsViewport } from '../../components/ui/tabs';
+import {
+  Dialog, DialogHeader, DialogTitle, DialogDescription
 } from '../../components/ui/dialog';
 import {
   DropdownMenu,
@@ -40,27 +43,37 @@ import { Badge } from '../../components/ui/badge';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { usePermissions } from '@/app/hooks/usePermissions';
-import { isAdvertiserRole, isCsRole, isRole, normalizeRole } from '@/app/data/roleHelpers';
+import { isCsRole, isRole, normalizeRole } from '@/app/data/roleHelpers';
 import { logActivity } from '@/app/services/auditService';
+import { getSessionAccessToken } from '@/app/services/internal/sessionClientHeaders';
 import { User, Role } from '../master-data/data';
 import { toast } from 'sonner';
 import { UserForm } from './UserForm';
 import { PasswordResetDialog } from './PasswordResetDialog';
 import { UserPermissionsDialog } from './UserPermissionsDialog';
-import { AdvertiserAccessModal } from '../master-data/modals/AdvertiserAccessModal';
 import { cn } from '../../components/ui/utils';
 
 // Inner component that uses the context
 const UserManagementContent = () => {
-  const { users, currentRole, createSystemUser, updateSystemUser, deleteSystemUser, resetUserPassword, branches, platforms, subChannels, currentUser } = useMasterData();
+  const {
+    users,
+    currentRole,
+    createSystemUser,
+    updateSystemUser,
+    deleteSystemUser,
+    resetUserPassword,
+    branches,
+    currentUser,
+    adAccounts,
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    platforms,
+    subChannels,
+  } = useMasterData();
   const { hasPermission, fetchUserCustomPermissions } = usePermissions();
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<User['status'] | 'all'>('active');
-  
-  // Advertiser Config Dialog State
-  const [isAdvertiserConfigOpen, setIsAdvertiserConfigOpen] = useState(false);
-  const [selectedAdvertiser, setSelectedAdvertiser] = useState<User | null>(null);
 
   // Permissions Dialog State
   const [isPermOpen, setIsPermOpen] = useState(false);
@@ -71,13 +84,26 @@ const UserManagementContent = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResetSubmitting, setIsResetSubmitting] = useState(false);
   const [editingItem, setEditingItem] = useState<User | null>(null);
+  const [detailUser, setDetailUser] = useState<User | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [userToReset, setUserToReset] = useState<User | null>(null);
   const [customAccessMap, setCustomAccessMap] = useState<Record<string, boolean>>({});
+  const [isUserFormDirty, setIsUserFormDirty] = useState(false);
 
   // Expanded/Collapsed state for role cards (optional, all expanded by default)
   const [expandedRoles, setExpandedRoles] = useState<Record<string, boolean>>({});
+
+  const closeUserForm = () => {
+    setIsAddOpen(false);
+    setEditingItem(null);
+    setIsUserFormDirty(false);
+  };
+
+  const userFormCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isAddOpen && isUserFormDirty,
+    onClose: closeUserForm,
+  });
 
   const toggleRoleExpand = (label: string) => {
       setExpandedRoles(prev => ({...prev, [label]: !prev[label]}));
@@ -85,13 +111,13 @@ const UserManagementContent = () => {
 
   // Dashboard Stats & Group Configuration
   const roleGroups = [
-    { label: 'Owner', role: 'Owner', icon: Crown, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800', headerBg: 'bg-white dark:bg-slate-900' },
-    { label: 'Super Admin', role: 'Super Admin', icon: ShieldAlert, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800', headerBg: 'bg-white dark:bg-slate-900' },
-    { label: 'Admin PIC', role: 'Admin PIC', icon: UserCog, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-900/20', border: 'border-pink-200 dark:border-pink-800', headerBg: 'bg-white dark:bg-slate-900' },
-    { label: 'Finance', role: 'Finance', icon: Banknote, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800', headerBg: 'bg-white dark:bg-slate-900' },
-    { label: 'Advertiser', role: 'Advertiser', icon: Target, color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-900/20', border: 'border-cyan-200 dark:border-cyan-800', headerBg: 'bg-white dark:bg-slate-900' },
-    { label: 'CS', role: 'CS', icon: Headphones, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800', headerBg: 'bg-white dark:bg-slate-900' },
-    { label: 'Teknisi', role: ['Teknisi', 'Technician'], icon: Wrench, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800', headerBg: 'bg-white dark:bg-slate-900' },
+    { label: 'Owner', role: 'Owner', icon: Crown, tone: 'violet', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+    { label: 'Super Admin', role: 'Super Admin', icon: ShieldAlert, tone: 'rose', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' },
+    { label: 'Admin PIC', role: 'Admin PIC', icon: UserCog, tone: 'pink', color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-900/20' },
+    { label: 'Finance', role: 'Finance', icon: Banknote, tone: 'emerald', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+    { label: 'Advertiser', role: 'Advertiser', icon: Target, tone: 'cyan', color: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-50 dark:bg-cyan-900/20' },
+    { label: 'CS', role: 'CS', icon: Headphones, tone: 'blue', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+    { label: 'Teknisi', role: ['Teknisi', 'Technician'], icon: Wrench, tone: 'amber', color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20' },
   ];
 
   const visibleRoleGroups = roleGroups.filter(group => {
@@ -124,7 +150,6 @@ const UserManagementContent = () => {
   const canDeleteUsers = hasPermission('users.delete');
   const canManageCustomAccess = hasPermission('role_permissions.manage');
   const canOpenAnyUserActionMenu = canEditUsers || canResetPasswords || canDeleteUsers || canManageCustomAccess;
-  const canManageAdvertiserConfig = canEditUsers;
 
   useEffect(() => {
     if (!canManageCustomAccess) {
@@ -162,6 +187,105 @@ const UserManagementContent = () => {
   const getBranchName = (branchId?: string) => {
     if (!branchId) return '-';
     return branches.find(b => b.id === branchId)?.name || '-';
+  };
+
+  const formatUserDate = (value?: string) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(date);
+  };
+
+  const getEmploymentStatusLabel = (value?: User['employmentStatus']) => {
+    if (value === 'permanent') return 'Tetap';
+    if (value === 'freelance') return 'Freelance';
+    if (value === 'training') return 'Training';
+    return '-';
+  };
+
+  const getRoleVisual = (role: string) => {
+    return roleGroups.find((group) => matchesRoleDefinition(role, group.role)) || roleGroups[0];
+  };
+
+  const getPlatformName = (platformId?: string) => {
+    if (!platformId) return '-';
+    return platforms.find((platform) => platform.id === platformId)?.name || '-';
+  };
+
+  const getSubChannelName = (subChannelId?: string | null) => {
+    if (!subChannelId) return undefined;
+    return subChannels.find((subChannel) => subChannel.id === subChannelId)?.name;
+  };
+
+  const isActiveAssignmentWindow = (assignment: { status?: string; startDate?: string; endDate?: string | null }) => {
+    if (assignment.status && assignment.status !== 'active') return false;
+    const today = new Date().toISOString().slice(0, 10);
+    if (assignment.startDate && assignment.startDate > today) return false;
+    if (assignment.endDate && assignment.endDate < today) return false;
+    return true;
+  };
+
+  const getAdvertiserAccountRelations = (userId: string) => {
+    const relationMap = new Map<string, { accountName: string; platformName: string; subChannelName?: string }>();
+
+    adAccounts
+      .filter((account) => account.advertiserId === userId)
+      .forEach((account) => {
+        relationMap.set(account.id, {
+          accountName: account.accountName,
+          platformName: getPlatformName(account.platformId),
+          subChannelName: getSubChannelName(account.subChannelId),
+        });
+      });
+
+    adAccountOwnerAssignments
+      .filter((assignment) => assignment.advertiserId === userId && isActiveAssignmentWindow(assignment))
+      .forEach((assignment) => {
+        const account = adAccounts.find((item) => item.id === assignment.adAccountId);
+        if (!account) return;
+        relationMap.set(account.id, {
+          accountName: account.accountName,
+          platformName: getPlatformName(account.platformId),
+          subChannelName: getSubChannelName(account.subChannelId),
+        });
+      });
+
+    return Array.from(relationMap.values());
+  };
+
+  const getCsAccountRelations = (userId: string) => {
+    return adAccountAssignments
+      .filter((assignment) => assignment.csId === userId && isActiveAssignmentWindow(assignment))
+      .map((assignment) => {
+        const account = adAccounts.find((item) => item.id === assignment.adAccountId);
+        if (!account) return null;
+
+        return {
+          accountName: account.accountName,
+          platformName: getPlatformName(account.platformId),
+          subChannelName: getSubChannelName(assignment.subChannelId || account.subChannelId),
+        };
+      })
+      .filter(Boolean) as Array<{ accountName: string; platformName: string; subChannelName?: string }>;
+  };
+
+  const openUserDetail = (item: User) => {
+    setDetailUser(item);
+  };
+
+  const ensureBackendSession = async () => {
+    try {
+      await getSessionAccessToken();
+      return true;
+    } catch {
+      toast.error('Session login tidak ditemukan. Silakan login ulang sebelum menyimpan perubahan.');
+      return false;
+    }
   };
 
   const getRoleForFilter = (statRole: string | string[]) => {
@@ -239,6 +363,8 @@ const UserManagementContent = () => {
       return;
     }
 
+    if (!(await ensureBackendSession())) return;
+
     setIsSubmitting(true);
     try {
       if (editingItem) {
@@ -282,8 +408,7 @@ const UserManagementContent = () => {
           );
         }
       }
-      setIsAddOpen(false);
-      setEditingItem(null);
+      closeUserForm();
     } catch (error: any) {
       console.error("Error saving user:", error);
       toast.error(error.message || "Gagal menyimpan data pengguna");
@@ -301,6 +426,10 @@ const UserManagementContent = () => {
 
     if (deleteId) {
       try {
+        if (!(await ensureBackendSession())) {
+          setDeleteId(null);
+          return;
+        }
         const userToDelete = users.find(u => u.id === deleteId);
         await deleteSystemUser(deleteId);
         if (currentUser && userToDelete) {
@@ -328,6 +457,7 @@ const UserManagementContent = () => {
 
     setIsResetSubmitting(true);
     try {
+      if (!(await ensureBackendSession())) return;
       await resetUserPassword(userToReset.id, password);
       toast.success("Password berhasil direset");
       if (currentUser) {
@@ -463,12 +593,16 @@ Password : `;
     const canResetThisUserPassword = canResetPasswords;
     const canDeleteThisUser = canDeleteUsers;
     const canManageThisUserAccess = canManageCustomAccess;
-    const canConfigureAdvertiser = canManageAdvertiserConfig && isAdvertiserRole(item.role);
 
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className={triggerClassName}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={triggerClassName}
+            onClick={(e) => e.stopPropagation()}
+          >
             <MoreVertical className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -479,7 +613,7 @@ Password : `;
           )}
 
           {canEditThisUser && (
-            <DropdownMenuItem onClick={() => { setEditingItem(item); setIsAddOpen(true); }} className="cursor-pointer text-slate-600 dark:text-slate-300 focus:bg-slate-50 dark:focus:bg-slate-800 rounded-lg px-2 py-2 mb-0.5">
+            <DropdownMenuItem onClick={() => { setIsUserFormDirty(false); setEditingItem(item); setIsAddOpen(true); }} className="cursor-pointer text-slate-600 dark:text-slate-300 focus:bg-slate-50 dark:focus:bg-slate-800 rounded-lg px-2 py-2 mb-0.5">
               <Edit className="w-4 h-4 mr-2.5 text-blue-500" />
               <span className="font-medium">Edit Profil</span>
             </DropdownMenuItem>
@@ -489,16 +623,6 @@ Password : `;
             <DropdownMenuItem onClick={() => { setUserToReset(item); setIsResetOpen(true); }} className="cursor-pointer text-slate-600 dark:text-slate-300 focus:bg-slate-50 dark:focus:bg-slate-800 rounded-lg px-2 py-2 mb-0.5">
               <Lock className="w-4 h-4 mr-2.5 text-slate-500" />
               <span className="font-medium">Reset Password</span>
-            </DropdownMenuItem>
-          )}
-
-          {canConfigureAdvertiser && (
-            <DropdownMenuItem onClick={() => {
-              setSelectedAdvertiser(item);
-              setIsAdvertiserConfigOpen(true);
-            }} className="cursor-pointer text-slate-600 dark:text-slate-300 focus:bg-slate-50 dark:focus:bg-slate-800 rounded-lg px-2 py-2 mb-0.5">
-              <Target className="w-4 h-4 mr-2.5 text-cyan-600" />
-              <span className="font-medium">Konfigurasi Platform</span>
             </DropdownMenuItem>
           )}
 
@@ -527,83 +651,82 @@ Password : `;
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-4 md:p-8 pb-48 md:pb-32 font-sans">
-      <div className="max-w-[1600px] mx-auto space-y-8">
+    <div className="opsPageShell userAccessPage pb-48 md:pb-32">
+      <div className="userAccessContent">
         
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 md:pb-6">
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Pengguna & Akses</h1>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <p className="text-slate-500 text-xs md:text-sm">Manajemen akun staff dan hak akses sistem.</p>
-                    <span className="hidden md:inline text-slate-300 mx-2">|</span>
-                    <span className="text-slate-400 text-[10px] md:text-xs flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-                        <Users className="w-3 h-3" />
-                        Total: {filteredSummaryUsers.length} Users
-                    </span>
-                </div>
+        <div className="topbar userAccessTopbar">
+          <div className="topbarTitle">
+            <div className="eyebrowLine">
+              <Shield className="h-4 w-4" />
+              Sistem & Akses
             </div>
-            <div className="flex gap-2 w-full md:w-auto">
-                 {canCreateUsers && (
-                    <Button 
-                      className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50 dark:shadow-none"
-                      onClick={() => {
-                        setEditingItem(null);
-                        setIsAddOpen(true);
-                      }}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Tambah Pengguna
-                    </Button>
-                 )}
+            <h1>Pengguna & Akses</h1>
+            <p>
+              Manajemen akun staff, status kerja, dan hak akses sistem.
+              <span className="userAccessHeaderCount">
+                <Users className="h-3.5 w-3.5" />
+                {filteredSummaryUsers.length} pengguna
+              </span>
+            </p>
+          </div>
+          {canCreateUsers && (
+            <div className="topbarActions">
+              <Button
+                className="masterDataActionButton"
+                onClick={() => {
+                  setIsUserFormDirty(false);
+                  setEditingItem(null);
+                  setIsAddOpen(true);
+                }}
+              >
+                <Plus /> Tambah Pengguna
+              </Button>
             </div>
+          )}
         </div>
 
-        {/* Global Stats Grid (Click to filter) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 md:gap-4">
-           {visibleRoleGroups.map((stat, index) => {
-             const filterValue = getRoleForFilter(stat.role);
-             const isActive = selectedRole === filterValue;
-             const count = getRoleCount(stat.role);
+        <Tabs value={selectedRole} onValueChange={setSelectedRole} className="userAccessRoleTabsShell">
+          <TabsViewport>
+            <TabsRail className="masterDataTabs userAccessRoleTabs min-w-max">
+              <TabsTrigger value="all" className="masterDataTab userAccessRoleTab">
+                <Users className="h-4 w-4" />
+                <span>Semua</span>
+                <strong>{filteredSummaryUsers.length}</strong>
+              </TabsTrigger>
 
-             return (
-                <button
-                    key={index}
-                    onClick={() => setSelectedRole(prev => prev === filterValue ? 'all' : filterValue)}
-                    className={cn(
-                        "flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200 relative overflow-hidden group",
-                        isActive 
-                            ? `bg-white dark:bg-slate-900 ring-2 ring-blue-500 border-transparent shadow-md`
-                            : `bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm`
-                    )}
-                >
-                    <div className={cn("p-2 rounded-full mb-2 transition-colors", stat.bg, stat.color)}>
-                        <stat.icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-0.5">{count}</span>
-                    <span className="text-[10px] uppercase font-semibold text-slate-500 dark:text-slate-400 tracking-wider text-center line-clamp-1">{stat.label}</span>
-                    
-                    {isActive && (
-                        <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                    )}
-                </button>
-             )
-           })}
-        </div>
+              {visibleRoleGroups.map((stat) => {
+                const filterValue = getRoleForFilter(stat.role);
+                const count = getRoleCount(stat.role);
+                const Icon = stat.icon;
+
+                return (
+                  <TabsTrigger
+                    key={stat.label}
+                    value={filterValue}
+                    className={cn('masterDataTab userAccessRoleTab', `tone-${stat.tone}`)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{stat.label}</span>
+                    <strong>{count}</strong>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsRail>
+          </TabsViewport>
+        </Tabs>
 
         {/* Global Toolbar */}
-        <div className="flex flex-col md:flex-row justify-between gap-4 sticky top-4 z-30 bg-slate-50/95 dark:bg-slate-950/95 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm backdrop-blur-sm">
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:max-w-4xl">
-                <div className="relative w-full sm:flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <Input
-                        placeholder="Cari user (nama, email, role, nomor)..."
-                        className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:ring-blue-500"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
+        <ControlPanel aria-label="Filter pengguna" className="userAccessControlPanel">
+          <ControlRow className="userAccessControlRow">
+            <SearchBox
+              placeholder="Cari user, email, role, nomor..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="userAccessFilterGroup">
                 <Select value={selectedRole} onValueChange={setSelectedRole}>
-                    <SelectTrigger className="w-full sm:w-[180px] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                    <SelectTrigger className="userAccessSelect">
                         <Filter className="w-3.5 h-3.5 mr-2 text-slate-400" />
                         <SelectValue placeholder="Filter Role" />
                     </SelectTrigger>
@@ -615,7 +738,7 @@ Password : `;
                     </SelectContent>
                 </Select>
                 <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as User['status'] | 'all')}>
-                    <SelectTrigger className="w-full sm:w-[200px] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                    <SelectTrigger className="userAccessSelect">
                         <Users className="w-3.5 h-3.5 mr-2 text-slate-400" />
                         <SelectValue placeholder="Status Karyawan" />
                     </SelectTrigger>
@@ -625,13 +748,12 @@ Password : `;
                         <SelectItem value="inactive">Nonaktif</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
-            <div className="flex gap-2">
-                <Button variant="outline" size="icon" className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 hover:text-blue-600">
+                <Button variant="outline" size="icon" className="userAccessIconButton">
                     <Download className="w-4 h-4" />
                 </Button>
             </div>
-        </div>
+          </ControlRow>
+        </ControlPanel>
 
         {/* Role Cards Section */}
         <div className="space-y-8">
@@ -651,71 +773,82 @@ Password : `;
 
                 const isExpanded = expandedRoles[group.label] !== false; // Default true
                 const isCsGroup = normalizeRole(getRoleForFilter(group.role)) === 'CS';
+                const tableColumnCount = 6 + (isCsGroup ? 1 : 0) + (canOpenAnyUserActionMenu ? 1 : 0);
 
                 return (
-                    <Card key={group.label} className={cn("overflow-hidden border transition-shadow hover:shadow-md bg-white dark:bg-slate-900", group.border)}>
-                        <CardHeader 
-                            className={cn("py-4 px-6 flex flex-row items-center justify-between cursor-pointer select-none", group.headerBg)}
+                    <div key={group.label} className={cn("userAccessRolePanel", `tone-${group.tone}`)}>
+                        <div
+                            className="userAccessRoleHeader"
                             onClick={() => toggleRoleExpand(group.label)}
                         >
-                            <div className="flex items-center gap-3">
-                                <div className={cn("p-2 rounded-lg bg-white dark:bg-slate-900 shadow-sm", group.color)}>
+                            <div className="userAccessRoleHeaderTitle">
+                                <div className="userAccessRoleIcon">
                                     <group.icon className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+                                    <h2>
                                         {group.label}
-                                        <Badge variant="secondary" className="bg-white/80 dark:bg-black/20 text-slate-600 dark:text-slate-300 ml-2">
-                                            {groupUsers.length} User
-                                        </Badge>
-                                    </CardTitle>
+                                    </h2>
+                                    <p>{groupUsers.length} pengguna dalam role ini</p>
                                 </div>
                             </div>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-white/50 dark:hover:bg-black/20">
+                            <Button variant="ghost" size="sm" className="userAccessCollapseButton">
                                 {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                             </Button>
-                        </CardHeader>
+                        </div>
                         
                         {isExpanded && (
-                            <CardContent className="p-0">
+                            <div className="p-0">
                                 {/* Desktop Table View */}
-                                <div className="hidden md:block overflow-x-auto">
-                                    <Table>
-                                        <TableHeader className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-700">
-                                            <TableRow className="hover:bg-transparent">
-                                                <TableHead className="py-3 pl-6 w-[72px] font-semibold text-xs text-slate-500 uppercase">No</TableHead>
-                                                <TableHead className="py-3 pl-6 w-[120px] font-semibold text-xs text-slate-500 uppercase">ID</TableHead>
-                                                <TableHead className="py-3 w-[280px] font-semibold text-xs text-slate-500 uppercase">User Info</TableHead>
-                                                <TableHead className="py-3 font-semibold text-xs text-slate-500 uppercase">Status</TableHead>
-                                                <TableHead className="py-3 font-semibold text-xs text-slate-500 uppercase">Cabang</TableHead>
-                                                <TableHead className="py-3 font-semibold text-xs text-slate-500 uppercase">Kontak</TableHead>
+                                <div className="hidden md:block">
+                                    <DataTable
+                                      actionWidth={82}
+                                      cellY={12}
+                                      columns={[72, 120, 320, 240, 200, 200, isCsGroup ? 200 : null, canOpenAnyUserActionMenu ? 82 : null]}
+                                      minWidth={isCsGroup ? 1434 : 1234}
+                                      rowMinHeight={72}
+                                    >
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th className="text-center">No</th>
+                                                <th>ID</th>
+                                                <th>User Info</th>
+                                                <th>Status</th>
+                                                <th>Cabang</th>
+                                                <th>Kontak</th>
                                                 {isCsGroup && (
-                                                    <TableHead className="py-3 font-semibold text-xs text-slate-500 uppercase">No CS Kantor</TableHead>
+                                                    <th>No CS Kantor</th>
                                                 )}
-                                                <TableHead className="py-3 font-semibold text-xs text-slate-500 uppercase text-right pr-6">Aksi</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
+                                                {canOpenAnyUserActionMenu && <TableActionHeader />}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
                                             {groupUsers.length > 0 ? (
                                                 groupUsers.map((item, index) => (
-                                                    <TableRow 
-                                                        key={item.id} 
-                                                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0 cursor-pointer"
-                                                        onClick={() => {
-                                                            // Optional: Scroll to top or just open detail? For now just simple log or no-op
+                                                    <tr
+                                                        key={item.id}
+                                                        className="userAccessDataRow"
+                                                        tabIndex={0}
+                                                        onClick={() => openUserDetail(item)}
+                                                        onKeyDown={(event) => {
+                                                          if (event.key === 'Enter' || event.key === ' ') {
+                                                            event.preventDefault();
+                                                            openUserDetail(item);
+                                                          }
                                                         }}
                                                     >
-                                                        <TableCell className="pl-6 py-4">
-                                                            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                                                        <td className="monoCell text-center">
+                                                            <span>
                                                                 {index + 1}
                                                             </span>
-                                                        </TableCell>
-                                                        <TableCell className="pl-6 py-4">
+                                                        </td>
+                                                        <td>
                                                             <span className="font-mono text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
                                                                 {formatDisplayId(item.id)}
                                                             </span>
-                                                        </TableCell>
-                                                        <TableCell className="py-4">
+                                                        </td>
+                                                        <td>
                                                             <div className="flex items-center gap-3">
                                                                 <Avatar className="h-9 w-9 border border-slate-200 dark:border-slate-700">
                                                                     <AvatarImage src={item.avatar || ''} />
@@ -735,8 +868,8 @@ Password : `;
                                                                     <span className="text-xs text-slate-500 truncate">{item.email}</span>
                                                                 </div>
                                                             </div>
-                                                        </TableCell>
-                                                        <TableCell className="py-4">
+                                                        </td>
+                                                        <td>
                                                             <div className="flex flex-wrap items-center gap-1.5">
                                                                 <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5 font-medium border", getRoleBadgeColor(item.role))}>
                                                                     {item.role}
@@ -747,35 +880,38 @@ Password : `;
                                                                     item.status === 'active' ? "bg-emerald-500" : "bg-slate-300"
                                                                 )} title={item.status} />
                                                             </div>
-                                                        </TableCell>
-                                                        <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span className={cn("w-1.5 h-1.5 rounded-full", item.branchId ? "bg-blue-400" : "bg-slate-300")} />
-                                                                {getBranchName(item.branchId)}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="py-4">
+                                                        </td>
+                                                        <td>
+                                                            <TableText
+                                                              primary={getBranchName(item.branchId)}
+                                                              primaryClassName={!item.branchId ? 'text-slate-400 dark:text-slate-500' : undefined}
+                                                            />
+                                                        </td>
+                                                        <td>
                                                             {renderContact(item)}
-                                                        </TableCell>
+                                                        </td>
                                                         {isCsGroup && (
-                                                            <TableCell className="py-4">
+                                                            <td>
                                                                 {renderCsOfficeContact(item)}
-                                                            </TableCell>
+                                                            </td>
                                                         )}
-                                                        <TableCell className="py-4 pr-6 text-right">
-                                                            {renderUserActionMenu(item, 'h-8 w-8 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200')}
-                                                        </TableCell>
-                                                    </TableRow>
+                                                        {canOpenAnyUserActionMenu && (
+                                                          <TableActionCell>
+                                                              {renderUserActionMenu(item, 'h-8 w-8 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200')}
+                                                          </TableActionCell>
+                                                        )}
+                                                    </tr>
                                                 ))
                                             ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={isCsGroup ? 8 : 7} className="h-24 text-center text-slate-400 italic bg-slate-50/20 dark:bg-slate-900/20">
+                                                <tr>
+                                                    <td colSpan={tableColumnCount} className="h-24 text-center text-slate-400 italic bg-slate-50/20 dark:bg-slate-900/20">
                                                         Belum ada user untuk role ini.
-                                                    </TableCell>
-                                                </TableRow>
+                                                    </td>
+                                                </tr>
                                             )}
-                                        </TableBody>
-                                    </Table>
+                                        </tbody>
+                                    </table>
+                                    </DataTable>
                                 </div>
 
                                 {/* Mobile List View */}
@@ -783,7 +919,18 @@ Password : `;
                                     {groupUsers.length > 0 ? (
                                         <div className="divide-y divide-slate-100 dark:divide-slate-800">
                                             {groupUsers.map((item, index) => (
-                                                <div key={item.id} className="p-4 flex items-start gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors">
+                                                <div
+                                                  key={item.id}
+                                                  className="userAccessMobileItem p-4 flex items-start gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors"
+                                                  tabIndex={0}
+                                                  onClick={() => openUserDetail(item)}
+                                                  onKeyDown={(event) => {
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                      event.preventDefault();
+                                                      openUserDetail(item);
+                                                    }
+                                                  }}
+                                                >
                                                     <Avatar className="h-10 w-10 border border-slate-100 dark:border-slate-700 flex-shrink-0">
                                                         <AvatarImage src={item.avatar || ''} />
                                                         <AvatarFallback className={cn("text-xs font-bold", group.bg, group.color)}>
@@ -848,9 +995,9 @@ Password : `;
                                         </div>
                                     )}
                                 </div>
-                            </CardContent>
+                            </div>
                         )}
-                    </Card>
+                    </div>
                 );
             })}
             
@@ -872,10 +1019,183 @@ Password : `;
         </div>
 
         {/* Dialogs */}
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto border-none shadow-2xl">
+        <Dialog open={Boolean(detailUser)} onOpenChange={(open) => !open && setDetailUser(null)}>
+          {detailUser && (() => {
+            const visual = getRoleVisual(detailUser.role);
+            const RoleIcon = visual.icon;
+            const isCsUser = isCsRole(detailUser.role);
+            const advertiserRelations = getAdvertiserAccountRelations(detailUser.id);
+            const csRelations = getCsAccountRelations(detailUser.id);
+            const detailSections = [
+              {
+                title: 'Identitas',
+                icon: IdCard,
+                rows: [
+                  { label: 'ID User', value: formatDisplayId(detailUser.id) },
+                  { label: 'Role', value: detailUser.role },
+                  { label: 'Status Kerja', value: getEmploymentStatusLabel(detailUser.employmentStatus) },
+                  { label: 'Tanggal Masuk', value: formatUserDate(detailUser.joinDate) },
+                  { label: 'Last Login', value: formatUserDate(detailUser.lastLogin) },
+                ],
+              },
+              {
+                title: 'Operasional',
+                icon: Building2,
+                rows: [
+                  { label: 'Cabang', value: detailUser.branchId ? getBranchName(detailUser.branchId) : undefined },
+                  { label: 'CS Display', value: isCsUser ? detailUser.csDisplayName : undefined },
+                  { label: 'Status CS', value: isCsUser ? detailUser.csAssignmentStatus : undefined },
+                  { label: 'Max Chat', value: isCsUser ? detailUser.csMaxActiveChats : undefined },
+                  { label: 'Parent User', value: detailUser.parentUserId ? formatDisplayId(detailUser.parentUserId) : undefined },
+                  { label: 'Catatan CS', value: isCsUser ? detailUser.csNotes : undefined },
+                ],
+              },
+              {
+                title: 'Kontak',
+                icon: Phone,
+                rows: [
+                  { label: 'Email', value: detailUser.email, icon: <Mail className="h-3.5 w-3.5" /> },
+                  { label: 'WhatsApp', value: detailUser.phone, icon: <Phone className="h-3.5 w-3.5" /> },
+                  { label: 'No CS Kantor', value: isCsUser ? detailUser.csWhatsappNumber : undefined },
+                  { label: 'Emergency', value: detailUser.emergencyPhone },
+                ],
+              },
+              {
+                title: 'Bank',
+                icon: Banknote,
+                rows: [
+                  { label: 'Bank', value: detailUser.bankName },
+                  { label: 'No Rekening', value: detailUser.bankAccountNumber },
+                ],
+              },
+              {
+                title: 'Relasi Iklan',
+                icon: Target,
+                rows: [
+                  {
+                    label: 'Sebagai Advertiser',
+                    value: advertiserRelations.length > 0
+                      ? <UserRelationList items={advertiserRelations} />
+                      : undefined,
+                  },
+                  {
+                    label: 'Sebagai CS',
+                    value: csRelations.length > 0
+                      ? <UserRelationList items={csRelations} />
+                      : undefined,
+                  },
+                ],
+              },
+            ]
+              .map((section) => ({
+                ...section,
+                rows: section.rows.filter((row) => hasDetailValue(row.value)),
+              }))
+              .filter((section) => section.rows.length > 0);
+
+            return (
+              <MasterDataFormDialogContent size="wide" preventOutsideClose={false} className="userAccessDetailDialog">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                    <Users className="h-5 w-5 text-blue-600" />
+                    Detail Pengguna
+                  </DialogTitle>
+                  <DialogDescription>
+                    Rekapan profil, akses, cabang, dan kontak pengguna.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="userAccessDetailHero">
+                  <Avatar className="userAccessDetailAvatar">
+                    <AvatarImage src={detailUser.avatar || detailUser.avatar_url || ''} />
+                    <AvatarFallback className={cn("text-sm font-bold", visual.bg, visual.color)}>
+                      {getInitials(detailUser.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <h3>{detailUser.name}</h3>
+                    <p>{detailUser.email || 'Email belum diisi'}</p>
+                    <div className="userAccessDetailBadges">
+                      <Badge variant="outline" className={cn("border px-2.5 py-1 text-xs font-semibold", getRoleBadgeColor(detailUser.role))}>
+                        <RoleIcon className="mr-1 h-3.5 w-3.5" />
+                        {detailUser.role}
+                      </Badge>
+                      {getEmploymentStatusBadge(detailUser.employmentStatus)}
+                      <span className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
+                        detailUser.status === 'active'
+                          ? "border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-300"
+                          : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                      )}>
+                        <span className={cn("h-1.5 w-1.5 rounded-full", detailUser.status === 'active' ? "bg-emerald-500" : "bg-slate-400")} />
+                        {detailUser.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                      {hasCustomAccess(detailUser.id) && (
+                        <Badge variant="outline" className="border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                          Custom Access
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="userAccessDetailGrid">
+                  {detailSections.map((section) => {
+                    const SectionIcon = section.icon;
+
+                    return (
+                      <div key={section.title} className="userAccessDetailCard">
+                        <div className="userAccessDetailCardTitle">
+                          <SectionIcon className="h-4 w-4" />
+                          {section.title}
+                        </div>
+                        <div className="masterDataDetailRows">
+                          {section.rows.map((row) => (
+                            <UserDetailRow key={row.label} label={row.label} value={row.value} icon={row.icon} />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="userAccessDetailActions">
+                  <Button type="button" variant="outline" onClick={() => setDetailUser(null)}>
+                    Tutup
+                  </Button>
+                  {canEditUsers && (
+	                    <Button
+	                      type="button"
+	                      onClick={() => {
+	                        setIsUserFormDirty(false);
+	                        setEditingItem(detailUser);
+	                        setDetailUser(null);
+	                        setIsAddOpen(true);
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit Pengguna
+                    </Button>
+                  )}
+                </div>
+              </MasterDataFormDialogContent>
+            );
+          })()}
+        </Dialog>
+
+        <Dialog open={isAddOpen} onOpenChange={(open) => {
+          if (open) {
+            setIsAddOpen(true);
+            return;
+          }
+          userFormCloseGuard.requestClose();
+        }}>
+           <MasterDataFormDialogContent size="wide" preventOutsideClose={false} className="sm:max-w-[860px]">
               <DialogHeader>
-                 <DialogTitle>{editingItem ? 'Edit Data Pengguna' : 'Tambah Pengguna Baru'}</DialogTitle>
+                 <DialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                   <UserCog className="h-5 w-5 text-blue-600" />
+                   {editingItem ? 'Edit Data Pengguna' : 'Tambah Pengguna Baru'}
+                 </DialogTitle>
                  <DialogDescription>
                     {editingItem ? 'Perbarui informasi profil pengguna.' : 'Lengkapi formulir untuk membuat akun baru.'}
                  </DialogDescription>
@@ -883,7 +1203,8 @@ Password : `;
               <UserForm 
                   initialData={editingItem || undefined}
                   onSubmit={handleSubmit}
-                  onCancel={() => setIsAddOpen(false)}
+                  onCancel={userFormCloseGuard.requestClose}
+                  onDirtyChange={setIsUserFormDirty}
                   isSubmitting={isSubmitting}
                   branches={branches}
                   canResetPassword={canResetPasswords}
@@ -892,8 +1213,13 @@ Password : `;
                     .map((user) => user.email || '')
                     .filter(Boolean)}
               />
-           </DialogContent>
+           </MasterDataFormDialogContent>
         </Dialog>
+        <MasterDataUnsavedChangesDialog
+          open={userFormCloseGuard.isConfirmOpen}
+          onCancel={userFormCloseGuard.cancelClose}
+          onConfirm={userFormCloseGuard.confirmClose}
+        />
 
         <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
             <AlertDialogContent className="border-none shadow-2xl">
@@ -932,19 +1258,57 @@ Password : `;
             userRole={permUser?.role || ''}
         />
 
-        {/* Advertiser Access Modal */}
-        <AdvertiserAccessModal 
-            isOpen={isAdvertiserConfigOpen}
-            onClose={() => setIsAdvertiserConfigOpen(false)}
-            advertiser={selectedAdvertiser}
-            platforms={platforms || []}
-            subChannels={subChannels || []}
-            users={users || []}
-        />
-
       </div>
     </div>
   );
+};
+
+const UserDetailRow = ({
+  icon,
+  label,
+  value,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+}) => (
+  <div className="masterDataDetailRow userAccessDetailRow">
+    <span className="masterDataDetailLabel">{label}</span>
+    <span className={cn('masterDataDetailValue', value && typeof value !== 'string' && 'isComplex')}>
+      {icon ? <span className="userAccessDetailValueIcon">{icon}</span> : null}
+      {value}
+    </span>
+  </div>
+);
+
+const UserRelationList = ({
+  items,
+}: {
+  items: Array<{ accountName: string; platformName: string; subChannelName?: string }>;
+}) => (
+  <span className="userAccessRelationList">
+    {items.slice(0, 5).map((item) => (
+      <span key={`${item.platformName}-${item.accountName}-${item.subChannelName || 'all'}`} className="userAccessRelationItem">
+        <span className="userAccessRelationName">{item.accountName}</span>
+        <span className="userAccessRelationMeta">
+          {item.platformName}
+          {item.subChannelName ? ` / ${item.subChannelName}` : ''}
+        </span>
+      </span>
+    ))}
+    {items.length > 5 ? (
+      <span className="userAccessRelationMore">+{items.length - 5} lainnya</span>
+    ) : null}
+  </span>
+);
+
+const hasDetailValue = (value: React.ReactNode) => {
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed !== '' && trimmed !== '-';
+  }
+  return true;
 };
 
 // Main Export

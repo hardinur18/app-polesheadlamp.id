@@ -5,7 +5,7 @@ import appLogo from '@/assets/polesheadlamp-app-logo-round.png';
 import { router } from './routes';
 import { isSupabaseConfigured, supabaseConfigErrorMessage } from '/utils/supabase/info';
 
-const useLocalAuth = import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
+const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
 
 function ThemeClassBridge() {
   const { resolvedTheme, theme } = useTheme();

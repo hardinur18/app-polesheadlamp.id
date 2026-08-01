@@ -644,7 +644,7 @@ export function AppLayout() {
       localStorage.clear();
       sessionStorage.clear();
 
-      if (!(import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local')) {
+      if (import.meta.env.VITE_AUTH_MODE !== 'local') {
         const { error } = await supabase.auth.signOut();
         if (error) {
           console.warn('Logout warning:', error.message);

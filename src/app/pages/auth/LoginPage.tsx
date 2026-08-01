@@ -8,7 +8,7 @@ import { Loader2, Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, ShieldCheck } fro
 import { toast } from 'sonner';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
-const useLocalAuth = import.meta.env.DEV || import.meta.env.VITE_AUTH_MODE === 'local';
+const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
 
 const getLoginErrorMessage = (err: unknown) => {
   if (err instanceof Error) {
