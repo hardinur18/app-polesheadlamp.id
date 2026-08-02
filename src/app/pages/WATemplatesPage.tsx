@@ -1,30 +1,31 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { 
-  Search, Plus, MessageSquare, Edit, Trash2, MoreVertical, Copy, Check, Loader2
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  Check,
+  Copy,
+  Edit,
+  MessageSquare,
+  Plus,
+  Search,
+  Tags,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Badge } from '../components/ui/badge';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
-} from '../components/ui/dialog';
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Textarea } from '../components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
+import { AlertDialog } from '../components/ui/alert-dialog';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { TableActionMenu, TableActionMenuItem, TableActionMenuTrigger } from '../components/ui/data-table';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
-} from "../components/ui/select";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
-} from "../components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../components/ui/alert-dialog";
+  MasterDataConfirmContent,
+  MasterDataFieldLabel,
+  MasterDataFormActions,
+  MasterDataFormDialogContent,
+  MasterDataUnsavedChangesDialog,
+  useMasterDataFormCloseGuard,
+} from '../components/ui/master-data-ui';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { logActivity } from '@/app/services/auditService';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -32,176 +33,241 @@ import { WATemplate } from '@/app/pages/master-data/data';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/clipboard';
 
+type TemplateCategory = NonNullable<WATemplate['category']>;
+type TemplateFilter = TemplateCategory | 'all';
+
+const CATEGORY_ORDER: TemplateCategory[] = ['Leads', 'Orders', 'Teknisi', 'General'];
+
+const CATEGORY_META: Record<TemplateCategory, { label: string; shortLabel: string; tone: string }> = {
+  Leads: { label: 'Prospek (Leads)', shortLabel: 'Prospek', tone: 'blue' },
+  Orders: { label: 'Pesanan (Orders)', shortLabel: 'Pesanan', tone: 'violet' },
+  Teknisi: { label: 'Teknisi', shortLabel: 'Teknisi', tone: 'amber' },
+  General: { label: 'Umum', shortLabel: 'Umum', tone: 'slate' },
+};
+
+const AVAILABLE_VARIABLES = [
+  { label: 'Nama Customer', value: '[Nama]' },
+  { label: 'ID Order', value: '[Order ID]' },
+  { label: 'Tipe Mobil', value: '[Mobil]' },
+  { label: 'Alamat Lengkap', value: '[Alamat]' },
+  { label: 'Tanggal Service', value: '[Tanggal]' },
+  { label: 'Jam Service', value: '[Jam]' },
+  { label: 'Jenis Layanan', value: '[Layanan]' },
+  { label: 'Total Harga', value: '[Total]' },
+];
+
+const normalizeCategory = (category?: WATemplate['category']): TemplateCategory => category || 'General';
+
+const createTemplateId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID().slice(0, 8).toUpperCase();
+  }
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+};
+
 export const WATemplatesPage = () => {
   const { waTemplates, addWATemplate, updateWATemplate, deleteWATemplate, currentUser } = useMasterData();
   const { hasPermission } = usePermissions();
   const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  
+  const [categoryFilter, setCategoryFilter] = useState<TemplateFilter>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<WATemplate>>({});
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
-  const AVAILABLE_VARIABLES = [
-    { label: 'Nama Customer', value: '[Nama]' },
-    { label: 'ID Order', value: '[Order ID]' },
-    { label: 'Tipe Mobil', value: '[Mobil]' },
-    { label: 'Alamat Lengkap', value: '[Alamat]' },
-    { label: 'Tanggal Service', value: '[Tanggal]' },
-    { label: 'Jam Service', value: '[Jam]' },
-    { label: 'Jenis Layanan', value: '[Layanan]' },
-    { label: 'Total Harga', value: '[Total]' },
-  ];
-
-  // Filtering
   const filteredTemplates = useMemo(() => {
-    return waTemplates.filter(t => {
-      const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase()) || 
-                            t.message.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
-      
-      return matchesSearch && matchesCategory;
-    });
-  }, [waTemplates, search, categoryFilter]);
+    const normalizedSearch = search.trim().toLowerCase();
 
-  // Grouping
-  const groupedTemplates = useMemo(() => {
-    const groups: Record<string, WATemplate[]> = {
-      'Leads': [],
-      'Orders': [],
-      'Teknisi': [],
-      'General': []
-    };
-    
-    filteredTemplates.forEach(t => {
-      const cat = t.category || 'General';
-      if (groups[cat]) {
-        groups[cat].push(t);
-      } else {
-        // Fallback for unknown categories
-        if (!groups['General']) groups['General'] = [];
-        groups['General'].push(t);
-      }
+    return waTemplates.filter((template) => {
+      const category = normalizeCategory(template.category);
+      const matchesCategory = categoryFilter === 'all' || category === categoryFilter;
+      const matchesSearch = !normalizedSearch
+        || template.title.toLowerCase().includes(normalizedSearch)
+        || template.message.toLowerCase().includes(normalizedSearch)
+        || template.id.toLowerCase().includes(normalizedSearch);
+
+      return matchesCategory && matchesSearch;
     });
-    
-    return groups;
+  }, [categoryFilter, search, waTemplates]);
+
+  const groupedTemplates = useMemo(() => {
+    return CATEGORY_ORDER.reduce<Record<TemplateCategory, WATemplate[]>>((groups, category) => {
+      groups[category] = filteredTemplates.filter((template) => normalizeCategory(template.category) === category);
+      return groups;
+    }, {} as Record<TemplateCategory, WATemplate[]>);
   }, [filteredTemplates]);
 
-  // Actions
+  const categoryCounts = useMemo(() => {
+    return CATEGORY_ORDER.reduce<Record<TemplateCategory, number>>((counts, category) => {
+      counts[category] = waTemplates.filter((template) => normalizeCategory(template.category) === category).length;
+      return counts;
+    }, {} as Record<TemplateCategory, number>);
+  }, [waTemplates]);
+
+  const activeCategorySections = categoryFilter === 'all' ? CATEGORY_ORDER : [categoryFilter];
+  const templateToDelete = deleteId ? waTemplates.find((template) => template.id === deleteId) : null;
+
+  const closeFormDialog = React.useCallback(() => {
+    setIsFormDirty(false);
+    setIsDialogOpen(false);
+  }, []);
+
+  const formCloseGuard = useMasterDataFormCloseGuard({
+    hasUnsavedChanges: isFormDirty,
+    onClose: closeFormDialog,
+  });
+
+  const requestDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setIsDialogOpen(true);
+      return;
+    }
+    formCloseGuard.requestClose();
+  };
+
+  const updateForm = (patch: Partial<WATemplate>) => {
+    setEditForm((previous) => ({ ...previous, ...patch }));
+    setIsFormDirty(true);
+  };
+
   const handleAddNew = () => {
     setEditingId(null);
-    setEditForm({ category: 'General', title: '', message: '' });
+    setEditForm({ category: categoryFilter === 'all' ? 'General' : categoryFilter, title: '', message: '' });
+    setIsFormDirty(false);
     setIsDialogOpen(true);
   };
 
   const handleEdit = (template: WATemplate) => {
     setEditingId(template.id);
-    setEditForm({ ...template });
+    setEditForm({ ...template, category: normalizeCategory(template.category) });
+    setIsFormDirty(false);
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    setDeleteId(id);
-  };
+  const confirmDelete = async () => {
+    if (!deleteId) return;
 
-  const confirmDelete = () => {
-    if (deleteId) {
-      const templateToDelete = waTemplates.find(t => t.id === deleteId);
-      deleteWATemplate(deleteId);
-      toast.success('Template berhasil dihapus');
-      if (currentUser && templateToDelete) {
+    const deletedTemplate = waTemplates.find((template) => template.id === deleteId);
+
+    try {
+      await deleteWATemplate(deleteId);
+
+      if (currentUser && deletedTemplate) {
         logActivity(
           { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-          'DELETE', 'Template WhatsApp',
-          `Menghapus template WA: ${templateToDelete.title}`,
-          deleteId
+          'DELETE',
+          'Template WhatsApp',
+          `Menghapus template WA: ${deletedTemplate.title}`,
+          deleteId,
         );
       }
+
       setDeleteId(null);
+    } catch {
+      // Error toast is handled by the shared master data mutation helper.
     }
   };
 
-  const handleSave = async () => {
-    if (!editForm.title || !editForm.message) {
-      toast.error('Judul dan pesan wajib diisi');
+  const handleSave = async (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+
+    const title = editForm.title?.trim();
+    const message = editForm.message?.trim();
+    const category = normalizeCategory(editForm.category);
+
+    if (!title || !message) {
+      toast.error('Judul dan isi pesan wajib diisi');
+      return;
+    }
+
+    const categoryCount = waTemplates.filter((template) => normalizeCategory(template.category) === category).length;
+
+    if (editingId) {
+      const oldTemplate = waTemplates.find((template) => template.id === editingId);
+      if (oldTemplate && normalizeCategory(oldTemplate.category) !== category && categoryCount >= 10) {
+        toast.error(`Kategori ${CATEGORY_META[category].label} sudah mencapai batas maksimum 10 template.`);
+        return;
+      }
+    } else if (categoryCount >= 10) {
+      toast.error(`Kategori ${CATEGORY_META[category].label} sudah mencapai batas maksimum 10 template.`);
       return;
     }
 
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
 
-    if (editingId) {
-      // Check if category changed and if target category is full
-      const oldTemplate = waTemplates.find(t => t.id === editingId);
-      if (oldTemplate && oldTemplate.category !== editForm.category) {
-          const targetCategoryCount = waTemplates.filter(t => t.category === editForm.category).length;
-          if (targetCategoryCount >= 10) {
-              toast.error(`Kategori ${editForm.category} sudah mencapai batas maksimum (10 template).`);
-              setIsSubmitting(false);
-              return;
-          }
+    try {
+      if (editingId) {
+        const updatedTemplate: WATemplate = {
+          id: editingId,
+          title,
+          message,
+          category,
+          usage_count: editForm.usage_count || 0,
+        };
+
+        await updateWATemplate(updatedTemplate);
+
+        if (currentUser) {
+          logActivity(
+            { id: currentUser.id, name: currentUser.name, role: currentUser.role },
+            'UPDATE',
+            'Template WhatsApp',
+            `Memperbarui template WA: ${title}`,
+            editingId,
+          );
+        }
+      } else {
+        const newTemplate: WATemplate = {
+          id: createTemplateId(),
+          title,
+          message,
+          category,
+          usage_count: 0,
+        };
+
+        await addWATemplate(newTemplate);
+
+        if (currentUser) {
+          logActivity(
+            { id: currentUser.id, name: currentUser.name, role: currentUser.role },
+            'CREATE',
+            'Template WhatsApp',
+            `Membuat template WA baru: ${title}`,
+            newTemplate.id,
+          );
+        }
       }
 
-      updateWATemplate({ ...editForm, id: editingId } as WATemplate);
-      toast.success('Template berhasil diperbarui');
-      if (currentUser) {
-        logActivity(
-          { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-          'UPDATE', 'Template WhatsApp',
-          `Memperbarui template WA: ${editForm.title}`,
-          editingId
-        );
-      }
-    } else {
-      // Check limit for new template
-      const targetCategoryCount = waTemplates.filter(t => t.category === (editForm.category || 'General')).length;
-      if (targetCategoryCount >= 10) {
-          toast.error(`Kategori ${editForm.category || 'General'} sudah mencapai batas maksimum (10 template).`);
-          setIsSubmitting(false);
-          return;
-      }
-
-      const newTemplate: WATemplate = {
-        id: Math.random().toString(36).substring(2, 6).toUpperCase(),
-        title: editForm.title!,
-        message: editForm.message!,
-        category: (editForm.category as any) || 'General'
-      };
-      addWATemplate(newTemplate);
-      toast.success('Template berhasil dibuat');
-      if (currentUser) {
-        logActivity(
-          { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-          'CREATE', 'Template WhatsApp',
-          `Membuat template WA baru: ${newTemplate.title}`,
-          newTemplate.id
-        );
-      }
+      setIsFormDirty(false);
+      setIsDialogOpen(false);
+    } catch {
+      // Error toast is handled by the shared master data mutation helper.
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsSubmitting(false);
-    setIsDialogOpen(false);
   };
 
   const handleInsertVariable = (variable: string) => {
     const textarea = messageRef.current;
-    if (!textarea) return;
+    const text = editForm.message || '';
+
+    if (!textarea) {
+      updateForm({ message: `${text}${variable}` });
+      return;
+    }
 
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const text = editForm.message || '';
-    
     const newText = text.substring(0, start) + variable + text.substring(end);
-    
-    setEditForm(prev => ({ ...prev, message: newText }));
-    
-    // Restore focus and cursor position
-    setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + variable.length, start + variable.length);
+
+    updateForm({ message: newText });
+
+    window.setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + variable.length, start + variable.length);
     }, 0);
   };
 
@@ -209,258 +275,260 @@ export const WATemplatesPage = () => {
     copyToClipboard(text, { successMessage: 'Pesan disalin ke clipboard' });
   };
 
-  const getCategoryColor = (cat?: string) => {
-      switch(cat) {
-          case 'Leads': return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800';
-          case 'Orders': return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800';
-          case 'Teknisi': return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800';
-          default: return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-700';
-      }
-  };
-
-  const getCategoryLabel = (cat: string) => {
-      switch(cat) {
-          case 'Leads': return 'Prospek (Leads)';
-          case 'Orders': return 'Pesanan (Orders)';
-          case 'Teknisi': return 'Teknisi';
-          default: return 'Umum';
-      }
-  };
-
   return (
-    <div className="p-4 md:p-8 w-full max-w-[1600px] mx-auto min-h-screen bg-slate-50/50 dark:bg-slate-950 transition-colors duration-300">
-      <div className="flex flex-col space-y-6">
-        
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
-                <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-500" />
-                Template WhatsApp
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Kelola pesan standar untuk respon cepat ke pelanggan</p>
+    <main className="opsPageShell waTemplatePage pb-48 md:pb-32">
+      <div className="waTemplateInner">
+        <section className="topbar waTemplateTopbar">
+          <div className="topbarTitle">
+            <div className="eyebrowLine">
+              <MessageSquare className="h-4 w-4" />
+              Sistem & Akses
+            </div>
+            <h1>Template WhatsApp</h1>
+            <p>
+              Kelola pesan standar untuk respons cepat pelanggan, order, dan teknisi.
+              <span className="waTemplateHeaderCount">
+                <MessageSquare className="h-3.5 w-3.5" />
+                {filteredTemplates.length} dari {waTemplates.length} template
+              </span>
+            </p>
           </div>
-          {hasPermission('wa_template.create') && (
-            <Button 
-                className="bg-green-600 hover:bg-green-700 text-white shadow-sm dark:bg-green-600 dark:hover:bg-green-700"
-                onClick={handleAddNew}
-            >
-                <Plus className="mr-2 h-4 w-4" /> Buat Template Baru
-            </Button>
-          )}
-        </div>
 
-        {/* Filters */}
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between transition-colors">
-            <div className="flex items-center gap-2 w-full md:w-auto">
-                <div className="relative w-full md:w-64">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-                    <Input 
-                        placeholder="Cari template..." 
-                        className="pl-9 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-slate-200"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
-                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-[180px] bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-slate-200">
-                        <SelectValue placeholder="Semua Kategori" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white dark:bg-slate-800 z-[9999] border border-slate-200 dark:border-slate-700 shadow-xl">
-                        <SelectItem value="all" className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">Semua Kategori</SelectItem>
-                        <SelectItem value="Leads" className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">Prospek (Leads)</SelectItem>
-                        <SelectItem value="Orders" className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">Pesanan (Orders)</SelectItem>
-                        <SelectItem value="Teknisi" className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">Teknisi</SelectItem>
-                        <SelectItem value="General" className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">Umum</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400 hidden md:block">
-                Menampilkan <strong>{filteredTemplates.length}</strong> template
-            </div>
-        </div>
+          <div className="topbarActions">
+            {hasPermission('wa_template.create') ? (
+              <Button type="button" onClick={handleAddNew} icon={<Plus className="h-4 w-4" />}>
+                Buat Template Baru
+              </Button>
+            ) : null}
+          </div>
+        </section>
 
-        {/* Content Grid */}
-        <div className="space-y-8">
-            {filteredTemplates.length === 0 ? (
-                <div className="py-12 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 transition-colors">
-                    <div className="mx-auto w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-3">
-                        <MessageSquare className="w-6 h-6 text-slate-400 dark:text-slate-500" />
-                    </div>
-                    <h3 className="text-lg font-medium text-slate-900 dark:text-slate-200">Tidak ada template ditemukan</h3>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Coba ubah filter pencarian atau buat template baru.</p>
+      <section className="controlPanel filterPanel waTemplateFilterPanel">
+        <div className="waTemplateFilterGrid">
+          <label className="searchBox waTemplateSearchBox">
+            <Search className="h-4 w-4" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Cari judul, isi pesan, atau ID template..."
+            />
+          </label>
+
+          <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as TemplateFilter)}>
+            <SelectTrigger aria-label="Filter kategori template">
+              <SelectValue placeholder="Semua Kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Kategori</SelectItem>
+              {CATEGORY_ORDER.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {CATEGORY_META[category].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </section>
+
+      <section className="waTemplateTabsShell">
+        <Tabs value={categoryFilter} onValueChange={(value) => setCategoryFilter(value as TemplateFilter)}>
+          <TabsList className="waTemplateTabs">
+            <TabsTrigger value="all">
+              <Tags className="h-4 w-4" />
+              Semua
+              <span>{waTemplates.length}</span>
+            </TabsTrigger>
+            {CATEGORY_ORDER.map((category) => (
+              <TabsTrigger key={category} value={category}>
+                {CATEGORY_META[category].shortLabel}
+                <span>{categoryCounts[category]}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </section>
+
+      <section className="waTemplateContent">
+        {filteredTemplates.length === 0 ? (
+          <div className="waTemplateEmptyState">
+            <span>
+              <MessageSquare className="h-7 w-7" />
+            </span>
+            <strong>Tidak ada template ditemukan</strong>
+            <p>Coba ubah pencarian atau kategori, lalu buat template baru jika memang belum tersedia.</p>
+          </div>
+        ) : (
+          activeCategorySections.map((category) => {
+            const templates = groupedTemplates[category] || [];
+            if (templates.length === 0) return null;
+
+            return (
+              <div key={category} className="waTemplateSection">
+                <div className="waTemplateSectionHeader">
+                  <div className={`waTemplateSectionIcon tone-${CATEGORY_META[category].tone}`}>
+                    <MessageSquare className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2>{CATEGORY_META[category].label}</h2>
+                    <p>{templates.length} template aktif dalam kategori ini</p>
+                  </div>
                 </div>
-            ) : (
-                ['Leads', 'Orders', 'Teknisi', 'General'].map(category => {
-                    const templates = groupedTemplates[category] || [];
-                    if (templates.length === 0) return null;
-                    
-                    return (
-                        <div key={category} className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-                                <Badge variant="outline" className={`px-3 py-1 text-sm font-medium border-0 ${getCategoryColor(category)}`}>
-                                    {getCategoryLabel(category)}
-                                </Badge>
-                                <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
-                                    ({templates.length})
-                                </span>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {templates.map(template => (
-                                    <div key={template.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex flex-col group relative overflow-hidden">
-                                        <div className="p-5 flex-1">
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    {/* Optional: Add icon based on category? */}
-                                                </div>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 -mt-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 ml-auto">
-                                                            <MoreVertical className="w-4 h-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 z-[9999] border border-slate-200 dark:border-slate-700 shadow-xl min-w-[160px]">
-                                                        <DropdownMenuItem onClick={() => handleCopyToClipboard(template.message)} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">
-                                                            <Copy className="w-4 h-4 mr-2" /> Salin Pesan
-                                                        </DropdownMenuItem>
-                                                        {hasPermission('wa_template.edit') && (
-                                                            <DropdownMenuItem onClick={() => handleEdit(template)} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200">
-                                                                <Edit className="w-4 h-4 mr-2" /> Edit
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                        {hasPermission('wa_template.delete') && (
-                                                            <DropdownMenuItem onClick={() => handleDelete(template.id)} className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-700 dark:focus:text-red-300 focus:bg-red-50 dark:focus:bg-red-900/30 hover:bg-red-50 dark:hover:bg-red-900/20">
-                                                                <Trash2 className="w-4 h-4 mr-2" /> Hapus
-                                                            </DropdownMenuItem>
-                                                        )}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
-                                            <h3 className="font-semibold text-slate-900 dark:text-slate-200 mb-2">{template.title}</h3>
-                                            <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-100 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 relative transition-colors h-[100px] overflow-y-auto custom-scrollbar">
-                                                <p className="leading-relaxed whitespace-pre-wrap text-xs">{template.message}</p>
-                                            </div>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-900 px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <span>ID: {template.id}</span>
-                                                {(template.usage_count || 0) > 0 && (
-                                                     <span className="flex items-center text-green-600 dark:text-green-500 font-medium bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded">
-                                                         <Check className="w-3 h-3 mr-1" />
-                                                         {template.usage_count}x Dipakai
-                                                     </span>
-                                                )}
-                                            </div>
-                                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {hasPermission('wa_template.edit') && (
-                                                    <button onClick={() => handleEdit(template)} className="hover:text-blue-600 dark:hover:text-blue-400 font-medium">Edit</button>
-                                                )}
-                                                {hasPermission('wa_template.delete') && (
-                                                    <button onClick={() => handleDelete(template.id)} className="hover:text-red-600 dark:hover:text-red-400 font-medium">Hapus</button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+
+                <div className="waTemplateGrid">
+                  {templates.map((template) => (
+                    <article key={template.id} className="waTemplateCard">
+                      <div className="waTemplateCardHeader">
+                        <div className="waTemplateCardTitle">
+                          <span className={`waTemplateCardIcon tone-${CATEGORY_META[normalizeCategory(template.category)].tone}`}>
+                            <MessageSquare className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <h3>{template.title}</h3>
+                            <p>ID: {template.id}</p>
+                          </div>
                         </div>
-                    );
-                })
-            )}
-        </div>
 
-      </div>
+                        <TableActionMenu trigger={<TableActionMenuTrigger aria-label={`Aksi ${template.title}`} />}>
+                          <TableActionMenuItem icon={Copy} onClick={() => handleCopyToClipboard(template.message)}>
+                            Salin Pesan
+                          </TableActionMenuItem>
+                          {hasPermission('wa_template.edit') ? (
+                            <TableActionMenuItem icon={Edit} onClick={() => handleEdit(template)}>
+                              Edit
+                            </TableActionMenuItem>
+                          ) : null}
+                          {hasPermission('wa_template.delete') ? (
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteId(template.id)}>
+                              Hapus
+                            </TableActionMenuItem>
+                          ) : null}
+                        </TableActionMenu>
+                      </div>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-800 dark:border-slate-700">
-            <DialogHeader>
-                <DialogTitle className="dark:text-slate-200">{editingId ? 'Edit Template' : 'Buat Template Baru'}</DialogTitle>
-                <DialogDescription className="dark:text-slate-400">
-                    Gunakan tombol <span className="font-medium text-slate-700 dark:text-slate-300">Sisipkan Variabel</span> untuk menambahkan data dinamis seperti Nama, Mobil, dll.
-                </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Judul Template</label>
-                    <Input 
-                        value={editForm.title || ''}
-                        onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                        placeholder="Misal: Follow Up H+3"
-                        className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-slate-200"
-                    />
+                      <div className="waTemplateMessageBubble">
+                        <p>{template.message}</p>
+                      </div>
+
+                      <div className="waTemplateCardFooter">
+                        <span className="waTemplateCategoryPill">{CATEGORY_META[normalizeCategory(template.category)].shortLabel}</span>
+                        <span className="waTemplateUsagePill">
+                          <Check className="h-3.5 w-3.5" />
+                          {template.usage_count || 0}x dipakai
+                        </span>
+                      </div>
+                    </article>
+                  ))}
                 </div>
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Kategori</label>
-                    <Select 
-                        value={editForm.category} 
-                        onValueChange={(val: any) => setEditForm(prev => ({ ...prev, category: val }))}
-                    >
-                        <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-slate-200">
-                            <SelectValue placeholder="Pilih Kategori" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-slate-800 z-[9999] border border-slate-200 dark:border-slate-700 shadow-xl">
-                            <SelectItem value="Leads" className="hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200 cursor-pointer">Prospek (Leads)</SelectItem>
-                            <SelectItem value="Orders" className="hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200 cursor-pointer">Pesanan (Orders)</SelectItem>
-                            <SelectItem value="Teknisi" className="hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200 cursor-pointer">Teknisi</SelectItem>
-                            <SelectItem value="General" className="hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200 cursor-pointer">Umum</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Isi Pesan</label>
-                    <Textarea 
-                        ref={messageRef}
-                        value={editForm.message || ''}
-                        onChange={e => setEditForm(prev => ({ ...prev, message: e.target.value }))}
-                        placeholder="Halo Kak [Nama]..."
-                        className="min-h-[120px] bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-slate-200"
-                    />
-                    <div className="flex justify-end">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="text-xs h-8 gap-2 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700">
-                                    <Plus className="w-3 h-3" />
-                                    Sisipkan Variabel
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 z-[9999] border border-slate-200 dark:border-slate-700 shadow-xl max-h-[300px] overflow-y-auto">
-                                {AVAILABLE_VARIABLES.map(v => (
-                                    <DropdownMenuItem key={v.value} onClick={() => handleInsertVariable(v.value)} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200 justify-between gap-4">
-                                        <span>{v.label}</span>
-                                        <span className="text-slate-400 font-mono text-[10px] bg-slate-100 dark:bg-slate-900 px-1 rounded">{v.value}</span>
-                                    </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </div>
+              </div>
+            );
+          })
+        )}
+      </section>
+
+      <Dialog open={isDialogOpen} onOpenChange={requestDialogOpenChange}>
+        <MasterDataFormDialogContent size="wide">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-blue-600" />
+              {editingId ? 'Edit Template WhatsApp' : 'Buat Template WhatsApp'}
+            </DialogTitle>
+            <DialogDescription>
+              Simpan template respons cepat untuk digunakan di prospek, pesanan, dan teknisi.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="masterDataForm" onSubmit={handleSave}>
+            <div className="masterDataFormGrid">
+              <div className="space-y-2">
+                <MasterDataFieldLabel required>Judul Template</MasterDataFieldLabel>
+                <Input
+                  value={editForm.title || ''}
+                  onChange={(event) => updateForm({ title: event.target.value })}
+                  placeholder="Contoh: Follow Up Penawaran"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <MasterDataFieldLabel required>Kategori</MasterDataFieldLabel>
+                <Select
+                  value={normalizeCategory(editForm.category)}
+                  onValueChange={(value) => updateForm({ category: value as TemplateCategory })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_ORDER.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {CATEGORY_META[category].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting} className="dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700">Batal</Button>
-                <Button onClick={handleSave} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white min-w-[140px]">
-                   {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan...</> : "Simpan Template"}
-                </Button>
-            </DialogFooter>
-        </DialogContent>
+
+            <div className="space-y-2">
+              <div className="waTemplateMessageLabelRow">
+                <MasterDataFieldLabel
+                  required
+                  info={{
+                    title: 'Variabel template',
+                    description: 'Variabel seperti [Nama], [Mobil], dan [Order ID] akan diganti oleh data customer atau order saat template dipakai.',
+                  }}
+                >
+                  Isi Pesan
+                </MasterDataFieldLabel>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" icon={<Plus className="h-3.5 w-3.5" />}>
+                      Sisipkan Variabel
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="waTemplateVariableMenu">
+                    {AVAILABLE_VARIABLES.map((variable) => (
+                      <DropdownMenuItem key={variable.value} onClick={() => handleInsertVariable(variable.value)}>
+                        <span>{variable.label}</span>
+                        <code>{variable.value}</code>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <Textarea
+                ref={messageRef}
+                value={editForm.message || ''}
+                onChange={(event) => updateForm({ message: event.target.value })}
+                placeholder="Halo Kak [Nama], ..."
+                className="waTemplateTextarea"
+              />
+            </div>
+
+            <MasterDataFormActions
+              onCancel={formCloseGuard.requestClose}
+              isSubmitting={isSubmitting}
+              saveLabel={isSubmitting ? 'Menyimpan...' : 'Simpan Template'}
+              submitDisabled={isSubmitting}
+            />
+          </form>
+        </MasterDataFormDialogContent>
+
+        <MasterDataUnsavedChangesDialog
+          open={formCloseGuard.isConfirmOpen}
+          onCancel={formCloseGuard.cancelClose}
+          onConfirm={formCloseGuard.confirmClose}
+        />
       </Dialog>
 
-      {/* Delete Alert Dialog */}
-      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-slate-900 dark:text-slate-100">Apakah Anda yakin?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Template yang dihapus tidak dapat dikembalikan lagi.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-0">Batal</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">Hapus</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => {
+        if (!open) setDeleteId(null);
+      }}>
+        <MasterDataConfirmContent title="Hapus template ini?" onConfirm={confirmDelete} actionLabel="Hapus Template">
+          Template <strong>{templateToDelete?.title || '-'}</strong> akan dihapus dan tidak bisa dikembalikan.
+        </MasterDataConfirmContent>
       </AlertDialog>
-    </div>
+      </div>
+    </main>
   );
 };

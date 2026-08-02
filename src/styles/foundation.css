@@ -4510,7 +4510,779 @@ body {
   box-shadow: none;
 }
 
+.rolePermissionPage {
+  --role-permission-blue: #0f63c7;
+  --role-permission-soft: rgba(239, 246, 255, 0.72);
+}
+
+.rolePermissionInner {
+  display: grid;
+  gap: 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.rolePermissionTopbar {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
+  padding-bottom: 18px;
+}
+
+.rolePermissionState {
+  display: grid;
+  min-height: min(70vh, 640px);
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.rolePermissionStateIcon {
+  display: inline-flex;
+  width: 72px;
+  height: 72px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(191, 219, 254, 0.92);
+  border-radius: 24px;
+  background: rgba(239, 246, 255, 0.9);
+  color: var(--blue-ink);
+  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.1);
+}
+
+.rolePermissionStateIcon.isDanger {
+  border-color: rgba(254, 202, 202, 0.95);
+  background: rgba(254, 242, 242, 0.92);
+  color: #dc2626;
+}
+
+.rolePermissionState h1 {
+  color: var(--ink);
+  font-size: 1.45rem;
+  font-weight: 820;
+  line-height: 1.1;
+}
+
+.rolePermissionState p {
+  max-width: 420px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 620;
+  line-height: 1.5;
+}
+
+.rolePermissionHeaderBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.92);
+  padding: 4px 9px;
+  color: #738197;
+  font-size: 0.72rem;
+  font-weight: 760;
+  vertical-align: middle;
+}
+
+.rolePermissionHeaderBadge.isWarning {
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  background: rgba(255, 251, 235, 0.92);
+  color: #b45309;
+}
+
+.rolePermissionTabs {
+  padding-inline: 10px;
+}
+
+.rolePermissionTab strong,
+.rolePermissionTab em {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.95);
+  color: #738197;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 780;
+}
+
+.rolePermissionTab em {
+  min-width: 20px;
+  height: 20px;
+  background: rgba(251, 191, 36, 0.16);
+  color: #b45309;
+  font-size: 0.68rem;
+}
+
+.rolePermissionTab[data-state="active"] strong {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--blue-ink);
+}
+
+.rolePermissionLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.rolePermissionNotice {
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 251, 235, 0.78);
+  padding: 12px 14px;
+  color: #a8550f;
+  font-size: 0.76rem;
+  font-weight: 620;
+  line-height: 1.6;
+}
+
+.rolePermissionSidebarWrap {
+  position: sticky;
+  top: 18px;
+}
+
+.rolePermissionSidebar {
+  display: flex;
+  max-height: calc(100vh - 132px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.06);
+}
+
+.rolePermissionSidebarBody {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.rolePermissionSelectedRole {
+  display: grid;
+  gap: 4px;
+  margin-top: 14px;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.9));
+  padding: 14px;
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.07);
+}
+
+.rolePermissionSelectedRole span {
+  color: var(--blue-ink);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rolePermissionSelectedRole strong {
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 820;
+  line-height: 1.12;
+}
+
+.rolePermissionSelectedRole small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.rolePermissionUserPanelHeader label {
+  color: #96a3b8;
+  font-size: 0.68rem;
+  font-weight: 830;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rolePermissionUserPanel {
+  margin-top: 22px;
+}
+
+.rolePermissionUserPanelHeader {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 10px;
+}
+
+.rolePermissionUserPanelHeader span {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.92);
+  color: #738197;
+  font-size: 0.75rem;
+  font-weight: 780;
+}
+
+.rolePermissionUserPanelHeader .rolePermissionTinyAction,
+.rolePermissionUserPanelHeader .rolePermissionMoreButton {
+  margin-left: auto;
+}
+
+.rolePermissionUserList {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(226, 232, 240, 0.74);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.rolePermissionUserItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 8px;
+  transition: background 180ms ease;
+}
+
+.rolePermissionUserItem:hover {
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.rolePermissionUserAvatar {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.88);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+}
+
+.rolePermissionUserAvatar span {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 830;
+}
+
+.rolePermissionUserText {
+  min-width: 0;
+  flex: 1;
+}
+
+.rolePermissionUserText > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.rolePermissionUserText p {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rolePermissionUserText small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rolePermissionUserText span,
+.rolePermissionCustomBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 251, 235, 0.86);
+  padding: 3px 7px;
+  color: #b45309;
+  font-size: 0.66rem;
+  font-weight: 780;
+}
+
+.rolePermissionTinyAction {
+  height: 28px;
+  flex: 0 0 auto;
+  border-color: rgba(245, 158, 11, 0.28) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  padding-inline: 9px !important;
+  color: #b45309 !important;
+  font-size: 0.66rem !important;
+  font-weight: 780 !important;
+}
+
+.rolePermissionMoreButton {
+  width: 28px;
+  height: 28px;
+  color: #94a3b8;
+}
+
+.rolePermissionEmptyUsers {
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.62);
+  padding: 18px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.rolePermissionContent {
+  min-width: 0;
+  width: 100%;
+  padding-bottom: 80px;
+}
+
+.rolePermissionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rolePermissionCard {
+  display: flex;
+  min-height: 216px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.055);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.rolePermissionCard:hover {
+  border-color: rgba(191, 219, 254, 0.96);
+  box-shadow: 0 22px 54px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.rolePermissionCardHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 18px 18px 12px;
+}
+
+.rolePermissionCardIcon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--role-permission-soft);
+  color: var(--role-permission-blue);
+}
+
+.rolePermissionCardTitle {
+  min-width: 0;
+}
+
+.rolePermissionCardTitle h3 {
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 820;
+  line-height: 1.18;
+}
+
+.rolePermissionCardTitle p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.rolePermissionCheckboxSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rolePermissionCheckbox {
+  width: 20px !important;
+  height: 20px !important;
+  border-color: rgba(203, 213, 225, 0.9) !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+}
+
+.rolePermissionCheckbox[data-state="checked"] {
+  border-color: #2563eb !important;
+  background: #2563eb !important;
+  color: #fff !important;
+}
+
+.rolePermissionCheckbox[data-disabled] {
+  opacity: 0.42;
+}
+
+.rolePermissionCardBody {
+  display: grid;
+  gap: 16px;
+  flex: 1;
+  align-content: start;
+  padding: 4px 18px 18px;
+}
+
+.rolePermissionFeature {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.rolePermissionFeatureMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.rolePermissionFeatureText > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.rolePermissionFeatureText p {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 720;
+  line-height: 1.25;
+}
+
+.rolePermissionFeatureText small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 590;
+  line-height: 1.35;
+}
+
+.rolePermissionMenuBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(203, 213, 225, 0.74);
+  border-radius: 7px;
+  background: rgba(241, 245, 249, 0.78);
+  padding: 3px 7px;
+  color: #738197;
+  font-size: 0.68rem;
+  font-weight: 720;
+}
+
+.rolePermissionChipGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 7px;
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
+.rolePermissionChip {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 7px 10px;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 710;
+  line-height: 1;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.rolePermissionChip:hover:not(:disabled) {
+  border-color: rgba(191, 219, 254, 0.98);
+  color: var(--blue-ink);
+}
+
+.rolePermissionChip.isActive {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(239, 246, 255, 0.92);
+  color: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
+}
+
+.rolePermissionPayrollBlock {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  padding-top: 14px;
+}
+
+.rolePermissionPayrollHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rolePermissionPayrollIcon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.92);
+  color: var(--blue-ink);
+}
+
+.rolePermissionPayrollHeader p {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.rolePermissionPayrollHeader small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.rolePermissionPayrollGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
+.rolePermissionPayrollGrid.isDisabled {
+  opacity: 0.48;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+
+.rolePermissionPayrollOption {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 8px 10px;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.rolePermissionPayrollOption:hover {
+  border-color: rgba(191, 219, 254, 0.95);
+}
+
+.rolePermissionPayrollOption.isActive {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: rgba(239, 246, 255, 0.86);
+  color: var(--blue-ink);
+}
+
+.rolePermissionPayrollOption span {
+  overflow: hidden;
+  font-size: 0.76rem;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rolePermissionActionDock {
+  position: fixed;
+  right: 0;
+  bottom: 24px;
+  left: 0;
+  z-index: 70;
+  display: flex;
+  justify-content: center;
+  padding-inline: 18px;
+  pointer-events: none;
+}
+
+.rolePermissionActionBar {
+  display: flex;
+  width: min(840px, 100%);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 24px 68px rgba(15, 23, 42, 0.16);
+  padding: 12px 14px 12px 18px;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.rolePermissionActionStatus,
+.rolePermissionActionButtons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rolePermissionActionStatus > div {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.rolePermissionActionStatus > div.isDirty {
+  background: #f59e0b;
+  box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.14);
+}
+
+.rolePermissionActionStatus span {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.rolePermissionCancelButton {
+  min-width: 94px;
+  color: #64748b;
+}
+
+.rolePermissionSaveButton {
+  min-width: 124px;
+  background: linear-gradient(135deg, #10a8ea, #0758be) !important;
+  color: #fff !important;
+  font-weight: 780 !important;
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.2);
+}
+
+.rolePermissionSaveButton:disabled {
+  background: #eef2f7 !important;
+  color: #94a3b8 !important;
+  box-shadow: none;
+}
+
+.rolePermissionActionDivider {
+  width: 1px;
+  height: 28px;
+  background: rgba(226, 232, 240, 0.86);
+}
+
+.rolePermissionHelpButton {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px !important;
+  background: rgba(241, 245, 249, 0.82) !important;
+  color: #64748b !important;
+}
+
+.rolePermissionDialogAction {
+  background: linear-gradient(135deg, #10a8ea, #0758be) !important;
+  color: #fff !important;
+  font-weight: 780 !important;
+}
+
+@media (max-width: 1180px) {
+  .rolePermissionLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .rolePermissionGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
+  .rolePermissionInner {
+    gap: 16px;
+  }
+
+  .rolePermissionHeaderBadge {
+    margin: 8px 6px 0 0;
+  }
+
+  .rolePermissionTabs {
+    padding-inline: 8px;
+  }
+
+  .rolePermissionTab {
+    min-height: 46px;
+  }
+
+  .rolePermissionNotice {
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 0.72rem;
+  }
+
+  .rolePermissionCard {
+    min-height: auto;
+    border-radius: 16px;
+  }
+
+  .rolePermissionCardHeader {
+    padding: 16px 16px 10px;
+  }
+
+  .rolePermissionCardIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+
+  .rolePermissionCardBody {
+    padding: 4px 16px 16px;
+  }
+
+  .rolePermissionActionDock {
+    bottom: 86px;
+    padding-inline: 12px;
+  }
+
+  .rolePermissionActionBar {
+    align-items: stretch;
+    flex-direction: column;
+    border-radius: 18px;
+  }
+
+  .rolePermissionActionButtons {
+    width: 100%;
+  }
+
+  .rolePermissionActionButtons > button:not(.rolePermissionHelpButton) {
+    flex: 1;
+  }
+
   .userAccessContent {
     gap: 18px;
   }
@@ -5078,6 +5850,423 @@ body {
   font-weight: 680;
   line-height: 1.35;
   text-align: right;
+}
+
+.waTemplatePage {
+  padding-bottom: 8rem;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.54), rgba(255, 255, 255, 0));
+}
+
+.waTemplateInner {
+  display: flex;
+  width: min(100%, 1600px);
+  flex-direction: column;
+  gap: 22px;
+  margin: 0 auto;
+}
+
+.waTemplateTopbar {
+  align-items: flex-start;
+  margin-bottom: 0;
+  padding-bottom: 8px;
+}
+
+.waTemplateTopbar .eyebrowLine {
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 11px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.waTemplateTopbar .eyebrowLine svg {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.waTemplateTopbar h1 {
+  max-width: none;
+  font-size: clamp(1.9rem, 2.35vw, 2.42rem);
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.waTemplateTopbar p {
+  max-width: 1040px;
+  margin-top: 13px;
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.waTemplateHeaderCount {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 2px 10px;
+  border: 1px solid rgba(226, 232, 240, 0.78);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 0.78rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.waTemplateFilterPanel {
+  margin-bottom: 12px;
+}
+
+.waTemplateFilterGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 300px);
+  gap: 12px;
+  align-items: center;
+}
+
+.waTemplateSearchBox {
+  margin: 0;
+}
+
+.waTemplateTabsShell {
+  position: relative;
+  z-index: 4;
+}
+
+.waTemplateTabs {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 5px;
+  border-radius: 18px;
+}
+
+.waTemplateTabs .uiTabsTrigger {
+  gap: 8px;
+  min-height: 42px;
+  padding-inline: 16px;
+}
+
+.waTemplateTabs .uiTabsTrigger span {
+  display: inline-grid;
+  min-width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(226, 232, 240, 0.58);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.waTemplateTabs .uiTabsTrigger[data-state="active"] span {
+  color: var(--ops-blue-ink);
+  background: rgba(219, 234, 254, 0.86);
+}
+
+.waTemplateContent {
+  display: grid;
+  gap: 24px;
+}
+
+.waTemplateSection {
+  display: grid;
+  gap: 14px;
+}
+
+.waTemplateSectionHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.waTemplateSectionHeader h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.waTemplateSectionHeader p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.waTemplateSectionIcon,
+.waTemplateCardIcon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(191, 219, 254, 0.88);
+  color: var(--ops-blue-ink);
+  background: rgba(239, 246, 255, 0.92);
+  box-shadow: 0 16px 30px -24px rgba(37, 99, 235, 0.44);
+}
+
+.waTemplateSectionIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+}
+
+.waTemplateCardIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+}
+
+.waTemplateSectionIcon.tone-violet,
+.waTemplateCardIcon.tone-violet {
+  border-color: rgba(221, 214, 254, 0.9);
+  color: #6d28d9;
+  background: rgba(245, 243, 255, 0.96);
+}
+
+.waTemplateSectionIcon.tone-amber,
+.waTemplateCardIcon.tone-amber {
+  border-color: rgba(254, 215, 170, 0.88);
+  color: #b45309;
+  background: rgba(255, 247, 237, 0.96);
+}
+
+.waTemplateSectionIcon.tone-slate,
+.waTemplateCardIcon.tone-slate {
+  border-color: rgba(203, 213, 225, 0.9);
+  color: #475569;
+  background: rgba(248, 250, 252, 0.96);
+}
+
+.waTemplateGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+
+.waTemplateCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  min-height: 232px;
+  padding: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 22px 52px -42px rgba(15, 23, 42, 0.38);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease;
+}
+
+.waTemplateCard:hover {
+  transform: translateY(-2px);
+  border-color: rgba(191, 219, 254, 0.9);
+  box-shadow: 0 28px 62px -42px rgba(0, 119, 217, 0.42);
+}
+
+.waTemplateCardHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.waTemplateCardTitle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.waTemplateCardTitle h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waTemplateCardTitle p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.waTemplateMessageBubble {
+  position: relative;
+  min-height: 116px;
+  max-height: 154px;
+  overflow: auto;
+  padding: 15px 16px;
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  border-radius: 20px;
+  color: var(--muted);
+  background: rgba(248, 250, 252, 0.78);
+  scrollbar-width: thin;
+}
+
+.waTemplateMessageBubble p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.83rem;
+  font-weight: 620;
+  line-height: 1.58;
+  white-space: pre-wrap;
+}
+
+.waTemplateCardFooter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.waTemplateCategoryPill,
+.waTemplateUsagePill {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.waTemplateCategoryPill {
+  color: var(--muted);
+  background: rgba(241, 245, 249, 0.92);
+}
+
+.waTemplateUsagePill {
+  color: #047857;
+  background: rgba(236, 253, 245, 0.9);
+}
+
+.waTemplateEmptyState {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 1px dashed rgba(203, 213, 225, 0.9);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.waTemplateEmptyState span {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 18px;
+  color: var(--muted);
+  background: rgba(241, 245, 249, 0.92);
+}
+
+.waTemplateEmptyState strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.waTemplateEmptyState p {
+  max-width: 420px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 620;
+  line-height: 1.55;
+}
+
+.waTemplateMessageLabelRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.waTemplateTextarea {
+  min-height: 190px;
+  border-radius: 18px;
+  border-color: rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 620;
+  line-height: 1.58;
+}
+
+.waTemplateVariableMenu code {
+  margin-left: auto;
+  border-radius: 8px;
+  padding: 3px 7px;
+  color: var(--ops-blue-ink);
+  background: rgba(219, 234, 254, 0.7);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+@media (max-width: 767px) {
+  .waTemplateTopbar {
+    padding-bottom: 0;
+  }
+
+  .waTemplateHeaderCount {
+    width: fit-content;
+    margin-top: 10px;
+    margin-left: 0;
+  }
+
+  .waTemplateFilterGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .waTemplateTabs {
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .waTemplateTabs .uiTabsTrigger {
+    min-height: 38px;
+    padding-inline: 12px;
+  }
+
+  .waTemplateGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .waTemplateCard {
+    min-height: 0;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .waTemplateMessageBubble {
+    min-height: 104px;
+  }
+
+  .waTemplateMessageLabelRow {
+    align-items: flex-start;
+  }
 }
 
 .masterDataDetailDescription {

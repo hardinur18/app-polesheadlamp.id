@@ -354,14 +354,6 @@ export const AUTH_APP_ROUTES: AppRouteDefinition[] = [
     permission: 'role_permissions.view',
   },
   {
-    id: 'usage-control',
-    tabId: 'usage-control',
-    path: '/settings/usage-control',
-    title: 'Kontrol Pemakaian',
-    access: 'permission',
-    permission: 'role_permissions.view',
-  },
-  {
     id: 'wa-templates',
     tabId: 'wa-templates',
     path: '/leads/templates',

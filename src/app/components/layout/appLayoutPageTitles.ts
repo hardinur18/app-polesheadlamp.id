@@ -50,7 +50,6 @@ const APP_LAYOUT_PAGE_TITLES: Partial<Record<string, string>> = {
   'wa-templates': 'Template WhatsApp',
   'audit-logs': 'Riwayat Aktivitas',
   roles: 'Role Management',
-  'usage-control': 'Kontrol Pemakaian',
   profile: 'Profil Saya',
   'teknisi-mobile': 'Area Teknisi',
   'monitoring-activity': 'Aktivitas Teknisi',

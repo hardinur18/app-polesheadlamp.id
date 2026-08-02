@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, Database, Users, Settings, LogOut, Shield,
-  Megaphone, UserPlus, ClipboardList, Calendar, Activity, Map,
+  Megaphone, UserPlus, ClipboardList, Calendar, Map,
   Wallet, ArrowRightLeft, ScrollText, FileBarChart, Package, ShieldCheck, MessageSquare, CreditCard,
   Share2, RefreshCw, Briefcase, TrendingUp, DollarSign, Repeat, ChevronDown,
-  Smartphone, FileText, BarChart3, Images, Target
+  Smartphone, FileText, BarChart3, Images, Target, Activity
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import appLogo from "@/assets/polesheadlamp-app-logo-round.png";
@@ -181,7 +181,6 @@ const NAV_GROUPS: NavGroup[] = [
           { icon: Database, label: 'Master Data', id: 'master-data', permission: 'master_data.view' },
           { icon: ShieldCheck, label: 'Pengguna & Akses', id: 'users', permission: 'users.view' },
           { icon: Shield, label: 'Role & Permission', id: 'roles', permission: 'role_permissions.view' },
-          { icon: Activity, label: 'Kontrol Pemakaian', id: 'usage-control', permission: 'role_permissions.view', ownerOnly: true },
           { icon: MessageSquare, label: 'Template WhatsApp', id: 'wa-templates', permission: 'wa_template.view' },
         ],
       },

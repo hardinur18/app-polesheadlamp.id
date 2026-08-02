@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { PERMISSIONS, PermissionKey } from '@/app/data/permissions';
 import { normalizeRole } from '@/app/data/roleHelpers';
@@ -6,7 +7,17 @@ import { Role } from '../master-data/data';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { Button } from '../../components/ui/button';
 import { Checkbox } from '../../components/ui/checkbox';
-import { Card } from '../../components/ui/card';
+import { Tabs, TabsRail, TabsTrigger, TabsViewport } from '../../components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { 
   Shield, Save, RotateCcw, Check, LayoutDashboard, 
   Users, ShoppingCart, Calendar, MapPin, Wallet, 
@@ -58,6 +69,7 @@ export const RoleManagement = () => {
   const [customAccessMap, setCustomAccessMap] = useState<Record<string, boolean>>({});
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [isBulkResettingCustom, setIsBulkResettingCustom] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   // Refresh permissions on mount to ensure we are not editing stale data
   useEffect(() => {
@@ -144,18 +156,23 @@ export const RoleManagement = () => {
   const handleReset = async () => {
     if (!canManageRolePermissions) return;
 
-    if (confirm('Reset semua permission ke default?')) {
-      setIsSaving(true);
-      try {
-        await resetPermissions();
-        setHasChanges(false);
-        toast.success('Permission di-reset ke default');
-      } catch (error) {
-        console.error('[RoleManagement] Reset error:', error);
-        toast.error('Gagal reset permission');
-      } finally {
-        setIsSaving(false);
-      }
+    setIsResetConfirmOpen(true);
+  };
+
+  const confirmReset = async () => {
+    if (!canManageRolePermissions) return;
+
+    setIsSaving(true);
+    try {
+      await resetPermissions();
+      setHasChanges(false);
+      setIsResetConfirmOpen(false);
+      toast.success('Permission di-reset ke default');
+    } catch (error) {
+      console.error('[RoleManagement] Reset error:', error);
+      toast.error('Gagal reset permission');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -273,16 +290,70 @@ export const RoleManagement = () => {
   const otherGroups = groups.filter(g => !ORDERED_GROUPS.includes(g));
   const displayGroups = [...ORDERED_GROUPS, ...otherGroups];
   
+  const activeUsers = useMemo(
+    () => users.filter((u) => isActiveUserStatus(u.status)),
+    [users],
+  );
+
   // Get users for selected role
   // Only show active users
   const roleUsers = useMemo(
-    () => users.filter((u) => normalizeRole(u.role) === selectedRole && isActiveUserStatus(u.status)),
-    [selectedRole, users],
+    () => activeUsers.filter((u) => normalizeRole(u.role) === selectedRole),
+    [activeUsers, selectedRole],
   );
   const customAccessCount = roleUsers.filter((user) => customAccessMap[user.id]).length;
   const isBootstrapping = contextLoading && !hasCompletedInitialSync;
   const isRoleReadOnly = selectedRole === 'Owner';
   const isInteractionDisabled = isSaving || !canManageRolePermissions;
+  const actionDock = (
+    <div className="rolePermissionActionDock">
+      <div className="rolePermissionActionBar">
+        <div className="rolePermissionActionStatus">
+          {hasChanges ? <div className="isDirty" /> : <div />}
+          <span className={cn(
+            "transition-colors",
+            hasChanges ? "text-slate-700 dark:text-slate-200" : "text-slate-500",
+          )}>
+            {hasChanges ? 'Perubahan belum disimpan.' : 'Tidak ada perubahan.'}
+          </span>
+        </div>
+
+        <div className="rolePermissionActionButtons">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setLocalPermissions(rolePermissions);
+              setLocalSettings(roleSettings);
+              setHasChanges(false);
+              toast.info("Perubahan dibatalkan");
+            }}
+            disabled={!hasChanges || isSaving}
+            className="rolePermissionCancelButton"
+          >
+            Batal
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || isInteractionDisabled}
+            className="rolePermissionSaveButton"
+          >
+            {isSaving ? <><Loader2 className="w-4 h-4 animate-spin"/> Menyimpan</> : <><Save className="w-4 h-4" /> Simpan</>}
+          </Button>
+
+          <div className="rolePermissionActionDivider" />
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rolePermissionHelpButton"
+            onClick={() => toast.info('Bantuan permission belum tersedia')}
+          >
+            <HelpCircle className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     if (!canManageRolePermissions) {
@@ -294,7 +365,7 @@ export const RoleManagement = () => {
 
     const loadCustomAccessMap = async () => {
       const nextEntries = await Promise.all(
-        roleUsers.map(async (user) => {
+        activeUsers.map(async (user) => {
           const customPermissions = await fetchUserCustomPermissions(user.id);
           return [user.id, Array.isArray(customPermissions)] as const;
         }),
@@ -310,14 +381,18 @@ export const RoleManagement = () => {
     return () => {
       isCancelled = true;
     };
-  }, [canManageRolePermissions, fetchUserCustomPermissions, roleUsers]);
+  }, [activeUsers, canManageRolePermissions, fetchUserCustomPermissions]);
 
   if (!canViewRolePermissions) {
     return (
-      <div className="flex h-[80vh] items-center justify-center flex-col gap-4 text-center p-8">
-        <div className="bg-red-50 p-4 rounded-full text-red-600"><ShieldAlert className="w-12 h-12" /></div>
-        <h1 className="text-2xl font-bold">Akses Dibatasi</h1>
-        <p className="text-slate-500">Anda tidak memiliki izin untuk membuka halaman role permission.</p>
+      <div className="opsPageShell rolePermissionPage">
+        <div className="rolePermissionState">
+          <div className="rolePermissionStateIcon isDanger">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+          <h1>Akses Dibatasi</h1>
+          <p>Anda tidak memiliki izin untuk membuka halaman role permission.</p>
+        </div>
       </div>
     );
   }
@@ -325,182 +400,139 @@ export const RoleManagement = () => {
   // Show loading ONLY if context is loading AND we don't have local data yet
   if (isBootstrapping) {
       return (
-          <div className="flex h-screen items-center justify-center flex-col">
-              <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-              <p className="text-slate-500 animate-pulse">Memuat konfigurasi permission...</p>
+          <div className="opsPageShell rolePermissionPage">
+              <div className="rolePermissionState">
+                  <div className="rolePermissionStateIcon">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                  <h1>Memuat Permission</h1>
+                  <p>Menyiapkan konfigurasi role dan custom access.</p>
+              </div>
           </div>
       );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 p-4 md:p-8 pb-48 md:pb-32 font-sans">
-      <div className="max-w-[1600px] mx-auto space-y-8">
-        
-        {/* Mobile-optimized Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 md:pb-6">
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Role Permission</h1>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <p className="text-slate-500 text-xs md:text-sm">Atur hak akses pengguna.</p>
-                    <span className="hidden md:inline text-slate-300 mx-2">|</span>
-                    <span className="text-slate-400 text-[10px] md:text-xs flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-                        <History className="w-3 h-3" />
-                        Updated: {contextLoading ? 'Syncing...' : 'Ready'}
+    <div className="opsPageShell rolePermissionPage pb-48 md:pb-32">
+      <div className="rolePermissionInner">
+        <div className="topbar rolePermissionTopbar">
+            <div className="topbarTitle">
+                <div className="eyebrowLine">
+                    <Shield className="h-4 w-4" />
+                    Sistem & Akses
+                </div>
+                <h1>Role Permission</h1>
+                <p>
+                    Atur role default, akses menu, dan batas permission pengguna.
+                    <span className="rolePermissionHeaderBadge">
+                        <History className="h-3.5 w-3.5" />
+                        {contextLoading ? 'Syncing' : 'Ready'}
                     </span>
                     {!canManageRolePermissions && (
-                        <span className="text-amber-600 text-[10px] md:text-xs flex items-center gap-1 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-900">
-                            <ShieldAlert className="w-3 h-3" />
+                        <span className="rolePermissionHeaderBadge isWarning">
+                            <ShieldAlert className="h-3.5 w-3.5" />
                             View Only
                         </span>
                     )}
-                </div>
+                </p>
             </div>
-            <div className="flex gap-2 w-full md:w-auto">
-                 <Button variant="outline" size="sm" onClick={() => toast.info('Log history akan segera hadir')} className="flex-1 md:flex-none h-9 text-xs text-slate-600 border-slate-300 hover:bg-slate-100">
-                    <History className="w-3.5 h-3.5 mr-2" /> History
+            <div className="topbarActions">
+                 <Button variant="outline" onClick={() => toast.info('Log history akan segera hadir')}>
+                    <History className="h-4 w-4" /> History
                  </Button>
-                 <Button variant="outline" size="sm" onClick={handleReset} disabled={isInteractionDisabled} className="flex-1 md:flex-none h-9 text-xs text-slate-600 border-slate-300 hover:bg-slate-100">
-                    <RotateCcw className="w-3.5 h-3.5 mr-2" /> Reset
+                 <Button variant="outline" onClick={handleReset} disabled={isInteractionDisabled}>
+                    <RotateCcw className="h-4 w-4" /> Reset
                  </Button>
             </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 items-start relative">
-            <div className="w-full lg:hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-300">
+        <Tabs value={selectedRole} onValueChange={(value) => setSelectedRole(value as Role)} className="rolePermissionTabsShell">
+            <TabsViewport>
+                <TabsRail className="masterDataTabs rolePermissionTabs min-w-max">
+                    {ROLES.map(role => {
+                        const count = users.filter((user) => normalizeRole(user.role) === role && isActiveUserStatus(user.status)).length;
+                        const customCount = users.filter((user) => normalizeRole(user.role) === role && customAccessMap[user.id]).length;
+
+                        return (
+                            <TabsTrigger key={role} value={role} className="masterDataTab rolePermissionTab">
+                                <Shield className="h-4 w-4" />
+                                <span>{role}</span>
+                                <strong>{count}</strong>
+                                {customCount > 0 && <em>{customCount}</em>}
+                            </TabsTrigger>
+                        );
+                    })}
+                </TabsRail>
+            </TabsViewport>
+        </Tabs>
+
+        <div className="rolePermissionLayout">
+            <div className="rolePermissionNotice lg:hidden">
                 Role Permission berlaku sebagai default role. Jika suatu akun memakai <strong>Custom Access</strong>, perubahan role tidak akan langsung mengubah permission akun itu sampai custom access-nya direset.
-            </div>
-            
-            {/* Mobile: Sticky Role Selector (Horizontal) */}
-            <div className="lg:hidden w-full sticky top-0 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 -mx-4 px-4 py-3 mb-2 transition-all">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide snap-x mask-linear-gradient">
-                    {ROLES.map(role => (
-                        <button
-                            key={role}
-                            onClick={() => setSelectedRole(role)}
-                            className={cn(
-                                "flex-shrink-0 snap-start px-4 py-2 rounded-full text-xs font-semibold transition-all border flex items-center gap-1.5 shadow-sm",
-                                selectedRole === role 
-                                    ? "bg-blue-600 text-white border-blue-600 shadow-blue-200 dark:shadow-none ring-2 ring-blue-100 dark:ring-blue-900" 
-                                    : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800"
-                            )}
-                        >
-                            {role}
-                            {selectedRole === role && <Check className="w-3 h-3" />}
-                        </button>
-                    ))}
-                </div>
-                
-                {/* Mobile User Summary */}
-                <div className="mt-2 flex items-center justify-between text-xs px-1">
-                    <span className="text-slate-500 font-medium">
-                        {roleUsers.length} User Active
-                    </span>
-                    {selectedRole === 'Owner' ? (
-                        <span className="text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                            <ShieldAlert className="w-3 h-3" /> Full Access
-                        </span>
-                    ) : customAccessCount > 0 ? (
-                        <span className="text-amber-700 flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                            <ShieldAlert className="w-3 h-3" /> {customAccessCount} Custom
-                        </span>
-                    ) : null}
-                </div>
-                {customAccessCount > 0 && (
-                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                        <div>Ada user di role ini yang memakai <strong>Custom Access</strong>, jadi menu mereka bisa berbeda dari role default.</div>
-                        {canManageRolePermissions && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={isBulkResettingCustom}
-                                onClick={() => void handleResetAllCustomAccessForRole()}
-                                className="mt-2 h-7 px-2 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
-                            >
-                                {isBulkResettingCustom ? 'Reset...' : 'Reset Semua Custom'}
-                            </Button>
-                        )}
-                    </div>
-                )}
             </div>
 
             {/* Desktop: Sidebar Role Selector (Vertical) */}
-            <div className="hidden lg:block w-72 shrink-0 sticky top-6">
-                <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden h-[calc(100vh-140px)] flex flex-col">
-                    <div className="p-4 flex-1 overflow-y-auto">
-                        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-300">
+            <div className="hidden lg:block rolePermissionSidebarWrap">
+                <div className="rolePermissionSidebar">
+                    <div className="rolePermissionSidebarBody">
+                        <div className="rolePermissionNotice">
                             Role Permission berlaku sebagai default role. Akun dengan <strong>Custom Access</strong> tetap mengikuti override user sampai custom access tersebut direset.
                         </div>
-                        {/* Role List */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between px-3 mb-4">
-                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pilih Role</label>
-                            </div>
-                            
-                            <div className="flex flex-col gap-1">
-                                {ROLES.map(role => (
-                                    <button
-                                        key={role}
-                                        onClick={() => setSelectedRole(role)}
-                                        className={cn(
-                                            "w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all flex items-center justify-between relative",
-                                            selectedRole === role 
-                                                ? "bg-blue-600 text-white font-medium shadow-md shadow-blue-200 dark:shadow-none" 
-                                                : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 font-normal"
-                                        )}
-                                    >
-                                        <span>{role}</span>
-                                        {selectedRole === role && <Check className="w-4 h-4 text-white" />}
-                                    </button>
-                                ))}
-                            </div>
+
+                        <div className="rolePermissionSelectedRole">
+                            <span>Role Aktif</span>
+                            <strong>{selectedRole}</strong>
+                            <small>
+                                {roleUsers.length} user aktif
+                                {customAccessCount > 0 ? `, ${customAccessCount} custom access` : ''}
+                            </small>
                         </div>
 
                         {/* Users List Preview */}
-                        <div className="mt-8">
-                            <div className="flex items-center justify-between px-3 mb-3">
-                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                    User ({roleUsers.length})
-                                </label>
+                        <div className="rolePermissionUserPanel">
+                            <div className="rolePermissionUserPanelHeader">
+                                <label>User Aktif</label>
+                                <span>{roleUsers.length}</span>
                                 {customAccessCount > 0 ? (
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         disabled={isBulkResettingCustom}
                                         onClick={() => void handleResetAllCustomAccessForRole()}
-                                        className="h-7 px-2 text-[10px] font-semibold text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                                        className="rolePermissionTinyAction"
                                     >
                                         {isBulkResettingCustom ? 'Reset...' : 'Reset Semua Custom'}
                                     </Button>
                                 ) : (
-                                    <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-400 hover:text-slate-600">
+                                    <Button variant="ghost" size="icon" className="rolePermissionMoreButton">
                                         <MoreHorizontal className="w-3.5 h-3.5" />
                                     </Button>
                                 )}
                             </div>
                             
-                            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-3">
+                            <div className="rolePermissionUserList">
                                 {roleUsers.length > 0 ? (
                                     roleUsers.slice(0, 10).map(user => (
-                                        <div key={user.id} className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-default group">
-                                            <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden shrink-0 border-2 border-white dark:border-slate-600 shadow-sm">
+                                        <div key={user.id} className="rolePermissionUserItem">
+                                            <div className="rolePermissionUserAvatar">
                                                 {user.avatar ? (
                                                     <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                                                 ) : (
-                                                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-300">
+                                                    <span>
                                                         {user.name.substring(0,2).toUpperCase()}
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="overflow-hidden min-w-0 flex-1">
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <p className="text-sm font-medium text-slate-900 dark:text-slate-200 truncate group-hover:text-blue-600 transition-colors">{user.name}</p>
+                                            <div className="rolePermissionUserText">
+                                                <div>
+                                                    <p>{user.name}</p>
                                                     {customAccessMap[user.id] && (
-                                                        <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                                                        <span>
                                                             Custom
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                                                <small>{user.email}</small>
                                             </div>
                                             {customAccessMap[user.id] && (
                                                 <Button
@@ -509,7 +541,7 @@ export const RoleManagement = () => {
                                                     size="sm"
                                                     disabled={resettingUserId === user.id}
                                                     onClick={() => void handleResetUserCustomAccess(user.id, user.name)}
-                                                    className="h-7 shrink-0 border-amber-200 bg-white px-2 text-[10px] font-semibold text-amber-700 hover:bg-amber-50"
+                                                    className="rolePermissionTinyAction"
                                                 >
                                                     {resettingUserId === user.id ? 'Reset...' : 'Reset Custom'}
                                                 </Button>
@@ -517,19 +549,19 @@ export const RoleManagement = () => {
                                         </div>
                                     ))
                                 ) : (
-                                    <div className="text-center py-6">
-                                        <p className="text-xs text-slate-400 italic">Tidak ada user aktif</p>
+                                    <div className="rolePermissionEmptyUsers">
+                                        Tidak ada user aktif
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
-                </Card>
+                </div>
             </div>
 
             {/* Right: Cards Grid */}
-            <div className="flex-1 w-full pb-20">
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="rolePermissionContent">
+                <div className="rolePermissionGrid">
                     {displayGroups.map(group => {
                         const features = organizePermissions(group);
                         const GroupIcon = GROUP_CONFIG[group]?.icon || Box;
@@ -548,61 +580,61 @@ export const RoleManagement = () => {
                             groupPermissionKeys.every(permission => selectedRolePermissions.includes(permission));
 
                         return (
-                            <div key={group} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden h-full">
+                            <div key={group} className="rolePermissionCard">
                                 {/* Card Header */}
-                                <div className="p-5 flex items-start gap-4">
-                                    <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400 shrink-0">
+                                <div className="rolePermissionCardHeader">
+                                    <div className="rolePermissionCardIcon">
                                         <GroupIcon className="w-5 h-5" />
                                     </div>
-                                    <div className="flex-1">
-                                        <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">{groupLabel}</h3>
+                                    <div className="rolePermissionCardTitle">
+                                        <h3>{groupLabel}</h3>
                                         {groupDesc && (
-                                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{groupDesc}</p>
+                                            <p>{groupDesc}</p>
                                         )}
                                     </div>
-                                    <div className="h-6 w-6">
+                                    <div className="rolePermissionCheckboxSlot">
                                        <Checkbox 
                                             checked={isGroupFullyChecked}
                                             disabled={isRoleReadOnly || isInteractionDisabled}
                                             onCheckedChange={(checked) => setRolePermissionKeys(selectedRole, groupPermissionKeys, checked === true)}
-                                            className="data-[state=checked]:bg-blue-600 border-slate-300 rounded"
+                                            className="rolePermissionCheckbox"
                                        />
                                     </div>
                                 </div>
 
                                 {/* Card Body */}
-                                <div className="px-5 pb-5 space-y-6 flex-1">
+                                <div className="rolePermissionCardBody">
                                     {features.map(({ main, subs }) => {
                                         const isMainChecked = localPermissions[selectedRole]?.includes(main.key);
                                         const isMenuToggle = main.key.endsWith('.view') || main.key.endsWith('.view_daily') || main.key.endsWith('.view_global');
                                         
                                         return (
-                                            <div key={main.key} className="group/item">
+                                            <div key={main.key} className="rolePermissionFeature">
                                                 {/* Main Row */}
-                                                <div className="flex items-start justify-between gap-4 mb-3">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="font-medium text-slate-800 dark:text-slate-200 text-sm">
+                                                <div className="rolePermissionFeatureMain">
+                                                    <div className="rolePermissionFeatureText">
+                                                        <div>
+                                                            <p>
                                                                 {main.label}
                                                             </p>
                                                             {isMenuToggle && (
-                                                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200 dark:border-slate-700">
+                                                                <span className="rolePermissionMenuBadge">
                                                                     <MenuSquare className="w-3 h-3" /> Menu
                                                                 </span>
                                                             )}
                                                         </div>
                                                         {main.description && (
-                                                            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                                                            <small>
                                                                 {main.description}
-                                                            </p>
+                                                            </small>
                                                         )}
                                                     </div>
-                                                    <div className="pt-0.5">
+                                                    <div className="rolePermissionCheckboxSlot">
                                                         <Checkbox 
                                                             checked={isMainChecked}
                                                             onCheckedChange={() => handleToggle(selectedRole, main.key)}
                                                             disabled={isRoleReadOnly || isInteractionDisabled}
-                                                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 w-5 h-5 border-slate-300 dark:border-slate-600 rounded"
+                                                            className="rolePermissionCheckbox"
                                                         />
                                                     </div>
                                                 </div>
@@ -610,7 +642,7 @@ export const RoleManagement = () => {
                                                 {/* Sub Permissions (Buttons) */}
                                                 {subs.length > 0 && (
                                                     <div className={cn(
-                                                        "flex flex-wrap gap-2 transition-all pl-0",
+                                                        "rolePermissionChipGroup",
                                                         !isMainChecked && "opacity-50 pointer-events-none grayscale"
                                                     )}>
                                                         {subs.map(sub => {
@@ -631,10 +663,10 @@ export const RoleManagement = () => {
                                                                     onClick={() => handleToggle(selectedRole, sub.key)}
                                                                     disabled={isRoleReadOnly || isInteractionDisabled}
                                                                     className={cn(
-                                                                        "px-3 py-1 rounded-[6px] text-[11px] font-medium transition-all border flex items-center gap-1.5 shadow-sm",
-                                                                        isSubChecked 
-                                                                            ? "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 ring-1 ring-blue-100 dark:ring-blue-900" 
-                                                                            : "bg-white text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 hover:border-slate-300"
+                                                                        "rolePermissionChip",
+                                                                        isSubChecked
+                                                                            ? "isActive"
+                                                                            : ""
                                                                     )}
                                                                 >
                                                                     {isSubChecked && <Check className="w-3 h-3" />}
@@ -650,20 +682,20 @@ export const RoleManagement = () => {
                                     
                                     {/* TARGET-BASED PERMISSION FOR PAYROLL */}
                                     {group === 'Gaji & Payroll' && (
-                                        <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/20 rounded-md text-indigo-600 dark:text-indigo-400">
-                                                    <ShieldAlert className="w-4 h-4" />
+                                        <div className="rolePermissionPayrollBlock">
+                                            <div className="rolePermissionPayrollHeader">
+                                                <div className="rolePermissionPayrollIcon">
+                                                    <ShieldAlert className="h-4 w-4" />
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-slate-800 dark:text-slate-200 text-sm">Akses Data Divisi (Whitelist)</p>
-                                                    <p className="text-[11px] text-slate-500">Pilih role mana saja yang data gajinya boleh dilihat oleh {selectedRole}.</p>
+                                                    <p>Akses Data Divisi</p>
+                                                    <small>Pilih role yang data gajinya boleh dilihat oleh {selectedRole}.</small>
                                                 </div>
                                             </div>
                                             
                                             <div className={cn(
-                                                "grid grid-cols-2 gap-2 transition-all",
-                                                !localPermissions[selectedRole]?.includes('payroll.view') && "opacity-50 pointer-events-none grayscale"
+                                                "rolePermissionPayrollGrid",
+                                                !localPermissions[selectedRole]?.includes('payroll.view') && "isDisabled"
                                             )}>
                                                 {ROLES.map(r => {
                                                     const currentVisibleRoles = localSettings[selectedRole]?.payroll_visible_roles || [];
@@ -673,10 +705,8 @@ export const RoleManagement = () => {
                                                         <label 
                                                             key={r} 
                                                             className={cn(
-                                                                "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all",
-                                                                isChecked 
-                                                                    ? "bg-indigo-50/50 border-indigo-200 dark:bg-indigo-900/10 dark:border-indigo-800" 
-                                                                    : "bg-slate-50 border-slate-200 hover:border-slate-300 dark:bg-slate-800/50 dark:border-slate-700"
+                                                                "rolePermissionPayrollOption",
+                                                                isChecked && "isActive"
                                                             )}
                                                         >
                                                             <Checkbox 
@@ -688,14 +718,9 @@ export const RoleManagement = () => {
                                                                         : currentVisibleRoles.filter((v: string) => v !== r);
                                                                     handleSettingChange(selectedRole, 'payroll_visible_roles', newVisibleRoles);
                                                                 }}
-                                                                className="data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+                                                                className="rolePermissionCheckbox"
                                                             />
-                                                            <span className={cn(
-                                                                "text-[11px] font-medium",
-                                                                isChecked ? "text-indigo-700 dark:text-indigo-300" : "text-slate-600 dark:text-slate-400"
-                                                            )}>
-                                                                {r}
-                                                            </span>
+                                                            <span>{r}</span>
                                                         </label>
                                                     )
                                                 })}
@@ -711,64 +736,23 @@ export const RoleManagement = () => {
             </div>
         </div>
 
-        {/* Floating Footer - Island Style */}
-        <div className="fixed bottom-[90px] md:bottom-6 left-0 right-0 lg:pl-72 z-40 flex justify-center pointer-events-none px-4">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-slate-200/50 dark:shadow-black/50 rounded-2xl p-4 md:px-6 md:py-3 flex items-center justify-between gap-6 pointer-events-auto w-full max-w-4xl transition-all duration-300">
-                
-                <div className="flex items-center gap-3">
-                    {hasChanges ? (
-                        <div className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                    ) : (
-                        <div className="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0" />
-                    )}
-                    <span className={cn(
-                        "text-sm font-medium transition-colors",
-                        hasChanges ? "text-slate-700 dark:text-slate-200" : "text-slate-500"
-                    )}>
-                        {hasChanges ? 'Perubahan belum disimpan.' : 'Tidak ada perubahan.'}
-                    </span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                    <Button 
-                        variant="ghost" 
-                        onClick={() => {
-                             setLocalPermissions(rolePermissions);
-                             setLocalSettings(roleSettings);
-                             setHasChanges(false);
-                             toast.info("Perubahan dibatalkan");
-                        }} 
-                        disabled={!hasChanges || isSaving}
-                        className="h-9 px-4 text-slate-500 hover:bg-slate-100 hover:text-slate-900 rounded-lg"
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleSave} 
-                        disabled={!hasChanges || isInteractionDisabled}
-                        className={cn(
-                            "h-9 px-6 min-w-[120px] font-semibold transition-all rounded-lg",
-                            hasChanges && canManageRolePermissions
-                                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200/50" 
-                                : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"
-                        )}
-                    >
-                        {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/> Saving...</> : 'Save Changes'}
-                    </Button>
-                    
-                    <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
-                    
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200 hover:text-slate-900"
-                        onClick={() => toast.info('Bantuan permission belum tersedia')}
-                    >
-                        <HelpCircle className="w-5 h-5" />
-                    </Button>
-                </div>
-            </div>
-        </div>
+        {typeof document !== 'undefined' ? createPortal(actionDock, document.body) : actionDock}
+        <AlertDialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
+            <AlertDialogContent className="masterDataConfirmDialog">
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Reset permission role?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Semua konfigurasi role akan dikembalikan ke default sistem. Custom Access user tetap terpisah dan tidak ikut dihapus dari aksi ini.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="masterDataConfirmActions">
+                    <AlertDialogCancel disabled={isSaving}>Batal</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmReset} disabled={isSaving} className="rolePermissionDialogAction">
+                        {isSaving ? 'Reset...' : 'Reset Permission'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
