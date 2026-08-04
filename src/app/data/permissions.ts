@@ -24,10 +24,6 @@ export const PERMISSIONS = definePermissions([
   { key: 'order.payment.view', label: 'Lihat Kolom Pembayaran', group: 'Pesanan Pembayaran' },
   { key: 'order.payment.edit_type', label: 'Ubah Metode Bayar', group: 'Pesanan Pembayaran', description: 'Transfer / Cash' },
   { key: 'order.payment.edit_status', label: 'Ubah Status Bayar', group: 'Pesanan Pembayaran', description: 'Paid / Unpaid (Khusus Finance)' },
-  { key: 'order.payment.qris.view', label: 'Lihat Panel QRIS', group: 'Pesanan Pembayaran', description: 'Buka modal QRIS per pesanan' },
-  { key: 'order.payment.qris.generate', label: 'Generate QRIS', group: 'Pesanan Pembayaran', description: 'Buat atau generate ulang tagihan QRIS' },
-  { key: 'order.payment.qris.refresh', label: 'Refresh Status QRIS', group: 'Pesanan Pembayaran', description: 'Sinkronkan status transaksi QRIS dari gateway' },
-  { key: 'order.payment.qris.cancel', label: 'Batalkan QRIS', group: 'Pesanan Pembayaran', description: 'Batalkan tagihan QRIS aktif' },
   
   // --- KONTAK & PETA (PESANAN) ---
   { key: 'customer.contact.view', label: 'Lihat Kontak Pelanggan', group: 'Kontak', description: 'Tombol WhatsApp & Telepon' },
@@ -100,8 +96,6 @@ export const PERMISSIONS = definePermissions([
   { key: 'debts.view', label: 'Akses Hutang & Piutang', group: 'Keuangan', description: 'Monitoring kewajiban dan settlement hutang piutang' },
   { key: 'finance_report.view', label: 'Akses Operasional Teknisi', group: 'Keuangan', description: 'Laporan operasional teknisi dari sisi keuangan' },
   { key: 'finance.manage', label: 'Kelola Transaksi Keuangan', group: 'Keuangan' },
-  { key: 'payment_gateway.view', label: 'Akses Payment Gateway', group: 'Keuangan', description: 'Lihat pengaturan payment gateway (QRIS/Xendit)' },
-  { key: 'payment_gateway.manage', label: 'Kelola Payment Gateway', group: 'Keuangan', description: 'Ubah konfigurasi API key, rekening bank, dan status aktif/nonaktif' },
   
   // --- PENGELUARAN RUTIN ---
   { key: 'recurring_expenses.view', label: 'Lihat Daftar Pengeluaran', group: 'Keuangan - Pengeluaran' },
@@ -174,7 +168,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'dashboard.view', 'dashboard.view_owner', 'dashboard.view_advertiser', 'dashboard.view_financial',
     'leads.view', 'leads.create', 'leads.edit', 'leads.export',
     'proof_assets.view', 'proof_assets.create', 'proof_assets.edit', 'proof_assets.delete',
-    'order.view', 'order.create', 'order.edit', 'order.assign_technician', 'order.view_details', 'order.status.edit', 'order.status.mark_done', 'order.payment.view', 'order.payment.edit_type', 'order.payment.qris.view', 'order.payment.qris.generate', 'order.payment.qris.refresh', 'order.payment.qris.cancel', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
+    'order.view', 'order.create', 'order.edit', 'order.assign_technician', 'order.view_details', 'order.status.edit', 'order.status.mark_done', 'order.payment.view', 'order.payment.edit_type', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
     'schedule.view',
     'audit_logs.view',
     'monitoring.view', 'monitoring.activity_view', 'targets.manage',
@@ -190,9 +184,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'dashboard.view', 'dashboard.view_owner', 'dashboard.view_advertiser', 'dashboard.view_financial',
     'audit_logs.view',
     'leads.view',
-    'order.view', 'order.view_details', 'order.payment.view', 'order.payment.edit_status', 'order.payment.edit_type', 'order.payment.qris.view', 'order.payment.qris.generate', 'order.payment.qris.refresh', 'order.payment.qris.cancel', 'order.status.edit', 'order.status.mark_done', 'map.view_route', 'customer.contact.view', 'staff.contact.view',
+    'order.view', 'order.view_details', 'order.payment.view', 'order.payment.edit_status', 'order.payment.edit_type', 'order.status.edit', 'order.status.mark_done', 'map.view_route', 'customer.contact.view', 'staff.contact.view',
     'daily_report.view',
-    'finance.view', 'payments.view', 'operational_expenses.view', 'operational_expenses.create', 'operational_expenses.edit', 'operational_expenses.delete', 'debts.view', 'finance_report.view', 'finance.manage', 'payment_gateway.view', 'payment_gateway.manage',
+    'finance.view', 'payments.view', 'operational_expenses.view', 'operational_expenses.create', 'operational_expenses.edit', 'operational_expenses.delete', 'debts.view', 'finance_report.view', 'finance.manage',
     'stock.valuation.view', 'stock.valuation.export',
     'recurring_expenses.view', 'recurring_expenses.create', 'recurring_expenses.edit', 'recurring_expenses.delete', 'recurring_expenses.pay',
     'monitoring.marketing.view', 'cs_okr.view', 'cs_okr.manage', 'targets.manage'
@@ -203,7 +197,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'audit_logs.view',
     'leads.view', 'leads.create', 'leads.edit',
     'proof_assets.view',
-    'order.view', 'order.create', 'order.edit', 'order.view_details', 'order.status.edit', 'order.payment.view', 'order.payment.edit_type', 'order.payment.qris.view', 'order.payment.qris.generate', 'order.payment.qris.refresh', 'order.payment.qris.cancel', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
+    'order.view', 'order.create', 'order.edit', 'order.view_details', 'order.status.edit', 'order.payment.view', 'order.payment.edit_type', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
     'schedule.view',
     'monitoring.view',
     'monitoring.marketing.view', 'cs_okr.view'

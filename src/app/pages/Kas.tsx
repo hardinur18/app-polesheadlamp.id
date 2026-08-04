@@ -3,7 +3,6 @@ import {
   AlertCircle,
   BarChart3,
   Building2,
-  CalendarRange,
   ClipboardList,
   Edit,
   Eye,
@@ -17,6 +16,7 @@ import {
   WalletCards,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabaseClient';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { DEFAULT_OPERATIONAL_EXPENSE_ONLY_ACCOUNTS } from '@/app/data/operationalExpenseAccounts';
@@ -28,16 +28,10 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useMasterData } from './master-data/context';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from '../components/ui/dialog';
 import {
   AlertDialog,
@@ -57,13 +51,36 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import {
+  DataTable,
+  TableActionCell,
+  TableActionHeader,
+} from '../components/ui/data-table';
+import {
+  OperationalEmptyState,
+  OperationalFilterPanel,
+  OperationalKpiCard,
+  OperationalKpiGrid,
+  OperationalPageHeader,
+  OperationalPageShell,
+  OperationalTableCard,
+} from '../components/ui/operational-page';
+import {
+  MasterDataCurrencyInput,
+  MasterDataDialogBody,
+  MasterDataFieldLabel,
+  MasterDataFormActions,
+  MasterDataFormDialogContent,
+  MasterDataFormField,
+  MasterDataFormGrid,
+  MasterDataFormHeader,
+} from '../components/ui/master-data-ui';
 
 type OperationalExpenseCategory = {
   id: string;
@@ -72,7 +89,27 @@ type OperationalExpenseCategory = {
   account_code?: string;
   account_type?: 'income' | 'expense' | 'cogs';
   description?: string;
+  finance_account_id?: string;
+  finance_category_id?: string;
+  is_active?: boolean;
   sort_order?: number;
+};
+
+type FinanceCategoryRow = {
+  id: string;
+  name: string;
+  type: 'income' | 'expense' | 'cogs';
+  active: boolean;
+  sort_order: number;
+};
+
+type FinanceAccountRow = {
+  id: string;
+  category_id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  active: boolean;
 };
 
 type OperationalExpenseRow = {
@@ -134,7 +171,7 @@ type OperationalExpensePayload = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 const OPERATIONAL_EXPENSES_URL = buildMakeServerUrl('/finance/operational-expenses');
-const OPERATIONAL_EXPENSE_CATEGORIES_URL = buildMakeServerUrl('/finance/operational-expense-categories');
+const OPTIONAL_SELECT_NONE = '__none__';
 const EMPTY_SUMMARY: Summary = {
   totalAmount: 0,
   transactionCount: 0,
@@ -170,6 +207,64 @@ const buildOperationalExpensePayloadFromForm = (source: FormState): OperationalE
   source_ref: source.source_ref,
   notes: source.notes,
 });
+
+const mapFinanceCategoriesToOperationalOptions = (
+  financeCategories: FinanceCategoryRow[],
+  financeAccounts: FinanceAccountRow[],
+): OperationalExpenseCategory[] => {
+  const categoryById = new Map(
+    financeCategories
+      .filter((category) => category.active && (category.type === 'expense' || category.type === 'cogs'))
+      .map((category) => [category.id, category]),
+  );
+
+  return financeAccounts
+    .flatMap((account) => {
+      const category = categoryById.get(account.category_id);
+      if (!category || !account.active) return [];
+
+      return [{
+        id: account.id,
+        category: category.name,
+        subcategory: account.name,
+        account_code: account.code,
+        account_type: category.type,
+        description: account.description || '',
+        finance_account_id: account.id,
+        finance_category_id: category.id,
+        is_active: true,
+        sort_order: (category.sort_order || 0) * 100 + (Number(account.code) || 0),
+      }];
+    })
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.category.localeCompare(b.category) || a.subcategory.localeCompare(b.subcategory));
+};
+
+const fetchFinanceExpenseCategoryOptions = async () => {
+  const [categoryResult, accountResult] = await Promise.all([
+    supabase
+      .from('finance_categories')
+      .select('id, name, type, active, sort_order')
+      .in('type', ['expense', 'cogs'])
+      .eq('active', true)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true }),
+    supabase
+      .from('finance_accounts')
+      .select('id, category_id, name, code, description, active')
+      .eq('active', true)
+      .order('category_id', { ascending: true })
+      .order('code', { ascending: true })
+      .order('name', { ascending: true }),
+  ]);
+
+  if (categoryResult.error) throw categoryResult.error;
+  if (accountResult.error) throw accountResult.error;
+
+  return mapFinanceCategoriesToOperationalOptions(
+    (categoryResult.data || []) as FinanceCategoryRow[],
+    (accountResult.data || []) as FinanceAccountRow[],
+  );
+};
 
 const buildFormFromForwardDraft = (draft: OperationalExpenseForwardDraft): FormState => ({
   ...EMPTY_FORM,
@@ -223,9 +318,12 @@ const formatDate = (value?: string) => {
   });
 };
 
+const getPaymentSourceLabel = (payment: { bankName: string; accountNumber?: string; accountHolder?: string }) =>
+  [payment.bankName, payment.accountNumber, payment.accountHolder].filter(Boolean).join(' - ');
+
 export function Kas() {
   const { hasPermission, loading: permissionsLoading } = usePermissions();
-  const { branches } = useMasterData();
+  const { activeBranches, payments, vendors } = useMasterData();
   const canView = hasPermission('operational_expenses.view');
   const canCreate = hasPermission('operational_expenses.create');
   const canEdit = hasPermission('operational_expenses.edit');
@@ -272,6 +370,20 @@ export function Kas() {
     return Array.from(new Set(source.map((item) => item.subcategory).filter(Boolean)));
   }, [categories, form.category]);
 
+  const activeVendorOptions = useMemo(
+    () => vendors
+      .filter((vendor) => vendor.status === 'active')
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [vendors],
+  );
+
+  const activePaymentOptions = useMemo(
+    () => payments
+      .filter((payment) => payment.status === 'active')
+      .sort((left, right) => getPaymentSourceLabel(left).localeCompare(getPaymentSourceLabel(right))),
+    [payments],
+  );
+
   const buildParams = (includePaging = true) => {
     const params = new URLSearchParams();
     if (includePaging) {
@@ -311,7 +423,7 @@ export function Kas() {
     if (!canView) return;
     setLoading(true);
     const [categoryResult, listResult, summaryResult] = await Promise.allSettled([
-      fetchJson<OperationalExpenseCategory[]>(`${OPERATIONAL_EXPENSE_CATEGORIES_URL}?accountType=expense`),
+      fetchFinanceExpenseCategoryOptions(),
       fetchJson<{ data: OperationalExpenseRow[] }>(`${OPERATIONAL_EXPENSES_URL}?${buildParams(true)}`),
       fetchJson<Summary>(`${OPERATIONAL_EXPENSES_URL}/summary?${buildParams(false)}`),
     ]);
@@ -455,8 +567,8 @@ export function Kas() {
   };
 
   const handleSave = async () => {
-    if (!form.expense_date || !form.category || !form.amount || Number(form.amount) <= 0) {
-      toast.error('Tanggal, kategori, dan nominal wajib diisi.');
+    if (!form.expense_date || !form.category || !form.subcategory || !form.amount || Number(form.amount) <= 0) {
+      toast.error('Tanggal, kategori finance, subkategori finance, dan nominal wajib diisi.');
       return;
     }
 
@@ -498,279 +610,297 @@ export function Kas() {
 
   if (!canView) {
     return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="rounded-full bg-red-50 p-4 text-red-600 dark:bg-red-900/20 dark:text-red-400">
-          <Lock className="h-12 w-12" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Akses Dibatasi</h1>
-        <p className="text-slate-500 dark:text-slate-400">Anda tidak memiliki izin untuk membuka Biaya Operasional.</p>
-      </div>
+      <OperationalPageShell>
+        <OperationalEmptyState
+          icon={Lock}
+          title="Akses Dibatasi"
+          description="Anda tidak memiliki izin untuk membuka Biaya Operasional."
+          className="min-h-[70vh]"
+        />
+      </OperationalPageShell>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1540px] space-y-4 px-4 py-4 md:px-6">
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-4 border-b border-slate-100 p-4 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
-              <WalletCards className="h-4 w-4" />
-              Finance
-            </div>
-            <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">Biaya Operasional</h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Periode {formatDate(filters.startDate)} sampai {formatDate(filters.endDate)}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button variant="outline" onClick={refreshData} disabled={loading} className="h-9 gap-2">
+    <OperationalPageShell className="pb-20">
+      <OperationalPageHeader
+        eyebrow="Keuangan"
+        icon={WalletCards}
+        title="Biaya Operasional"
+        subtitle={`Periode ${formatDate(filters.startDate)} sampai ${formatDate(filters.endDate)}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={refreshData} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button onClick={openCreate} disabled={!canCreate} className="h-9 gap-2">
+            <Button onClick={openCreate} disabled={!canCreate}>
               <Plus className="h-4 w-4" />
               Tambah Biaya
             </Button>
-          </div>
-        </div>
-        {loadError && (
-          <div className="mx-4 mt-4 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <div className="font-semibold">Data belum bisa dimuat dari server.</div>
-              <div className="mt-0.5 text-amber-700 dark:text-amber-300">{loadError}</div>
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900/50 dark:bg-rose-900/10">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-rose-700 dark:text-rose-300">Total Biaya</p>
-              <ReceiptText className="h-5 w-5 text-rose-500" />
-            </div>
-            <p className="mt-3 break-words text-2xl font-semibold text-rose-700 dark:text-rose-300">{formatCurrency(summary.totalAmount)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-slate-500">Transaksi</p>
-              <ClipboardList className="h-5 w-5 text-blue-500" />
-            </div>
-            <p className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">{summary.transactionCount.toLocaleString('id-ID')}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-slate-500">Rata-rata</p>
-              <BarChart3 className="h-5 w-5 text-emerald-500" />
-            </div>
-            <p className="mt-3 break-words text-2xl font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(summary.averageAmount)}</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-slate-500">Kategori Aktif</p>
-              <Building2 className="h-5 w-5 text-violet-500" />
-            </div>
-            <p className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">{summary.categoryCount.toLocaleString('id-ID')}</p>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
-          <CalendarRange className="h-4 w-4 text-blue-500" />
-          Filter Data
+      {loadError && (
+        <div className="surfacePanel flex gap-3 border-amber-200 bg-amber-50 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <div className="font-semibold">Data belum bisa dimuat dari server.</div>
+            <div className="mt-0.5 text-amber-700 dark:text-amber-300">{loadError}</div>
+          </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[160px_160px_minmax(160px,1fr)_minmax(170px,1fr)_minmax(190px,1fr)_minmax(240px,1.4fr)]">
-          <Input className="h-10" type="date" value={filters.startDate} onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))} />
-          <Input className="h-10" type="date" value={filters.endDate} onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))} />
+      )}
+
+      <OperationalKpiGrid>
+        <OperationalKpiCard label="Total Biaya" value={formatCurrency(summary.totalAmount)} icon={ReceiptText} tone="rose" />
+        <OperationalKpiCard label="Transaksi" value={summary.transactionCount.toLocaleString('id-ID')} icon={ClipboardList} tone="blue" />
+        <OperationalKpiCard label="Rata-rata" value={formatCurrency(summary.averageAmount)} icon={BarChart3} tone="emerald" />
+        <OperationalKpiCard label="Kategori Finance" value={categoryOptions.length.toLocaleString('id-ID')} icon={Building2} tone="violet" />
+      </OperationalKpiGrid>
+
+      <OperationalFilterPanel>
+        <div className="masterDataControlRow">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[160px_160px_minmax(160px,1fr)_minmax(170px,1fr)_minmax(190px,1fr)_minmax(240px,1.4fr)]">
+          <Input className="filterDateButton" type="date" value={filters.startDate} onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))} />
+          <Input className="filterDateButton" type="date" value={filters.endDate} onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))} />
           <Select value={filters.branchId} onValueChange={(value) => setFilters((prev) => ({ ...prev, branchId: value }))}>
-            <SelectTrigger className="h-10"><SelectValue placeholder="Semua Cabang" /></SelectTrigger>
+            <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Semua Cabang" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Cabang</SelectItem>
-              {branches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>)}
+              {activeBranches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.category} onValueChange={(value) => setFilters((prev) => ({ ...prev, category: value, subcategory: 'all' }))}>
-            <SelectTrigger className="h-10"><SelectValue placeholder="Semua Kategori" /></SelectTrigger>
+            <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Semua Kategori Finance" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Kategori</SelectItem>
+              <SelectItem value="all">Semua Kategori Finance</SelectItem>
               {categoryOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filters.subcategory} onValueChange={(value) => setFilters((prev) => ({ ...prev, subcategory: value }))}>
-            <SelectTrigger className="h-10"><SelectValue placeholder="Semua Subkategori" /></SelectTrigger>
+            <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Semua Subkategori Finance" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Semua Subkategori</SelectItem>
+              <SelectItem value="all">Semua Subkategori Finance</SelectItem>
               {subcategoryOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex min-w-0 gap-2 sm:col-span-2 xl:col-span-1">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input className="h-10 pl-9" placeholder="Cari..." value={filters.q} onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))} onKeyDown={(event) => event.key === 'Enter' && refreshData()} />
+              <Input className="uiInput pl-9" placeholder="Cari biaya, vendor, atau catatan..." value={filters.q} onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))} onKeyDown={(event) => event.key === 'Enter' && refreshData()} />
             </div>
-            <Button variant="outline" onClick={refreshData} className="h-10 shrink-0">Cari</Button>
+            <Button variant="outline" onClick={refreshData} className="shrink-0">Cari</Button>
           </div>
         </div>
-      </div>
+        </div>
+      </OperationalFilterPanel>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="overflow-x-auto">
-        <Table className="min-w-[1080px]">
+      <OperationalTableCard>
+        <DataTable columns={[64, 132, 236, 170, 280, 180, 160, 120]} minWidth={1342} rowMinHeight={62} cellY={12} textMax={280}>
+        <table>
           <TableHeader>
-            <TableRow className="bg-slate-50 hover:bg-slate-50 dark:bg-slate-950/40 dark:hover:bg-slate-950/40">
+            <TableRow>
+              <TableHead className="text-center">No</TableHead>
               <TableHead className="w-[130px]">Tanggal</TableHead>
               <TableHead className="w-[220px]">Kategori</TableHead>
               <TableHead className="w-[160px]">Cabang</TableHead>
               <TableHead>Keterangan</TableHead>
               <TableHead className="w-[180px]">Vendor</TableHead>
               <TableHead className="w-[160px] text-right">Nominal</TableHead>
-              <TableHead className="w-[120px] text-right">Aksi</TableHead>
+              <TableActionHeader />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center">
+                <TableCell colSpan={8} className="h-32 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
                 </TableCell>
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-44 text-center">
-                  <div className="mx-auto flex max-w-sm flex-col items-center gap-2 text-slate-500">
-                    <div className="rounded-full bg-slate-100 p-3 text-slate-400 dark:bg-slate-800">
-                      {loadError ? <AlertCircle className="h-6 w-6" /> : <ReceiptText className="h-6 w-6" />}
-                    </div>
-                    <div className="font-medium text-slate-700 dark:text-slate-200">
-                      {loadError ? 'Server belum siap' : 'Belum ada biaya operasional'}
-                    </div>
-                    <div className="text-sm">
-                      {loadError ? 'Setelah migration dan function terbaru aktif, data akan tampil di sini.' : 'Tidak ada data pada filter yang sedang dipilih.'}
-                    </div>
-                  </div>
+                <TableCell colSpan={8}>
+                  <OperationalEmptyState
+                    icon={loadError ? AlertCircle : ReceiptText}
+                    title={loadError ? 'Server belum siap' : 'Belum ada biaya operasional'}
+                    description={loadError ? 'Setelah migration dan function terbaru aktif, data akan tampil di sini.' : 'Tidak ada data pada filter yang sedang dipilih.'}
+                  />
                 </TableCell>
               </TableRow>
-            ) : rows.map((row) => (
+            ) : rows.map((row, index) => (
               <TableRow key={row.id}>
+                <TableCell className="monoCell text-center">{index + 1}</TableCell>
                 <TableCell>{formatDate(row.expense_date)}</TableCell>
                 <TableCell>
-                  <div className="font-medium text-slate-900 dark:text-slate-100">{row.category}</div>
-                  <div className="text-xs text-slate-500">{row.subcategory || '-'}</div>
+                  <div className="tableTextStack" data-full-text={`${row.category} - ${row.subcategory || '-'}`}>
+                    <span className="tableTextPrimary">{row.category}</span>
+                    <small className="tableTextSecondary">{row.subcategory || '-'}</small>
+                  </div>
                 </TableCell>
                 <TableCell className="text-slate-600 dark:text-slate-300">{row.branch_name || '-'}</TableCell>
                 <TableCell className="max-w-[320px] truncate">{row.description || '-'}</TableCell>
                 <TableCell className="max-w-[180px] truncate">{row.vendor_name || '-'}</TableCell>
-                <TableCell className="text-right font-semibold text-rose-600">{formatCurrency(row.amount)}</TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-1">
+                <TableCell className="text-right text-rose-600">{formatCurrency(row.amount)}</TableCell>
+                <TableActionCell>
                     <Button variant="ghost" size="icon" onClick={() => setDetailRow(row)}><Eye className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(row)} disabled={!canEdit}><Edit className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="icon" onClick={() => setVoidRow(row)} disabled={!canDelete}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                  </div>
-                </TableCell>
+                </TableActionCell>
               </TableRow>
             ))}
           </TableBody>
-        </Table>
-        </div>
-      </div>
+        </table>
+        </DataTable>
+      </OperationalTableCard>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{form.id ? 'Edit Biaya Operasional' : 'Tambah Biaya Operasional'}</DialogTitle>
-            <DialogDescription>Isi kategori dan subkategori dengan rapi supaya laporan mudah dibaca.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Tanggal</Label>
-              <Input type="date" value={form.expense_date} onChange={(event) => setForm((prev) => ({ ...prev, expense_date: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Cabang</Label>
-              <Select value={form.branch_id} onValueChange={(value) => setForm((prev) => ({ ...prev, branch_id: value }))}>
-                <SelectTrigger><SelectValue placeholder="Umum / tanpa cabang" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Umum / tanpa cabang</SelectItem>
-                  {branches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Kategori</Label>
+        <MasterDataFormDialogContent size="wide">
+          <MasterDataFormHeader
+            icon={ReceiptText}
+            title={form.id ? 'Edit Biaya Operasional' : 'Tambah Biaya Operasional'}
+            description="Isi kategori dan subkategori dengan rapi supaya laporan mudah dibaca."
+          />
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleSave();
+            }}
+          >
+          <MasterDataDialogBody>
+          <MasterDataFormGrid>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel required>Tanggal</MasterDataFieldLabel>
+              <Input className="uiInput" type="date" value={form.expense_date} onChange={(event) => setForm((prev) => ({ ...prev, expense_date: event.target.value }))} />
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel required>Kategori Finance</MasterDataFieldLabel>
               <Select value={form.category} onValueChange={(value) => setForm((prev) => ({ ...prev, category: value, subcategory: '' }))}>
-                <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih kategori finance" /></SelectTrigger>
                 <SelectContent>
                   {categoryOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Subkategori</Label>
-              <Select value={form.subcategory || 'none'} onValueChange={(value) => setForm((prev) => ({ ...prev, subcategory: value === 'none' ? '' : value }))}>
-                <SelectTrigger><SelectValue placeholder="Pilih subkategori" /></SelectTrigger>
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel required>Subkategori Finance</MasterDataFieldLabel>
+              <Select value={form.subcategory} onValueChange={(value) => setForm((prev) => ({ ...prev, subcategory: value }))} disabled={!form.category}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder={form.category ? 'Pilih subkategori finance' : 'Pilih kategori dulu'} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Tanpa subkategori</SelectItem>
                   {formSubcategoryOptions.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Vendor / Penerima</Label>
-              <Input value={form.vendor_name} onChange={(event) => setForm((prev) => ({ ...prev, vendor_name: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Nominal</Label>
-              <Input type="number" min="0" value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Sumber Pembayaran</Label>
-              <Input placeholder="Cash, BCA, Mandiri..." value={form.payment_source} onChange={(event) => setForm((prev) => ({ ...prev, payment_source: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Referensi</Label>
-              <Input placeholder="No bukti / invoice" value={form.source_ref} onChange={(event) => setForm((prev) => ({ ...prev, source_ref: event.target.value }))} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Keterangan</Label>
-              <Input value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Catatan</Label>
-              <Textarea value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Batal</Button>
-            <Button onClick={handleSave} disabled={saving || (form.id ? !canEdit : !canCreate)}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel optional>Cabang</MasterDataFieldLabel>
+              <Select value={form.branch_id} onValueChange={(value) => setForm((prev) => ({ ...prev, branch_id: value }))}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Umum / tanpa cabang" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Umum / tanpa cabang</SelectItem>
+                  {activeBranches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel optional>Vendor / Penerima</MasterDataFieldLabel>
+              <Select
+                value={form.vendor_name || OPTIONAL_SELECT_NONE}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, vendor_name: value === OPTIONAL_SELECT_NONE ? '' : value }))}
+              >
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih vendor / penerima" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPTIONAL_SELECT_NONE}>Tanpa vendor</SelectItem>
+                  {activeVendorOptions.map((vendor) => <SelectItem key={vendor.id} value={vendor.name}>{vendor.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel optional>Sumber Pembayaran</MasterDataFieldLabel>
+              <Select
+                value={form.payment_source || OPTIONAL_SELECT_NONE}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, payment_source: value === OPTIONAL_SELECT_NONE ? '' : value }))}
+              >
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih bank / sumber dana" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={OPTIONAL_SELECT_NONE}>Tanpa sumber pembayaran</SelectItem>
+                  {activePaymentOptions.map((payment) => {
+                    const label = getPaymentSourceLabel(payment);
+                    return <SelectItem key={payment.id} value={label}>{label}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel required>Nominal</MasterDataFieldLabel>
+              <MasterDataCurrencyInput value={form.amount} onValueChange={(amount) => setForm((prev) => ({ ...prev, amount }))} />
+            </MasterDataFormField>
+            <MasterDataFormField span="half">
+              <MasterDataFieldLabel optional>Referensi</MasterDataFieldLabel>
+              <Input className="uiInput" placeholder="No bukti / invoice" value={form.source_ref} onChange={(event) => setForm((prev) => ({ ...prev, source_ref: event.target.value }))} />
+            </MasterDataFormField>
+            <MasterDataFormField span="full">
+              <MasterDataFieldLabel optional>Keterangan</MasterDataFieldLabel>
+              <Input className="uiInput" value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} />
+            </MasterDataFormField>
+            <MasterDataFormField span="full">
+              <MasterDataFieldLabel optional>Catatan</MasterDataFieldLabel>
+              <Textarea className="min-h-[96px]" value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} />
+            </MasterDataFormField>
+          </MasterDataFormGrid>
+          <MasterDataFormActions
+            isSubmitting={saving}
+            onCancel={() => setDialogOpen(false)}
+            saveLabel={form.id ? 'Simpan Perubahan' : 'Simpan Biaya'}
+            submitDisabled={form.id ? !canEdit : !canCreate}
+          />
+          </MasterDataDialogBody>
+          </form>
+        </MasterDataFormDialogContent>
       </Dialog>
 
       <Dialog open={Boolean(detailRow)} onOpenChange={(open) => !open && setDetailRow(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Detail Biaya Operasional</DialogTitle>
-          </DialogHeader>
+        <MasterDataFormDialogContent>
+          <MasterDataFormHeader
+            icon={Eye}
+            title="Detail Biaya Operasional"
+            description="Ringkasan transaksi biaya operasional yang tercatat."
+          />
           {detailRow && (
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span>Status</span>
-                <Badge variant="outline">{detailRow.status === 'active' ? 'Aktif' : 'Void'}</Badge>
+            <MasterDataDialogBody compact>
+              <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                  <span className="text-sm font-medium text-slate-500">Status</span>
+                  <Badge variant="outline">{detailRow.status === 'active' ? 'Aktif' : 'Void'}</Badge>
+                </div>
+                {[
+                  ['Tanggal', formatDate(detailRow.expense_date)],
+                  ['Kategori Finance', detailRow.category],
+                  ['Subkategori Finance', detailRow.subcategory || '-'],
+                  ['Cabang', detailRow.branch_name || '-'],
+                  ['Vendor / Penerima', detailRow.vendor_name || '-'],
+                  ['Sumber Pembayaran', detailRow.payment_source || '-'],
+                  ['Referensi', detailRow.source_ref || '-'],
+                  ['Nominal', formatCurrency(detailRow.amount)],
+                ].map(([label, value]) => (
+                  <div key={label} className="grid grid-cols-[150px_minmax(0,1fr)] gap-4 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0 dark:border-slate-800">
+                    <span className="font-medium text-slate-500">{label}</span>
+                    <span className="min-w-0 text-slate-900 dark:text-slate-100">{value}</span>
+                  </div>
+                ))}
               </div>
-              <div className="flex justify-between"><span>Tanggal</span><strong>{formatDate(detailRow.expense_date)}</strong></div>
-              <div className="flex justify-between"><span>Kategori</span><strong>{detailRow.category}</strong></div>
-              <div className="flex justify-between"><span>Subkategori</span><strong>{detailRow.subcategory || '-'}</strong></div>
-              <div className="flex justify-between"><span>Cabang</span><strong>{detailRow.branch_name || '-'}</strong></div>
-              <div className="flex justify-between"><span>Nominal</span><strong>{formatCurrency(detailRow.amount)}</strong></div>
-              <div><span className="text-slate-500">Keterangan</span><p className="mt-1 font-medium">{detailRow.description || '-'}</p></div>
-              <div><span className="text-slate-500">Catatan</span><p className="mt-1 font-medium">{detailRow.notes || '-'}</p></div>
-            </div>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-500">Keterangan</div>
+                  <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">{detailRow.description || '-'}</p>
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-slate-500">Catatan</div>
+                  <p className="mt-1 text-sm text-slate-900 dark:text-slate-100">{detailRow.notes || '-'}</p>
+                </div>
+              </div>
+            </MasterDataDialogBody>
           )}
-        </DialogContent>
+        </MasterDataFormDialogContent>
       </Dialog>
 
       <AlertDialog open={Boolean(voidRow)} onOpenChange={(open) => !open && setVoidRow(null)}>
@@ -779,7 +909,7 @@ export function Kas() {
             <AlertDialogTitle>Void biaya operasional?</AlertDialogTitle>
             <AlertDialogDescription>Data tidak dihapus permanen, tetapi statusnya berubah menjadi void dan tidak masuk summary aktif.</AlertDialogDescription>
           </AlertDialogHeader>
-          <Textarea placeholder="Alasan void" value={voidReason} onChange={(event) => setVoidReason(event.target.value)} />
+          <Textarea className="min-h-[96px] rounded-2xl" placeholder="Alasan void" value={voidReason} onChange={(event) => setVoidReason(event.target.value)} />
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>Batal</AlertDialogCancel>
             <AlertDialogAction onClick={handleVoid} disabled={saving} className="bg-red-600 hover:bg-red-700">
@@ -788,6 +918,6 @@ export function Kas() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </OperationalPageShell>
   );
 }

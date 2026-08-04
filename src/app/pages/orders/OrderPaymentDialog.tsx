@@ -2,10 +2,9 @@ import React from 'react';
 import { CreditCard, Landmark, ReceiptText } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { Badge } from '../../components/ui/badge';
-import { Order, PaymentMethod, PaymentTransaction } from '../master-data/data';
+import { Order, PaymentMethod } from '../master-data/data';
 import { useMasterData } from '../master-data/context';
 import { Button } from '../../components/ui/button';
-import { OrderQrisPanel } from './OrderQrisPanel';
 
 interface OrderPaymentDialogProps {
   isOpen: boolean;
@@ -13,7 +12,6 @@ interface OrderPaymentDialogProps {
   order: Order | null;
   previewMode?: boolean;
   previewPayments?: PaymentMethod[];
-  previewTransactions?: PaymentTransaction[];
 }
 
 const statusClasses: Record<string, string> = {
@@ -35,7 +33,6 @@ export function OrderPaymentDialog({
   order,
   previewMode = false,
   previewPayments,
-  previewTransactions,
 }: OrderPaymentDialogProps) {
   const { orders, payments } = useMasterData();
 
@@ -106,11 +103,6 @@ export function OrderPaymentDialog({
           </div>
         </div>
 
-        <OrderQrisPanel
-          order={activeOrder}
-          previewMode={previewMode}
-          previewTransactions={previewTransactions}
-        />
       </div>
     </Modal>
   );

@@ -69,7 +69,7 @@ Inventory, Master Data, Pengguna & Akses, Role Permission, Kontrol Pemakaian, Te
    Jadwal, Teknisi Mobile, Ketersediaan Teknisi, Aktivitas Teknisi, Pemantauan Lapangan.
 
 4. Finance workflow:
-   Payroll, Pembayaran, Pengeluaran Rutin, Biaya Operasional, Hutang & Piutang, Payment Gateway.
+   Payroll, Pembayaran, Pengeluaran Rutin, Biaya Operasional, Hutang & Piutang.
 
 5. Admin workflow:
    Master Data, User & Akses, Role Permission, Inventory, Template WhatsApp.

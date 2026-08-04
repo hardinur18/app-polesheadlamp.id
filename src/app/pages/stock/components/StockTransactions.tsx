@@ -1229,7 +1229,7 @@ export function StockTransactions() {
   const selectedTechnician = activeTechnicians.find((technician) => technician.id === formData.technicianId);
   const sameBranchTechnicians = activeTechnicians.filter((technician) => technician.branchId === formData.branchId);
   const otherActiveTechnicians = activeTechnicians.filter((technician) => technician.branchId !== formData.branchId);
-  const tableColumnCount = hasTransactionActions ? 8 : 7;
+  const tableColumnCount = hasTransactionActions ? 9 : 8;
   const transactionPagination = useInventoryTablePagination(
     filteredTransactions,
     `${searchTerm}|${typeFilter}|${branchFilter}|${technicianFilter}|${dateFrom || ''}|${dateTo || ''}`,
@@ -1484,7 +1484,7 @@ export function StockTransactions() {
         <DataTable
           actionWidth={hasTransactionActions ? 82 : undefined}
           cellY={12}
-          columns={["10%", "24%", "25%", "8%", "13%", "13%", "7%", hasTransactionActions ? "56px" : null]}
+          columns={["5%", "9%", "23%", "23%", "8%", "13%", "12%", "7%", hasTransactionActions ? "56px" : null]}
           className="inventoryTransactionTable"
           minWidth="100%"
           primaryLines={1}
@@ -1495,6 +1495,7 @@ export function StockTransactions() {
         <table>
           <TableHeader>
             <TableRow>
+              <TableHead>No</TableHead>
               <TableHead>Tipe</TableHead>
               <TableHead>Nama Barang</TableHead>
               <TableHead>Teknisi/Cabang</TableHead>
@@ -1515,6 +1516,9 @@ export function StockTransactions() {
             ) : (
                 transactionPagination.paginatedItems.map((trx, index) => (
                     <TableRow key={trx.id} className="border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                        <TableCell className="inventoryTableIndexCell">
+                          {transactionPagination.startIndex + index + 1}
+                        </TableCell>
                         <TableCell>
                           <span className={`inventoryStockTypeText is${trx.type}`}>{getTypeLabel(trx.type)}</span>
                         </TableCell>

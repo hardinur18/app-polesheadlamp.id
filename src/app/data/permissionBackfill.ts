@@ -88,20 +88,6 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
     ensurePermission(updated, 'cs_okr.view');
   }
 
-  if (updated.includes('order.payment.view')) {
-    ensurePermission(updated, 'order.payment.qris.view');
-  }
-
-  if (
-    updated.includes('order.edit') ||
-    updated.includes('order.payment.edit_type') ||
-    updated.includes('order.payment.edit_status')
-  ) {
-    ensurePermission(updated, 'order.payment.qris.generate');
-    ensurePermission(updated, 'order.payment.qris.refresh');
-    ensurePermission(updated, 'order.payment.qris.cancel');
-  }
-
   if (updated.includes('stock.transaction.create')) {
     ensurePermission(updated, 'stock.transaction.cancel');
   }

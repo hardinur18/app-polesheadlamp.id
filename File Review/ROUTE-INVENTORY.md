@@ -43,7 +43,6 @@ Inventory ini disusun dari:
 | short internal routes | `AuthenticatedApp` | authenticated app namespace | Canonical route set |
 | `/app/*` | `AuthenticatedApp` | legacy authenticated app namespace | Kept as compatibility route |
 | `/booking` | `PublicBookingPage` | public | Keep stable |
-| `/payment-gateway-preview` | `PaymentGatewayPreviewPage` | public | Keep stable |
 | `*` | `AuthenticatedApp` | smart fallback | Keep during transition, then narrow later |
 
 ## Target Route Rules
@@ -54,7 +53,7 @@ Recommended route contract:
 - internal authenticated routes use short canonical paths without `/app`, for example `/dashboard`, `/orders`, and `/finance/payments`.
 - `/app/*` stays supported as a legacy compatibility namespace during transition, but is canonicalized back to short URLs in the app.
 - top-level internal routes canonicalize with a trailing slash in production, for example `/orders/`, because Cloudflare Pages serves those direct routes reliably with the slash.
-- `/booking` and `/payment-gateway-preview` remain public and unchanged.
+- `/booking` remains public and unchanged.
 - `/` becomes a smart entry:
   - logged out: login
   - logged in: default role route, normally `/dashboard`
@@ -119,7 +118,6 @@ These rules must remain behaviorally equivalent during route migration.
 | Cashflow | `cashflow` | `/finance/cashflow` | `Kas` | `cashflow.view` | Cash in/out |
 | Debts | `debts` | `/finance/debts` | `DebtsPage` | `debts.view` | Debt/receivable module |
 | Finance Report | `finance-report` | `/finance/report` | `Laporan mode="finance"` | `finance_report.view` | Uses report component in finance mode |
-| Payment Gateway | `payment-gateway` | `/finance/payment-gateway` | `PaymentGatewaySettings` | `payment_gateway.view` | Internal settings page |
 
 ## Inventory Routes
 
@@ -340,7 +338,6 @@ For every routing batch:
 - open `/`
 - open `/login`
 - open `/booking`
-- open `/payment-gateway-preview`
 - login as Owner and open `/dashboard`
 - open `/leads`
 - open `/orders`

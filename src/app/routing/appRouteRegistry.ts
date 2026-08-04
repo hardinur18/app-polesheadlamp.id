@@ -20,12 +20,6 @@ export const PUBLIC_APP_ROUTES: AppRouteDefinition[] = [
     title: 'Booking',
     access: 'public',
   },
-  {
-    id: 'public-payment-gateway-preview',
-    path: '/payment-gateway-preview',
-    title: 'Payment Gateway Preview',
-    access: 'public',
-  },
 ];
 
 export const AUTH_APP_ROUTES: AppRouteDefinition[] = [
@@ -279,14 +273,6 @@ export const AUTH_APP_ROUTES: AppRouteDefinition[] = [
     permission: 'finance_report.view',
     canonicalPath: '/reports/daily',
     notes: 'Legacy finance menu alias; laporan operasional teknisi sekarang satu pintu di /reports/daily.',
-  },
-  {
-    id: 'payment-gateway',
-    tabId: 'payment-gateway',
-    path: '/finance/payment-gateway',
-    title: 'Payment Gateway',
-    access: 'permission',
-    permission: 'payment_gateway.view',
   },
   {
     id: 'inventory',

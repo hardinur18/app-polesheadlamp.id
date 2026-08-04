@@ -8,7 +8,6 @@ const APP_LAYOUT_PAGE_TITLES: Partial<Record<string, string>> = {
   'recurring-expenses': 'Pengeluaran Rutin',
   cashflow: 'Biaya Operasional',
   payroll: 'Payroll & Komisi',
-  'payment-gateway': 'Payment Gateway',
   'ads-realtime': 'Integrasi Iklan',
   'ads-monitoring': 'Monitoring Performance',
   'ads-monitoring-workspace': 'Ads Monitoring',

@@ -49,7 +49,6 @@ export const APP_LAYOUT_TAB_PERMISSIONS: Partial<Record<string, AppLayoutTabPerm
   debts: 'debts.view',
   'finance-report': 'finance_report.view',
   payroll: 'payroll.view',
-  'payment-gateway': 'payment_gateway.view',
   inventory: 'inventory.view',
   'inventory-products': 'inventory.view',
   'inventory-transactions': 'stock.transaction.view',

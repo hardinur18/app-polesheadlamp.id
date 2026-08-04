@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/app/components/ui/sheet";
 import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { Plus, Search, Edit, Trash2, RefreshCcw, Loader2, Wand2, Check, ChevronsUpDown, ClipboardList, Boxes, PackageCheck, WalletCards } from "lucide-react";
@@ -1199,14 +1198,14 @@ export function ProductList() {
         </MasterDataFormDialogContent>
       </Dialog>
 
-      <Sheet open={!!detailProduct} onOpenChange={(open) => { if (!open) setDetailProduct(null); }}>
-        <SheetContent side="right" className="inventoryFormSheet inventoryDetailSheet">
-          <SheetHeader className="inventoryFormHeader">
-            <SheetTitle>Detail Produk</SheetTitle>
-            <SheetDescription>
+      <Dialog open={!!detailProduct} onOpenChange={(open) => { if (!open) setDetailProduct(null); }}>
+        <MasterDataFormDialogContent size="wide" className="inventoryDetailDialog">
+          <DialogHeader>
+            <DialogTitle>Detail Produk</DialogTitle>
+            <DialogDescription>
               Informasi master produk, kepemilikan stok, harga, dan status persediaan.
-            </SheetDescription>
-          </SheetHeader>
+            </DialogDescription>
+          </DialogHeader>
           {detailProduct && (
             <div className="inventoryDetailContent">
               <div className="inventoryDetailHero">
@@ -1310,8 +1309,8 @@ export function ProductList() {
               </div>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </MasterDataFormDialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
@@ -1339,7 +1338,7 @@ export function ProductList() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Kartu Stok Sheet */}
+      {/* Kartu Stok Dialog */}
       <StockCard
         open={stockCardOpen}
         onOpenChange={setStockCardOpen}

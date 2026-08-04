@@ -137,8 +137,8 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="masterDataForm">
-        <div className={type === 'payment' ? 'masterDataFormGrid' : undefined}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="masterDataForm masterDataGenericForm">
+        <div className={type === 'payment' ? 'masterDataFormGrid masterDataGenericFormFields' : 'masterDataFormStack masterDataGenericFormFields'}>
           <FormField
             control={form.control}
             name="name"
@@ -251,7 +251,9 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
             name="platformId"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Platform Iklan <span className="text-red-500">*</span></FormLabel>
+                <FormLabel asChild>
+                  <MasterDataFieldLabel required>Platform Iklan</MasterDataFieldLabel>
+                </FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger className={selectClassName}>
@@ -278,7 +280,9 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
             name="category"
             render={({field}) => (
               <FormItem>
-                <FormLabel>Kategori Size <span className="text-red-500">*</span></FormLabel>
+                <FormLabel asChild>
+                  <MasterDataFieldLabel required>Kategori Size</MasterDataFieldLabel>
+                </FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger className={selectClassName}>
@@ -357,7 +361,9 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
               name="phone"
               render={({field}) => (
                 <FormItem>
-                  <FormLabel>No. Telepon / WA</FormLabel>
+                  <FormLabel asChild>
+                    <MasterDataFieldLabel optional>No. Telepon / WA</MasterDataFieldLabel>
+                  </FormLabel>
                   <FormControl>
                     <Input placeholder="08123456789" {...field} className={inputClassName} />
                   </FormControl>
@@ -370,7 +376,9 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
               name="address"
               render={({field}) => (
                 <FormItem>
-                  <FormLabel>Alamat</FormLabel>
+                  <FormLabel asChild>
+                    <MasterDataFieldLabel optional>Alamat</MasterDataFieldLabel>
+                  </FormLabel>
                   <FormControl>
                     <Textarea placeholder="Alamat Lengkap" {...field} className={inputClassName} />
                   </FormControl>
@@ -387,9 +395,11 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
           name="description"
           render={({field}) => (
             <FormItem>
-              <FormLabel>Deskripsi</FormLabel>
+              <FormLabel asChild>
+                <MasterDataFieldLabel optional>Deskripsi</MasterDataFieldLabel>
+              </FormLabel>
               <FormControl>
-                <Textarea placeholder="Deskripsi (Opsional)" {...field} className={inputClassName} />
+                <Textarea placeholder="Deskripsi..." {...field} className={inputClassName} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -402,7 +412,9 @@ export const GenericForm: React.FC<GenericFormProps> = ({ type, item, label, onD
           name="status"
           render={({field}) => (
             <FormItem className={isMediaForm ? 'md:col-span-2' : undefined}>
-              <FormLabel>Status</FormLabel>
+              <FormLabel asChild>
+                <MasterDataFieldLabel>Status</MasterDataFieldLabel>
+              </FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger className={selectClassName}>

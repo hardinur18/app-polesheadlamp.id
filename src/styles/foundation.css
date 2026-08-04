@@ -1347,6 +1347,9 @@
   position: relative;
   z-index: 5;
   display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   gap: 12px;
   margin-bottom: 16px;
   padding: 14px;
@@ -1359,6 +1362,9 @@
 
 .controlRow {
   display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: center;
   gap: 10px;
@@ -1368,6 +1374,9 @@
 .selectBox,
 .filterSelectBox {
   display: flex;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 44px;
   align-items: center;
@@ -3724,18 +3733,23 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: visible;
 }
 
 .masterDataControlRow {
-  grid-template-columns: minmax(360px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   justify-content: stretch;
 }
 
 .masterDataControlActions {
   display: flex;
   width: max-content;
-  min-width: 220px;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   justify-self: end;
@@ -3749,6 +3763,54 @@ body {
 .masterDataActionButton.secondary {
   width: 148px;
   min-width: 148px;
+}
+
+@media (max-width: 900px) {
+  .masterDataTabSurface {
+    overflow-x: clip;
+  }
+
+  .controlPanel {
+    max-height: calc(100dvh - 140px);
+    overflow-x: clip;
+    overflow-y: auto;
+    padding: 12px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .controlRow,
+  .masterDataControlRow {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .masterDataControlActions {
+    width: 100%;
+    flex-direction: column;
+    justify-content: stretch;
+    justify-self: stretch;
+  }
+
+  .masterDataActionButton,
+  .masterDataActionButton.secondary,
+  .masterDataControlActions .uiButton,
+  .masterDataControlActions button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .searchBox {
+    min-height: 48px;
+    border-radius: 18px;
+    padding-inline: 14px;
+  }
+
+  .searchBox input {
+    min-height: 44px;
+    font-size: 0.92rem;
+  }
 }
 
 .masterDataSegmentedTabs {
@@ -5004,16 +5066,19 @@ body {
   white-space: normal;
 }
 
-.inventoryDetailSheet {
-  width: min(100vw, 520px);
-  max-width: min(100vw, 520px);
+.inventoryDetailDialog {
+  width: min(92vw, 720px);
+  max-height: min(86vh, 780px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .inventoryDetailContent {
   display: grid;
   gap: 18px;
   overflow-y: auto;
-  padding: 22px 24px 24px;
+  padding: 4px 2px 2px;
 }
 
 .inventoryDetailHero {
@@ -5210,10 +5275,23 @@ body {
 
 .inventorySettingsToolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 180px);
+  align-items: center;
+  gap: 12px;
   border-top: 1px solid rgba(226, 232, 240, 0.76);
-  padding: 16px 18px;
+  padding: 14px 18px;
+}
+
+.inventorySettingsToolbar .uiInput,
+.inventorySettingsToolbar .uiButton {
+  height: 52px;
+  min-height: 52px;
+  border-radius: 16px;
+}
+
+.inventorySettingsToolbar .inventoryPrimaryButton {
+  min-width: 0;
+  width: 100%;
 }
 
 .inventorySettingsListItem {
@@ -6600,13 +6678,16 @@ body {
 }
 
 .controlRow.masterDataControlRow {
-  grid-template-columns: minmax(360px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .searchBox,
 .selectBox,
 .filterSelectBox {
   display: flex;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 48px;
   align-items: center;
@@ -6653,6 +6734,12 @@ body {
 .filterSelectBox:focus-within {
   border-color: rgba(99, 102, 241, 0.6);
   box-shadow: var(--ring);
+}
+
+@media (max-width: 900px) {
+  .controlRow.masterDataControlRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .tablePanel {
@@ -7011,6 +7098,11 @@ body {
 }
 
 .masterDataDialogBody {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
   padding: 18px 24px 22px;
 }
 
@@ -7018,22 +7110,188 @@ body {
   padding-block: 14px 18px;
 }
 
+.masterDataFormDialogContent {
+  border-radius: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: min(88vh, calc(100dvh - 32px));
+  max-width: min(calc(100vw - 32px), 560px);
+  width: min(calc(100vw - 32px), 560px);
+}
+
+.masterDataFormDialogContent:has(.masterDataFormHeader) {
+  padding: 0;
+}
+
+.masterDataFormDialogContent.sm\:max-w-\[960px\] {
+  max-width: min(calc(100vw - 48px), 960px);
+  width: min(calc(100vw - 48px), 960px);
+}
+
+.masterDataFormDialogContent > button {
+  right: 22px;
+  top: 22px;
+}
+
+.masterDataFormDialogContent > .overflow-y-auto {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.masterDataFormHeader {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 34px 48px 28px;
+  text-align: left;
+}
+
+.masterDataFormTitle {
+  align-items: center;
+  color: #0f172a;
+  display: flex;
+  font-size: 1.2rem;
+  font-weight: 800;
+  gap: 10px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.masterDataFormTitleIcon {
+  color: #0b63ce;
+  height: 20px;
+  width: 20px;
+}
+
+.masterDataFormDescription {
+  color: #64748b;
+  font-size: 0.98rem;
+  font-weight: 500;
+  line-height: 1.55;
+  max-width: 760px;
+}
+
 .masterDataForm {
   display: grid;
-  gap: 16px;
+  gap: 22px;
+  padding-top: 2px;
 }
 
 .masterDataFormGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 22px 16px;
+}
+
+.masterDataFormStack {
+  display: grid;
+  gap: 28px;
+}
+
+.masterDataFormFieldGrid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.masterDataFormField {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.masterDataForm [data-slot="form-item"] {
+  gap: 9px;
+  min-width: 0;
+}
+
+.masterDataGenericFormFields > [data-slot="form-item"] + [data-slot="form-item"] {
+  margin-top: 2px;
+}
+
+.masterDataGenericForm [data-slot="form-label"] {
+  line-height: 1.2;
+}
+
+.masterDataGenericForm [data-slot="form-control"] {
+  width: 100%;
+}
+
+.masterDataFormField.span-full {
+  grid-column: 1 / -1;
+}
+
+.masterDataFormField.span-half {
+  grid-column: span 6;
+}
+
+.masterDataFormField.span-third {
+  grid-column: span 4;
+}
+
+.masterDataFormField.span-quarter {
+  grid-column: span 3;
+}
+
+.masterDataFormField .uiInput,
+.masterDataFormField .uiSelectTrigger,
+.masterDataFormField button[role="combobox"] {
+  min-height: 44px;
+}
+
+.masterDataFormField button[role="combobox"].uiSelectTrigger {
+  justify-content: space-between;
+  text-align: left;
+}
+
+.masterDataForm textarea,
+.masterDataForm [data-slot="form-control"][data-slot="form-control"],
+.masterDataFormField textarea {
+  border-radius: 16px;
+}
+
+.masterDataForm textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.masterDataCurrencyInput {
+  position: relative;
+  min-width: 0;
+}
+
+.masterDataCurrencyPrefix {
+  pointer-events: none;
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  z-index: 1;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.masterDataCurrencyInput .uiInput {
+  padding-left: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+.masterDataFieldOptional {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 .masterDataFormActions {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), #ffffff 30%);
+  bottom: 0;
   margin-top: 22px;
   gap: 10px;
   border-top: 1px solid rgba(226, 232, 240, 0.82);
   padding-top: 16px;
+  position: sticky;
+  z-index: 3;
 }
 
 .masterDataFormActions .uiButton {
@@ -8127,9 +8385,28 @@ body {
     padding: 14px 18px 18px;
   }
 
-  .masterDataFormGrid {
+  .masterDataFormDialogContent,
+  .masterDataFormDialogContent.sm\:max-w-\[960px\] {
+    border-radius: 22px;
+    max-width: calc(100vw - 20px);
+    width: calc(100vw - 20px);
+  }
+
+  .masterDataFormHeader {
+    padding: 24px 20px 20px;
+  }
+
+  .masterDataFormGrid,
+  .masterDataFormFieldGrid {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
+  }
+
+  .masterDataFormField.span-full,
+  .masterDataFormField.span-half,
+  .masterDataFormField.span-third,
+  .masterDataFormField.span-quarter {
+    grid-column: 1 / -1;
   }
 
   .platformLogoUploader {
@@ -8234,4 +8511,417 @@ body {
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
   word-break: normal !important;
+}
+
+/* Inventory data rows should read like operational data, not headline text. */
+.inventoryPage .uiDataTableScroller tbody td,
+.inventoryPage .uiDataTableScroller tbody td *,
+.inventoryPage .uiDataTableScroller tbody .tableTextPrimary,
+.inventoryPage .uiDataTableScroller tbody .tableTextSecondary,
+.inventoryPage .uiDataTableScroller tbody .inventoryTableIndexCell,
+.inventoryPage .uiDataTableScroller tbody .inventoryPlainCellText,
+.inventoryPage .uiDataTableScroller tbody .inventoryOwnerStack span,
+.inventoryPage .uiDataTableScroller tbody .inventoryOwnerStack small,
+.inventoryPage .uiDataTableScroller tbody .inventoryStockTypeText,
+.inventoryPage .uiDataTableScroller tbody .inventoryStockQtyText,
+.inventoryPage .uiDataTableScroller tbody .inventoryMoneyValue,
+.inventoryPage .uiDataTableScroller tbody .inventoryQtyValue {
+  font-weight: 500 !important;
+}
+
+/* Finance: Hutang & Piutang foundation pass */
+.debtPage {
+  --debt-radius: 18px;
+  padding-bottom: 80px;
+}
+
+.debtStack {
+  display: grid;
+  gap: 14px;
+}
+
+.debtPage .topbar {
+  margin-bottom: 6px;
+  align-items: flex-start;
+}
+
+.debtPage .eyebrowLine {
+  margin-bottom: 8px;
+  font-size: 0.7rem;
+}
+
+.debtPage .topbar h1 {
+  font-size: clamp(1.85rem, 2.1vw, 2.38rem);
+  line-height: 1.04;
+}
+
+.debtPage .topbar p {
+  margin-top: 9px;
+  max-width: 620px;
+  font-size: 0.86rem;
+  line-height: 1.42;
+}
+
+.debtReadOnlyNote {
+  color: #b45309;
+  font-weight: 650;
+}
+
+.debtHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.debtHeaderActions .uiButton {
+  min-height: 44px;
+  border-radius: 13px;
+  padding-inline: 17px;
+  font-size: 0.8rem;
+}
+
+.debtRefreshButton {
+  min-width: 118px;
+}
+
+.debtFilterPanel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(190px, 240px);
+  gap: 10px;
+  align-items: center;
+  border-radius: var(--debt-radius);
+  padding: 12px;
+  box-shadow: 0 16px 38px -34px rgba(15, 23, 42, 0.42);
+  animation: debtFadeUp 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.debtSearchField {
+  position: relative;
+  min-width: 0;
+}
+
+.debtFilterType {
+  min-width: 0;
+}
+
+.debtFilterPanel .uiInput,
+.debtFilterPanel .uiSelectTrigger {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 13px;
+  font-size: 0.8rem;
+}
+
+.debtKpiGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.debtKpiGrid .metricCard {
+  min-height: 88px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  border-radius: var(--debt-radius);
+  padding: 16px 17px;
+  box-shadow: 0 16px 42px -36px rgba(15, 23, 42, 0.44);
+  animation: debtFadeUp 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.debtKpiGrid .metricCard:nth-child(2) {
+  animation-delay: 55ms;
+}
+
+.debtKpiGrid .metricCard:hover {
+  transform: translateY(-2px);
+}
+
+.debtKpiGrid .metricIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
+.debtKpiGrid .metricCard small {
+  font-size: 0.72rem;
+}
+
+.debtKpiGrid .metricValue {
+  margin-top: 3px;
+  font-size: clamp(1.05rem, 1.5vw, 1.32rem);
+  font-weight: 720;
+}
+
+.debtTabsViewport {
+  margin: 2px 0 0;
+}
+
+.debtTabs {
+  width: fit-content;
+  min-height: 42px;
+  border-radius: 16px;
+  padding: 4px;
+  box-shadow: 0 16px 38px -35px rgba(15, 23, 42, 0.48);
+}
+
+.debtTab {
+  gap: 8px;
+  min-height: 34px;
+  border-radius: 13px;
+  padding-inline: 13px;
+  font-size: 0.78rem;
+}
+
+.debtTabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 620;
+}
+
+.debtTabContent {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  outline: none;
+}
+
+.debtGroupCard {
+  min-height: 0;
+  height: auto;
+  border-radius: var(--debt-radius);
+  box-shadow: 0 16px 42px -38px rgba(15, 23, 42, 0.46);
+  overflow: hidden;
+  animation: debtFadeUp 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: border-color 180ms ease, box-shadow 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.debtGroupCard:hover {
+  border-color: rgba(37, 99, 235, 0.18);
+  box-shadow: 0 22px 50px -40px rgba(15, 23, 42, 0.56);
+  transform: translateY(-1px);
+}
+
+.debtGroupHeader {
+  display: flex;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 76px;
+  padding: 14px 18px;
+  transition: background 160ms ease, padding 160ms ease;
+}
+
+.debtGroupHeader:hover {
+  background: linear-gradient(90deg, rgba(248, 250, 252, 0.88), rgba(255, 255, 255, 0.48));
+}
+
+.debtGroupName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 640;
+  line-height: 1.3;
+}
+
+.debtGroupMeta {
+  margin-top: 3px;
+  color: #8190a6;
+  font-size: 0.72rem;
+  font-weight: 560;
+}
+
+.debtIdentityText,
+.debtSourceText {
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.debtIdentityText.isVendor {
+  color: #b45309;
+}
+
+.debtIdentityText.isUser {
+  color: #2563eb;
+}
+
+.debtGroupTotal {
+  font-size: 0.92rem;
+  font-weight: 640;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.debtGroupTotal.isReceivable,
+.debtMoneyCell.isReceivable {
+  color: #047857;
+}
+
+.debtGroupTotal.isPayable,
+.debtMoneyCell.isPayable {
+  color: #b91c1c;
+}
+
+.debtGroupTable {
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  animation: debtReveal 220ms ease both;
+}
+
+.debtIndexCell {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.debtSourceText {
+  display: block;
+  text-transform: uppercase;
+}
+
+.debtSourceText.isManual {
+  color: #475569;
+}
+
+.debtSourceText.isAuto {
+  color: #2563eb;
+}
+
+.debtMoneyCell {
+  text-align: right;
+  font-size: 0.84rem;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.debtRowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.debtSettleButton {
+  min-width: 74px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.debtSettleButton.isReceivable {
+  border-color: rgba(16, 185, 129, 0.32);
+  color: #047857;
+}
+
+.debtSettleButton.isPayable {
+  border-color: rgba(37, 99, 235, 0.28);
+  color: #1d4ed8;
+}
+
+.debtFormDialog {
+  width: min(92vw, 860px);
+  animation: debtDialogIn 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.debtFormBody {
+  gap: 16px;
+}
+
+@keyframes debtDialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes debtFieldIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.debtPage .uiDataTableScroller tbody td,
+.debtPage .uiDataTableScroller tbody td *,
+.debtPage .uiDataTableScroller tbody .tableTextPrimary,
+.debtPage .uiDataTableScroller tbody .tableTextSecondary {
+  font-weight: 500 !important;
+}
+
+@keyframes debtFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes debtReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .debtFilterPanel,
+  .debtKpiGrid .metricCard,
+  .debtGroupCard,
+  .debtGroupTable {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .debtFilterPanel,
+  .debtKpiGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .debtHeaderActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .debtGroupHeader {
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .debtHeaderActions .uiButton {
+    width: 100%;
+  }
+
 }

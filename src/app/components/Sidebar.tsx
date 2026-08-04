@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   LayoutDashboard, Database, Users, Settings, LogOut, Shield,
   Megaphone, UserPlus, ClipboardList, Calendar, Map,
-  Wallet, ArrowRightLeft, ScrollText, FileBarChart, Package, ShieldCheck, MessageSquare, CreditCard,
+  Wallet, ArrowRightLeft, ScrollText, FileBarChart, Package, ShieldCheck, MessageSquare,
   Share2, RefreshCw, Briefcase, TrendingUp, DollarSign, Repeat, ChevronDown,
   Smartphone, FileText, BarChart3, Images, Target, Activity
 } from 'lucide-react';
@@ -154,7 +154,6 @@ const NAV_GROUPS: NavGroup[] = [
           { icon: ScrollText, label: 'Hutang & Piutang', id: 'debts', permission: 'debts.view' },
         ],
       },
-      { icon: CreditCard, label: 'Payment Gateway', id: 'payment-gateway', permission: 'payment_gateway.view' },
     ]
   },
   {

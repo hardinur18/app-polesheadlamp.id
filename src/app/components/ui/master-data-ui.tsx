@@ -13,7 +13,8 @@ import {
   AlertDialogTitle,
 } from './alert-dialog';
 import { Button } from './button';
-import { DialogContent, DialogFooter } from './dialog';
+import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
+import { Input } from './input';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 import { TableActionMenu, TableActionMenuItem } from './data-table';
 import { cn } from './utils';
@@ -169,8 +170,8 @@ export function MasterDataFormDialogContent({
   return (
     <DialogContent
       className={cn(
-        'max-h-[88vh] overflow-y-auto rounded-2xl border-none bg-white shadow-2xl dark:bg-slate-900',
-        size === 'wide' ? 'sm:max-w-[760px]' : 'sm:max-w-[520px]',
+        'masterDataFormDialogContent max-h-[88vh] overflow-hidden rounded-2xl border-none bg-white shadow-2xl dark:bg-slate-900',
+        size === 'wide' ? 'sm:max-w-[960px]' : 'sm:max-w-[560px]',
         className,
       )}
       onEscapeKeyDown={(event) => {
@@ -192,6 +193,102 @@ export function MasterDataFormDialogContent({
   );
 }
 
+type MasterDataFormHeaderProps = React.HTMLAttributes<HTMLDivElement> & {
+  description?: ReactNode;
+  icon?: LucideIcon;
+  title: ReactNode;
+};
+
+export function MasterDataFormHeader({
+  className,
+  description,
+  icon: Icon,
+  title,
+  ...props
+}: MasterDataFormHeaderProps) {
+  return (
+    <DialogHeader className={cn('masterDataFormHeader', className)} {...props}>
+      <DialogTitle className="masterDataFormTitle">
+        {Icon ? <Icon className="masterDataFormTitleIcon" /> : null}
+        <span>{title}</span>
+      </DialogTitle>
+      {description ? (
+        <DialogDescription className="masterDataFormDescription">
+          {description}
+        </DialogDescription>
+      ) : null}
+    </DialogHeader>
+  );
+}
+
+type MasterDataFormGridProps = React.HTMLAttributes<HTMLDivElement>;
+
+export function MasterDataFormGrid({ children, className, ...props }: MasterDataFormGridProps) {
+  return (
+    <div className={cn('masterDataFormGrid masterDataFormFieldGrid', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+type MasterDataFormFieldSpan = 'full' | 'half' | 'third' | 'quarter';
+
+type MasterDataFormFieldProps = React.HTMLAttributes<HTMLDivElement> & {
+  span?: MasterDataFormFieldSpan;
+};
+
+export function MasterDataFormField({
+  children,
+  className,
+  span = 'full',
+  ...props
+}: MasterDataFormFieldProps) {
+  return (
+    <div className={cn('masterDataFormField', `span-${span}`, className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+function formatRupiahInputValue(value: string | number | undefined | null) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('id-ID');
+}
+
+type MasterDataCurrencyInputProps = Omit<
+  React.ComponentProps<typeof Input>,
+  'onChange' | 'type' | 'value'
+> & {
+  onValueChange: (value: string) => void;
+  value: string | number | undefined | null;
+};
+
+export const MasterDataCurrencyInput = React.forwardRef<HTMLInputElement, MasterDataCurrencyInputProps>(
+  ({ className, onValueChange, placeholder = '0', value, ...props }, ref) => {
+    return (
+      <div className="masterDataCurrencyInput">
+        <span className="masterDataCurrencyPrefix">Rp</span>
+        <Input
+          ref={ref}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          className={cn('pl-12', className)}
+          placeholder={placeholder}
+          value={formatRupiahInputValue(value)}
+          onChange={(event) => {
+            const digits = event.target.value.replace(/\D/g, '');
+            onValueChange(digits);
+          }}
+          {...props}
+        />
+      </div>
+    );
+  },
+);
+MasterDataCurrencyInput.displayName = 'MasterDataCurrencyInput';
+
 export type MasterDataFieldInfo = {
   title: string;
   description: string;
@@ -201,6 +298,7 @@ type MasterDataFieldLabelProps = React.LabelHTMLAttributes<HTMLLabelElement> & {
   children: ReactNode;
   info?: MasterDataFieldInfo;
   onInfo?: (info: MasterDataFieldInfo) => void;
+  optional?: boolean;
   required?: boolean;
 };
 
@@ -209,6 +307,7 @@ export function MasterDataFieldLabel({
   className,
   info,
   onInfo,
+  optional,
   required,
   ...props
 }: MasterDataFieldLabelProps) {
@@ -239,6 +338,7 @@ export function MasterDataFieldLabel({
     >
       <span>
         {children}{required && <span className="text-red-500"> *</span>}
+        {!required && optional ? <span className="masterDataFieldOptional"> (Opsional)</span> : null}
       </span>
       {info ? (
         <Popover open={isInfoOpen} onOpenChange={setIsInfoOpen}>

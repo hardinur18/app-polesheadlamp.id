@@ -197,39 +197,6 @@ export interface Order {
   followUpNote?: string;
 }
 
-export type PaymentTransactionStatus =
-  | 'pending'
-  | 'requires_action'
-  | 'paid'
-  | 'expired'
-  | 'failed'
-  | 'cancelled';
-
-export interface PaymentTransaction {
-  id: string;
-  orderId: string;
-  amount: number;
-  paymentMethod: 'qris';
-  gatewayProvider: 'xendit' | 'mock';
-  status: PaymentTransactionStatus;
-  providerStatus?: string;
-  channelCode?: string;
-  referenceId?: string;
-  paymentRequestId?: string;
-  paymentId?: string;
-  qrString?: string;
-  qrImageUrl?: string;
-  checkoutUrl?: string;
-  expiresAt?: string;
-  paidAt?: string;
-  cancelledAt?: string;
-  description?: string;
-  metadata?: Record<string, any>;
-  providerPayload?: any;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 // Cancel/Reschedule Reason Lookup
 export interface CancelReason {
   id: string;

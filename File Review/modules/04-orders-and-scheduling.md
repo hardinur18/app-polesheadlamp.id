@@ -15,8 +15,6 @@ Modul ini mengelola order, detail order, pembayaran order, invoice preview, dan 
 - `src/app/pages/orders/OrderForm.tsx`
 - `src/app/pages/orders/OrderDetailDialog.tsx`
 - `src/app/pages/orders/OrderPaymentDialog.tsx`
-- `src/app/pages/orders/OrderQrisPanel.tsx`
-- `src/app/services/orderPaymentService.ts`
 - `src/app/services/orderScheduleValidation.ts`
 - `src/app/services/orderTime.ts`
 
@@ -43,7 +41,6 @@ Modul ini mengelola order, detail order, pembayaran order, invoice preview, dan 
 - `technician_schedules`
 - `payment_transactions`
 - branches, areas, services, vehicle types, payment methods
-- payments Edge Function for QRIS/payment flow
 
 ## Service/API Boundary
 
@@ -65,7 +62,6 @@ Modul ini mengelola order, detail order, pembayaran order, invoice preview, dan 
 - order create/edit works
 - order detail opens
 - payment dialog works
-- QRIS panel works
 - schedule page opens
 - navigation from leads to orders still works
 

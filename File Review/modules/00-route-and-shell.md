@@ -23,7 +23,6 @@ Saat ini browser route masih tipis:
 
 - `/`
 - `/booking`
-- `/payment-gateway-preview`
 - `*`
 
 Mayoritas halaman internal dikendalikan oleh state `activeTab` di `AppLayout`.

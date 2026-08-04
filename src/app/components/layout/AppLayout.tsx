@@ -199,10 +199,6 @@ const PayrollPage = React.lazy(() =>
   import('../../pages/finance/PayrollPage').then((module) => ({ default: module.PayrollPage })),
 );
 
-const PaymentGatewaySettings = React.lazy(() =>
-  import('../../pages/finance/PaymentGatewaySettings').then((module) => ({ default: module.PaymentGatewaySettings })),
-);
-
 const StockManagementPage = React.lazy(() =>
   import('../../pages/stock/StockManagementPage').then((module) => ({ default: module.StockManagementPage })),
 );
@@ -597,8 +593,6 @@ export function AppLayout() {
         return <Laporan mode="finance" />;
       case 'payroll':
         return <PayrollPage />;
-      case 'payment-gateway':
-        return <div className="p-6 w-full max-w-[1600px] mx-auto"><PaymentGatewaySettings /></div>;
       case 'inventory':
       case 'inventory-products':
         return <StockManagementPage key={activeTab} defaultTab="products" />;

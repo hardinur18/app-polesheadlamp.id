@@ -101,13 +101,6 @@ export const router = createBrowserRouter([
     },
   },
   {
-    path: "/payment-gateway-preview",
-    lazy: async () => {
-      const { PaymentGatewayPreviewPage } = await import("./pages/orders/PaymentGatewayPreviewPage");
-      return { Component: PaymentGatewayPreviewPage };
-    },
-  },
-  {
     path: "*",
     Component: AuthenticatedApp,
   }
