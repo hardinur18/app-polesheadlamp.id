@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from "@/app/components/ui/tabs";
 import { StockSettings } from "./components/StockSettings";
 import { ProductList } from "./components/ProductList";
 import { StockTransactions } from "./components/StockTransactions";
@@ -7,7 +7,6 @@ import { StockValuationReport } from "./components/StockValuationReport";
 import { Boxes, Package, Repeat, Settings, FileBarChart } from "lucide-react";
 import { usePermissions } from "@/app/hooks/usePermissions";
 import {
-  OperationalPageHeader,
   OperationalPageShell,
 } from "@/app/components/ui/operational-page";
 
@@ -60,6 +59,15 @@ export function StockManagementPage({ defaultTab = 'products' }: StockManagement
   };
 
   useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
     const nextTab = determineInitialTab(defaultTab);
     setActiveTab((currentTab) => (currentTab === nextTab ? currentTab : nextTab));
   }, [defaultTab, hasPermission]);
@@ -70,62 +78,89 @@ export function StockManagementPage({ defaultTab = 'products' }: StockManagement
     }
   }, [activeTab, defaultTab, hasPermission]);
 
+  useLayoutEffect(() => {
+    const resetInventoryScroll = () => {
+      const workspace = document.querySelector<HTMLElement>('.workspaceViewport');
+      workspace?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document
+        .querySelectorAll<HTMLElement>('.inventoryPage .tableScroller, .inventoryPage .uiDataTableScroller')
+        .forEach((scroller) => {
+          scroller.scrollTop = 0;
+          scroller.scrollLeft = 0;
+        });
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    };
+
+    const animationFrame = window.requestAnimationFrame(resetInventoryScroll);
+    const restoreTimers = [50, 180, 420, 800, 1200].map((delay) =>
+      window.setTimeout(resetInventoryScroll, delay)
+    );
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      restoreTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [activeTab, defaultTab]);
+
   return (
-    <OperationalPageShell className="max-w-[1680px] space-y-4">
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        <OperationalPageHeader
-          icon={Boxes}
-          eyebrow="Inventory"
-          title="Manajemen Stok"
-          subtitle="Kelola produk, mutasi barang, nilai aset, dan satuan stok operasional."
-          className="overflow-hidden"
-        >
-          <div className="overflow-x-auto p-3">
-            <TabsList className="h-auto min-w-max rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-          {hasPermission('inventory.view') && (
-            <TabsTrigger value="products" className="flex items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-blue-300">
-              <Package className="h-4 w-4" /> Data Produk
-            </TabsTrigger>
-          )}
-          {hasPermission('stock.transaction.view') && (
-            <TabsTrigger value="transactions" className="flex items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-blue-300">
-              <Repeat className="h-4 w-4" /> Transaksi & Mutasi
-            </TabsTrigger>
-          )}
-          {hasPermission('stock.valuation.view') && (
-            <TabsTrigger value="valuation" className="flex items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-blue-300">
-              <FileBarChart className="h-4 w-4" /> Laporan Valuasi
-            </TabsTrigger>
-          )}
-          {hasPermission('stock.settings.manage') && (
-            <TabsTrigger value="settings" className="flex items-center gap-2 rounded-md px-3 py-2 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-blue-300">
-              <Settings className="h-4 w-4" /> Pengaturan
-            </TabsTrigger>
-          )}
-            </TabsList>
+    <OperationalPageShell className="inventoryPage pb-48 md:pb-32">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="inventoryShell">
+        <section className="topbar inventoryTopbar">
+          <div className="topbarTitle">
+            <div className="eyebrowLine">
+              <Boxes className="h-4 w-4" />
+              Inventory
+            </div>
+            <h1>Manajemen Stok</h1>
+            <p>Kelola produk, mutasi barang, nilai aset, dan satuan stok operasional.</p>
           </div>
-        </OperationalPageHeader>
+        </section>
+
+        <TabsViewport className="inventoryTabsViewport">
+          <TabsRail className="masterDataTabs inventoryTabs min-w-max">
+            {hasPermission('inventory.view') && (
+              <TabsTrigger value="products" className="masterDataTab inventoryTab">
+                <Package className="h-4 w-4" /> Data Produk
+              </TabsTrigger>
+            )}
+            {hasPermission('stock.transaction.view') && (
+              <TabsTrigger value="transactions" className="masterDataTab inventoryTab">
+                <Repeat className="h-4 w-4" /> Transaksi & Mutasi
+              </TabsTrigger>
+            )}
+            {hasPermission('stock.valuation.view') && (
+              <TabsTrigger value="valuation" className="masterDataTab inventoryTab">
+                <FileBarChart className="h-4 w-4" /> Laporan Valuasi
+              </TabsTrigger>
+            )}
+            {hasPermission('stock.settings.manage') && (
+              <TabsTrigger value="settings" className="masterDataTab inventoryTab">
+                <Settings className="h-4 w-4" /> Pengaturan
+              </TabsTrigger>
+            )}
+          </TabsRail>
+        </TabsViewport>
 
         {hasPermission('inventory.view') && (
-          <TabsContent value="products" className="mt-0 space-y-4">
+          <TabsContent value="products" className="inventoryTabContent">
             <ProductList />
           </TabsContent>
         )}
 
         {hasPermission('stock.transaction.view') && (
-          <TabsContent value="transactions" className="mt-0 space-y-4">
+          <TabsContent value="transactions" className="inventoryTabContent">
             <StockTransactions />
           </TabsContent>
         )}
 
         {hasPermission('stock.valuation.view') && (
-          <TabsContent value="valuation" className="mt-0 space-y-4">
+          <TabsContent value="valuation" className="inventoryTabContent">
             <StockValuationReport />
           </TabsContent>
         )}
 
         {hasPermission('stock.settings.manage') && (
-          <TabsContent value="settings" className="mt-0 space-y-4">
+          <TabsContent value="settings" className="inventoryTabContent">
             <StockSettings />
           </TabsContent>
         )}

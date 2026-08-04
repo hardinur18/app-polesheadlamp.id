@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
-import { Badge } from "@/app/components/ui/badge";
-import { Loader2, Download, Printer, TrendingUp, DollarSign, AlertTriangle, Boxes } from "lucide-react";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
+import { Loader2, Download, Printer, TrendingUp, DollarSign, Boxes } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import * as XLSX from 'xlsx';
 import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
 import { usePermissions } from "@/app/hooks/usePermissions";
 import { STOCK_UPDATED_EVENT, groupTransactionsByProduct, reconcileProductStock, type StockTransactionLike } from "../utils/stockLedger";
+import { DataTable, TableText } from "@/app/components/ui/data-table";
+import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
@@ -16,6 +16,7 @@ import {
   OperationalKpiGrid,
   OperationalTableCard,
 } from "@/app/components/ui/operational-page";
+import { InventoryTablePagination, useInventoryTablePagination } from "./InventoryTablePagination";
 
 interface Product {
   id: string;
@@ -27,6 +28,16 @@ interface Product {
   recorded_qty?: number;
   stock_needs_review?: boolean;
 }
+
+const formatValuationCurrency = (value: number | string | null | undefined) =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const formatValuationNumber = (value: number | string | null | undefined) =>
+  Number(value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 });
 
 export function StockValuationReport() {
   const [loading, setLoading] = useState(false);
@@ -86,7 +97,7 @@ export function StockValuationReport() {
 
   const totalAssetValue = products.reduce((sum, p) => sum + (p.current_qty * p.average_cost), 0);
   const totalItems = products.reduce((sum, p) => sum + p.current_qty, 0);
-  const stockMismatchCount = products.filter((product) => product.stock_needs_review).length;
+  const valuationPagination = useInventoryTablePagination(products);
 
   const handleExportExcel = () => {
     try {
@@ -142,50 +153,42 @@ export function StockValuationReport() {
   };
 
   return (
-    <div className="space-y-4">
-      <OperationalFilterPanel className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="inventoryTabStack">
+      <OperationalFilterPanel className="inventoryFilterPanel">
         <div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Laporan Valuasi Aset</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">Ringkasan nilai persediaan berdasarkan HPP rata-rata.</p>
         </div>
-        <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.print()} className="h-9 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <Printer className="mr-2 h-4 w-4" /> Cetak
+        <div className="inventoryFilterActions">
+            <Button variant="outline" onClick={() => window.print()} icon={<Printer className="h-4 w-4" />}>
+                Cetak
             </Button>
             {hasPermission('stock.valuation.export') && (
-              <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={loading || products.length === 0} className="h-9 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <Download className="mr-2 h-4 w-4" /> Export Excel
+              <Button variant="outline" onClick={handleExportExcel} disabled={loading || products.length === 0} icon={<Download className="h-4 w-4" />}>
+                  Export Excel
               </Button>
             )}
         </div>
       </OperationalFilterPanel>
 
-      <OperationalKpiGrid className="sm:grid-cols-2 xl:grid-cols-3">
-        <OperationalKpiCard label="Total Nilai Aset" value={`Rp ${totalAssetValue.toLocaleString('id-ID')}`} icon={DollarSign} tone="emerald" />
+      <OperationalKpiGrid className="inventoryKpiGrid sm:grid-cols-2 xl:grid-cols-3">
+        <OperationalKpiCard label="Total Nilai Aset" value={formatValuationCurrency(totalAssetValue)} icon={DollarSign} tone="emerald" />
         <OperationalKpiCard label="Total Item Fisik" value={totalItems.toLocaleString('id-ID')} icon={TrendingUp} tone="blue" />
         <OperationalKpiCard label="Jenis Produk" value={products.length} icon={Boxes} tone="amber" />
       </OperationalKpiGrid>
 
-      {stockMismatchCount > 0 && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Valuasi memakai stok hasil histori</AlertTitle>
-          <AlertDescription>
-            {stockMismatchCount} produk terdeteksi punya selisih pada data tabel lama, jadi laporan ini memakai histori transaksi agar nilai aset lebih akurat.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <OperationalTableCard>
-        <Table className="min-w-[900px]">
-            <TableHeader className="bg-slate-50/80 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
-                <TableRow className="hover:bg-transparent border-slate-100 dark:border-slate-800">
-                    <TableHead className="h-11 w-[56px] text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">No</TableHead>
-                    <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nama Barang</TableHead>
-                    <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Kategori</TableHead>
-                    <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Stok Fisik</TableHead>
-                    <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">HPP Satuan</TableHead>
-                    <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total Valuasi</TableHead>
+      <OperationalTableCard className="inventoryTableCard">
+        <MasterDataTableTitle title="Laporan Valuasi Aset" count={products.length} variant="active" icon={Boxes} />
+        <DataTable columns={[64, 320, 170, 132, 150, 168]} minWidth={1004} rowMinHeight={66} cellY={12} textMax={300}>
+        <table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>No</TableHead>
+                    <TableHead>Nama Barang</TableHead>
+                    <TableHead>Kategori</TableHead>
+                    <TableHead className="text-right">Stok Fisik</TableHead>
+                    <TableHead className="text-right">HPP Satuan</TableHead>
+                    <TableHead className="text-right">Total Valuasi</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -194,64 +197,46 @@ export function StockValuationReport() {
                 ) : products.length === 0 ? (
                     <TableRow><TableCell colSpan={6} className="border-0"><OperationalEmptyState icon={Boxes} title="Tidak ada data valuasi" description="Belum ada produk yang bisa dihitung pada laporan ini." className="py-12" /></TableCell></TableRow>
                 ) : (
-                    products.map((p, index) => (
+                    valuationPagination.paginatedItems.map((p, index) => (
                         <TableRow
                           key={p.id}
-                          className={
-                            p.stock_needs_review
-                              ? "border-slate-100 bg-amber-50/30 hover:bg-amber-50/50 dark:border-slate-800 dark:bg-amber-950/10 dark:hover:bg-amber-950/20"
-                              : p.current_qty <= 0
-                              ? "border-slate-100 bg-red-50/20 hover:bg-red-50/40 dark:border-slate-800 dark:bg-red-950/10 dark:hover:bg-red-950/20"
-                              : "border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60"
-                          }
+                          className="border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60"
                         >
-                            <TableCell className="w-[56px] text-xs font-semibold text-slate-400">
-                              <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full border border-slate-200 bg-white px-2 tabular-nums text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                                {index + 1}
-                              </span>
+                            <TableCell className="inventoryTableIndexCell">
+                              {valuationPagination.startIndex + index + 1}
                             </TableCell>
-                            <TableCell className="font-medium text-slate-900 dark:text-slate-100">
-                              <div className="flex items-center gap-2 flex-wrap">
+                            <TableCell>
+                              <div className="inventoryProductNameCell">
                                 <span
                                   className={
                                     p.stock_needs_review
-                                      ? "h-2 w-2 rounded-full bg-amber-500"
+                                      ? "inventoryProductStatusDot isAudit"
                                       : p.current_qty <= 0
-                                      ? "h-2 w-2 rounded-full bg-red-500"
-                                      : "h-2 w-2 rounded-full bg-emerald-500"
+                                      ? "inventoryProductStatusDot isLow"
+                                      : "inventoryProductStatusDot isOk"
                                   }
                                 />
-                                <span>{p.name}</span>
-                                {p.stock_needs_review && (
-                                  <Badge className="h-5 border-amber-200 bg-amber-100 px-1.5 text-[10px] text-amber-800 hover:bg-amber-100">
-                                    Audit Histori
-                                  </Badge>
-                                )}
+                                <TableText primary={p.name} secondary={p.stock_needs_review ? 'Audit histori' : undefined} />
                               </div>
                             </TableCell>
-                            <TableCell><Badge variant="outline" className="rounded-md border-violet-200 bg-violet-50 font-medium text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/30 dark:text-violet-300">{p.category || '-'}</Badge></TableCell>
-                            <TableCell className="text-right font-medium">
-                              <span
-                                className={
-                                  p.current_qty <= 0
-                                    ? "inline-flex items-baseline gap-1 rounded-md bg-red-50 px-2 py-1 tabular-nums text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                                    : "inline-flex items-baseline gap-1 rounded-md bg-emerald-50 px-2 py-1 tabular-nums text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                                }
-                              >
-                                {p.current_qty} <span className="text-xs font-normal opacity-70">{p.unit}</span>
+                            <TableCell><span className="inventoryPlainCellText">{p.category || '-'}</span></TableCell>
+                            <TableCell className="inventoryNumericCell">
+                              <span className={p.current_qty <= 0 ? "inventoryQtyValue isLow" : "inventoryQtyValue isOk"}>
+                                {formatValuationNumber(p.current_qty)}
                               </span>
+                              <span className="inventoryQtyUnit">{p.unit}</span>
                             </TableCell>
-                            <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">Rp {p.average_cost.toLocaleString('id-ID')}</TableCell>
+                            <TableCell className="inventoryMoneyCell"><span className="inventoryMoneyValue">{formatValuationCurrency(p.average_cost)}</span></TableCell>
                             <TableCell className="text-right font-bold tabular-nums text-slate-900 dark:text-slate-100">
-                              <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-                                Rp {(p.current_qty * p.average_cost).toLocaleString('id-ID')}
-                              </span>
+                              <span className="inventoryMoneyValue isAsset">{formatValuationCurrency(p.current_qty * p.average_cost)}</span>
                             </TableCell>
                         </TableRow>
                     ))
                 )}
             </TableBody>
-        </Table>
+        </table>
+        </DataTable>
+        <InventoryTablePagination {...valuationPagination} />
       </OperationalTableCard>
     </div>
   );

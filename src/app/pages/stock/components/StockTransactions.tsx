@@ -1,17 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription } from "@/app/components/ui/sheet";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/app/components/ui/select";
-import { Label } from "@/app/components/ui/label";
-import { Plus, Search, RefreshCcw, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, Trash2, AlertTriangle, Building2, UserCircle, Info, Pencil, ClipboardList } from "lucide-react";
+import { Plus, Search, RefreshCcw, Loader2, Trash2, ClipboardList, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import { Badge } from "@/app/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/app/components/ui/alert-dialog";
@@ -21,13 +17,16 @@ import { useMasterData } from "@/app/pages/master-data/context";
 import { logActivity } from "@/app/services/auditService";
 import { STOCK_UPDATED_EVENT, computeLedgerState, emitStockUpdated, groupTransactionsByProduct, reconcileProductStock, roundCurrencyValue, roundStockQuantity, sortStockTransactions, toStockNumber, type StockTransactionLike } from "../utils/stockLedger";
 import { isMissingStockTransactionScopeColumnError, omitStockTransactionScope, retryWithoutInvalidStockScope, type StockScopeField } from "../utils/stockTransactionScope";
-import { StockUsageInsights } from "./StockUsageInsights";
 import { isTechnicianRole } from "@/app/data/roleHelpers";
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableText } from "@/app/components/ui/data-table";
+import { MasterDataDialogBody, MasterDataFieldLabel, MasterDataFormActions, MasterDataFormDialogContent } from "@/app/components/ui/master-data-ui";
+import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
   OperationalTableCard,
 } from "@/app/components/ui/operational-page";
+import { InventoryTablePagination, useInventoryTablePagination } from "./InventoryTablePagination";
 
 interface Transaction {
   id: string;
@@ -92,11 +91,19 @@ const UNASSIGNED_SCOPE_FILTER = "__unassigned__";
 
 const formatStockCurrency = (value: number | string | null | undefined) => {
   const numeric = toStockNumber(value);
-  if (!numeric) return '-';
+  if (!numeric) return 'Rp 0';
 
-  return Math.round(numeric).toLocaleString('id-ID', {
+  return `Rp ${Math.round(numeric).toLocaleString('id-ID', {
     maximumFractionDigits: 0,
-  });
+  })}`;
+};
+
+const formatStockDateLabel = (value: string | null | undefined) => {
+  if (!value) return '-';
+  const parsed = new Date(value);
+  if (!isValid(parsed)) return '-';
+
+  return format(parsed, 'dd MMM yyyy', { locale: idLocale });
 };
 
 const createBatchItemId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -1206,12 +1213,12 @@ export function StockTransactions() {
       return matchesType && matchesBranch && matchesTechnician && matchesDate && matchesSearch;
   });
 
-  const getTypeBadge = (type: string) => {
+  const getTypeLabel = (type: string) => {
       switch(type) {
-          case 'IN': return <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-green-200"><ArrowDownRight className="w-3 h-3 mr-1" /> Masuk</Badge>;
-          case 'OUT': return <Badge className="bg-red-100 text-red-700 hover:bg-red-200 border-red-200"><ArrowUpRight className="w-3 h-3 mr-1" /> Keluar</Badge>;
-          case 'ADJUST': return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border-yellow-200"><ArrowRightLeft className="w-3 h-3 mr-1" /> Opname</Badge>;
-          default: return <Badge variant="outline">{type}</Badge>;
+          case 'IN': return 'Masuk';
+          case 'OUT': return 'Keluar';
+          case 'ADJUST': return 'Opname';
+          default: return type;
       }
   };
 
@@ -1222,9 +1229,16 @@ export function StockTransactions() {
   const selectedTechnician = activeTechnicians.find((technician) => technician.id === formData.technicianId);
   const sameBranchTechnicians = activeTechnicians.filter((technician) => technician.branchId === formData.branchId);
   const otherActiveTechnicians = activeTechnicians.filter((technician) => technician.branchId !== formData.branchId);
-  const stockMismatchCount = products.filter((product) => product.stock_needs_review).length;
-  const transactionsMissingScopeCount = transactions.filter((transaction) => !transaction.branch_id || !transaction.technician_id).length;
-  const tableColumnCount = hasTransactionActions ? 11 : 10;
+  const tableColumnCount = hasTransactionActions ? 8 : 7;
+  const transactionPagination = useInventoryTablePagination(
+    filteredTransactions,
+    `${searchTerm}|${typeFilter}|${branchFilter}|${technicianFilter}|${dateFrom || ''}|${dateTo || ''}`,
+  );
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.inventoryTransactionTable')?.scrollTo({ left: 0, top: 0 });
+  }, [searchTerm, typeFilter, branchFilter, technicianFilter, dateFrom, dateTo, transactionPagination.page]);
+
   const transactionPreview = useMemo(() => {
     if (!selectedProduct) return null;
 
@@ -1366,22 +1380,22 @@ export function StockTransactions() {
   }, [batchTransactionPreview]);
 
   return (
-    <div className="space-y-4">
+    <div className="inventoryTabStack">
       {/* Filters */}
-      <OperationalFilterPanel className="space-y-3 p-3">
-        <div className="grid gap-2 lg:grid-cols-[minmax(260px,1.4fr)_repeat(3,minmax(150px,0.8fr))_minmax(260px,1.2fr)]">
+      <OperationalFilterPanel className="inventoryFilterPanel inventoryFilterPanelStack">
+        <div className="inventoryFilterGrid inventoryFilterGridTransactions">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               placeholder="Cari barang, cabang, teknisi, atau catatan..."
-              className="h-9 border-slate-200 bg-slate-50 pl-9 shadow-none focus-visible:ring-blue-500/20 dark:border-slate-800 dark:bg-slate-950"
+              className="uiInput pl-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-9 border-slate-200 bg-slate-50 shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <SelectTrigger className="uiSelectTrigger">
               <SelectValue placeholder="Tipe Transaksi" />
             </SelectTrigger>
             <SelectContent>
@@ -1393,7 +1407,7 @@ export function StockTransactions() {
           </Select>
 
             <Select value={branchFilter} onValueChange={setBranchFilter}>
-            <SelectTrigger className="h-9 border-slate-200 bg-slate-50 shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <SelectTrigger className="uiSelectTrigger">
               <SelectValue placeholder="Semua Cabang" />
             </SelectTrigger>
             <SelectContent>
@@ -1408,7 +1422,7 @@ export function StockTransactions() {
           </Select>
 
           <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-            <SelectTrigger className="h-9 border-slate-200 bg-slate-50 shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <SelectTrigger className="uiSelectTrigger">
               <SelectValue placeholder="Semua Teknisi" />
             </SelectTrigger>
             <SelectContent>
@@ -1429,112 +1443,67 @@ export function StockTransactions() {
               className="w-full"
             />
           </div>
+
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-            <Badge variant="outline">Tampil: {filteredTransactions.length} mutasi</Badge>
+        <div className="inventoryFilterFooter">
+          <div className="inventoryFilterMeta">
+            <span>Tampil: {filteredTransactions.length} mutasi</span>
             {branchFilter !== 'all' && (
-              <Badge variant="outline">
+              <span>
                 Cabang: {branchFilter === UNASSIGNED_SCOPE_FILTER ? 'Belum ditentukan' : getBranchName(branchFilter)}
-              </Badge>
+              </span>
             )}
             {technicianFilter !== 'all' && (
-              <Badge variant="outline">
+              <span>
                 Teknisi: {technicianFilter === UNASSIGNED_SCOPE_FILTER ? 'Belum ditentukan' : getUserName(technicianFilter)}
-              </Badge>
+              </span>
             )}
             {dateFrom && (
-              <Badge variant="outline">
+              <span>
                 Periode: {dateFrom}{dateTo && dateTo !== dateFrom ? ` s/d ${dateTo}` : ''}
-              </Badge>
+              </span>
             )}
           </div>
-
-          <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={fetchData} title="Refresh" className="h-9 w-9 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="inventoryFilterActions">
+            <Button variant="outline" size="icon" onClick={fetchData} title="Refresh" className="inventoryFilterRefreshButton">
               <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
             {canCreateTransaction && (
-              <Button onClick={openNewDialog} className="h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700">
-                <Plus className="mr-2 h-4 w-4" /> Transaksi Baru
+              <Button onClick={openNewDialog} icon={<Plus className="h-4 w-4" />} className="inventoryPrimaryButton">
+                Transaksi Baru
               </Button>
             )}
           </div>
         </div>
       </OperationalFilterPanel>
 
-      {stockMismatchCount > 0 && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Stok transaksi sedang diselaraskan</AlertTitle>
-          <AlertDescription>
-            {stockMismatchCount} produk punya selisih antara angka tabel lama dan histori mutasi.
-            Form transaksi akan memakai stok hasil histori agar keluar-masuk barang tetap akurat.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {historyScopeAvailable === false && (
-        <Alert className="border-orange-200 bg-orange-50 text-orange-900">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Snapshot cabang dan teknisi histori belum aktif di database live</AlertTitle>
-          <AlertDescription>
-            Tabel <code className="rounded bg-orange-100 px-1 py-0.5 text-[11px]">stock_transactions</code> di database live
-            belum punya kolom snapshot cabang/teknisi, jadi transaksi tetap tersimpan tetapi histori mutasi belum bisa
-            menyimpan dua field itu secara penuh sampai migration database dijalankan.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {transactionsMissingScopeCount > 0 && (
-        <Alert className="border-blue-200 bg-blue-50 text-blue-900">
-          <Info className="h-4 w-4" />
-          <AlertTitle>Masih ada mutasi lama tanpa snapshot lengkap</AlertTitle>
-          <AlertDescription>
-            {historyScopeAvailable === false
-              ? `${transactionsMissingScopeCount} transaksi di histori saat ini belum punya snapshot cabang atau teknisi karena schema database live masih versi lama.`
-              : `${transactionsMissingScopeCount} transaksi belum punya data cabang atau teknisi pada histori mutasi.`}
-            {' '}
-            Transaksi tersebut akan tampil sebagai belum ditentukan sampai dicatat ulang atau dibackfill.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <StockUsageInsights
-        transactions={filteredTransactions}
-        branches={branches}
-        users={users}
-      />
-
       {/* Table */}
-      <OperationalTableCard>
-        <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Histori Transaksi & Mutasi</h3>
-          <p className="text-sm text-slate-500">
-            Snapshot cabang dan teknisi di bawah ini mengikuti histori transaksi, jadi tidak berubah saat owner produk saat ini berganti.
-          </p>
-          {hasTransactionActions && (
-            <p className="mt-1 text-[11px] text-slate-400">
-              Qty dan Harga Beli (HPP) bisa diedit di semua transaksi; stok & HPP rata-rata dihitung ulang dari seluruh histori. Tipe & tanggal tetap dibatasi ke transaksi terbaru per produk agar urutan mutasi konsisten.
-            </p>
-          )}
-        </div>
-        <Table className="min-w-[1240px]">
-          <TableHeader className="bg-slate-50/80 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
-            <TableRow className="hover:bg-transparent border-slate-100 dark:border-slate-800">
-              <TableHead className="h-11 w-[56px] text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">No</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tanggal</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tipe</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nama Barang</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cabang Mutasi</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Teknisi Mutasi</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Qty</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Harga Satuan</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total Nilai</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Catatan</TableHead>
+      <OperationalTableCard className="inventoryTableCard">
+        <MasterDataTableTitle title="Histori Transaksi & Mutasi" count={filteredTransactions.length} variant="active" />
+        <DataTable
+          actionWidth={hasTransactionActions ? 82 : undefined}
+          cellY={12}
+          columns={["10%", "24%", "25%", "8%", "13%", "13%", "7%", hasTransactionActions ? "56px" : null]}
+          className="inventoryTransactionTable"
+          minWidth="100%"
+          primaryLines={1}
+          rowMinHeight={58}
+          secondaryLines={1}
+          textMax={220}
+        >
+        <table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Tipe</TableHead>
+              <TableHead>Nama Barang</TableHead>
+              <TableHead>Teknisi/Cabang</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead className="text-right">Harga Satuan</TableHead>
+              <TableHead className="text-right">Total Nilai</TableHead>
+              <TableHead>Catatan</TableHead>
               {hasTransactionActions && (
-                <TableHead className="w-[96px]"></TableHead>
+                <TableActionHeader />
               )}
             </TableRow>
           </TableHeader>
@@ -1544,65 +1513,22 @@ export function StockTransactions() {
             ) : filteredTransactions.length === 0 ? (
                  <TableRow><TableCell colSpan={tableColumnCount} className="border-0"><OperationalEmptyState icon={ClipboardList} title="Belum ada transaksi" description="Tidak ada mutasi yang cocok dengan filter saat ini." className="py-12" /></TableCell></TableRow>
             ) : (
-                filteredTransactions.map((trx, index) => (
-                    <TableRow
-                      key={trx.id}
-                      className={
-                        trx.type === 'OUT'
-                          ? "border-slate-100 bg-red-50/20 hover:bg-red-50/40 dark:border-slate-800 dark:bg-red-950/10 dark:hover:bg-red-950/20"
-                          : trx.type === 'ADJUST'
-                          ? "border-slate-100 bg-amber-50/20 hover:bg-amber-50/40 dark:border-slate-800 dark:bg-amber-950/10 dark:hover:bg-amber-950/20"
-                          : "border-slate-100 bg-emerald-50/20 hover:bg-emerald-50/40 dark:border-slate-800 dark:bg-emerald-950/10 dark:hover:bg-emerald-950/20"
-                      }
-                    >
-                        <TableCell className="w-[56px] text-xs font-semibold text-slate-400">
-                            <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full border border-slate-200 bg-white px-2 tabular-nums text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                              {index + 1}
-                            </span>
+                transactionPagination.paginatedItems.map((trx, index) => (
+                    <TableRow key={trx.id} className="border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                        <TableCell>
+                          <span className={`inventoryStockTypeText is${trx.type}`}>{getTypeLabel(trx.type)}</span>
                         </TableCell>
-                        <TableCell className="font-medium text-slate-600">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                              <span
-                                className={
-                                  trx.type === 'OUT'
-                                    ? "h-1.5 w-1.5 rounded-full bg-red-500"
-                                    : trx.type === 'ADJUST'
-                                    ? "h-1.5 w-1.5 rounded-full bg-amber-500"
-                                    : "h-1.5 w-1.5 rounded-full bg-emerald-500"
-                                }
-                              />
-                              {trx.date ? format(new Date(trx.date), 'dd MMM yyyy', { locale: idLocale }) : '-'}
-                            </span>
+                        <TableCell>
+                            <TableText primary={trx.products?.name || 'Unknown Product'} secondary={formatStockDateLabel(trx.date)} />
                         </TableCell>
-                        <TableCell>{getTypeBadge(trx.type)}</TableCell>
-                        <TableCell className="font-medium text-slate-900 dark:text-slate-100">
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full bg-blue-500" />
-                              {trx.products?.name || 'Unknown Product'}
-                            </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-500">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-cyan-50 px-2 py-1 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300">
-                              <Building2 className="h-3 w-3" />
-                              {getBranchName(getTransactionBranchId(trx))}
-                            </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-500">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-2 py-1 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">
-                              <UserCircle className="h-3 w-3" />
-                              {getUserName(getTransactionTechnicianId(trx))}
-                            </span>
+                        <TableCell>
+                            <div className="inventoryOwnerStack">
+                              <span>{getUserName(getTransactionTechnicianId(trx))}</span>
+                              <small>{getBranchName(getTransactionBranchId(trx))}</small>
+                            </div>
                         </TableCell>
                         <TableCell className="text-right font-bold">
-                            <span
-                              className={
-                                trx.type === 'OUT'
-                                  ? "inline-flex rounded-md bg-red-50 px-2 py-1 tabular-nums text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                                  : trx.type === 'ADJUST'
-                                  ? "inline-flex rounded-md bg-amber-50 px-2 py-1 tabular-nums text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                                  : "inline-flex rounded-md bg-emerald-50 px-2 py-1 tabular-nums text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                              }
-                            >
+                            <span className={`inventoryStockQtyText is${trx.type}`}>
                               {trx.quantity}
                             </span>
                         </TableCell>
@@ -1610,100 +1536,83 @@ export function StockTransactions() {
                             {formatStockCurrency(trx.unit_price)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums font-medium">
-                            <span
-                              className={
-                                trx.type === 'OUT'
-                                  ? "inline-flex rounded-md bg-red-50 px-2 py-1 text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                                  : trx.type === 'ADJUST'
-                                  ? "inline-flex rounded-md bg-amber-50 px-2 py-1 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                                  : "inline-flex rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                              }
-                            >
+                            <span className={`inventoryStockQtyText is${trx.type}`}>
                               {formatStockCurrency(trx.total_value)}
                             </span>
                         </TableCell>
                         <TableCell className="max-w-[200px] text-slate-500" title={trx.notes}>
-                            <span className="inline-block max-w-full truncate rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                              {trx.notes || '-'}
-                            </span>
+                            <TableText primary={trx.notes || '-'} />
                         </TableCell>
                         {hasTransactionActions && (
-                          <TableCell>
-                            <div className="flex items-center justify-end gap-1">
+                          <TableActionCell>
+                            <TableActionMenu contentClassName="w-56">
                               {canEditTransaction && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                                  title={latestCancelableTransactionIds.has(trx.id) ? "Edit transaksi terbaru" : "Edit snapshot histori"}
-                                  onClick={() => openEditDialog(trx)}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
+                                <TableActionMenuItem icon={Edit} onClick={() => openEditDialog(trx)}>
+                                  {latestCancelableTransactionIds.has(trx.id) ? "Edit transaksi terbaru" : "Edit snapshot histori"}
+                                </TableActionMenuItem>
                               )}
                               {canCancelTransaction && latestCancelableTransactionIds.has(trx.id) && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
-                                  title="Batalkan transaksi terbaru"
-                                  onClick={() => setDeleteTarget(trx)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
+                                <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteTarget(trx)}>
+                                  Batalkan transaksi
+                                </TableActionMenuItem>
                               )}
-                            </div>
-                          </TableCell>
+                            </TableActionMenu>
+                          </TableActionCell>
                         )}
                     </TableRow>
                 ))
             )}
           </TableBody>
-        </Table>
+        </table>
+        </DataTable>
+        <InventoryTablePagination {...transactionPagination} />
       </OperationalTableCard>
 
       {/* New Transaction Dialog */}
-      <Sheet open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
-        <SheetContent side="right" className="w-[400px] sm:w-[500px] sm:max-w-[500px] z-[150] flex flex-col h-full p-0 gap-0 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800">
-            <SheetHeader className="shrink-0 border-b border-slate-100 bg-slate-50/80 p-6 pb-4 text-left dark:border-slate-800 dark:bg-slate-900">
-                <SheetTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">{isEditMode ? 'Edit Transaksi Stok' : 'Catat Transaksi Stok'}</SheetTitle>
-                <SheetDescription className="text-slate-500 text-sm">
+      <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
+        <MasterDataFormDialogContent size="wide" className="inventoryProductFormDialog">
+            <DialogHeader>
+                <DialogTitle>{isEditMode ? 'Edit Transaksi Stok' : 'Catat Transaksi Stok'}</DialogTitle>
+                <DialogDescription>
                     {isEditMode
                       ? (isEditingLatestTransaction
                           ? 'Perbarui transaksi terbaru per produk tanpa memutus konsistensi histori stok.'
                           : 'Edit qty atau Harga Beli transaksi lama — stok & HPP rata-rata dihitung ulang dari seluruh histori.')
                       : 'Pencatatan transaksi stok barang masuk, keluar, atau penyesuaian (opname).'}
-                </SheetDescription>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                </DialogDescription>
+            </DialogHeader>
+            <form
+              className="masterDataForm inventoryProductForm"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSubmit();
+              }}
+            >
+            <MasterDataDialogBody className="inventoryProductFormBody">
                 {isEditMode && (
-                    <Alert className="border-blue-200 bg-blue-50 text-blue-900">
-                        <Info className="h-4 w-4" />
-                        <AlertTitle>{isEditingLatestTransaction ? 'Mode edit transaksi terbaru' : 'Mode koreksi histori mutasi'}</AlertTitle>
-                        <AlertDescription>
+                    <div className="inventoryFormNotice">
+                        <strong>{isEditingLatestTransaction ? 'Mode edit transaksi terbaru' : 'Mode koreksi histori mutasi'}</strong>
+                        <p>
                             {isEditingLatestTransaction
                               ? 'Produk tidak bisa diganti dari menu edit. Jika salah produk atau urutan tanggalnya perlu dipindah ke masa lalu, batalkan transaksi ini lalu catat ulang.'
-                              : 'Qty dan Harga Beli bisa diperbaiki di sini; stok & HPP rata-rata akan dihitung ulang dari seluruh histori saat disimpan. Tipe & tanggal tetap terkunci agar urutan mutasi terjaga. Perubahan ditolak bila membuat stok pernah minus.'}
-                        </AlertDescription>
-                    </Alert>
+                              : 'Qty dan Harga Beli bisa diperbaiki di sini; stok dan HPP rata-rata akan dihitung ulang dari seluruh histori saat disimpan.'}
+                        </p>
+                    </div>
                 )}
 
                 {historyScopeAvailable === false && (
-                    <Alert className="border-orange-200 bg-orange-50 text-orange-900">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertTitle>Snapshot histori mutasi belum tersimpan penuh</AlertTitle>
-                        <AlertDescription>
-                            Database live belum punya kolom snapshot cabang/teknisi pada histori mutasi. Simpan transaksi tetap jalan, tetapi dua field itu belum masuk penuh ke tabel histori sampai migration dijalankan.
-                        </AlertDescription>
-                    </Alert>
+                    <div className="inventoryFormNotice isWarning">
+                        <strong>Snapshot histori mutasi belum tersimpan penuh</strong>
+                        <p>Database live belum punya kolom snapshot cabang/teknisi pada histori mutasi. Simpan transaksi tetap jalan, tetapi dua field itu belum masuk penuh ke tabel histori sampai migration dijalankan.</p>
+                    </div>
                 )}
 
                 {/* Tanggal */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Tanggal</Label>
+                    <MasterDataFieldLabel>Tanggal</MasterDataFieldLabel>
                     <Input 
                         type="date" 
-                        className="bg-slate-50 border-slate-200"
+                        className="uiInput"
                         value={formData.date} 
                         disabled={isEditMode && !isEditingLatestTransaction}
                         onChange={(e) => setFormData({...formData, date: e.target.value})}
@@ -1712,13 +1621,13 @@ export function StockTransactions() {
 
                 {isEditMode && (
                   <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500">Barang <span className="text-red-500">*</span></Label>
+                      <MasterDataFieldLabel required>Barang</MasterDataFieldLabel>
                       <Select
                           value={formData.productId}
                           onValueChange={handleProductChange}
                           disabled={isEditMode}
                       >
-                          <SelectTrigger className="bg-slate-50 border-slate-200">
+                          <SelectTrigger className="uiSelectTrigger">
                               <SelectValue placeholder="Pilih Barang" />
                           </SelectTrigger>
                           <SelectContent className="z-[200] max-h-[200px]">
@@ -1734,36 +1643,17 @@ export function StockTransactions() {
                           Data tabel lama menunjukkan {selectedProduct.recorded_qty} {selectedProduct.unit}, tetapi form ini memakai histori transaksi.
                         </p>
                       )}
-                      <p className="text-[11px] text-slate-500">
-                        Barang dikunci saat edit agar mutasi tetap melekat ke histori produk yang sama.
-                      </p>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500 flex items-center gap-1">
-                            <Building2 className="h-3 w-3" /> Cabang Mutasi
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-slate-600"
-                                        aria-label="Info cabang aktif"
-                                    >
-                                        <Info className="h-3 w-3" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" sideOffset={6} className="max-w-[220px] bg-slate-900 px-3 py-2 text-[11px] leading-relaxed text-white">
-                                    Cabang ini disimpan ke histori mutasi, lalu ikut menjadi cabang aktif produk setelah transaksi tersimpan.
-                                </TooltipContent>
-                            </Tooltip>
-                        </Label>
+                        <MasterDataFieldLabel>Cabang Mutasi</MasterDataFieldLabel>
                         <Select
                             value={formData.branchId || '_none_'}
                             onValueChange={(val) => setFormData((prev) => ({ ...prev, branchId: val === '_none_' ? '' : val }))}
                         >
-                            <SelectTrigger className="bg-slate-50 border-slate-200">
+                            <SelectTrigger className="uiSelectTrigger">
                                 <SelectValue placeholder="Pilih Cabang" />
                             </SelectTrigger>
                             <SelectContent className="z-[200]">
@@ -1780,28 +1670,12 @@ export function StockTransactions() {
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500 flex items-center gap-1">
-                            <UserCircle className="h-3 w-3" /> Teknisi Mutasi
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-slate-600"
-                                        aria-label="Info teknisi aktif"
-                                    >
-                                        <Info className="h-3 w-3" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" sideOffset={6} className="max-w-[240px] bg-slate-900 px-3 py-2 text-[11px] leading-relaxed text-white">
-                                    Teknisi ini disimpan ke histori mutasi. Teknisi dari cabang terpilih diprioritaskan, tetapi cabang lain tetap bisa dipilih.
-                                </TooltipContent>
-                            </Tooltip>
-                        </Label>
+                        <MasterDataFieldLabel>Teknisi Mutasi</MasterDataFieldLabel>
                         <Select
                             value={formData.technicianId || '_none_'}
                             onValueChange={handleTechnicianChange}
                         >
-                            <SelectTrigger className="bg-slate-50 border-slate-200">
+                            <SelectTrigger className="uiSelectTrigger">
                                 <SelectValue placeholder="Pilih Teknisi" />
                             </SelectTrigger>
                             <SelectContent className="z-[200] max-h-[260px]">
@@ -1837,29 +1711,15 @@ export function StockTransactions() {
                     </div>
                 </div>
 
-                {(selectedBranch || selectedTechnician) && (
-                    <div className="flex justify-start">
-                        <button
-                            type="button"
-                            onClick={() => setIsScopeInfoDialogOpen(true)}
-                            className="inline-flex h-4 w-4 items-center justify-center rounded-full text-blue-500 transition-colors hover:text-blue-700"
-                            aria-label="Lihat detail snapshot mutasi"
-                            title="Lihat detail snapshot mutasi"
-                        >
-                            <AlertTriangle className="h-3 w-3" />
-                        </button>
-                    </div>
-                )}
-
                 {/* Tipe */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Tipe <span className="text-red-500">*</span></Label>
+                    <MasterDataFieldLabel required>Tipe</MasterDataFieldLabel>
                     <Select 
                         value={formData.type} 
                         disabled={isEditMode && !isEditingLatestTransaction}
                         onValueChange={(val) => setFormData({...formData, type: val})}
                     >
-                        <SelectTrigger className="bg-slate-50 border-slate-200">
+                        <SelectTrigger className="uiSelectTrigger">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="z-[200]">
@@ -1874,20 +1734,15 @@ export function StockTransactions() {
                   <>
                     {/* Qty */}
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500">Qty <span className="text-red-500">*</span></Label>
+                        <MasterDataFieldLabel required>Qty</MasterDataFieldLabel>
                         <div className="relative">
                             <Input
                                 type="number"
-                                className="bg-slate-50 border-slate-200 pr-14"
+                                className="uiInput"
                                 value={formData.quantity}
                                 onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                                placeholder="0"
+                                placeholder={selectedProduct ? `Qty (${selectedProduct.unit})` : 'Qty'}
                             />
-                            {selectedProduct && (
-                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">
-                                    {selectedProduct.unit}
-                                 </span>
-                            )}
                         </div>
                         {formData.type === 'ADJUST' && (
                             <p className="text-[10px] text-slate-500">Gunakan angka negatif untuk mengurangi stok (misal: -2).</p>
@@ -1897,25 +1752,21 @@ export function StockTransactions() {
                     {/* Harga Beli - only for IN */}
                     {formData.type === 'IN' && (
                         <div className="space-y-1.5">
-                            <Label className="text-xs text-slate-500">Harga Beli <span className="text-red-500">*</span></Label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">Rp</span>
-                                <Input
-                                    type="number"
-                                    className="pl-8 bg-slate-50 border-slate-200"
-                                    value={formData.unitPrice}
-                                    onChange={(e) => setFormData({...formData, unitPrice: e.target.value})}
-                                    placeholder="Harga Satuan (Rp)"
-                                />
-                            </div>
-                            <p className="text-[10px] text-slate-500">*Akan memperbarui HPP Rata-rata otomatis</p>
+                            <MasterDataFieldLabel required>Harga Beli</MasterDataFieldLabel>
+                            <Input
+                                type="number"
+                                className="uiInput"
+                                value={formData.unitPrice}
+                                onChange={(e) => setFormData({...formData, unitPrice: e.target.value})}
+                                placeholder="Harga satuan dalam Rupiah"
+                            />
                         </div>
                     )}
 
                     {formData.type === 'OUT' && selectedProduct && (
-                        <div className="bg-yellow-50 text-yellow-800 text-xs p-3 rounded-lg border border-yellow-200">
+                        <div className="inventoryFormNotice isWarning">
                             Harga keluar akan menggunakan HPP Rata-rata saat ini:
-                            <b> Rp {formatStockCurrency(selectedProduct.average_cost)}</b>
+                            <b> {formatStockCurrency(selectedProduct.average_cost)}</b>
                         </div>
                     )}
                   </>
@@ -1923,13 +1774,13 @@ export function StockTransactions() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <Label className="text-xs text-slate-500">Daftar Barang <span className="text-red-500">*</span></Label>
+                        <MasterDataFieldLabel required>Daftar Barang</MasterDataFieldLabel>
                         <p className="mt-1 text-[11px] text-slate-500">
                           Tambahkan beberapa barang untuk tipe transaksi dan tanggal yang sama.
                         </p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={addBatchItem} className="h-8 border-slate-200 bg-white text-xs">
-                        <Plus className="mr-1.5 h-3.5 w-3.5" /> Tambah
+                      <Button type="button" variant="outline" size="sm" onClick={addBatchItem} icon={<Plus className="h-3.5 w-3.5" />}>
+                        Tambah
                       </Button>
                     </div>
 
@@ -1960,7 +1811,7 @@ export function StockTransactions() {
                                   value={item.productId}
                                   onValueChange={(productId) => handleBatchProductChange(item.id, productId)}
                               >
-                                  <SelectTrigger className="bg-white border-slate-200">
+                                  <SelectTrigger className="uiSelectTrigger">
                                       <SelectValue placeholder="Pilih Barang" />
                                   </SelectTrigger>
                                   <SelectContent className="z-[200] max-h-[240px]">
@@ -1976,27 +1827,21 @@ export function StockTransactions() {
                                 <div className="relative">
                                   <Input
                                       type="number"
-                                      className="bg-white border-slate-200 pr-14"
+                                      className="uiInput"
                                       value={item.quantity}
                                       onChange={(event) => updateBatchItem(item.id, { quantity: event.target.value })}
-                                      placeholder="Qty"
+                                      placeholder={rowProduct ? `Qty (${rowProduct.unit})` : 'Qty'}
                                   />
-                                  {rowProduct && (
-                                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                                      {rowProduct.unit}
-                                    </span>
-                                  )}
                                 </div>
 
                                 {formData.type === 'IN' && (
                                   <div className="relative">
-                                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">Rp</span>
                                     <Input
                                         type="number"
-                                        className="bg-white border-slate-200 pl-8"
+                                        className="uiInput"
                                         value={item.unitPrice}
                                         onChange={(event) => updateBatchItem(item.id, { unitPrice: event.target.value })}
-                                        placeholder="Harga"
+                                        placeholder="Harga dalam Rupiah"
                                     />
                                   </div>
                                 )}
@@ -2012,7 +1857,7 @@ export function StockTransactions() {
                               )}
                               {formData.type === 'OUT' && rowProduct && (
                                 <p className="text-[11px] text-yellow-700">
-                                  HPP saat ini: Rp {formatStockCurrency(rowProduct.average_cost)}
+                                  HPP saat ini: {formatStockCurrency(rowProduct.average_cost)}
                                 </p>
                               )}
                               {rowPreview?.error && (
@@ -2024,7 +1869,7 @@ export function StockTransactions() {
                                     Stok: {rowPreview.beforeQty} → <b className="text-slate-700">{rowPreview.afterQty} {rowPreview.product.unit}</b>
                                   </span>
                                   <span className="font-medium text-emerald-600">
-                                    Rp {formatStockCurrency(rowPreview.totalValue)}
+                                    {formatStockCurrency(rowPreview.totalValue)}
                                   </span>
                                 </div>
                               )}
@@ -2038,9 +1883,9 @@ export function StockTransactions() {
 
                 {/* Catatan */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Catatan</Label>
+                    <MasterDataFieldLabel>Catatan</MasterDataFieldLabel>
                     <Input 
-                        className="bg-slate-50 border-slate-200"
+                        className="uiInput"
                         value={formData.notes} 
                         onChange={(e) => setFormData({...formData, notes: e.target.value})}
                         placeholder="Contoh: Pembelian Toko A, Pemakaian Cuci Mobil B 1234 XX" 
@@ -2056,7 +1901,7 @@ export function StockTransactions() {
                         </div>
                         <div className="mt-1.5 flex justify-between border-t border-slate-200 pt-1.5 text-xs">
                             <span className="text-slate-500">Estimasi Total Nilai</span>
-                            <span className="font-semibold text-emerald-600">Rp {formatStockCurrency(batchPreviewTotals.totalValue)}</span>
+                            <span className="font-semibold text-emerald-600">{formatStockCurrency(batchPreviewTotals.totalValue)}</span>
                         </div>
                         {batchPreviewTotals.hasError && (
                             <p className="mt-2 text-[11px] text-red-600">
@@ -2096,7 +1941,7 @@ export function StockTransactions() {
                             <div className="flex justify-between text-xs border-t border-slate-200 pt-1.5 mt-1.5">
                                 <span className="text-slate-500">Total Pembelian</span>
                                 <span className="text-emerald-600 font-medium">
-                                    Rp {formatStockCurrency(transactionPreview.totalValue)}
+                                    {formatStockCurrency(transactionPreview.totalValue)}
                                 </span>
                             </div>
                         )}
@@ -2118,16 +1963,15 @@ export function StockTransactions() {
                         )}
                     </div>
                 )}
-            </div>
-            <SheetFooter className="shrink-0 flex-row gap-3 border-t border-slate-100 bg-white p-6 pt-4 dark:border-slate-800 dark:bg-slate-900 sm:justify-end">
-                <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)} className="h-9 border-slate-200 bg-white px-6 dark:border-slate-800 dark:bg-slate-900">Batal</Button>
-                <Button onClick={handleSubmit} disabled={loading} className="h-9 bg-blue-600 px-6 text-white shadow-sm hover:bg-blue-700">
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isEditMode ? 'Simpan Perubahan' : 'Simpan Transaksi'}
-                </Button>
-            </SheetFooter>
-        </SheetContent>
-      </Sheet>
+                <MasterDataFormActions
+                    isSubmitting={loading}
+                    onCancel={() => handleDialogOpenChange(false)}
+                    saveLabel={isEditMode ? 'Simpan Perubahan' : 'Simpan Transaksi'}
+                />
+            </MasterDataDialogBody>
+            </form>
+        </MasterDataFormDialogContent>
+      </Dialog>
 
       {/* Konfirmasi Batalkan Transaksi */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Plus, Trash2, List, Scale, Loader2, ExternalLink, Info } from "lucide-react";
+import { Plus, Trash2, List, Scale, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import { useMasterData } from "@/app/pages/master-data/context";
 import { logActivity } from "@/app/services/auditService";
-import { Badge } from "@/app/components/ui/badge";
+import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
+import { DataTable, TableActionCell, TableActionHeader, TableText } from "@/app/components/ui/data-table";
+import { OperationalEmptyState, OperationalTableCard } from "@/app/components/ui/operational-page";
 
 export function StockSettings() {
   const { services, currentUser } = useMasterData();
@@ -97,93 +99,91 @@ export function StockSettings() {
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {/* Service Types (Read-only from Master Data) */}
-      <Card className="overflow-hidden rounded-xl border border-slate-200 shadow-sm dark:border-slate-800">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2">
-             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300">
-               <List className="h-4 w-4" />
-             </div>
-             <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Jenis Layanan</CardTitle>
-          </div>
-          <CardDescription className="flex items-start gap-1.5 text-sm">
-            <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
-            <span>Data diambil otomatis dari <strong>Master Data &gt; Layanan</strong> yang berstatus aktif. Untuk menambah/mengubah layanan, kelola di halaman Master Data.</span>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-            {activeServices.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Tidak ada layanan aktif di Master Data</p>
-            ) : (
-                activeServices.map((service) => (
-                    <div key={service.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 transition-colors hover:bg-slate-100/70 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:bg-slate-800/70">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{service.name}</span>
-                            {service.category && (
-                                <Badge variant="secondary" className="text-[10px] font-normal">{service.category}</Badge>
-                            )}
-                        </div>
-                        <span className="text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">
-                            Aktif
-                        </span>
-                    </div>
-                ))
-            )}
-          </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-[11px] text-slate-400 flex items-center gap-1">
-              <ExternalLink className="h-3 w-3" />
-              Kelola layanan di menu <strong className="text-slate-500">Master Data</strong>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="inventorySettingsGrid">
+      <OperationalTableCard className="inventoryTableCard">
+          <MasterDataTableTitle title="Jenis Layanan Aktif" count={activeServices.length} variant="active" icon={List} />
+          <DataTable columns={[64, 260, 180, 110]} minWidth={614} rowMinHeight={58} cellY={11} textMax={260}>
+            <table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>No</TableHead>
+                  <TableHead>Layanan</TableHead>
+                  <TableHead>Kategori</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeServices.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="border-0">
+                      <OperationalEmptyState icon={List} title="Tidak ada layanan aktif" description="Data layanan aktif diambil dari Master Data Layanan." className="py-10" />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  activeServices.map((service, index) => (
+                    <TableRow key={service.id} className="border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                      <TableCell className="inventoryTableIndexCell">{index + 1}</TableCell>
+                      <TableCell><TableText primary={service.name} /></TableCell>
+                      <TableCell><span className="inventoryPlainCellText">{service.category || '-'}</span></TableCell>
+                      <TableCell><span className="inventoryStockTypeText isIN">Aktif</span></TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </table>
+          </DataTable>
+      </OperationalTableCard>
 
       {/* Units */}
-      <Card className="overflow-hidden rounded-xl border border-slate-200 shadow-sm dark:border-slate-800">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-2">
-             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-300">
-               <Scale className="h-4 w-4" />
-             </div>
-             <CardTitle className="text-base font-semibold text-slate-900 dark:text-slate-100">Satuan (UoM)</CardTitle>
-          </div>
-          <CardDescription>Satuan pengukuran stok (Pcs, Liter, Kg, dll)</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
+      <OperationalTableCard className="inventoryTableCard">
+          <MasterDataTableTitle title="Satuan Stok" count={units.length} variant="active" icon={Scale} />
+          <div className="inventorySettingsToolbar">
             <Input 
-                className="h-9 border-slate-200 bg-slate-50 shadow-none focus-visible:ring-blue-500/20 dark:border-slate-800 dark:bg-slate-950"
+                className="uiInput"
                 placeholder="Tambah satuan..." 
                 value={newUnit}
                 onChange={(e) => setNewUnit(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addUnit()}
             />
-            <Button onClick={addUnit} disabled={loading || !newUnit.trim()} className="h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700">
-                <Plus className="h-4 w-4" />
+            <Button onClick={addUnit} disabled={loading || !newUnit.trim()} icon={<Plus className="h-4 w-4" />} className="inventoryPrimaryButton">
+                Tambah
             </Button>
           </div>
-          
-          <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1">
-            {loading ? (
-                <div className="flex justify-center p-4"><Loader2 className="animate-spin h-6 w-6 text-slate-300" /></div>
-            ) : units.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Belum ada data</p>
-            ) : (
-                units.map((unit) => (
-                    <div key={unit.id} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/70 p-3 transition-colors hover:bg-slate-100/70 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:bg-slate-800/70">
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{unit.name}</span>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50" onClick={() => removeUnit(unit.id)}>
-                            <Trash2 className="h-4 w-4" />
+          <DataTable actionWidth={82} columns={[64, 320, 82]} minWidth={466} rowMinHeight={58} cellY={11} textMax={300}>
+            <table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>No</TableHead>
+                  <TableHead>Satuan</TableHead>
+                  <TableActionHeader />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={3} className="h-28 text-center border-0"><Loader2 className="animate-spin h-6 w-6 mx-auto text-slate-300" /></TableCell></TableRow>
+                ) : units.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="border-0">
+                      <OperationalEmptyState icon={Scale} title="Belum ada satuan stok" description="Tambahkan satuan seperti pcs, liter, pack, atau kg." className="py-10" />
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  units.map((unit, index) => (
+                    <TableRow key={unit.id} className="border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60">
+                      <TableCell className="inventoryTableIndexCell">{index + 1}</TableCell>
+                      <TableCell><TableText primary={unit.name} /></TableCell>
+                      <TableActionCell>
+                        <Button variant="ghost" size="icon" className="inventoryIconButton text-slate-400 hover:text-red-500" onClick={() => removeUnit(unit.id)}>
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                    </div>
-                ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                      </TableActionCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </table>
+          </DataTable>
+      </OperationalTableCard>
     </div>
   );
 }

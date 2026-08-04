@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/app/components/ui/sheet";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/app/components/ui/sheet";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/app/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
-import { Label } from "@/app/components/ui/label";
-import { Plus, Search, MoreHorizontal, Edit, Trash2, RefreshCcw, Loader2, Wand2, Check, ChevronsUpDown, Building2, UserCircle, ClipboardList, AlertTriangle, Boxes, PackageCheck, WalletCards } from "lucide-react";
+import { Plus, Search, Edit, Trash2, RefreshCcw, Loader2, Wand2, Check, ChevronsUpDown, ClipboardList, Boxes, PackageCheck, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu";
 import { Badge } from "@/app/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/app/components/ui/alert";
 import { useMasterData } from "@/app/pages/master-data/context";
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/app/components/ui/command";
@@ -22,6 +20,9 @@ import { StockCard } from "./StockCard";
 import { STOCK_UPDATED_EVENT, emitStockUpdated, groupTransactionsByProduct, reconcileProductStock, toStockNumber, type StockTransactionLike } from "../utils/stockLedger";
 import { isMissingStockTransactionScopeColumnError, omitStockTransactionScope, retryWithoutInvalidStockScope, type StockScopeField } from "../utils/stockTransactionScope";
 import { isTechnicianRole } from "@/app/data/roleHelpers";
+import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableText } from "@/app/components/ui/data-table";
+import { MasterDataDialogBody, MasterDataFormActions, MasterDataFieldLabel, MasterDataFormDialogContent } from "@/app/components/ui/master-data-ui";
+import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
@@ -29,6 +30,7 @@ import {
   OperationalKpiGrid,
   OperationalTableCard,
 } from "@/app/components/ui/operational-page";
+import { InventoryTablePagination, useInventoryTablePagination } from "./InventoryTablePagination";
 
 interface Product {
   id: string;
@@ -83,6 +85,21 @@ const getErrorMessage = (error: unknown) => {
   return String(error);
 };
 
+const formatInventoryNumber = (value: number | string | null | undefined, maximumFractionDigits = 2) =>
+  toStockNumber(value).toLocaleString('id-ID', {
+    maximumFractionDigits,
+  });
+
+const formatInventoryCurrency = (value: number | string | null | undefined) =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0,
+  }).format(toStockNumber(value));
+
+const formatInventoryUnitPrice = (value: number | string | null | undefined, unit?: string) =>
+  `${formatInventoryCurrency(value)}${unit ? ` / ${unit}` : ''}`;
+
 export function ProductList() {
   const { services, activeBranches, users, currentUser } = useMasterData();
   const { hasPermission } = usePermissions();
@@ -119,6 +136,7 @@ export function ProductList() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Partial<Product>>({});
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
 
   // Kartu Stok State
   const [stockCardOpen, setStockCardOpen] = useState(false);
@@ -513,7 +531,7 @@ export function ProductList() {
   const totalItems = filteredProducts.length;
   const totalValue = filteredProducts.reduce((sum, p) => sum + (toStockNumber(p.current_qty) * toStockNumber(p.average_cost)), 0);
   const lowStockCount = filteredProducts.filter((product) => product.current_qty <= (product.min_stock || 0)).length;
-  const stockMismatchCount = filteredProducts.filter((product) => product.stock_needs_review).length;
+  const productPagination = useInventoryTablePagination(filteredProducts, `${searchTerm}|${categoryFilter}`);
 
   const generateSKU = () => {
     let prefix = 'PRD';
@@ -564,21 +582,21 @@ export function ProductList() {
   const exactCategoryMatch = uniqueCategories.some(c => c.toLowerCase() === categorySearchTrimmed);
 
   return (
-    <div className="space-y-4">
+    <div className="inventoryTabStack">
       {/* Filters & Actions */}
-      <OperationalFilterPanel className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
-        <div className="grid w-full gap-2 sm:grid-cols-[minmax(0,320px)_180px]">
+      <OperationalFilterPanel className="inventoryFilterPanel">
+        <div className="inventoryFilterGrid inventoryFilterGridProducts">
              <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input 
                     placeholder="Cari nama barang..." 
-                    className="h-9 border-slate-200 bg-slate-50 pl-9 shadow-none focus-visible:ring-blue-500/20 dark:border-slate-800 dark:bg-slate-950"
+                    className="uiInput pl-9"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
              </div>
              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="h-9 border-slate-200 bg-slate-50 shadow-none dark:border-slate-800 dark:bg-slate-950">
+                <SelectTrigger className="uiSelectTrigger">
                     <SelectValue placeholder="Filter Layanan" />
                 </SelectTrigger>
                 <SelectContent>
@@ -589,24 +607,24 @@ export function ProductList() {
                 </SelectContent>
              </Select>
         </div>
-        <div className="flex w-full gap-2 sm:w-auto">
-            <Button variant="outline" size="icon" onClick={fetchData} title="Refresh" className="h-9 w-9 shrink-0 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="inventoryFilterActions">
+            <Button variant="outline" size="icon" onClick={fetchData} title="Refresh">
                 <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
             {canCreateProduct && (
-                <Button onClick={openAddDialog} className="h-9 flex-1 bg-blue-600 text-white shadow-sm hover:bg-blue-700 sm:flex-none">
-                    <Plus className="mr-2 h-4 w-4" /> Tambah Produk
+                <Button onClick={openAddDialog} icon={<Plus className="h-4 w-4" />} className="inventoryPrimaryButton">
+                    Tambah Produk
                 </Button>
             )}
         </div>
       </OperationalFilterPanel>
 
       {/* Summary Cards */}
-      <OperationalKpiGrid className="grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+      <OperationalKpiGrid className="inventoryKpiGrid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
           <OperationalKpiCard label="Total Produk" value={totalItems} icon={Boxes} tone="blue" />
           <OperationalKpiCard
             label="Total Nilai Aset"
-            value={`Rp ${totalValue.toLocaleString('id-ID')}`}
+            value={formatInventoryCurrency(totalValue)}
             icon={WalletCards}
             tone="emerald"
             className="xl:col-span-2"
@@ -614,209 +632,202 @@ export function ProductList() {
           <OperationalKpiCard label="Perlu Restock" value={lowStockCount} icon={PackageCheck} tone={lowStockCount > 0 ? "amber" : "default"} />
       </OperationalKpiGrid>
 
-      {stockMismatchCount > 0 && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Stok diselaraskan dari histori transaksi</AlertTitle>
-          <AlertDescription>
-            {stockMismatchCount} produk terdeteksi punya selisih antara data tabel dan histori mutasi.
-            Tampilan inventaris sekarang memakai histori transaksi agar angka stok lebih konsisten.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Table */}
-      <OperationalTableCard>
-        <Table className="min-w-[1240px]">
-          <TableHeader className="bg-slate-50/80 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
-            <TableRow className="hover:bg-transparent border-slate-100 dark:border-slate-800">
-              <TableHead className="h-11 w-[56px] text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">No</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">SKU</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Nama Barang</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cabang</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Teknisi</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Kategori</TableHead>
-              <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Layanan</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Stok</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">HPP (Avg)</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Harga Jual</TableHead>
-              <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total Nilai</TableHead>
-              {hasProductActions && <TableHead className="w-[50px]"></TableHead>}
+      <OperationalTableCard className="inventoryTableCard">
+        <MasterDataTableTitle title="Data Produk Aktif" count={filteredProducts.length} variant="active" />
+        <DataTable
+          actionWidth={hasProductActions ? 82 : undefined}
+          cellY={12}
+          columns={[64, 340, 240, 160, 220, 112, 152, 152, 168, hasProductActions ? 82 : null]}
+          className="inventoryProductTable"
+          minWidth={hasProductActions ? 1588 : 1506}
+          rowMinHeight={66}
+          textMax={260}
+        >
+        <table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>No</TableHead>
+              <TableHead>Nama Barang</TableHead>
+              <TableHead>Layanan</TableHead>
+              <TableHead>Kategori</TableHead>
+              <TableHead>Teknisi/Cabang</TableHead>
+              <TableHead className="text-right">Stok</TableHead>
+              <TableHead className="text-right">HPP (Avg)</TableHead>
+              <TableHead className="text-right">Harga Jual</TableHead>
+              <TableHead className="text-right">Total Nilai</TableHead>
+              {hasProductActions && <TableActionHeader />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && products.length === 0 ? (
                  <TableRow>
-                    <TableCell colSpan={hasProductActions ? 12 : 11} className="h-32 text-center border-0">
+                    <TableCell colSpan={hasProductActions ? 10 : 9} className="h-32 text-center border-0">
                         <Loader2 className="mx-auto h-6 w-6 animate-spin text-slate-400" />
                     </TableCell>
                  </TableRow>
             ) : filteredProducts.length === 0 ? (
                  <TableRow>
-                    <TableCell colSpan={hasProductActions ? 12 : 11} className="border-0">
+                    <TableCell colSpan={hasProductActions ? 10 : 9} className="border-0">
                         <OperationalEmptyState icon={Boxes} title="Tidak ada data produk" description="Belum ada produk yang cocok dengan filter saat ini." className="py-12" />
                     </TableCell>
                  </TableRow>
             ) : (
-                filteredProducts.map((product, index) => (
+                productPagination.paginatedItems.map((product, index) => (
                     <TableRow
                       key={product.id}
                       className={cn(
-                        "border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60",
+                        "cursor-pointer border-slate-100 hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-slate-800/60",
                         product.stock_needs_review && "bg-amber-50/30 dark:bg-amber-950/10",
                         product.current_qty <= (product.min_stock || 0) && !product.stock_needs_review && "bg-red-50/20 dark:bg-red-950/10"
                       )}
+                      onClick={() => setDetailProduct(product)}
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setDetailProduct(product);
+                        }
+                      }}
                     >
-                        <TableCell className="w-[56px] text-xs font-semibold text-slate-400">
-                            <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full border border-slate-200 bg-white px-2 tabular-nums text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                              {index + 1}
-                            </span>
+                        <TableCell className="inventoryTableIndexCell">
+                            {productPagination.startIndex + index + 1}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-500 font-mono">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
-                              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                              {product.sku || '-'}
-                            </span>
-                        </TableCell>
-                        <TableCell className="font-medium text-slate-900 dark:text-slate-100">
-                            <div className="flex items-center gap-2 flex-wrap">
+                        <TableCell>
+                            <div className="inventoryProductNameCell">
                               <span
                                 className={cn(
-                                  "h-2 w-2 rounded-full",
+                                  "inventoryProductStatusDot",
                                   product.stock_needs_review
-                                    ? "bg-amber-500"
+                                    ? "isAudit"
                                     : product.current_qty <= (product.min_stock || 0)
-                                    ? "bg-red-500"
-                                    : "bg-emerald-500"
+                                    ? "isLow"
+                                    : "isOk"
                                 )}
                               />
-                              <span>{product.name}</span>
+                              <TableText
+                                primary={product.name}
+                                secondary={product.sku || 'SKU belum diisi'}
+                                className="inventoryProductText"
+                              />
+                            </div>
+                            <div className="inventoryProductBadges">
                               {product.current_qty <= (product.min_stock || 0) && (
-                                <Badge variant="destructive" className="text-[10px] h-5 px-1">Low Stock</Badge>
+                                <Badge variant="destructive" className="inventoryStatusBadge">Low Stock</Badge>
                               )}
                               {product.stock_needs_review && (
-                                <Badge className="h-5 border-amber-200 bg-amber-100 px-1.5 text-[10px] text-amber-800 hover:bg-amber-100">
+                                <Badge className="inventoryStatusBadge inventoryStatusBadgeAudit">
                                   Audit Histori
                                 </Badge>
                               )}
                             </div>
                             {product.stock_needs_review && typeof product.recorded_qty === 'number' && (
-                              <p className="mt-1 text-[11px] font-normal text-amber-700">
-                                Data tersimpan: {product.recorded_qty} {product.unit}
+                              <p className="inventoryAuditNote">
+                                Data tersimpan: {formatInventoryNumber(product.recorded_qty)} {product.unit}
                               </p>
                             )}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-500">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-cyan-50 px-2 py-1 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300">
-                              <Building2 className="h-3 w-3" />
-                              {product.branch_id ? (activeBranches.find(b => b.id === product.branch_id)?.name || '-') : '-'}
-                            </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-500">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-2 py-1 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">
-                              <UserCircle className="h-3 w-3" />
-                              {product.technician_id ? (users.find(u => u.id === product.technician_id)?.name || '-') : '-'}
-                            </span>
+                        <TableCell>
+                            <span className="inventoryPlainCellText">{product.service_type || '-'}</span>
                         </TableCell>
                         <TableCell>
-                            <Badge variant="outline" className="rounded-md border-violet-200 bg-violet-50 font-medium text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/30 dark:text-violet-300">
+                            <span className="inventoryPlainCellText">
                               {product.category || '-'}
-                            </Badge>
-                        </TableCell>
-                        <TableCell>
-                            <Badge variant="secondary" className="rounded-md bg-sky-50 font-medium text-sky-700 hover:bg-sky-50 dark:bg-sky-950/30 dark:text-sky-300">{product.service_type}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                            <span
-                              className={cn(
-                                "inline-flex items-baseline gap-1 rounded-md px-2 py-1 tabular-nums",
-                                product.current_qty <= (product.min_stock || 0)
-                                  ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                              )}
-                            >
-                              {product.current_qty} <span className="text-xs font-normal opacity-70">{product.unit}</span>
                             </span>
                         </TableCell>
-                        <TableCell className={cn("text-right tabular-nums", product.stock_needs_review ? "text-amber-700 dark:text-amber-300" : "text-slate-600 dark:text-slate-400")}>
-                            {product.average_cost?.toLocaleString('id-ID')}
-                            <span className="text-[10px] text-slate-400 block">/{product.unit}</span>
+                        <TableCell>
+                            <div className="inventoryOwnerStack">
+                              <span>{product.technician_id ? (users.find(u => u.id === product.technician_id)?.name || '-') : '-'}</span>
+                              <small>{product.branch_id ? (activeBranches.find(b => b.id === product.branch_id)?.name || '-') : '-'}</small>
+                            </div>
+                        </TableCell>
+                        <TableCell className="inventoryNumericCell">
+                            <span className={cn("inventoryQtyValue", product.current_qty <= (product.min_stock || 0) ? "isLow" : "isOk")}>
+                              {formatInventoryNumber(product.current_qty)}
+                            </span>
+                            <span className="inventoryQtyUnit">{product.unit}</span>
+                        </TableCell>
+                        <TableCell className={cn("inventoryMoneyCell", product.stock_needs_review && "isAudit")}>
+                            <span className="inventoryMoneyValue">{formatInventoryCurrency(product.average_cost)}</span>
+                            <span className="inventoryMoneyMeta">per {product.unit}</span>
                             {product.stock_needs_review && typeof product.recorded_average_cost === 'number' && (
-                              <span className="text-[10px] text-amber-600 block">
-                                Tabel lama: Rp {product.recorded_average_cost.toLocaleString('id-ID')}
+                              <span className="inventoryMoneyWarning">
+                                Tabel lama: {formatInventoryCurrency(product.recorded_average_cost)}
                               </span>
                             )}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums font-medium text-blue-600">
+                        <TableCell className="inventoryMoneyCell">
                              {product.sell_price ? (
                                 <>
-                                    {product.sell_price.toLocaleString('id-ID')}
-                                    <span className="text-[10px] text-slate-400 block font-normal">/{product.unit}</span>
+                                    <span className="inventoryMoneyValue isSell">{formatInventoryCurrency(product.sell_price)}</span>
+                                    <span className="inventoryMoneyMeta">per {product.unit}</span>
                                 </>
                              ) : '-'}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums font-medium text-slate-800 dark:text-slate-200">
-                            <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-                              {(product.current_qty * product.average_cost).toLocaleString('id-ID')}
-                            </span>
+                        <TableCell className="inventoryMoneyCell">
+                            <span className="inventoryMoneyValue isAsset">{formatInventoryCurrency(product.current_qty * product.average_cost)}</span>
                         </TableCell>
                         {hasProductActions && (
-                            <TableCell>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" className="h-8 w-8 p-0 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200">
-                                            <span className="sr-only">Open menu</span>
-                                            <MoreHorizontal className="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        {canViewStockCard && (
-                                            <DropdownMenuItem onClick={() => { setStockCardProduct(product); setStockCardOpen(true); }}>
-                                                <ClipboardList className="mr-2 h-4 w-4" /> Kartu Stok
-                                            </DropdownMenuItem>
-                                        )}
-                                        {canEditProduct && (
-                                            <DropdownMenuItem onClick={() => openEditDialog(product)}>
-                                                <Edit className="mr-2 h-4 w-4" /> Edit Detail
-                                            </DropdownMenuItem>
-                                        )}
-                                        {canDeleteProduct && (
-                                            <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(product)}>
-                                                <Trash2 className="mr-2 h-4 w-4" /> Hapus
-                                            </DropdownMenuItem>
-                                        )}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
+                            <TableActionCell>
+                                <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                                <TableActionMenu contentClassName="w-48">
+                                    {canViewStockCard && (
+                                        <TableActionMenuItem icon={ClipboardList} onClick={() => { setStockCardProduct(product); setStockCardOpen(true); }}>
+                                            Kartu Stok
+                                        </TableActionMenuItem>
+                                    )}
+                                    {canEditProduct && (
+                                        <TableActionMenuItem icon={Edit} onClick={() => openEditDialog(product)}>
+                                            Edit Detail
+                                        </TableActionMenuItem>
+                                    )}
+                                    {canDeleteProduct && (
+                                        <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteTarget(product)}>
+                                            Hapus
+                                        </TableActionMenuItem>
+                                    )}
+                                </TableActionMenu>
+                                </div>
+                            </TableActionCell>
                         )}
                     </TableRow>
                 ))
             )}
           </TableBody>
-        </Table>
+        </table>
+        </DataTable>
+        <InventoryTablePagination {...productPagination} />
       </OperationalTableCard>
 
       {/* Dialog Form */}
-      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <SheetContent side="right" className="w-[400px] sm:w-[480px] sm:max-w-[480px] z-[150] flex flex-col h-full p-0 gap-0 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800">
-            <SheetHeader className="shrink-0 border-b border-slate-100 bg-slate-50/80 p-6 pb-4 text-left dark:border-slate-800 dark:bg-slate-900">
-                <SheetTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">{isEditMode ? 'Edit Produk' : 'Tambah Produk Baru'}</SheetTitle>
-                <SheetDescription className="text-slate-500 text-sm">
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <MasterDataFormDialogContent size="wide" className="inventoryProductFormDialog">
+            <DialogHeader>
+                <DialogTitle>{isEditMode ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
+                <DialogDescription>
                     {isEditMode ? 'Perbarui informasi detail produk.' : 'Isi data untuk menambahkan produk baru.'}
-                </SheetDescription>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                </DialogDescription>
+            </DialogHeader>
+            <form
+              className="masterDataForm inventoryProductForm"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSave();
+              }}
+            >
+            <MasterDataDialogBody className="inventoryProductFormBody">
                 {/* Row 1: Kategori + SKU */}
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500">Kategori</Label>
+                        <MasterDataFieldLabel>Kategori</MasterDataFieldLabel>
                         <Popover open={categoryPopoverOpen} onOpenChange={(open) => { setCategoryPopoverOpen(open); if (!open) setCategorySearch(""); }}>
                             <PopoverTrigger asChild>
                                 <Button
-                                    variant="outline"
+                                      type="button"
+                                      variant="outline"
                                     role="combobox"
                                     aria-expanded={categoryPopoverOpen}
-                                    className="w-full justify-between bg-slate-50 border-slate-200 font-normal hover:bg-slate-100 h-9 text-sm"
+                                    className="uiSelectTrigger w-full justify-between"
                                 >
                                     {formData.category || <span className="text-muted-foreground">Pilih kategori...</span>}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -869,7 +880,7 @@ export function ProductList() {
                         </Popover>
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500">SKU / Kode <span className="text-red-500">*</span></Label>
+                        <MasterDataFieldLabel required>SKU / Kode</MasterDataFieldLabel>
                         {isEditMode ? (
                             <div className="flex items-center h-9 px-3 rounded-md bg-slate-100 border border-slate-200 text-sm text-slate-600 font-mono">
                                 {formData.sku || '-'}
@@ -877,7 +888,7 @@ export function ProductList() {
                         ) : (
                             <div className="flex gap-1.5">
                                 <Input 
-                                    className={cn("bg-slate-50 border-slate-200", formErrors.sku && "border-red-400 ring-1 ring-red-400")}
+	                                    className={cn("uiInput", formErrors.sku && "border-red-400 ring-1 ring-red-400")}
                                     value={formData.sku} 
                                     onChange={(e) => { setFormData({...formData, sku: e.target.value}); setFormErrors(prev => ({...prev, sku: ''})); }}
                                     placeholder="CHM-001"
@@ -887,7 +898,7 @@ export function ProductList() {
                                     size="icon" 
                                     onClick={generateSKU} 
                                     title="Generate SKU Otomatis"
-                                    className="shrink-0 bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+	                                    className="shrink-0"
                                 >
                                     <Wand2 className="h-4 w-4" />
                                 </Button>
@@ -899,9 +910,9 @@ export function ProductList() {
 
                 {/* Nama Barang */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Nama Barang <span className="text-red-500">*</span></Label>
+                    <MasterDataFieldLabel required>Nama Barang</MasterDataFieldLabel>
                     <Input 
-                        className={cn("bg-slate-50 border-slate-200", formErrors.name && "border-red-400 ring-1 ring-red-400")}
+	                        className={cn("uiInput", formErrors.name && "border-red-400 ring-1 ring-red-400")}
                         value={formData.name} 
                         onChange={(e) => { setFormData({...formData, name: e.target.value}); setFormErrors(prev => ({...prev, name: ''})); }}
                         placeholder="Contoh: Shampoo Mobil"
@@ -911,12 +922,12 @@ export function ProductList() {
 
                 {/* Jenis Layanan */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Jenis Layanan <span className="text-red-500">*</span></Label>
+                    <MasterDataFieldLabel required>Jenis Layanan</MasterDataFieldLabel>
                     <Select 
                         value={formData.service_type} 
                         onValueChange={(val) => { setFormData({...formData, service_type: val}); setFormErrors(prev => ({...prev, service_type: ''})); }}
                     >
-                        <SelectTrigger className={cn("bg-slate-50 border-slate-200", formErrors.service_type && "border-red-400 ring-1 ring-red-400")}>
+	                        <SelectTrigger className={cn("uiSelectTrigger", formErrors.service_type && "border-red-400 ring-1 ring-red-400")}>
                             <SelectValue placeholder="Pilih Layanan" />
                         </SelectTrigger>
                         <SelectContent>
@@ -931,14 +942,12 @@ export function ProductList() {
                 {/* Row: Cabang + Teknisi */}
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500 flex items-center gap-1">
-                            <Building2 className="h-3 w-3" /> Cabang
-                        </Label>
+                        <MasterDataFieldLabel>Cabang</MasterDataFieldLabel>
                         <Select 
                             value={formData.branch_id} 
                             onValueChange={(val) => setFormData({...formData, branch_id: val === '_none_' ? '' : val})}
                         >
-                            <SelectTrigger className="bg-slate-50 border-slate-200">
+	                            <SelectTrigger className="uiSelectTrigger">
                                 <SelectValue placeholder="Pilih Cabang" />
                             </SelectTrigger>
                             <SelectContent className="z-[200]">
@@ -954,14 +963,12 @@ export function ProductList() {
                         </Select>
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500 flex items-center gap-1">
-                            <UserCircle className="h-3 w-3" /> Teknisi PIC
-                        </Label>
+                        <MasterDataFieldLabel>Teknisi PIC</MasterDataFieldLabel>
                         <Select 
                             value={formData.technician_id} 
                             onValueChange={(val) => setFormData({...formData, technician_id: val === '_none_' ? '' : val})}
                         >
-                            <SelectTrigger className="bg-slate-50 border-slate-200">
+	                            <SelectTrigger className="uiSelectTrigger">
                                 <SelectValue placeholder="Pilih Teknisi" />
                             </SelectTrigger>
                             <SelectContent className="z-[200]">
@@ -981,14 +988,14 @@ export function ProductList() {
                 {/* Row: Satuan + Min. Stok */}
                 <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500">Satuan <span className="text-red-500">*</span></Label>
+	                        <MasterDataFieldLabel required>Satuan</MasterDataFieldLabel>
                         <Popover open={unitPopoverOpen} onOpenChange={(open) => { setUnitPopoverOpen(open); if (!open) setUnitSearch(""); }}>
                             <PopoverTrigger asChild>
                                 <Button
                                     variant="outline"
                                     role="combobox"
                                     aria-expanded={unitPopoverOpen}
-                                    className={cn("w-full justify-between bg-slate-50 border-slate-200 font-normal hover:bg-slate-100", formErrors.unit && "border-red-400 ring-1 ring-red-400")}
+	                                    className={cn("uiSelectTrigger w-full justify-between", formErrors.unit && "border-red-400 ring-1 ring-red-400")}
                                 >
                                     {formData.unit || <span className="text-muted-foreground">Pilih satuan...</span>}
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -1038,45 +1045,39 @@ export function ProductList() {
                         {formErrors.unit && <p className="text-[11px] text-red-500">{formErrors.unit}</p>}
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-500">
+                        <MasterDataFieldLabel>
                             Batas Minimum {formData.unit && <span className="text-slate-400">({formData.unit})</span>}
-                        </Label>
+                        </MasterDataFieldLabel>
                         <Input 
                             type="number"
-                            className={cn("bg-slate-50 border-slate-200", formErrors.min_stock && "border-red-400 ring-1 ring-red-400")}
+                            className={cn("uiInput", formErrors.min_stock && "border-red-400 ring-1 ring-red-400")}
                             value={formData.min_stock} 
                             onChange={(e) => { setFormData({...formData, min_stock: e.target.value}); setFormErrors(prev => ({...prev, min_stock: ''})); }} 
                         />
-                        <p className="text-[11px] text-slate-400">
-                            Dipakai untuk pengingat restock, bukan stok aktual yang tersedia.
-                        </p>
                         {formErrors.min_stock && <p className="text-[11px] text-red-500">{formErrors.min_stock}</p>}
                     </div>
                 </div>
 
                 {/* Harga Jual - full width */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">
+                    <MasterDataFieldLabel>
                         Harga Jual {formData.unit && <span className="text-slate-400">(per {formData.unit})</span>}
-                    </Label>
-                    <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">Rp</span>
-                        <Input 
-                            type="number"
-                            className={cn("pl-8 bg-slate-50 border-slate-200", formErrors.sell_price && "border-red-400 ring-1 ring-red-400")} 
-                            value={formData.sell_price} 
-                            onChange={(e) => { setFormData({...formData, sell_price: e.target.value}); setFormErrors(prev => ({...prev, sell_price: ''})); }}
-                            placeholder="0" 
-                        />
-                    </div>
+                    </MasterDataFieldLabel>
+                    <Input
+                        type="number"
+                        className={cn("uiInput", formErrors.sell_price && "border-red-400 ring-1 ring-red-400")}
+                        value={formData.sell_price}
+                        onChange={(e) => { setFormData({...formData, sell_price: e.target.value}); setFormErrors(prev => ({...prev, sell_price: ''})); }}
+                        placeholder="Harga dalam Rupiah"
+                    />
                     {formErrors.sell_price && <p className="text-[11px] text-red-500">{formErrors.sell_price}</p>}
                 </div>
 
                 {/* Deskripsi */}
                 <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Deskripsi</Label>
+                    <MasterDataFieldLabel>Deskripsi</MasterDataFieldLabel>
                     <textarea 
-                        className="flex h-20 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="uiInput min-h-24 resize-y py-3"
                         value={formData.description} 
                         onChange={(e) => setFormData({...formData, description: e.target.value})}
                         placeholder="Deskripsi produk..." 
@@ -1090,31 +1091,28 @@ export function ProductList() {
                             <p className="text-xs font-medium text-slate-500 mb-3">Saldo Awal</p>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs text-slate-500">
+                                    <MasterDataFieldLabel>
                                         Stok Awal {formData.unit && <span className="text-slate-400">({formData.unit})</span>}
-                                    </Label>
+                                    </MasterDataFieldLabel>
                                     <Input 
                                         type="number"
-                                        className={cn("bg-slate-50 border-slate-200", formErrors.initial_qty && "border-red-400 ring-1 ring-red-400")}
+                                        className={cn("uiInput", formErrors.initial_qty && "border-red-400 ring-1 ring-red-400")}
                                         value={formData.initial_qty} 
                                         onChange={(e) => { setFormData({...formData, initial_qty: e.target.value}); setFormErrors(prev => ({...prev, initial_qty: ''})); }} 
                                     />
                                     {formErrors.initial_qty && <p className="text-[11px] text-red-500">{formErrors.initial_qty}</p>}
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs text-slate-500">
-                                        HPP Awal <span className="text-red-500">*</span> {formData.unit && <span className="text-slate-400">(per {formData.unit})</span>}
-                                    </Label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">Rp</span>
-                                        <Input 
-                                            type="number"
-                                            className={cn("pl-8 bg-slate-50 border-slate-200", formErrors.initial_cost && "border-red-400 ring-1 ring-red-400")}
-                                            value={formData.initial_cost} 
-                                            onChange={(e) => { setFormData({...formData, initial_cost: e.target.value}); setFormErrors(prev => ({...prev, initial_cost: ''})); }}
-                                            placeholder="0" 
-                                        />
-                                    </div>
+                                    <MasterDataFieldLabel required>
+                                        HPP Awal {formData.unit && <span className="text-slate-400">(per {formData.unit})</span>}
+                                    </MasterDataFieldLabel>
+                                    <Input 
+                                        type="number"
+                                        className={cn("uiInput", formErrors.initial_cost && "border-red-400 ring-1 ring-red-400")}
+                                        value={formData.initial_cost} 
+                                        onChange={(e) => { setFormData({...formData, initial_cost: e.target.value}); setFormErrors(prev => ({...prev, initial_cost: ''})); }}
+                                        placeholder="HPP dalam Rupiah" 
+                                    />
                                     {formErrors.initial_cost && <p className="text-[11px] text-red-500">{formErrors.initial_cost}</p>}
                                 </div>
                             </div>
@@ -1128,21 +1126,21 @@ export function ProductList() {
                                     <div className="flex items-center justify-between text-xs gap-2">
                                         <span className="text-slate-500 shrink-0">Nilai Stok Awal</span>
                                         <span className="text-right text-slate-700 font-medium">
-                                            {Number(formData.initial_qty)} {formData.unit} &times; Rp {Number(formData.initial_cost).toLocaleString('id-ID')} = <span className="text-emerald-600">Rp {(Number(formData.initial_qty) * Number(formData.initial_cost)).toLocaleString('id-ID')}</span>
+                                            {formatInventoryNumber(formData.initial_qty)} {formData.unit} &times; {formatInventoryCurrency(formData.initial_cost)} = <span className="text-emerald-600">{formatInventoryCurrency(Number(formData.initial_qty) * Number(formData.initial_cost))}</span>
                                         </span>
                                     </div>
                                 )}
                                 {Number(formData.sell_price) > 0 && (
                                     <div className="flex items-center justify-between text-xs">
                                         <span className="text-slate-500">Harga Jual</span>
-                                        <span className="text-blue-600 font-medium">Rp {Number(formData.sell_price).toLocaleString('id-ID')}{formData.unit ? ` / ${formData.unit}` : ''}</span>
+                                        <span className="text-blue-600 font-medium">{formatInventoryUnitPrice(formData.sell_price, formData.unit)}</span>
                                     </div>
                                 )}
                                 {Number(formData.sell_price) > 0 && Number(formData.initial_cost) > 0 && (
                                     <div className="flex items-center justify-between text-xs border-t border-slate-200 pt-1.5 mt-1.5">
                                         <span className="text-slate-500">Margin</span>
                                         <span className={`font-medium ${(Number(formData.sell_price) - Number(formData.initial_cost)) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                            Rp {(Number(formData.sell_price) - Number(formData.initial_cost)).toLocaleString('id-ID')}{formData.unit ? ` / ${formData.unit}` : ''} ({Number(formData.initial_cost) > 0 ? ((Number(formData.sell_price) - Number(formData.initial_cost)) / Number(formData.initial_cost) * 100).toFixed(1) : '0'}%)
+                                            {formatInventoryUnitPrice(Number(formData.sell_price) - Number(formData.initial_cost), formData.unit)} ({Number(formData.initial_cost) > 0 ? ((Number(formData.sell_price) - Number(formData.initial_cost)) / Number(formData.initial_cost) * 100).toFixed(1) : '0'}%)
                                         </span>
                                     </div>
                                 )}
@@ -1158,27 +1156,27 @@ export function ProductList() {
                             <p className="text-xs font-medium text-slate-500 mb-2">Info Stok Saat Ini</p>
                             <div className="flex justify-between text-xs">
                                 <span className="text-slate-500">Stok</span>
-                                <span className="text-slate-700 font-medium">{currentProduct.current_qty} {currentProduct.unit}</span>
+                                <span className="text-slate-700 font-medium">{formatInventoryNumber(currentProduct.current_qty)} {currentProduct.unit}</span>
                             </div>
                             <div className="flex justify-between text-xs">
                                 <span className="text-slate-500">HPP Rata-rata</span>
-                                <span className="text-slate-700 font-medium">Rp {Number(currentProduct.average_cost || 0).toLocaleString('id-ID')}{currentProduct.unit ? ` / ${currentProduct.unit}` : ''}</span>
+                                <span className="text-slate-700 font-medium">{formatInventoryUnitPrice(currentProduct.average_cost, currentProduct.unit)}</span>
                             </div>
                             <div className="flex justify-between text-xs">
                                 <span className="text-slate-500">Total Nilai Aset</span>
-                                <span className="text-emerald-600 font-medium">Rp {((currentProduct.current_qty || 0) * (currentProduct.average_cost || 0)).toLocaleString('id-ID')}</span>
+                                <span className="text-emerald-600 font-medium">{formatInventoryCurrency((currentProduct.current_qty || 0) * (currentProduct.average_cost || 0))}</span>
                             </div>
                             {Number(formData.sell_price) > 0 && (
                                 <div className="flex justify-between text-xs border-t border-slate-200 pt-1.5 mt-1.5">
                                     <span className="text-slate-500">Harga Jual</span>
-                                    <span className="text-blue-600 font-medium">Rp {Number(formData.sell_price).toLocaleString('id-ID')}{formData.unit ? ` / ${formData.unit}` : ''}</span>
+                                    <span className="text-blue-600 font-medium">{formatInventoryUnitPrice(formData.sell_price, formData.unit)}</span>
                                 </div>
                             )}
                             {Number(formData.sell_price) > 0 && Number(currentProduct.average_cost) > 0 && (
                                 <div className="flex justify-between text-xs">
                                     <span className="text-slate-500">Margin</span>
                                     <span className={`font-medium ${(Number(formData.sell_price) - Number(currentProduct.average_cost)) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                        Rp {(Number(formData.sell_price) - Number(currentProduct.average_cost)).toLocaleString('id-ID')}{formData.unit ? ` / ${formData.unit}` : ''} ({Number(currentProduct.average_cost) > 0 ? ((Number(formData.sell_price) - Number(currentProduct.average_cost)) / Number(currentProduct.average_cost) * 100).toFixed(1) : '0'}%)
+                                        {formatInventoryUnitPrice(Number(formData.sell_price) - Number(currentProduct.average_cost), formData.unit)} ({Number(currentProduct.average_cost) > 0 ? ((Number(formData.sell_price) - Number(currentProduct.average_cost)) / Number(currentProduct.average_cost) * 100).toFixed(1) : '0'}%)
                                     </span>
                                 </div>
                             )}
@@ -1191,14 +1189,127 @@ export function ProductList() {
                         </div>
                     </div>
                 )}
+                <MasterDataFormActions
+                  isSubmitting={loading}
+                  onCancel={() => setIsDialogOpen(false)}
+                  saveLabel="Simpan"
+                />
+            </MasterDataDialogBody>
+            </form>
+        </MasterDataFormDialogContent>
+      </Dialog>
+
+      <Sheet open={!!detailProduct} onOpenChange={(open) => { if (!open) setDetailProduct(null); }}>
+        <SheetContent side="right" className="inventoryFormSheet inventoryDetailSheet">
+          <SheetHeader className="inventoryFormHeader">
+            <SheetTitle>Detail Produk</SheetTitle>
+            <SheetDescription>
+              Informasi master produk, kepemilikan stok, harga, dan status persediaan.
+            </SheetDescription>
+          </SheetHeader>
+          {detailProduct && (
+            <div className="inventoryDetailContent">
+              <div className="inventoryDetailHero">
+                <span
+                  className={cn(
+                    "inventoryProductStatusDot",
+                    detailProduct.stock_needs_review
+                      ? "isAudit"
+                      : detailProduct.current_qty <= (detailProduct.min_stock || 0)
+                      ? "isLow"
+                      : "isOk"
+                  )}
+                />
+                <div>
+                  <h3>{detailProduct.name}</h3>
+                  <p>{detailProduct.sku || 'SKU belum diisi'}</p>
+                </div>
+              </div>
+
+              <div className="inventoryDetailGrid">
+                <div className="inventoryDetailItem">
+                  <span>Stok Saat Ini</span>
+                  <strong>{formatInventoryNumber(detailProduct.current_qty)} {detailProduct.unit}</strong>
+                </div>
+                <div className="inventoryDetailItem">
+                  <span>Batas Minimum</span>
+                  <strong>{formatInventoryNumber(detailProduct.min_stock || 0)} {detailProduct.unit}</strong>
+                </div>
+                <div className="inventoryDetailItem">
+                  <span>HPP Rata-rata</span>
+                  <strong>{formatInventoryUnitPrice(detailProduct.average_cost, detailProduct.unit)}</strong>
+                </div>
+                <div className="inventoryDetailItem">
+                  <span>Harga Jual</span>
+                  <strong>{detailProduct.sell_price ? formatInventoryUnitPrice(detailProduct.sell_price, detailProduct.unit) : '-'}</strong>
+                </div>
+                <div className="inventoryDetailItem isWide">
+                  <span>Total Nilai Aset</span>
+                  <strong>{formatInventoryCurrency(detailProduct.current_qty * detailProduct.average_cost)}</strong>
+                </div>
+              </div>
+
+              <div className="inventoryDetailRows">
+                <div>
+                  <span>Kategori</span>
+                  <strong>{detailProduct.category || '-'}</strong>
+                </div>
+                <div>
+                  <span>Layanan</span>
+                  <strong>{detailProduct.service_type || '-'}</strong>
+                </div>
+                <div>
+                  <span>Cabang</span>
+                  <strong>{detailProduct.branch_id ? (activeBranches.find(b => b.id === detailProduct.branch_id)?.name || '-') : '-'}</strong>
+                </div>
+                <div>
+                  <span>Teknisi PIC</span>
+                  <strong>{detailProduct.technician_id ? (users.find(u => u.id === detailProduct.technician_id)?.name || '-') : '-'}</strong>
+                </div>
+                <div>
+                  <span>Deskripsi</span>
+                  <strong>{detailProduct.description || '-'}</strong>
+                </div>
+                {detailProduct.stock_needs_review && (
+                  <div className="isWarning">
+                    <span>Status Audit</span>
+                    <strong>
+                      Data tabel lama: {formatInventoryNumber(detailProduct.recorded_qty)} {detailProduct.unit}
+                      {typeof detailProduct.recorded_average_cost === 'number'
+                        ? `, HPP ${formatInventoryCurrency(detailProduct.recorded_average_cost)}`
+                        : ''}
+                    </strong>
+                  </div>
+                )}
+              </div>
+
+              <div className="inventoryDetailActions">
+                {canViewStockCard && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setStockCardProduct(detailProduct);
+                      setStockCardOpen(true);
+                    }}
+                  >
+                    Kartu Stok
+                  </Button>
+                )}
+                {canEditProduct && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      openEditDialog(detailProduct);
+                      setDetailProduct(null);
+                    }}
+                  >
+                    Edit Produk
+                  </Button>
+                )}
+              </div>
             </div>
-            <SheetFooter className="shrink-0 flex-row gap-3 border-t border-slate-100 bg-white p-6 pt-4 dark:border-slate-800 dark:bg-slate-900 sm:justify-end">
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="h-9 border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">Batal</Button>
-                <Button onClick={handleSave} disabled={loading} className="h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700">
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Simpan
-                </Button>
-            </SheetFooter>
+          )}
         </SheetContent>
       </Sheet>
 
