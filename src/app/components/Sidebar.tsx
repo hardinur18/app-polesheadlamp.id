@@ -148,7 +148,6 @@ const NAV_GROUPS: NavGroup[] = [
         canNavigate: false,
         children: [
           { icon: DollarSign, label: 'Payroll & Gaji', id: 'payroll', permission: 'payroll.view' },
-          { icon: Wallet, label: 'Pembayaran', id: 'payments', permission: 'payments.view' },
           { icon: RefreshCw, label: 'Pengeluaran Rutin', id: 'recurring-expenses', permission: 'recurring_expenses.view' },
           { icon: ArrowRightLeft, label: 'Biaya Operasional', id: 'cashflow', permission: 'operational_expenses.view' },
           { icon: ScrollText, label: 'Hutang & Piutang', id: 'debts', permission: 'debts.view' },

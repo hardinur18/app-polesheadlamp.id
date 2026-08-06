@@ -51,10 +51,13 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
   }
 
   if (updated.includes('finance.view')) {
-    ensurePermission(updated, 'payments.view');
     ensurePermission(updated, 'operational_expenses.view');
     ensurePermission(updated, 'debts.view');
     ensurePermission(updated, 'finance_report.view');
+  }
+
+  if (updated.includes('payroll.manage')) {
+    ensurePermission(updated, 'payroll.view');
   }
 
   if (
@@ -70,6 +73,11 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
     ensurePermission(updated, 'operational_expenses.create');
     ensurePermission(updated, 'operational_expenses.edit');
     ensurePermission(updated, 'operational_expenses.delete');
+  }
+
+  if (role === 'Finance' && updated.includes('finance.manage')) {
+    ensurePermission(updated, 'payroll.view');
+    ensurePermission(updated, 'payroll.manage');
   }
 
   if (updated.includes('monitoring.activity_view') || updated.includes('finance.manage')) {

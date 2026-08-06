@@ -93,10 +93,6 @@ const MapPage = React.lazy(() =>
   import('../../pages/MapPage').then((module) => ({ default: module.MapPage })),
 );
 
-const PaymentsPage = React.lazy(() =>
-  import('../../pages/finance/PaymentsPage').then((module) => ({ default: module.PaymentsPage })),
-);
-
 const DebtsPage = React.lazy(() =>
   import('../../pages/finance/DebtsPage').then((module) => ({ default: module.DebtsPage })),
 );
@@ -582,9 +578,7 @@ export function AppLayout() {
       case 'map':
         return <MapPage />;
       case 'recurring-expenses':
-        return <div className="p-6 w-full max-w-[1600px] mx-auto"><RecurringExpensesTab currentRole={currentRole} /></div>;
-      case 'payments':
-        return <PaymentsPage />;
+        return <div className="recurringExpensesRouteFrame"><RecurringExpensesTab currentRole={currentRole} /></div>;
       case 'cashflow':
         return <Kas />;
       case 'debts':

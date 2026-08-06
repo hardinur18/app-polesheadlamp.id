@@ -668,7 +668,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     const syncUser = async () => {
       let profileSyncTimeoutId: number | undefined;
 
-      const useLocalFallbackUser = (reason: CurrentUserIssue) => {
+      const applyLocalFallbackUser = (reason: CurrentUserIssue) => {
         if (!shouldUseLocalProfileFallback) {
           setCurrentUserIssue(reason);
           return false;
@@ -718,7 +718,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         if ('timedOut' in profileResult) {
           console.warn("[MasterData] Profile fetch timed out");
-          useLocalFallbackUser({
+          applyLocalFallbackUser({
             code: 'profile_timeout',
             message: 'Koneksi ke data profil timeout. Coba refresh atau login ulang.',
           });
@@ -738,7 +738,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
             return;
           }
           console.error("[MasterData] Profile fetch error:", error.message);
-          useLocalFallbackUser({
+          applyLocalFallbackUser({
             code: 'profile_query_error',
             message: error.message || 'Profil login tidak bisa dibaca dari database.',
           });
@@ -750,7 +750,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
             userId: session.user.id,
             email: session.user.email,
           });
-          useLocalFallbackUser({
+          applyLocalFallbackUser({
             code: 'profile_not_found',
             message: 'Sesi browser masih aktif, tetapi akun ini belum punya profil internal di app v2.',
           });
@@ -813,7 +813,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           return;
         }
         console.error("[MasterData] Unexpected error syncing user:", err);
-        useLocalFallbackUser({
+        applyLocalFallbackUser({
           code: 'profile_query_error',
           message: err?.message || 'Terjadi error saat sinkronisasi profil login.',
         });

@@ -19,7 +19,6 @@ export const APP_LAYOUT_TAB_PERMISSIONS: Partial<Record<string, AppLayoutTabPerm
   'monitoring-activity': 'monitoring.activity_view',
   map: 'map.view_global',
   'recurring-expenses': 'recurring_expenses.view',
-  payments: 'payments.view',
   'ads-monitoring': 'monitoring.marketing.view',
   'ads-monitoring-workspace': 'monitoring.marketing.view',
   'ads-monitoring-overview': 'monitoring.marketing.view',

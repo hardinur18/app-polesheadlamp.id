@@ -139,18 +139,18 @@ type MasterDataDialogShellProps = React.HTMLAttributes<HTMLDivElement> & {
   compact?: boolean;
 };
 
-export function MasterDataDialogBody({
+export const MasterDataDialogBody = React.forwardRef<HTMLDivElement, MasterDataDialogShellProps>(function MasterDataDialogBody({
   children,
   className,
   compact,
   ...props
-}: MasterDataDialogShellProps) {
+}, ref) {
   return (
-    <div className={cn('masterDataDialogBody', compact && 'isCompact', className)} {...props}>
+    <div ref={ref} className={cn('masterDataDialogBody', compact && 'isCompact', className)} {...props}>
       {children}
     </div>
   );
-}
+});
 
 type MasterDataFormDialogContentProps = React.ComponentProps<typeof DialogContent> & {
   preventOutsideClose?: boolean;

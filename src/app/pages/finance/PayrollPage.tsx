@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  DollarSign, Users, Briefcase, Plus, Save, Trash2, Edit, 
-  Search, Calculator, ArrowRight, CheckCircle2, AlertCircle, Loader2
+import {
+  DollarSign, Users, Briefcase, Plus, Trash2, Edit,
+  Search, Calculator, CheckCircle2, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -10,10 +10,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '@/app/components/ui/table';
 import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter
-} from "@/app/components/ui/card";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+  Dialog
 } from "@/app/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
@@ -22,6 +19,33 @@ import { Badge } from '@/app/components/ui/badge';
 import { Label } from '@/app/components/ui/label';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import {
+  DataTable,
+  TableActionCell,
+  TableActionHeader,
+  TableActionMenu,
+  TableActionMenuItem,
+  TableText,
+} from '@/app/components/ui/data-table';
+import {
+  OperationalEmptyState,
+  OperationalFilterPanel,
+  OperationalKpiCard,
+  OperationalKpiGrid,
+  OperationalPageHeader,
+  OperationalPageShell,
+  OperationalTableCard,
+} from '@/app/components/ui/operational-page';
+import {
+  MasterDataCurrencyInput,
+  MasterDataDialogBody,
+  MasterDataFieldLabel,
+  MasterDataFormActions,
+  MasterDataFormDialogContent,
+  MasterDataFormField,
+  MasterDataFormGrid,
+  MasterDataFormHeader,
+} from '@/app/components/ui/master-data-ui';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
 import { useMasterData } from '@/app/pages/master-data/context';
@@ -40,7 +64,7 @@ export interface SalaryProfile {
   allowance_fixed: number; // Tunjangan (General)
   tool_allowance: number; // Tunjangan Alat Pribadi
   quota: number; // Kuota
-  deductions: number; // Potongan (Kasbon/Lainnya)
+  deductions: number; // Potongan tetap yang terbawa ke simulasi setiap periode
   created_at?: string;
 }
 
@@ -133,18 +157,10 @@ const CurrencyInput = ({
     disabled?: boolean; 
     className?: string; 
 }) => {
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Remove non-digits
-        const rawValue = e.target.value.replace(/\D/g, '');
-        const numericValue = rawValue ? parseInt(rawValue, 10) : 0;
-        onChange(numericValue);
-    };
-
     return (
-        <Input
-            type="text"
+        <MasterDataCurrencyInput
             value={value ? value.toLocaleString('id-ID') : ''}
-            onChange={handleChange}
+            onValueChange={(digits) => onChange(digits ? parseInt(digits, 10) : 0)}
             placeholder={placeholder}
             disabled={disabled}
             className={className}
@@ -157,6 +173,7 @@ export const PayrollPage = () => {
   const { users, refreshTrigger, platforms, roles, activeBranches, orders, currentUser } = useMasterData();
   const { hasPermission } = usePermissions();
   const canViewPayroll = hasPermission('payroll.view');
+  const canManagePayroll = hasPermission('payroll.manage');
   const [activeTab, setActiveTab] = useState('salary');
   const [loading, setLoading] = useState(false);
   
@@ -241,91 +258,13 @@ export const PayrollPage = () => {
     }
   };
 
-  const handleBulkSave = async (updates: any) => {
-    try {
-        setLoading(true);
-        const usersToUpdate = Array.from(selectedUserIds);
-        
-        // 1. Prepare salary profile updates if any fields are active
-        if (updates.updateSalary) {
-            const { basic, allowance, tool, quota, deduction, fieldsToUpdate } = updates.salary;
-            
-            // Fetch current profiles to merge updates properly
-            // We can reuse `salaryProfiles` state since it's up to date
-            const profilesToUpsert = usersToUpdate.map(userId => {
-                const current = salaryProfiles.find(p => p.user_id === userId) || createEmptySalaryProfile(userId);
-
-                return {
-                    id: current.id || undefined, // undefined will let upsert generate ID if needed (or handle based on conflict on user_id)
-                    user_id: userId,
-                    basic_salary: fieldsToUpdate.basic ? basic : current.basic_salary,
-                    allowance_fixed: fieldsToUpdate.allowance ? allowance : current.allowance_fixed,
-                    tool_allowance: fieldsToUpdate.tool ? tool : current.tool_allowance,
-                    quota: fieldsToUpdate.quota ? quota : current.quota,
-                    deductions: fieldsToUpdate.deduction ? deduction : current.deductions,
-                    updated_at: new Date().toISOString()
-                };
-            });
-
-            // Upsert in batches or loop
-            const { error } = await supabase.from('salary_profiles').upsert(profilesToUpsert, { onConflict: 'user_id' });
-            if (error) throw error;
-        }
-
-        // 2. Update KPI assignments if active
-        if (updates.updateKpi) {
-            const { selectedKpis, mode } = updates.kpi; // mode: 'replace' | 'append'
-            
-            if (mode === 'replace') {
-                // Delete existing assignments for selected users
-                const { error: delError } = await supabase
-                    .from('employee_kpi_assignments')
-                    .delete()
-                    .in('user_id', usersToUpdate);
-                if (delError) throw delError;
-
-                // Insert new ones
-                if (selectedKpis.length > 0) {
-                    const newAssignments = usersToUpdate.flatMap(uid => 
-                        selectedKpis.map((kid: string) => ({ user_id: uid, kpi_id: kid }))
-                    );
-                    const { error: insError } = await supabase.from('employee_kpi_assignments').insert(newAssignments);
-                    if (insError) throw insError;
-                }
-            } else if (mode === 'append') {
-                // Append only new ones (avoid duplicates handled by unique constraint or just insert ignore)
-                // Supabase insert with ignoreDuplicates: true
-                 if (selectedKpis.length > 0) {
-                    const newAssignments = usersToUpdate.flatMap(uid => 
-                        selectedKpis.map((kid: string) => ({ user_id: uid, kpi_id: kid }))
-                    );
-                    const { error: insError } = await supabase.from('employee_kpi_assignments').insert(newAssignments).select();
-                    // Note: unique constraint violation might throw error unless we handle it. 
-                    // Better to just delete and re-insert for simplicity or rely on UI warning.
-                    // For now, let's just try insert and catch error if duplicate? 
-                    // Or actually, 'upsert' on assignments table with ignore duplicates isn't straightforward without ID.
-                    // Let's stick to 'replace' mode for simplicity in UI for now, or use 'upsert' with onConflict.
-                    // But kpi assignment has (user_id, kpi_id) unique constraint.
-                    const { error: upsertError } = await supabase.from('employee_kpi_assignments').upsert(newAssignments, { onConflict: 'user_id, kpi_id', ignoreDuplicates: true });
-                    if (upsertError) throw upsertError;
-                }
-            }
-        }
-
-        toast.success(`Berhasil memperbarui ${usersToUpdate.length} karyawan`);
-        setSelectedUserIds(new Set()); // Reset selection
-        setIsBulkModalOpen(false);
-        fetchData();
-
-    } catch (err: any) {
-        toast.error("Gagal update massal: " + err.message);
-    } finally {
-        setLoading(false);
-    }
-  };
-
   // --- Handlers: Salary Profile ---
   const handleSaveSalary = async (userId: string, basic: number, allowance: number, toolAllowance: number, quota: number, deductions: number, selectedKpis: string[]) => {
+    if (!canManagePayroll) {
+      toast.error('Anda hanya memiliki akses lihat payroll.');
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -396,6 +335,11 @@ export const PayrollPage = () => {
 
   // --- Handlers: KPI ---
   const handleSaveKpi = async (kpi: Partial<KPI>) => {
+    if (!canManagePayroll) {
+      toast.error('Anda hanya memiliki akses lihat payroll.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('kpi_library')
@@ -422,6 +366,11 @@ export const PayrollPage = () => {
   };
 
   const handleDeleteKpi = async (id: string) => {
+    if (!canManagePayroll) {
+        toast.error('Anda hanya memiliki akses lihat payroll.');
+        return;
+    }
+
     try {
         const kpiToDelete = kpis.find(k => k.id === id);
         const { error } = await supabase.from('kpi_library').delete().eq('id', id);
@@ -678,6 +627,16 @@ export const PayrollPage = () => {
         return { bonus: totalBonus, orders: uniqueOrderIds.size, units: totalUnits, relevantOrders: relevantOrderList };
     };
 
+    const payrollFixedCost = combinedUserData.reduce((sum, user) => {
+        const profile = user.salaryProfile;
+        return sum + (profile?.basic_salary || 0) + (profile?.allowance_fixed || 0) + (profile?.tool_allowance || 0) + (profile?.quota || 0);
+    }, 0);
+
+    const payrollDeductions = combinedUserData.reduce((sum, user) => sum + (user.salaryProfile?.deductions || 0), 0);
+    const payrollBonusEstimate = combinedUserData.reduce((sum, user) => sum + calculateBonus(user).bonus, 0);
+    const payrollTakeHomeEstimate = payrollFixedCost + payrollBonusEstimate - payrollDeductions;
+    const configuredEmployees = combinedUserData.filter((user) => Boolean(user.salaryProfile)).length;
+
   // --- Components ---
 
     // --- Components ---
@@ -694,65 +653,64 @@ export const PayrollPage = () => {
 
         return (
             <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-                <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-slate-900 border-slate-700 text-slate-100">
-                    <DialogHeader className="p-6 pb-2 border-b border-slate-800 bg-slate-900 z-10">
-                        <DialogTitle className="flex items-center gap-2 text-xl">
-                            <div className="p-2 bg-orange-900/30 text-orange-400 rounded-lg">
-                                <Briefcase className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div>Detail Order: {detailUser.name}</div>
-                                <div className="text-xs font-normal text-slate-400 mt-1">Periode: {periodString}</div>
-                            </div>
-                        </DialogTitle>
-                    </DialogHeader>
+                <MasterDataFormDialogContent size="wide" className="payrollOrderDetailDialog">
+                    <MasterDataFormHeader
+                        icon={Briefcase}
+                        title={`Detail Order ${detailUser.name}`}
+                        description={`Periode payroll: ${periodString}`}
+                    />
                     
-                    <div className="flex-1 overflow-y-auto p-0">
+                    <MasterDataDialogBody compact>
+                    <DataTable
+                        columns={['72px', '160px', 'minmax(220px,1.3fr)', 'minmax(160px,1fr)', '96px', '160px']}
+                        minWidth={880}
+                        rowMinHeight={72}
+                        className="payrollOrderDetailTable"
+                    >
                         <Table>
-                            <TableHeader className="bg-slate-900/90 backdrop-blur sticky top-0 z-10">
-                                <TableRow className="border-slate-800 hover:bg-transparent">
-                                    <TableHead className="w-[50px] text-slate-400 pl-6">No</TableHead>
-                                    <TableHead className="text-slate-400">Tgl Service</TableHead>
-                                    <TableHead className="text-slate-400">Customer</TableHead>
-                                    <TableHead className="text-slate-400">Platform</TableHead>
-                                    <TableHead className="text-center text-slate-400">Unit</TableHead>
-                                    <TableHead className="text-right text-slate-400 pr-6">Omzet</TableHead>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>No</TableHead>
+                                    <TableHead>Tanggal</TableHead>
+                                    <TableHead>Customer</TableHead>
+                                    <TableHead>Platform</TableHead>
+                                    <TableHead className="text-center">Unit</TableHead>
+                                    <TableHead className="text-right">Omzet</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {uniqueOrders.length === 0 ? (
-                                    <TableRow className="border-slate-800">
-                                        <TableCell colSpan={6} className="text-center h-32 text-slate-500">
-                                            <div className="flex flex-col items-center gap-2">
-                                                <AlertCircle className="w-8 h-8 opacity-20" />
-                                                <span>Tidak ada order yang memenuhi kriteria KPI pada periode ini.</span>
-                                            </div>
+                                    <TableRow>
+                                        <TableCell colSpan={6}>
+                                            <OperationalEmptyState
+                                                icon={AlertCircle}
+                                                title="Belum ada order"
+                                                description="Tidak ada order yang memenuhi kriteria KPI pada periode ini."
+                                                className="py-10"
+                                            />
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     uniqueOrders.map((order: any, idx: number) => (
-                                        <TableRow key={order.id} className="border-slate-800 hover:bg-slate-800/50 transition-colors">
-                                            <TableCell className="text-slate-500 pl-6">{idx + 1}</TableCell>
-                                            <TableCell className="font-mono text-slate-300">
+                                        <TableRow key={order.id}>
+                                            <TableCell>{idx + 1}</TableCell>
+                                            <TableCell>
                                                 {order.serviceDate ? new Date(order.serviceDate).toLocaleDateString('id-ID', {
                                                     day: 'numeric', month: 'short', year: 'numeric'
                                                 }) : '-'}
                                             </TableCell>
-                                            <TableCell className="font-medium text-slate-200">
-                                                <div className="flex flex-col">
-                                                    <span>{order.customerName}</span>
-                                                    <span className="text-[10px] text-slate-500">{order.customerPhone}</span>
-                                                </div>
+                                            <TableCell>
+                                                <TableText primary={order.customerName || '-'} secondary={order.customerPhone || undefined} />
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className="bg-slate-800 border-slate-700 text-slate-400 font-normal text-xs">
+                                                <Badge variant="outline" className="payrollSoftBadge">
                                                     {platforms.find(p => p.id === order.platformId)?.name || 'Unknown'}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-center font-mono text-slate-300 font-bold">
+                                            <TableCell className="text-center">
                                                 {order.units || 1}
                                             </TableCell>
-                                            <TableCell className="text-right font-mono text-emerald-400 pr-6">
+                                            <TableCell className="text-right payrollMoneyCell isPositive">
                                                 Rp {(order.price || 0).toLocaleString('id-ID')}
                                             </TableCell>
                                         </TableRow>
@@ -760,17 +718,17 @@ export const PayrollPage = () => {
                                 )}
                             </TableBody>
                         </Table>
-                    </div>
+                    </DataTable>
+                    </MasterDataDialogBody>
                     
-                    <DialogFooter className="p-4 border-t border-slate-800 bg-slate-900">
-                        <div className="flex items-center justify-between w-full">
-                            <div className="text-sm text-slate-400">
-                                Total Bonus Est: <span className="font-bold text-orange-400 text-lg ml-2">Rp {bonus.toLocaleString('id-ID')}</span>
+                    <div className="masterDataFormActions payrollDetailActions">
+                        <div className="payrollDetailTotal">
+                            <span>Total Bonus Estimasi</span>
+                            <strong>Rp {bonus.toLocaleString('id-ID')}</strong>
                             </div>
-                            <Button variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Tutup</Button>
-                        </div>
-                    </DialogFooter>
-                </DialogContent>
+                        <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Tutup</Button>
+                    </div>
+                </MasterDataFormDialogContent>
             </Dialog>
         );
     };
@@ -805,6 +763,11 @@ export const PayrollPage = () => {
     };
 
     const handleSave = async () => {
+        if (!canManagePayroll) {
+            toast.error('Anda hanya memiliki akses lihat payroll.');
+            return;
+        }
+
         const payload = {
             updateSalary: updateBasic || updateAllowance || updateTool || updateQuota || updateDeduction,
             salary: {
@@ -871,15 +834,22 @@ export const PayrollPage = () => {
 
     return (
         <Dialog open={isBulkModalOpen} onOpenChange={setIsBulkModalOpen}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>Edit Massal ({selectedUserIds.size} Karyawan)</DialogTitle>
-                    <DialogDescription>
-                        Perubahan akan diterapkan ke semua karyawan yang dipilih. Centang kolom yang ingin diubah.
-                    </DialogDescription>
-                </DialogHeader>
+            <MasterDataFormDialogContent size="wide" className="payrollBulkDialog">
+                <MasterDataFormHeader
+                    icon={Users}
+                    title={`Edit Massal (${selectedUserIds.size} Karyawan)`}
+                    description="Centang komponen yang ingin diubah. Komponen yang tidak dicentang akan tetap memakai data lama."
+                />
                 
-                <div className="space-y-6 py-4">
+                <form
+                  className="masterDataForm payrollBulkForm"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleSave();
+                  }}
+                >
+                <MasterDataDialogBody>
+                <div className="space-y-6">
                     {/* Salary Section */}
                     <div className="space-y-4 border-b pb-6">
                         <h3 className="font-semibold text-sm uppercase text-slate-500">Komponen Gaji</h3>
@@ -945,7 +915,7 @@ export const PayrollPage = () => {
                             <div className="flex items-start gap-3 p-3 border border-red-100 bg-red-50/20 rounded-lg hover:bg-red-50/50 transition-colors">
                                 <Checkbox checked={updateDeduction} onCheckedChange={(c) => setUpdateDeduction(!!c)} className="mt-1 data-[state=checked]:bg-red-600 data-[state=checked]:border-red-600" />
                                 <div className="flex-1 space-y-2">
-                                    <Label className={!updateDeduction ? 'text-slate-400' : 'text-red-700'}>Potongan (Kasbon)</Label>
+                                    <Label className={!updateDeduction ? 'text-slate-400' : 'text-red-700'}>Potongan Tetap</Label>
                                     <CurrencyInput 
                                         disabled={!updateDeduction} 
                                         value={deduction} 
@@ -963,7 +933,7 @@ export const PayrollPage = () => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Checkbox checked={updateKpi} onCheckedChange={(c) => setUpdateKpi(!!c)} />
-                                <Label className={!updateKpi ? 'text-slate-400' : 'font-semibold'}>Update KPI Assignment</Label>
+                                <Label className={!updateKpi ? 'text-slate-400' : 'font-semibold'}>Update KPI Karyawan</Label>
                             </div>
                             {updateKpi && (
                                 <div className="flex items-center bg-slate-100 rounded-lg p-1">
@@ -971,13 +941,13 @@ export const PayrollPage = () => {
                                         onClick={() => setKpiMode('replace')}
                                         className={cn("text-xs px-3 py-1 rounded-md transition-all", kpiMode === 'replace' ? "bg-white shadow text-slate-800 font-medium" : "text-slate-500")}
                                     >
-                                        Replace All
+                                        Ganti Semua
                                     </button>
                                     <button 
                                         onClick={() => setKpiMode('append')}
                                         className={cn("text-xs px-3 py-1 rounded-md transition-all", kpiMode === 'append' ? "bg-white shadow text-slate-800 font-medium" : "text-slate-500")}
                                     >
-                                        Add Only
+                                        Tambah Saja
                                     </button>
                                 </div>
                             )}
@@ -1012,14 +982,16 @@ export const PayrollPage = () => {
                         )}
                     </div>
                 </div>
+                </MasterDataDialogBody>
 
-                <DialogFooter>
-                    <Button variant="ghost" onClick={() => setIsBulkModalOpen(false)}>Batal</Button>
-                    <Button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700 text-white">
-                        Simpan Perubahan ({selectedUserIds.size} User)
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+                <MasterDataFormActions
+                    onCancel={() => setIsBulkModalOpen(false)}
+                    saveLabel={`Simpan (${selectedUserIds.size})`}
+                    submitDisabled={!canManagePayroll || selectedUserIds.size === 0}
+                    isSubmitting={loading}
+                />
+                </form>
+            </MasterDataFormDialogContent>
         </Dialog>
     );
   };
@@ -1059,23 +1031,21 @@ export const PayrollPage = () => {
 
     return (
         <Dialog open={isSalaryModalOpen} onOpenChange={setIsSalaryModalOpen}>
-            <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                    <DialogTitle className="text-xl flex items-center gap-2">
-                        <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
-                            <DollarSign className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <span>Atur Komponen Gaji</span>
-                            <span className="block text-sm font-normal text-slate-500 mt-1">{selectedUserForSalary.name} • {selectedUserForSalary.role}</span>
-                        </div>
-                    </DialogTitle>
-                    <DialogDescription className="text-slate-500">
-                        Sesuaikan gaji pokok, tunjangan, dan assign KPI untuk karyawan ini.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-6">
+            <MasterDataFormDialogContent size="wide" className="payrollSalaryDialog">
+                <MasterDataFormHeader
+                    icon={DollarSign}
+                    title="Atur Komponen Gaji"
+                    description={`${selectedUserForSalary.name} • ${selectedUserForSalary.role}`}
+                />
+                <form
+                  className="masterDataForm payrollSalaryForm"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleSaveSalary(selectedUserForSalary.id, basic, allowance, toolAllowance, quota, deductions, Array.from(selectedKpis));
+                  }}
+                >
+                <MasterDataDialogBody>
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                     <div className="space-y-6">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
                             <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold">1</div>
@@ -1084,7 +1054,7 @@ export const PayrollPage = () => {
                         
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2 col-span-2">
-                                <Label>Gaji Pokok (Rp)</Label>
+                                <MasterDataFieldLabel>Gaji Pokok</MasterDataFieldLabel>
                                 <CurrencyInput 
                                     value={basic} 
                                     onChange={setBasic}
@@ -1093,7 +1063,7 @@ export const PayrollPage = () => {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>Tunjangan (Rp)</Label>
+                                <MasterDataFieldLabel optional>Tunjangan</MasterDataFieldLabel>
                                 <CurrencyInput 
                                     value={allowance} 
                                     onChange={setAllowance}
@@ -1103,7 +1073,7 @@ export const PayrollPage = () => {
                                 <p className="text-[10px] text-slate-500">*Makan, Transport, dll</p>
                             </div>
                             <div className="space-y-2">
-                                <Label>Tunjangan Alat (Rp)</Label>
+                                <MasterDataFieldLabel optional>Tunjangan Alat</MasterDataFieldLabel>
                                 <CurrencyInput 
                                     value={toolAllowance} 
                                     onChange={setToolAllowance}
@@ -1113,7 +1083,7 @@ export const PayrollPage = () => {
                                 <p className="text-[10px] text-slate-500">*Sewa alat pribadi</p>
                             </div>
                             <div className="space-y-2">
-                                <Label>Kuota Internet (Rp)</Label>
+                                <MasterDataFieldLabel optional>Kuota Internet</MasterDataFieldLabel>
                                 <CurrencyInput 
                                     value={quota} 
                                     onChange={setQuota}
@@ -1122,14 +1092,14 @@ export const PayrollPage = () => {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>Potongan (Rp)</Label>
+                                <MasterDataFieldLabel optional>Potongan Tetap</MasterDataFieldLabel>
                                 <CurrencyInput 
                                     value={deductions} 
                                     onChange={setDeductions}
                                     className="font-mono bg-red-50 border-red-200 focus:border-red-500 focus:ring-red-500 text-red-700"
                                     placeholder="0"
                                 />
-                                <p className="text-[10px] text-red-500">*Kasbon/Cicilan Rutin</p>
+                                <p className="text-[10px] text-red-500">Terbawa ke setiap periode sampai diubah.</p>
                             </div>
                         </div>
                         
@@ -1141,7 +1111,7 @@ export const PayrollPage = () => {
                                 </p>
                             </div>
                             <div className="flex justify-between items-center text-red-600/80">
-                                <p className="text-xs font-semibold uppercase tracking-wider">Potongan</p>
+                                <p className="text-xs font-semibold uppercase tracking-wider">Potongan Tetap</p>
                                 <p className="text-sm font-bold font-mono">
                                     - Rp {deductions.toLocaleString('id-ID')}
                                 </p>
@@ -1238,6 +1208,7 @@ export const PayrollPage = () => {
                                             </div>
                                         )}
                                     </div>
+                                    {canManagePayroll && (
                                     <Button
                                         variant="ghost"
                                         size="sm"
@@ -1250,23 +1221,22 @@ export const PayrollPage = () => {
                                     >
                                         <Edit className="w-3.5 h-3.5 text-slate-400 hover:text-orange-500" />
                                     </Button>
+                                    )}
                                 </div>
                                 );
                             })}
                         </div>
                     </div>
                 </div>
-
-                <DialogFooter className="border-t border-slate-100 dark:border-slate-800 pt-4">
-                    <Button variant="ghost" onClick={() => setIsSalaryModalOpen(false)}>Batal</Button>
-                    <Button 
-                        onClick={() => handleSaveSalary(selectedUserForSalary.id, basic, allowance, toolAllowance, quota, deductions, Array.from(selectedKpis))}
-                        className="bg-orange-600 hover:bg-orange-700 text-white"
-                    >
-                        Simpan Perubahan
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+                </MasterDataDialogBody>
+                <MasterDataFormActions
+                    onCancel={() => setIsSalaryModalOpen(false)}
+                    saveLabel="Simpan Gaji"
+                    submitDisabled={!canManagePayroll}
+                    isSubmitting={loading}
+                />
+                </form>
+            </MasterDataFormDialogContent>
         </Dialog>
     );
   };
@@ -1352,26 +1322,32 @@ export const PayrollPage = () => {
 
     return (
         <Dialog open={isKpiModalOpen} onOpenChange={setIsKpiModalOpen}>
-            <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>{editingKpi ? 'Edit KPI' : 'Buat KPI Baru'}</DialogTitle>
-                    <DialogDescription>
-                        Atur detail KPI untuk perhitungan bonus karyawan.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Nama KPI / Bonus</Label>
+            <MasterDataFormDialogContent size="wide" className="payrollKpiDialog">
+                <MasterDataFormHeader
+                    icon={Briefcase}
+                    title={editingKpi ? 'Edit KPI' : 'Buat KPI Baru'}
+                    description="Atur bonus, periode hitung, dan filter order untuk payroll."
+                />
+                <form
+                  className="masterDataForm payrollKpiForm"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleSave();
+                  }}
+                >
+                <MasterDataDialogBody>
+                <MasterDataFormGrid>
+                    <MasterDataFormField span="full">
+                        <MasterDataFieldLabel required>Nama KPI / Bonus</MasterDataFieldLabel>
                         <Input 
                             value={formData.name} 
                             onChange={e => setFormData({...formData, name: e.target.value})}
                             placeholder="Contoh: Bonus Closing CS"
                         />
-                    </div>
+                    </MasterDataFormField>
                     
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Tipe Hitungan</Label>
+                    <MasterDataFormField span="half">
+                            <MasterDataFieldLabel required>Tipe Hitungan</MasterDataFieldLabel>
                             <Select 
                                 value={formData.type} 
                                 onValueChange={(val: any) => setFormData({...formData, type: val})}
@@ -1383,24 +1359,28 @@ export const PayrollPage = () => {
                                     <SelectItem value="percentage_omzet">Persentase Omzet</SelectItem>
                                 </SelectContent>
                             </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label>{kpiConfig.isTiered ? 'Nominal Dasar (Per Unit)' : 'Nominal / Nilai'}</Label>
-                            <Input 
+                    </MasterDataFormField>
+                    <MasterDataFormField span="half">
+                            <MasterDataFieldLabel required>{kpiConfig.isTiered ? 'Nominal Dasar' : 'Nominal / Nilai'}</MasterDataFieldLabel>
+                            {formData.type === 'percentage_omzet' ? (
+                            <Input
                                 type="number"
                                 value={formData.amount}
                                 onChange={e => setFormData({...formData, amount: Number(e.target.value)})}
                                 placeholder="0"
                             />
-                            <p className="text-[10px] text-slate-500">
-                                {kpiConfig.isTiered ? '*Nilai untuk unit di bawah target' : '*Isi angka saja (Rp atau %)'}
-                            </p>
-                        </div>
-                    </div>
+                            ) : (
+                            <MasterDataCurrencyInput
+                                value={formData.amount || 0}
+                                onValueChange={(digits) => setFormData({...formData, amount: digits ? Number(digits) : 0})}
+                                placeholder="0"
+                            />
+                            )}
+                    </MasterDataFormField>
 
                     {/* Tiered Calculation Option (Only for Per Order) */}
                     {formData.type === 'per_order' && (
-                        <div className="p-4 bg-orange-50 rounded-xl border border-orange-100 space-y-4">
+                        <MasterDataFormField span="full" className="payrollInlinePanel">
                             <div className="flex items-center gap-2">
                                 <Checkbox 
                                     id="isTiered" 
@@ -1442,10 +1422,10 @@ export const PayrollPage = () => {
                                     </div>
                                 </div>
                             )}
-                        </div>
+                        </MasterDataFormField>
                     )}
 
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-4">
+                    <MasterDataFormField span="full" className="payrollInlinePanel isNeutral">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
                              <Briefcase className="w-4 h-4 text-slate-500" />
                              <h4 className="text-sm font-semibold text-slate-700">Konfigurasi Periode & Filter</h4>
@@ -1517,7 +1497,7 @@ export const PayrollPage = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                
+
                                 {(() => {
                                     const normalizedTargetRole = normalizeRole(kpiConfig.targetRoles);
                                     return normalizedTargetRole === 'Advertiser' || normalizedTargetRole === 'CS' || normalizedTargetRole === 'Teknisi';
@@ -1562,67 +1542,106 @@ export const PayrollPage = () => {
                                 </div>
                              </div>
                         </div>
-                    </div>
+                    </MasterDataFormField>
 
-                    <div className="space-y-2">
-                        <Label>Keterangan</Label>
+                    <MasterDataFormField span="full">
+                        <MasterDataFieldLabel optional>Keterangan</MasterDataFieldLabel>
                         <Textarea 
                             value={formData.description || ''} 
                             onChange={e => setFormData({...formData, description: e.target.value})}
                             placeholder="Syarat & ketentuan pencapaian bonus..."
                             className="resize-none h-20"
                         />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsKpiModalOpen(false)}>Batal</Button>
-                    <Button onClick={handleSave}>Simpan</Button>
-                </DialogFooter>
-            </DialogContent>
+                    </MasterDataFormField>
+                </MasterDataFormGrid>
+                </MasterDataDialogBody>
+                <MasterDataFormActions
+                    onCancel={() => setIsKpiModalOpen(false)}
+                    saveLabel="Simpan KPI"
+                    submitDisabled={!canManagePayroll || !formData.name}
+                    isSubmitting={loading}
+                />
+                </form>
+            </MasterDataFormDialogContent>
         </Dialog>
     );
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto min-h-screen pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <DollarSign className="w-6 h-6 text-orange-500" />
-                Payroll & Komisi
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400">
-                Manajemen gaji pokok, KPI, dan estimasi bonus karyawan.
-            </p>
-        </div>
-        <div className="flex items-center gap-2">
-            <Badge variant="outline" className="px-3 py-1 bg-orange-50 text-orange-700 border-orange-200">
-                <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> System Ready
+    <OperationalPageShell className="payrollPage">
+      <OperationalPageHeader
+        eyebrow="KEUANGAN"
+        icon={DollarSign}
+        title="Payroll & Gaji"
+        subtitle={`Manajemen gaji pokok, KPI, bonus, dan estimasi payroll periode ${periodString}.`}
+        actions={
+          <div className="payrollHeaderActions">
+            <Badge variant="outline" className={cn('payrollAccessBadge', canManagePayroll ? 'isManage' : 'isView')}>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {canManagePayroll ? 'Mode Kelola' : 'Mode Lihat'}
             </Badge>
-        </div>
-      </div>
+            <Button type="button" variant="outline" onClick={fetchData} disabled={loading}>
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+              Refresh
+            </Button>
+          </div>
+        }
+      />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-slate-100 dark:bg-slate-800 p-1">
-            <TabsTrigger value="salary" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">
+      <OperationalKpiGrid className="payrollMetricGrid">
+        <OperationalKpiCard
+          icon={Users}
+          label="Karyawan Aktif"
+          value={`${combinedUserData.length} orang`}
+          tone="blue"
+        />
+        <OperationalKpiCard
+          icon={DollarSign}
+          label="Gaji & Tunjangan"
+          value={`Rp ${payrollFixedCost.toLocaleString('id-ID')}`}
+          tone="emerald"
+        />
+        <OperationalKpiCard
+          icon={Briefcase}
+          label="KPI Terpasang"
+          value={`${assignments.length} assignment`}
+          tone="violet"
+        />
+        <OperationalKpiCard
+          icon={Calculator}
+          label="Estimasi Take Home"
+          value={`Rp ${payrollTakeHomeEstimate.toLocaleString('id-ID')}`}
+          tone="amber"
+        />
+      </OperationalKpiGrid>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="payrollTabs">
+        <OperationalFilterPanel className="payrollTabsPanel">
+          <TabsList className="payrollTabList">
+            <TabsTrigger value="salary">
                 <Users className="w-4 h-4 mr-2" /> Data Gaji Pegawai
             </TabsTrigger>
-            <TabsTrigger value="kpi" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">
+            <TabsTrigger value="kpi">
                 <Briefcase className="w-4 h-4 mr-2" /> Master KPI & Bonus
             </TabsTrigger>
-            <TabsTrigger value="estimate" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700">
+            <TabsTrigger value="estimate">
                 <Calculator className="w-4 h-4 mr-2" /> Kalkulator Estimasi
             </TabsTrigger>
-        </TabsList>
+          </TabsList>
+          <div className="payrollTabsMeta">
+            <span>{configuredEmployees} dari {combinedUserData.length} profil gaji terisi</span>
+            <span>Potongan tetap: Rp {payrollDeductions.toLocaleString('id-ID')}</span>
+          </div>
+        </OperationalFilterPanel>
 
         {/* --- TAB 1: SALARY PROFILES --- */}
         <TabsContent value="salary">
-            <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+            <OperationalTableCard className="payrollTableCard">
+                <div className="payrollTableToolbar">
                     <div className="flex flex-col gap-1">
-                        <CardTitle className="text-xl">Daftar Gaji Karyawan</CardTitle>
-                        <CardDescription>Atur Gaji Pokok, Tunjangan, dan Assign KPI untuk setiap karyawan.</CardDescription>
-                        {selectedUserIds.size > 0 && (
+                        <h2>Daftar Gaji Karyawan</h2>
+                        <p>Atur gaji pokok, tunjangan, potongan tetap, dan KPI aktif per karyawan.</p>
+                        {canManagePayroll && selectedUserIds.size > 0 && (
                             <div className="flex items-center gap-3 mt-2 animate-in fade-in slide-in-from-top-2">
                                 <span className="text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
                                     {selectedUserIds.size} dipilih
@@ -1655,11 +1674,30 @@ export const PayrollPage = () => {
                             onChange={e => setSearchQuery(e.target.value)}
                         />
                     </div>
-                </CardHeader>
-                <CardContent className="p-0">
+                </div>
+                <div className="p-0">
+                    <DataTable
+                        columns={[
+                          canManagePayroll && '56px',
+                          '64px',
+                          'minmax(240px,1.5fr)',
+                          '150px',
+                          '150px',
+                          '150px',
+                          '150px',
+                          '130px',
+                          '130px',
+                          'minmax(220px,1fr)',
+                          canManagePayroll && '96px',
+                        ]}
+                        minWidth={canManagePayroll ? 1380 : 1240}
+                        rowMinHeight={76}
+                        className="payrollDataTable"
+                    >
                     <Table>
-                        <TableHeader className="bg-slate-50 dark:bg-slate-900">
+                        <TableHeader>
                             <TableRow className="border-slate-100 dark:border-slate-800">
+                                {canManagePayroll && (
                                 <TableHead className="w-[50px] py-4 pl-4">
                                     <Checkbox 
                                         checked={selectedUserIds.size === combinedUserData.length && combinedUserData.length > 0}
@@ -1667,16 +1705,17 @@ export const PayrollPage = () => {
                                         className="translate-y-[2px]"
                                     />
                                 </TableHead>
-                                <TableHead className="w-[50px] py-4 font-semibold text-slate-600">No</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Nama Karyawan</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Role</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Gaji Pokok</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Tunjangan</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Tunjangan Alat</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Kuota</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">Potongan</TableHead>
-                                <TableHead className="py-4 font-semibold text-slate-600">KPI Aktif</TableHead>
-                                <TableHead className="py-4 pr-6 text-right font-semibold text-slate-600">Aksi</TableHead>
+                                )}
+                                <TableHead>No</TableHead>
+                                <TableHead>Nama Karyawan</TableHead>
+                                <TableHead>Role</TableHead>
+                                <TableHead>Gaji Pokok</TableHead>
+                                <TableHead>Tunjangan</TableHead>
+                                <TableHead>Tunjangan Alat</TableHead>
+                                <TableHead>Kuota</TableHead>
+                                <TableHead>Potongan Tetap</TableHead>
+                                <TableHead>KPI Aktif</TableHead>
+                                {canManagePayroll && <TableActionHeader>Aksi</TableActionHeader>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1685,6 +1724,7 @@ export const PayrollPage = () => {
                                     "hover:bg-orange-50/30 dark:hover:bg-orange-900/10 transition-colors border-b border-slate-100 dark:border-slate-800",
                                     selectedUserIds.has(user.id) ? "bg-orange-50/40" : ""
                                 )}>
+                                    {canManagePayroll && (
                                     <TableCell className="py-3 pl-4">
                                         <Checkbox 
                                             checked={selectedUserIds.has(user.id)}
@@ -1692,48 +1732,34 @@ export const PayrollPage = () => {
                                             className="translate-y-[2px]"
                                         />
                                     </TableCell>
-                                    <TableCell className="py-3 font-medium text-slate-500 text-center">
+                                    )}
+                                    <TableCell className="text-center">
                                         {index + 1}
                                     </TableCell>
-                                    <TableCell className="py-3 font-medium">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
-                                                {user.avatar ? (
-                                                    <img 
-                                                        src={user.avatar} 
-                                                        alt={user.name} 
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <span className="text-xs font-bold text-slate-600">
-                                                        {user.name.substring(0,2).toUpperCase()}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {user.name}
-                                        </div>
+                                    <TableCell>
+                                        <TableText primary={user.name} secondary={user.email || user.phone || undefined} />
                                     </TableCell>
-                                    <TableCell className="py-3">
+                                    <TableCell>
                                         <Badge variant="outline" className={cn("font-normal border", ROLE_STYLES[normalizeRole(user.role) || user.role] || "bg-slate-50 text-slate-600 border-slate-200")}>
                                             {user.role}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="py-3 font-mono text-slate-600 dark:text-slate-300">
+                                    <TableCell className="payrollMoneyCell">
                                         {user.salaryProfile ? `Rp ${user.salaryProfile.basic_salary.toLocaleString('id-ID')}` : '-'}
                                     </TableCell>
-                                    <TableCell className="py-3 font-mono text-slate-600 dark:text-slate-300">
+                                    <TableCell className="payrollMoneyCell">
                                         {user.salaryProfile ? `Rp ${user.salaryProfile.allowance_fixed.toLocaleString('id-ID')}` : '-'}
                                     </TableCell>
-                                    <TableCell className="py-3 font-mono text-slate-600 dark:text-slate-300">
+                                    <TableCell className="payrollMoneyCell">
                                         {user.salaryProfile && user.salaryProfile.tool_allowance ? `Rp ${user.salaryProfile.tool_allowance.toLocaleString('id-ID')}` : '-'}
                                     </TableCell>
-                                    <TableCell className="py-3 font-mono text-slate-600 dark:text-slate-300">
+                                    <TableCell className="payrollMoneyCell">
                                         {user.salaryProfile && user.salaryProfile.quota ? `Rp ${user.salaryProfile.quota.toLocaleString('id-ID')}` : '-'}
                                     </TableCell>
-                                    <TableCell className="py-3 font-mono text-red-600 dark:text-red-400">
+                                    <TableCell className="payrollMoneyCell isNegative">
                                         {user.salaryProfile && user.salaryProfile.deductions ? `-Rp ${user.salaryProfile.deductions.toLocaleString('id-ID')}` : '-'}
                                     </TableCell>
-                                    <TableCell className="py-3">
+                                    <TableCell>
                                         <div className="flex flex-wrap gap-1">
                                             {user.activeKpis.length > 0 ? (
                                                 user.activeKpis.map(kpi => (
@@ -1746,245 +1772,255 @@ export const PayrollPage = () => {
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell className="py-3 pr-6 text-right">
-                                        <Button 
-                                            size="sm" 
-                                            variant="ghost" 
-                                            className="h-8 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                            onClick={() => {
-                                                setSelectedUserForSalary(user);
-                                                setIsSalaryModalOpen(true);
-                                            }}
-                                        >
-                                            <Edit className="w-4 h-4 mr-2" /> Atur Gaji
-                                        </Button>
-                                    </TableCell>
+                                    {canManagePayroll && (
+                                    <TableActionCell>
+                                        <TableActionMenu>
+                                            <TableActionMenuItem
+                                                icon={Edit}
+                                                onClick={() => {
+                                                    setSelectedUserForSalary(user);
+                                                    setIsSalaryModalOpen(true);
+                                                }}
+                                            >
+                                                Atur Gaji
+                                            </TableActionMenuItem>
+                                        </TableActionMenu>
+                                    </TableActionCell>
+                                    )}
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
-                </CardContent>
-            </Card>
+                    </DataTable>
+                </div>
+            </OperationalTableCard>
         </TabsContent>
 
         {/* --- TAB 2: MASTER KPI --- */}
         <TabsContent value="kpi">
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Master KPI & Bonus</CardTitle>
-                        <CardDescription>Perpustakaan aturan bonus yang bisa diterapkan ke karyawan.</CardDescription>
+            <OperationalTableCard className="payrollTableCard">
+                <div className="payrollTableToolbar">
+                    <div className="flex flex-col gap-1">
+                        <h2>Master KPI & Bonus</h2>
+                        <p>Perpustakaan aturan bonus yang bisa diterapkan ke karyawan.</p>
                     </div>
-                    <Button onClick={() => { setEditingKpi(null); setIsKpiModalOpen(true); }} className="bg-orange-600 hover:bg-orange-700 text-white">
+                    {canManagePayroll && (
+                    <Button onClick={() => { setEditingKpi(null); setIsKpiModalOpen(true); }}>
                         <Plus className="w-4 h-4 mr-2" /> Buat KPI Baru
                     </Button>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {kpis.map(kpi => (
-                            <div key={kpi.id} className="group relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 hover:shadow-md transition-all">
-                                <div className="flex justify-between items-start mb-3">
-                                    <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
-                                        <DollarSign className="w-5 h-5" />
-                                    </div>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setEditingKpi(kpi); setIsKpiModalOpen(true); }}>
-                                            <Edit className="w-4 h-4" />
-                                        </Button>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDeleteKpi(kpi.id)}>
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                                <h3 className="font-semibold text-lg mb-1">{kpi.name}</h3>
-                                <p className="text-sm text-slate-500 mb-4 h-10 line-clamp-2">{kpi.description || 'Tidak ada keterangan tambahan.'}</p>
-                                
-                                <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
-                                    <Badge variant="secondary" className="capitalize">
-                                        {kpi.type.replace('_', ' ')}
-                                    </Badge>
-                                    <span className="font-mono font-bold text-emerald-600 text-lg">
-                                        {kpi.type === 'percentage_omzet' ? `${kpi.amount}%` : `Rp ${kpi.amount.toLocaleString('id-ID')}`}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                        
-                        {kpis.length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center py-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
-                                <Briefcase className="w-12 h-12 mb-3 opacity-20" />
-                                <p>Belum ada KPI yang dibuat.</p>
-                                <Button variant="link" onClick={() => setIsKpiModalOpen(true)}>Buat Sekarang</Button>
-                            </div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+                    )}
+                </div>
+                <DataTable
+                    columns={['72px', 'minmax(260px,1.4fr)', '180px', '180px', 'minmax(260px,1fr)', canManagePayroll && '96px']}
+                    minWidth={canManagePayroll ? 1060 : 960}
+                    rowMinHeight={72}
+                    className="payrollDataTable"
+                >
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>No</TableHead>
+                                <TableHead>Nama KPI</TableHead>
+                                <TableHead>Tipe Hitungan</TableHead>
+                                <TableHead>Nominal</TableHead>
+                                <TableHead>Keterangan</TableHead>
+                                {canManagePayroll && <TableActionHeader>Aksi</TableActionHeader>}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {kpis.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={canManagePayroll ? 6 : 5}>
+                                        <OperationalEmptyState
+                                            icon={Briefcase}
+                                            title="Belum ada KPI"
+                                            description="Buat KPI baru untuk menghitung bonus payroll."
+                                            className="py-12"
+                                        />
+                                        {canManagePayroll && (
+                                            <div className="payrollEmptyAction">
+                                                <Button type="button" onClick={() => setIsKpiModalOpen(true)}>Buat KPI Baru</Button>
+                                            </div>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                kpis.map((kpi, index) => (
+                                    <TableRow key={kpi.id}>
+                                        <TableCell>{index + 1}</TableCell>
+                                        <TableCell>
+                                            <TableText primary={kpi.name} secondary={`Dipakai ${assignments.filter((item) => item.kpi_id === kpi.id).length} karyawan`} />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="payrollSoftBadge">
+                                                {kpi.type === 'per_order' ? 'Per Unit' : kpi.type === 'fixed' ? 'Fixed' : 'Persentase Omzet'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className={cn('payrollMoneyCell', kpi.type !== 'percentage_omzet' && 'isPositive')}>
+                                            {kpi.type === 'percentage_omzet' ? `${kpi.amount}%` : `Rp ${kpi.amount.toLocaleString('id-ID')}`}
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="payrollMutedText">{kpi.description || '-'}</span>
+                                        </TableCell>
+                                        {canManagePayroll && (
+                                            <TableActionCell>
+                                                <TableActionMenu>
+                                                    <TableActionMenuItem icon={Edit} onClick={() => { setEditingKpi(kpi); setIsKpiModalOpen(true); }}>
+                                                        Edit KPI
+                                                    </TableActionMenuItem>
+                                                    <TableActionMenuItem danger icon={Trash2} onClick={() => handleDeleteKpi(kpi.id)}>
+                                                        Hapus KPI
+                                                    </TableActionMenuItem>
+                                                </TableActionMenu>
+                                            </TableActionCell>
+                                        )}
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </DataTable>
+            </OperationalTableCard>
         </TabsContent>
 
         {/* --- TAB 3: ESTIMATION CALCULATOR --- */}
         <TabsContent value="estimate">
-            <Card className="bg-slate-900 text-slate-100 border-slate-800">
-                <CardHeader>
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <CardTitle className="flex items-center gap-2 text-white">
-                                <Calculator className="w-5 h-5 text-emerald-400" />
-                                Simulasi Payroll
-                            </CardTitle>
-                            <CardDescription className="text-slate-400">
-                                Estimasi real-time berdasarkan Gaji Pokok + (Mock Data Kinerja). Periode Cutoff: <strong>{periodString}</strong>
-                            </CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-400">Periode:</span>
-                            <input 
-                                type="month" 
-                                value={selectedMonth} 
-                                onChange={(e) => setSelectedMonth(e.target.value)}
-                                className="bg-slate-800 border-slate-700 text-white rounded px-2 py-1 text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                            />
-                        </div>
+            <OperationalTableCard className="payrollTableCard payrollEstimateCard">
+                <div className="payrollTableToolbar">
+                    <div className="flex flex-col gap-1">
+                        <h2>Simulasi Payroll</h2>
+                        <p>Estimasi take home pay dari gaji tetap, bonus KPI, potongan tetap, dan tagihan rutin.</p>
                     </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-6">
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Total Fixed Cost</p>
-                                <p className="text-lg font-bold text-white">
-                                    Rp {combinedUserData.reduce((acc, u) => acc + (u.salaryProfile?.basic_salary || 0) + (u.salaryProfile?.allowance_fixed || 0), 0).toLocaleString('id-ID')}
-                                </p>
-                            </div>
-                            
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Est. Bonus Berjalan</p>
-                                <p className="text-lg font-bold text-orange-400">
-                                    Rp {combinedUserData.reduce((acc, u) => acc + calculateBonus(u).bonus, 0).toLocaleString('id-ID')}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-1">*Live dari order "Selesai"</p>
-                            </div>
+                    <div className="payrollMonthControl">
+                        <span>Periode</span>
+                        <input
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                        />
+                    </div>
+                </div>
 
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Save Komisi Freelance</p>
-                                <p className="text-lg font-bold text-teal-400">
-                                    Rp {totalFreelanceSavings.toLocaleString('id-ID')}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-1">Tabungan/Hold</p>
-                            </div>
+                <OperationalKpiGrid className="payrollEstimateMetrics">
+                    <OperationalKpiCard
+                        label="Biaya Tetap"
+                        value={`Rp ${payrollFixedCost.toLocaleString('id-ID')}`}
+                        tone="blue"
+                    />
+                    <OperationalKpiCard
+                        label="Bonus KPI"
+                        value={`Rp ${payrollBonusEstimate.toLocaleString('id-ID')}`}
+                        tone="emerald"
+                    />
+                    <OperationalKpiCard
+                        label="Tabungan Freelance"
+                        value={`Rp ${totalFreelanceSavings.toLocaleString('id-ID')}`}
+                        tone="violet"
+                    />
+                    <OperationalKpiCard
+                        label="Tagihan Rutin"
+                        value={`Rp ${totalUnpaidExpenses.toLocaleString('id-ID')}`}
+                        tone="rose"
+                    />
+                    <OperationalKpiCard
+                        label="Grand Total Estimasi"
+                        value={`Rp ${(payrollTakeHomeEstimate + totalUnpaidExpenses).toLocaleString('id-ID')}`}
+                        tone="amber"
+                    />
+                </OperationalKpiGrid>
 
-                            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-                                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Tagihan Rutin</p>
-                                <p className="text-lg font-bold text-red-400">
-                                    Rp {totalUnpaidExpenses.toLocaleString('id-ID')}
-                                </p>
-                                <p className="text-[10px] text-slate-500 mt-1">Belum Bayar (s/d Tgl 28)</p>
-                            </div>
+                <DataTable
+                    columns={['minmax(240px,1.4fr)', '140px', '140px', '130px', '120px', '140px', 'minmax(190px,1fr)', '120px', '110px', '140px', '170px']}
+                    minWidth={1480}
+                    rowMinHeight={76}
+                    className="payrollDataTable payrollEstimateTable"
+                >
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nama</TableHead>
+                                <TableHead>Gaji Pokok</TableHead>
+                                <TableHead>Tunjangan</TableHead>
+                                <TableHead>Alat</TableHead>
+                                <TableHead>Kuota</TableHead>
+                                <TableHead>Potongan Tetap</TableHead>
+                                <TableHead>Periode KPI</TableHead>
+                                <TableHead className="text-center">Order</TableHead>
+                                <TableHead className="text-center">Unit</TableHead>
+                                <TableHead>Bonus</TableHead>
+                                <TableHead className="text-right">Take Home Pay</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {combinedUserData.map(user => {
+                                const basic = user.salaryProfile?.basic_salary || 0;
+                                const allowance = user.salaryProfile?.allowance_fixed || 0;
+                                const tool = user.salaryProfile?.tool_allowance || 0;
+                                const quota = user.salaryProfile?.quota || 0;
+                                const deductions = user.salaryProfile?.deductions || 0;
+                                const bonusStats = calculateBonus(user);
+                                const total = basic + allowance + tool + quota + bonusStats.bonus - deductions;
 
-                            <div className="bg-emerald-900/30 p-4 rounded-lg border border-emerald-900/50">
-                                <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">Grand Total Estimasi</p>
-                                <p className="text-lg font-bold text-emerald-400">
-                                    Rp {(
-                                        combinedUserData.reduce((acc, u) => acc + (u.salaryProfile?.basic_salary || 0) + (u.salaryProfile?.allowance_fixed || 0) + calculateBonus(u).bonus, 0) + 
-                                        totalUnpaidExpenses
-                                    ).toLocaleString('id-ID')}
-                                </p>
-                                <p className="text-[10px] text-emerald-600/70 mt-1">Fixed + Bonus + Tagihan</p>
-                            </div>
-                        </div>
-
-                        {/* Detailed Table */}
-                        <div className="rounded-lg border border-slate-700 overflow-hidden">
-                            <Table>
-                                <TableHeader className="bg-slate-800">
-                                    <TableRow className="border-slate-700 hover:bg-slate-800">
-                                        <TableHead className="text-slate-300">Nama</TableHead>
-                                        <TableHead className="text-slate-300">Gaji Pokok</TableHead>
-                                        <TableHead className="text-slate-300">Tunjangan</TableHead>
-                                        <TableHead className="text-slate-300">Tool</TableHead>
-                                        <TableHead className="text-slate-300">Kuota</TableHead>
-                                        <TableHead className="text-slate-300">Potongan</TableHead>
-                                        <TableHead className="text-slate-300">Periode</TableHead>
-                                        <TableHead className="text-slate-300 text-center">Total Order</TableHead>
-                                        <TableHead className="text-slate-300 text-center">Total Unit</TableHead>
-                                        <TableHead className="text-slate-300">Bonus</TableHead>
-                                        <TableHead className="text-right text-slate-300">Take Home Pay</TableHead>
+                                return (
+                                    <TableRow key={user.id}>
+                                        <TableCell>
+                                            <TableText primary={user.name} secondary={user.role} />
+                                        </TableCell>
+                                        <TableCell className="payrollMoneyCell">Rp {basic.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell className="payrollMoneyCell">Rp {allowance.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell className="payrollMoneyCell">Rp {tool.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell className="payrollMoneyCell">Rp {quota.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell className="payrollMoneyCell isNegative">-Rp {deductions.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell>
+                                            <TableText
+                                                primary={periodString}
+                                                secondary={(() => {
+                                                    try {
+                                                        if (user.activeKpis && user.activeKpis.length > 0 && user.activeKpis[0].target_field) {
+                                                            const conf = JSON.parse(user.activeKpis[0].target_field);
+                                                            if (conf.dateReference === 'lead_date') return 'Acuan: Tgl Leads';
+                                                            if (conf.dateReference === 'closing_date') return 'Acuan: Tgl Closing';
+                                                        }
+                                                    } catch(e){}
+                                                    return 'Acuan: Tgl Service';
+                                                })()}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <button
+                                                type="button"
+                                                className="payrollLinkButton"
+                                                onClick={() => {
+                                                    setDetailUser(user);
+                                                    setIsDetailModalOpen(true);
+                                                }}
+                                            >
+                                                {bonusStats.orders}
+                                            </button>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <button
+                                                type="button"
+                                                className="payrollLinkButton"
+                                                onClick={() => {
+                                                    setDetailUser(user);
+                                                    setIsDetailModalOpen(true);
+                                                }}
+                                            >
+                                                {bonusStats.units}
+                                            </button>
+                                        </TableCell>
+                                        <TableCell className="payrollMoneyCell isPositive">Rp {bonusStats.bonus.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell className="text-right payrollMoneyCell isTotal">
+                                            Rp {total.toLocaleString('id-ID')}
+                                        </TableCell>
                                     </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {combinedUserData.map(user => {
-                                        const basic = user.salaryProfile?.basic_salary || 0;
-                                        const allowance = user.salaryProfile?.allowance_fixed || 0;
-                                        const tool = user.salaryProfile?.tool_allowance || 0;
-                                        const quota = user.salaryProfile?.quota || 0;
-                                        const deductions = user.salaryProfile?.deductions || 0;
-                                        const bonusStats = calculateBonus(user);
-                                        const total = basic + allowance + tool + quota + bonusStats.bonus - deductions;
-                                        
-                                        return (
-                                            <TableRow key={user.id} className="border-slate-800 hover:bg-slate-800/50">
-                                                <TableCell className="font-medium text-slate-200">
-                                                    <div className="flex flex-col">
-                                                        <span>{user.name}</span>
-                                                        <span className="text-[10px] text-slate-500">{user.role}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-slate-400 text-xs">Rp {basic.toLocaleString('id-ID')}</TableCell>
-                                                <TableCell className="font-mono text-slate-400 text-xs">Rp {allowance.toLocaleString('id-ID')}</TableCell>
-                                                <TableCell className="font-mono text-slate-400 text-xs">Rp {tool.toLocaleString('id-ID')}</TableCell>
-                                                <TableCell className="font-mono text-slate-400 text-xs">Rp {quota.toLocaleString('id-ID')}</TableCell>
-                                                <TableCell className="font-mono text-red-400 text-xs">-Rp {deductions.toLocaleString('id-ID')}</TableCell>
-                                                <TableCell className="text-xs text-slate-400">
-                                                    <div className="font-medium text-slate-300 whitespace-nowrap">{periodString}</div>
-                                                    <div className="text-[10px] opacity-70 text-slate-500">
-                                                        By: {(() => {
-                                                            try {
-                                                                if (user.activeKpis && user.activeKpis.length > 0 && user.activeKpis[0].target_field) {
-                                                                    const conf = JSON.parse(user.activeKpis[0].target_field);
-                                                                    if (conf.dateReference === 'lead_date') return 'Tgl Leads';
-                                                                    if (conf.dateReference === 'closing_date') return 'Tgl Closing';
-                                                                }
-                                                            } catch(e){}
-                                                            return 'Tgl Service';
-                                                        })()}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-slate-300 text-center">
-                                                    <div 
-                                                        className="cursor-pointer hover:text-orange-400 decoration-dotted underline underline-offset-4"
-                                                        onClick={() => {
-                                                            setDetailUser(user);
-                                                            setIsDetailModalOpen(true);
-                                                        }}
-                                                    >
-                                                        {bonusStats.orders}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-slate-300 text-center">
-                                                    <div 
-                                                        className="cursor-pointer hover:text-orange-400 decoration-dotted underline underline-offset-4"
-                                                        onClick={() => {
-                                                            setDetailUser(user);
-                                                            setIsDetailModalOpen(true);
-                                                        }}
-                                                    >
-                                                        {bonusStats.units}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-orange-400 font-bold">Rp {bonusStats.bonus.toLocaleString('id-ID')}</TableCell>
-                                                <TableCell className="text-right font-bold font-mono text-emerald-400 text-lg">
-                                                    Rp {total.toLocaleString('id-ID')}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </DataTable>
+            </OperationalTableCard>
         </TabsContent>
       </Tabs>
 
@@ -1993,7 +2029,7 @@ export const PayrollPage = () => {
       <KpiModal />
       <BulkEditModal />
       {isDetailModalOpen && <OrderDetailModal />}
-    </div>
+    </OperationalPageShell>
   );
 };
 

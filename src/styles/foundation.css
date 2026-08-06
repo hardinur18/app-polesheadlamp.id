@@ -1457,6 +1457,764 @@
   min-width: min(100%, 260px);
 }
 
+.kasFilterPanel {
+  padding: 18px;
+  overflow: visible;
+}
+
+.kasTabsShell {
+  display: grid;
+  gap: 16px;
+}
+
+.kasTabs {
+  width: fit-content;
+}
+
+.kasTabContent {
+  display: grid;
+  gap: 16px;
+  margin-top: 0;
+}
+
+.kasDashboardLoading {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+}
+
+.kasDashboardNotice {
+  border: 1px solid #fde68a;
+  border-radius: 16px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.45;
+  padding: 12px 14px;
+}
+
+.kasDashboardGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.kasDashboardPanel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 100%;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--radius-panel);
+  background: #fff;
+  box-shadow: var(--shadow-xs);
+  padding: 18px;
+}
+
+.kasDashboardPanelWide {
+  grid-column: span 2;
+}
+
+.kasDashboardPanelHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kasDashboardPanelHeader h3 {
+  color: var(--ops-ink);
+  font-size: 1rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.kasDashboardPanelHeader p {
+  color: var(--ops-muted);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.35;
+  margin: 5px 0 0;
+}
+
+.kasDashboardPanelHeader > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--ops-border);
+  border-radius: 999px;
+  color: var(--ops-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 6px 10px;
+}
+
+.kasBreakdownList,
+.kasCompactList,
+.kasRecentList {
+  display: grid;
+  gap: 10px;
+}
+
+.kasBreakdownItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 14px;
+}
+
+.kasBreakdownMeta,
+.kasBreakdownValue {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.kasBreakdownMeta span,
+.kasCompactRow span,
+.kasRecentRow strong,
+.kasHighlightExpense span {
+  overflow: hidden;
+  color: var(--ops-ink);
+  font-size: 0.9rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kasBreakdownMeta small,
+.kasBreakdownValue small,
+.kasRecentRow small,
+.kasHighlightExpense small {
+  color: var(--ops-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.kasBreakdownValue {
+  justify-items: end;
+  text-align: right;
+}
+
+.kasBreakdownValue span,
+.kasCompactRow strong,
+.kasRecentRow em,
+.kasHighlightExpense strong {
+  color: #0f766e;
+  font-size: 0.9rem;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.kasBreakdownTrack {
+  grid-column: 1 / -1;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf2f7;
+}
+
+.kasBreakdownTrack div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0ea5e9, #2563eb);
+}
+
+.kasMiniTrend {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  min-height: 170px;
+  padding-top: 8px;
+}
+
+.kasMiniTrendItem {
+  display: grid;
+  align-items: end;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+}
+
+.kasMiniTrendBar {
+  width: 100%;
+  border-radius: 999px 999px 8px 8px;
+  background: linear-gradient(180deg, #38bdf8, #2563eb);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.12);
+}
+
+.kasMiniTrendItem span {
+  overflow: hidden;
+  color: var(--ops-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kasCompactRow,
+.kasRecentRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  border: 1px solid var(--ops-border);
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.kasRecentRow {
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.kasRecentRow:hover {
+  border-color: #c9d6e8;
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.kasRecentRow span,
+.kasHighlightExpense {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kasHighlightExpense {
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fafc, #eef6ff);
+  padding: 16px;
+}
+
+.kasHighlightExpense strong {
+  color: #be123c;
+  font-size: 1.5rem;
+}
+
+.kasFilterGrid {
+  display: grid;
+  grid-template-columns:
+    minmax(260px, 1.25fr)
+    minmax(170px, 0.86fr)
+    minmax(210px, 1.05fr)
+    minmax(230px, 1.12fr)
+    minmax(300px, 1.45fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.kasFilterSearch {
+  min-width: 0;
+}
+
+.kasFilterGrid :where(.uiInput, .uiSelectTrigger, .filterDateButton, .uiPeriodPicker) {
+  min-height: 50px;
+  height: 50px;
+  border-radius: 15px;
+}
+
+.kasExpenseDataTable {
+  --table-row-hover-bg: #f8fbff;
+}
+
+.kasExpenseDataTable table {
+  table-layout: fixed;
+}
+
+.kasExpenseDataTable th,
+.kasExpenseDataTable td {
+  overflow: hidden;
+}
+
+.kasExpenseDataTable .tableTextStack {
+  max-width: 100%;
+}
+
+.kasExpenseDataTable th {
+  text-align: left;
+}
+
+.kasExpenseDataTable .kasExpenseClickableRow {
+  cursor: pointer;
+}
+
+.kasExpenseDataTable .kasExpenseClickableRow:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid rgba(37, 99, 235, 0.36);
+  outline-offset: -2px;
+}
+
+.kasExpenseDataTable .kasExpenseClickableRow:hover .tableTextPrimary {
+  color: #0f3f8f;
+}
+
+.kasExpenseDataTable .kasExpenseAmountHeader,
+.kasExpenseDataTable .kasExpenseAmountCell {
+  text-align: right !important;
+}
+
+.kasExpenseDataTable .kasExpenseAmountCell {
+  color: #be123c;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.kasExpenseDataTable .tableActionHeader,
+.kasExpenseDataTable .tableActionCell {
+  width: 76px;
+  min-width: 76px;
+  padding-inline: 12px;
+}
+
+.kasExpenseDataTable .tableActionCell .rowActions {
+  align-items: center;
+  justify-content: center;
+  margin-top: -2px;
+}
+
+.kasBulkToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--ops-border);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  padding: 14px 16px;
+}
+
+.kasBulkToolbar:not(.isActive) {
+  background: #fff;
+}
+
+.kasBulkToolbar > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kasBulkToolbar strong {
+  color: var(--ops-ink);
+  font-size: 0.92rem;
+  font-weight: 840;
+  letter-spacing: 0;
+}
+
+.kasBulkToolbar span {
+  color: var(--ops-muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.kasBulkToolbarActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.kasBulkSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  border: 1px solid var(--ops-border-strong);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--ops-text);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 780;
+  padding: 0 12px;
+  box-shadow: var(--shadow-xs);
+  user-select: none;
+}
+
+.kasBulkSwitch [data-slot='switch'] {
+  height: 1.05rem;
+  width: 1.9rem;
+}
+
+.kasBulkSwitch span {
+  color: var(--ops-text);
+  font-size: 0.8rem;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.kasExpenseDataTable .kasExpenseSelectCell {
+  width: 52px;
+  min-width: 52px;
+  padding-inline: 12px;
+  text-align: center !important;
+  vertical-align: middle;
+}
+
+.kasExpenseDataTable .kasExpenseSelectCell [data-slot='checkbox'] {
+  margin-inline: auto;
+  border-color: #c8d4e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kasExpenseDataTable .kasExpenseSelectCell [data-slot='checkbox']:hover {
+  border-color: #8fb4e8;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.kasExpenseDataTable .kasExpenseSelectCell [data-slot='checkbox']:focus-visible {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+}
+
+.kasExpenseDataTable .kasExpenseSelectCell [data-slot='checkbox'][data-state='checked'],
+.kasExpenseDataTable .kasExpenseSelectCell [data-slot='checkbox'][data-state='indeterminate'] {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.kasExpenseDataTable .kasExpenseSelectCell [data-slot='checkbox'] svg {
+  stroke-width: 2.6;
+}
+.kasDetailStatusPill {
+  gap: 7px;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 820;
+  letter-spacing: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.kasDetailStatusPill span {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.kasDetailStatusPill.isActive {
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ecfdf5, #dcfce7);
+  color: #047857;
+}
+
+.kasDetailStatusPill.isActive span {
+  background: #10b981;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
+}
+
+.kasDetailStatusPill.isVoid {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #fff1f2, #fee2e2);
+  color: #be123c;
+}
+
+.kasDetailStatusPill.isVoid span {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.13);
+}
+
+.uiPeriodPicker {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  border-color: var(--ops-border-strong);
+  background: #fff;
+  color: var(--ops-ink);
+  font-size: 0.94rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  padding-inline: 16px;
+  box-shadow: var(--shadow-xs);
+}
+
+.uiPeriodPicker:hover {
+  background: #fff;
+  border-color: #c9d6e8;
+}
+
+.periodPickerContent {
+  z-index: 220;
+  width: min(620px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid #d8e2ef !important;
+  background: #fff;
+  padding: 0;
+  border-radius: 16px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.14);
+  outline: 0;
+}
+
+.periodPickerShell {
+  display: grid;
+  grid-template-columns: 158px minmax(0, 1fr);
+  min-height: 286px;
+}
+
+.periodPickerSidebar {
+  border-right: 1px solid var(--ops-border);
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.periodPickerPresetGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.periodPickerPreset {
+  min-height: 32px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ops-text);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  padding: 7px 10px;
+  text-align: left;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.periodPickerPreset:focus-visible,
+.periodPickerChoice:focus-visible,
+.periodPickerNavButton:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.periodPickerPreset:hover,
+.periodPickerPreset.is-active {
+  background: #fff;
+  color: var(--ops-blue);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+}
+
+.periodPickerPreset.is-active {
+  background: #eef6ff;
+}
+
+.periodPickerDivider {
+  border-top: 1px solid var(--ops-border);
+  margin: 8px 0;
+}
+
+.periodPickerMain {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.periodPickerCaption,
+.periodPickerYearHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+}
+
+.periodPickerCaptionGroup {
+  display: flex;
+  gap: 2px;
+}
+
+.periodPickerCaptionLabel,
+.periodPickerYearHeader span {
+  color: var(--ops-ink);
+  font-size: 0.95rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: capitalize;
+}
+
+.periodPickerNavButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ops-muted);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.periodPickerNavButton:hover {
+  background: var(--surface-soft);
+  color: var(--ops-ink);
+}
+
+.periodPickerMonthGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.periodPickerChoice {
+  min-height: 40px;
+  border: 1px solid var(--ops-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ops-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.periodPickerChoice:hover {
+  border-color: #c3d7fb;
+  background: #f8fbff;
+  color: var(--ops-blue);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
+}
+
+.periodPickerFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--ops-border);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.periodPickerFooter p {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ops-text);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.periodPickerFooter .uiButton {
+  min-height: 34px;
+  height: 34px;
+  border-radius: 11px;
+  padding-inline: 14px;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 1640px) {
+  .kasFilterGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .kasFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kasDashboardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .kasFilterPanel {
+    padding: 12px;
+  }
+
+  .kasFilterGrid,
+  .kasFilterSearch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kasFilterSearch {
+    grid-column: auto;
+  }
+
+  .kasBulkToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kasBulkToolbarActions {
+    justify-content: flex-start;
+  }
+
+  .kasBulkGridScroller {
+    max-height: none;
+    min-height: 0;
+  }
+
+  .periodPickerContent {
+    width: calc(100vw - 24px);
+    max-height: min(78vh, 680px);
+    overflow-y: auto;
+  }
+
+  .periodPickerShell {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .periodPickerSidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--ops-border);
+  }
+
+  .periodPickerPresetGroup {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .periodPickerMonthGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .periodPickerFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .periodPickerFooter .uiButton {
+    width: 100%;
+  }
+
+  .kasDashboardGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kasDashboardPanelWide {
+    grid-column: auto;
+  }
+}
+
 .dashboardHeaderActions {
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, max-content));
@@ -3050,6 +3808,153 @@
 .sidebar.collapsed .navItemParent .navChevron,
 .sidebar.collapsed .navLabel {
   display: none !important;
+}
+
+@media (min-width: 1024px) {
+  .appShell:not(.sidebarCollapsed):not(.sidebarHidden) {
+    grid-template-columns: 304px minmax(0, 1fr);
+  }
+
+  .sidebar:not(.collapsed):not(.mobile) {
+    width: 304px;
+    padding: 22px 16px 18px;
+  }
+
+  .sidebar:not(.collapsed) .brand {
+    min-height: 54px;
+    padding: 0 8px 22px;
+  }
+
+  .sidebar:not(.collapsed) .brandText {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .sidebar:not(.collapsed) .brandText strong,
+  .sidebar:not(.collapsed) .brandText small {
+    display: block;
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar:not(.collapsed) .brandText strong {
+    font-size: 0.98rem;
+    line-height: 1.18;
+  }
+
+  .sidebar:not(.collapsed) .brandText small {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .sidebar:not(.collapsed) .navList {
+    gap: 15px;
+    overflow-x: hidden;
+    padding: 0 4px 10px 0;
+  }
+
+  .sidebar:not(.collapsed) .navGroup {
+    gap: 8px;
+  }
+
+  .sidebar:not(.collapsed) .navGroupItems {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+  }
+
+  .sidebar:not(.collapsed) .navGroupLabel {
+    min-height: 16px;
+    padding-inline: 10px;
+    font-size: 0.66rem;
+    line-height: 1;
+  }
+
+  .sidebar:not(.collapsed) .navItem,
+  .sidebar:not(.collapsed) .navItemParent {
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 45px;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    font-size: 0.86rem;
+    line-height: 1.18;
+  }
+
+  .sidebar:not(.collapsed) .navItem svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.05;
+  }
+
+  .sidebar:not(.collapsed) .navLabel,
+  .sidebar:not(.collapsed) .navSubItem span,
+  .sidebar:not(.collapsed) .navFlyoutItem span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar:not(.collapsed) .navLabel {
+    flex: 1 1 auto;
+    color: inherit;
+    font-size: 0.86rem;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  .sidebar:not(.collapsed) .navChevron {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+  }
+
+  .sidebar:not(.collapsed) .navSubList {
+    gap: 3px;
+    margin-left: 16px;
+    padding: 4px 0 5px 17px;
+  }
+
+  .sidebar:not(.collapsed) .navSubItem {
+    box-sizing: border-box;
+    min-height: 35px;
+    gap: 9px;
+    padding: 0 10px;
+    font-size: 0.8rem;
+    line-height: 1.18;
+  }
+
+  .sidebar:not(.collapsed) .navSubItem svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2.05;
+  }
+
+  .sidebar:not(.collapsed) .sidebarUser {
+    gap: 9px;
+    padding: 9px;
+  }
+
+  .sidebar:not(.collapsed) .sidebarUserProfile {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .sidebar:not(.collapsed) .userMeta strong,
+  .sidebar:not(.collapsed) .userMeta small {
+    display: block;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .opsPageShell {
@@ -8870,6 +9775,582 @@ body {
   font-weight: 500 !important;
 }
 
+.recurringExpensesRouteFrame {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: clamp(28px, 2.4vw, 46px) clamp(34px, 3.2vw, 64px) 56px;
+}
+
+.recurringExpensesPage {
+  width: 100%;
+  max-width: none;
+}
+
+.recurringExpensesPage .topbar {
+  margin-bottom: 20px;
+}
+
+.recurringExpensesPage .metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(14px, 1.1vw, 20px);
+}
+
+.recurringExpensesPage .metricCard {
+  min-height: clamp(92px, 7vw, 118px);
+}
+
+.recurringExpensesPage .controlPanel {
+  margin-bottom: 20px;
+}
+
+.recurringExpensesPage .tablePanel {
+  width: 100%;
+}
+
+.recurringExpenseDataTable.uiDataTableScroller {
+  border-radius: 0;
+}
+
+.recurringExpenseDataTable.uiDataTableScroller > table {
+  table-layout: fixed;
+}
+
+.recurringExpenseDataTable th,
+.recurringExpenseDataTable td {
+  vertical-align: middle !important;
+}
+
+.recurringExpenseDataTable .recurringExpenseClickableRow {
+  cursor: pointer;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.recurringExpenseDataTable .recurringExpenseClickableRow:hover {
+  background: #f8fbff;
+}
+
+.recurringExpenseDataTable .recurringExpenseClickableRow:focus-visible {
+  position: relative;
+  outline: none;
+  box-shadow: inset 4px 0 0 #2563eb, inset 0 0 0 2px rgba(37, 99, 235, 0.16);
+}
+
+.recurringExpenseDataTable .recurringExpenseNumberCell {
+  color: #64748b;
+  font-size: 0.86rem;
+  font-weight: 720;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurringExpenseDataTable .recurringExpenseAmountCell {
+  color: #0f766e;
+  font-size: 0.9rem;
+  font-weight: 760;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurringExpenseDataTable th:nth-child(4) {
+  text-align: right;
+}
+
+.recurringExpenseDueStack {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.recurringExpenseDueBadge,
+.recurringExpenseClearBadge {
+  width: fit-content;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.recurringExpenseClearBadge {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.recurringExpensePayButton.uiButton,
+.recurringExpensePayButton {
+  height: 34px;
+  min-height: 34px;
+  border-radius: 12px;
+  padding-inline: 12px;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.recurringExpensePayButton.isDisabled {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.recurringExpenseDataTable .tableStatusCell .dataStatusSwitch {
+  min-width: 92px;
+  box-shadow: none;
+}
+
+.recurringExpenseDataTable .tableActionCell .rowActions {
+  gap: 8px;
+}
+
+.masterDataManagedForm {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.masterDataManagedForm > .masterDataDialogBody {
+  flex: 1 1 auto;
+  padding-bottom: 28px;
+}
+
+.recurringExpenseFormDialog.masterDataFormDialogContent {
+  max-height: min(88vh, calc(100dvh - 28px));
+}
+
+.recurringExpenseFormDialog .masterDataFormHeader {
+  padding-bottom: 24px;
+}
+
+.recurringExpenseManagedForm .masterDataFormActions {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 16px 48px 18px;
+}
+
+.recurringExpenseDetailDialog.masterDataFormDialogContent {
+  max-height: min(88vh, calc(100dvh - 32px));
+  max-width: min(calc(100vw - 48px), 1040px);
+  overflow: hidden;
+  width: min(calc(100vw - 48px), 1040px);
+}
+
+.recurringExpenseDetailDialog .masterDataFormHeader {
+  padding-block: 24px 20px;
+}
+
+.recurringExpenseDetailDialog .masterDataDialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: calc(88vh - 142px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 18px 24px 20px;
+}
+
+.recurringExpenseDetailLayout {
+  align-items: stretch;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.82fr);
+  min-height: 0;
+}
+
+.recurringExpenseDetailMain {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.recurringExpenseDetailHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  padding: 16px;
+}
+
+.recurringExpenseDetailHero span {
+  display: block;
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.recurringExpenseDetailHero h3 {
+  margin: 7px 0 0;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.recurringExpenseDetailHero p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.recurringExpenseStatusPill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  border: 1px solid rgba(203, 213, 225, 0.88);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 780;
+  line-height: 1;
+  padding: 5px 10px 5px 6px;
+  white-space: nowrap;
+}
+
+.recurringExpenseStatusPill .dataStatusIcon {
+  height: 20px;
+  width: 20px;
+}
+
+.recurringExpenseStatusPill.isActive {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.recurringExpenseStatusPill.isInactive {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.recurringExpenseDetailDialog .masterDataDetailRows {
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.recurringExpenseDetailDialog .masterDataDetailRow {
+  min-height: 42px;
+  padding: 10px 14px;
+}
+
+.recurringExpenseDetailDialog .masterDataDetailValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.recurringExpenseDetailCard {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.recurringExpenseDetailCardTitle {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.recurringExpenseDetailCardText {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.recurringExpenseBankCard {
+  display: grid;
+  gap: 4px;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 13px 14px;
+}
+
+.recurringExpenseBankCard span {
+  color: #334155;
+  font-size: 0.85rem;
+  font-weight: 760;
+}
+
+.recurringExpenseBankCard strong {
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.2;
+  user-select: all;
+}
+
+.recurringExpenseBankCard small {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 560;
+}
+
+.recurringExpenseMiniRows.masterDataDetailRows {
+  border-radius: 14px;
+}
+
+.recurringExpenseHistoryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recurringExpenseHistoryList {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.recurringExpenseHistoryItem {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 12px;
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.recurringExpenseHistoryItem:hover {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: #f5f9ff;
+  transform: translateY(-1px);
+}
+
+.recurringExpenseHistoryItem span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recurringExpenseHistoryItem strong,
+.recurringExpenseHistoryItem b {
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.recurringExpenseHistoryItem small {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 560;
+  line-height: 1.4;
+}
+
+.recurringExpenseHistoryItem b {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurringExpenseHistoryPanel {
+  align-content: start;
+  min-width: 0;
+}
+
+.recurringExpenseEmptyDetail {
+  border: 1px dashed rgba(203, 213, 225, 0.95);
+  border-radius: 14px;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 620;
+  padding: 14px;
+  text-align: center;
+}
+
+.recurringExpenseDetailNote {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 560;
+  line-height: 1.5;
+  padding: 14px;
+}
+
+.recurringExpenseDetailNote span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 780;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.recurringExpenseDetailLink {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(203, 213, 225, 0.88);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 720;
+  padding-inline: 12px;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.recurringExpenseDetailLink:hover {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: #eff6ff;
+  color: #0b63ce;
+}
+
+.recurringExpenseProofPreview {
+  margin-top: 2px;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.recurringExpenseProofPreview img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.recurringExpenseDetailDialog .masterDataFormActions {
+  align-items: center;
+  border-top: 1px solid #e5eaf3;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 0;
+  padding: 16px 0 2px;
+}
+
+.recurringExpenseDetailDialog .masterDataFormActions .uiButton,
+.recurringExpenseDetailDialog .masterDataFormActions button {
+  border-radius: 13px;
+  min-height: 44px;
+  min-width: 136px;
+  padding-inline: 18px;
+}
+
+@media (max-width: 767px) {
+  .recurringExpensesRouteFrame {
+    padding: 18px 14px 96px;
+  }
+
+  .recurringExpensesPage .metricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .recurringExpensesPage .metricCard {
+    min-height: 86px;
+  }
+
+  .recurringExpenseDetailDialog.masterDataFormDialogContent {
+    border-radius: 22px;
+    max-height: calc(100dvh - 20px);
+    max-width: calc(100vw - 20px);
+    width: calc(100vw - 20px);
+  }
+
+  .recurringExpenseDetailDialog .masterDataFormHeader {
+    padding: 20px 18px 16px;
+  }
+
+  .recurringExpenseDetailDialog .masterDataDialogBody {
+    max-height: calc(100dvh - 138px);
+    padding: 16px 18px 18px;
+  }
+
+  .recurringExpenseDetailLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .recurringExpenseManagedForm .masterDataFormActions {
+    padding: 14px 18px 16px;
+  }
+
+  .recurringExpenseDetailHero,
+  .recurringExpenseHistoryHeader,
+  .recurringExpenseHistoryItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .recurringExpenseHistoryItem b {
+    white-space: normal;
+  }
+
+  .recurringExpenseHistoryList {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .recurringExpenseDetailDialog .masterDataFormActions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .recurringExpenseDetailDialog .masterDataFormActions .uiButton,
+  .recurringExpenseDetailDialog .masterDataFormActions button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .recurringExpensesRouteFrame {
+    padding: 24px 22px 44px;
+  }
+
+  .recurringExpensesPage .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recurringExpenseDetailDialog.masterDataFormDialogContent {
+    max-width: min(calc(100vw - 36px), 940px);
+    width: min(calc(100vw - 36px), 940px);
+  }
+
+  .recurringExpenseDetailLayout {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.76fr);
+  }
+}
+
 @keyframes debtFadeUp {
   from {
     opacity: 0;
@@ -8924,4 +10405,979 @@ body {
     width: 100%;
   }
 
+}
+
+/* Finance bulk input dialog: document-style scrolling, not an inner table viewport. */
+.masterDataFormDialogContent.kasModuleFormDialog {
+  max-height: calc(100vh - 64px) !important;
+  overflow: hidden !important;
+}
+
+.kasModuleFormDialog form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.kasModuleFormDialog .masterDataDialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 18px;
+}
+
+.kasModuleFormDialog form > .masterDataFormActions {
+  align-items: center;
+  background: #fff;
+  border-top: 1px solid #e5eaf3;
+  flex: 0 0 auto;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 14px 24px 18px;
+  position: static;
+  z-index: 5;
+}
+
+.kasLockedSourceRef {
+  display: grid;
+  min-height: 44px;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 8px 14px;
+}
+
+.kasLockedSourceRef span {
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.kasLockedSourceRef strong {
+  overflow: hidden;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 720;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.masterDataFormDialogContent.kasBulkInputDialog {
+  height: calc(100vh - 64px) !important;
+  max-height: calc(100vh - 64px) !important;
+  max-width: calc(100vw - 64px) !important;
+  overflow: hidden !important;
+  width: calc(100vw - 64px) !important;
+}
+
+.kasBulkInputDialog form {
+  display: flex !important;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: auto;
+  min-height: 0;
+  overflow: hidden !important;
+}
+
+.kasBulkInputDialog .masterDataFormHeader {
+  flex: 0 0 auto;
+  padding-block: 24px 18px;
+}
+
+.kasBulkInputBody {
+  display: block !important;
+  flex: 1 1 auto;
+  height: auto !important;
+  min-height: 0;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding: 18px 22px 20px;
+  scroll-padding-top: 18px;
+}
+
+.kasBulkInputDropPanel {
+  align-items: center;
+  background: #fbfdff;
+  border: 1px solid #d7e4fb;
+  border-radius: 14px;
+  box-shadow: none;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+}
+
+.kasBulkInputDropPanel > div:first-child {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kasBulkInputDropPanel strong {
+  font-size: 0.84rem;
+  font-weight: 820;
+}
+
+.kasBulkInputDropPanel span {
+  font-size: 0.78rem;
+  font-weight: 640;
+}
+
+.kasBulkInputDropActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.kasBulkInputDropActions .uiButton {
+  border-radius: 11px;
+  height: 34px;
+  min-height: 34px;
+  padding-inline: 12px;
+}
+
+.kasBulkInputSelectToolbar {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #e1e9f6;
+  border-radius: 14px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+}
+
+.kasBulkInputSelectToolbar.isActive {
+  background: #eef6ff;
+  border-color: #bfdbfe;
+}
+
+.kasBulkInputSelectToolbar > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.kasBulkInputSelectToolbar strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 820;
+}
+
+.kasBulkInputSelectToolbar span {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.kasBulkGridPanel {
+  display: block !important;
+  min-height: 0;
+}
+
+.kasBulkGridPanelHeader {
+  align-items: flex-end;
+  background: transparent;
+  border: 0;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.kasBulkGridPanelHeader > div {
+  display: grid;
+  gap: 4px;
+}
+
+.kasBulkGridPanelHeader strong {
+  font-size: 0.94rem;
+  font-weight: 820;
+}
+
+.kasBulkGridPanelHeader span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 620;
+}
+
+.kasBulkGridMetaText {
+  align-items: center;
+  color: #75839a;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.94rem;
+  font-weight: 760;
+  gap: 14px;
+  justify-content: flex-end;
+  line-height: 1.25;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.kasBulkGridMetaText span {
+  color: #c4ccda;
+  font-weight: 850;
+}
+
+.kasBulkGridMetaText strong {
+  color: #047857;
+  font: inherit;
+}
+
+.kasBulkGridMetaText em {
+  color: #75839a;
+  font: inherit;
+  font-style: normal;
+}
+
+.kasBulkGridMetaText em.isError {
+  color: #be123c;
+}
+
+.kasBulkGridScroller {
+  border: 1px solid #e4eaf4;
+  border-radius: 14px;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  touch-action: pan-x pan-y;
+}
+
+.kasBulkGridTable {
+  min-width: 1880px;
+}
+
+.kasBulkGridTable.hasSelection {
+  min-width: 1934px;
+}
+
+.kasBulkGridTable th,
+.kasBulkGridTable td {
+  width: auto !important;
+}
+
+.kasBulkGridTable col.kasBulkInputSelectCol {
+  width: 54px;
+}
+
+.kasBulkGridTable col.kasBulkGridIndexCol {
+  width: 70px;
+}
+
+.kasBulkGridTable col.kasBulkGridDateCol {
+  width: 170px;
+}
+
+.kasBulkGridTable col.kasBulkGridCategoryCol,
+.kasBulkGridTable col.kasBulkGridSubcategoryCol {
+  width: 230px;
+}
+
+.kasBulkGridTable col.kasBulkGridAmountCol {
+  width: 150px;
+}
+
+.kasBulkGridTable col.kasBulkGridBranchCol,
+.kasBulkGridTable col.kasBulkGridVendorCol,
+.kasBulkGridTable col.kasBulkGridPaymentCol {
+  width: 210px;
+}
+
+.kasBulkGridTable col.kasBulkGridDescriptionCol,
+.kasBulkGridTable col.kasBulkGridNotesCol {
+  width: 220px;
+}
+
+.kasBulkGridTable col.kasBulkGridReferenceCol,
+.kasBulkGridTable col.kasBulkGridStatusCol {
+  width: 150px;
+}
+
+.kasBulkGridTable col.kasBulkGridActionCol {
+  width: 78px;
+}
+
+.kasBulkInputSelectCell {
+  text-align: center;
+  vertical-align: middle !important;
+}
+
+.kasBulkGridTable th {
+  background: #f5f7fc;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  padding-block: 11px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.kasBulkGridTable td {
+  padding-block: 9px;
+  vertical-align: middle;
+}
+
+.kasBulkGridTable tbody tr.isSelected {
+  background: #f0f7ff;
+}
+
+.kasBulkGridTable .uiInput,
+.kasBulkGridTable .uiSelectTrigger {
+  border-radius: 12px;
+  height: 38px;
+  min-height: 38px;
+  font-size: 0.78rem;
+  font-weight: 680;
+}
+
+.kasBulkDatePicker.uiButton {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(203, 213, 225, 0.92);
+  border-radius: 12px;
+  box-shadow: none;
+  color: #0f172a;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 720;
+  gap: 8px;
+  height: 38px;
+  justify-content: flex-start;
+  min-height: 38px;
+  overflow: hidden;
+  padding-inline: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.kasBulkDatePicker.uiButton:hover,
+.kasBulkDatePicker.uiButton:focus-visible {
+  background: #fff;
+  border-color: #93b4ff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+}
+
+.kasBulkDatePicker svg {
+  color: #64748b;
+  flex: 0 0 auto;
+}
+
+.kasBulkDatePicker span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kasBulkDatePicker.isEmpty {
+  color: #94a3b8;
+}
+
+.kasBulkDatePopover {
+  --kas-date-cell: 34px;
+  --kas-date-gap: 6px;
+  --kas-date-grid: calc((var(--kas-date-cell) * 7) + (var(--kas-date-gap) * 6));
+  border-color: #d8e2ef !important;
+  overflow: hidden;
+  padding: 14px 16px !important;
+  width: calc(var(--kas-date-grid) + 32px) !important;
+  z-index: 260 !important;
+}
+
+.kasBulkDatePopover .rdp,
+.kasBulkDatePopover > div:first-child,
+.kasBulkDatePopover .rdp-months,
+.kasBulkDatePopover .rdp-month {
+  margin: 0;
+  width: 100%;
+}
+
+.kasBulkDatePopover .rdp-month {
+  align-items: center !important;
+}
+
+.kasBulkDatePopover .rdp-caption {
+  margin: 0 auto 10px !important;
+  min-height: 34px;
+  width: var(--kas-date-grid) !important;
+}
+
+.kasBulkDatePopover .rdp-caption_label {
+  line-height: 34px;
+}
+
+.kasBulkDatePopover table,
+.kasBulkDatePopover [role='grid'] {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  margin: 0 auto !important;
+  width: var(--kas-date-grid) !important;
+}
+
+.kasBulkDatePopover .rdp-head_row,
+.kasBulkDatePopover .rdp-row {
+  display: grid !important;
+  gap: var(--kas-date-gap) !important;
+  grid-template-columns: repeat(7, var(--kas-date-cell)) !important;
+  margin-top: var(--kas-date-gap) !important;
+}
+
+.kasBulkDatePopover th,
+.kasBulkDatePopover td,
+.kasBulkDatePopover [role='columnheader'],
+.kasBulkDatePopover [role='gridcell'] {
+  height: var(--kas-date-cell) !important;
+  padding: 0 !important;
+  text-align: center !important;
+  width: var(--kas-date-cell) !important;
+}
+
+.kasBulkDatePopover button:not(.kasBulkDateClear) {
+  align-items: center !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  font-size: 0.82rem !important;
+  font-weight: 760 !important;
+  height: var(--kas-date-cell) !important;
+  justify-content: center !important;
+  min-height: var(--kas-date-cell) !important;
+  min-width: var(--kas-date-cell) !important;
+  padding: 0 !important;
+  width: var(--kas-date-cell) !important;
+}
+
+.kasBulkDatePopover button:not(.kasBulkDateClear):hover {
+  background: #eef6ff !important;
+  color: #0f55bd !important;
+}
+
+.kasBulkDatePopover button[aria-selected='true'] {
+  background: #0f55bd !important;
+  color: #fff !important;
+}
+
+.kasBulkDatePopover svg {
+  height: 16px !important;
+  width: 16px !important;
+}
+
+.kasBulkDateClear.uiButton {
+  height: 34px;
+  margin: 10px auto 0;
+  min-height: 34px;
+  width: var(--kas-date-grid);
+}
+
+.kasBulkInputHelp {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 620;
+  margin: 10px 2px 18px;
+}
+
+.kasBulkInputDialog form > .masterDataFormActions {
+  align-items: center;
+  background: #fff;
+  border-top: 1px solid #e5eaf3;
+  flex: 0 0 auto;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 14px 22px 16px;
+  position: static;
+  z-index: 5;
+}
+
+.kasBulkInputDialog form > .masterDataFormActions .uiButton {
+  border-radius: 13px;
+  min-height: 42px;
+  min-width: 140px;
+  padding-inline: 18px;
+}
+
+.kasBulkInputDialog form > .masterDataFormActions .uiButton[type="submit"] {
+  min-width: 180px;
+}
+
+@media (max-width: 1100px) {
+  .masterDataFormDialogContent.kasModuleFormDialog {
+    max-height: calc(100vh - 32px) !important;
+  }
+
+  .masterDataFormDialogContent.kasBulkInputDialog {
+    height: calc(100vh - 32px) !important;
+    max-height: calc(100vh - 32px) !important;
+    max-width: calc(100vw - 32px) !important;
+    width: calc(100vw - 32px) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .kasModuleFormDialog form > .masterDataFormActions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+    padding: 12px 14px 14px;
+  }
+
+  .kasModuleFormDialog form > .masterDataFormActions .uiButton {
+    width: 100%;
+  }
+
+  .kasBulkInputBody {
+    padding: 14px 14px 18px;
+  }
+
+  .kasBulkGridPanelHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .kasBulkInputSelectToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kasBulkGridMetaText {
+    justify-content: flex-start;
+  }
+
+  .kasBulkInputDialog form > .masterDataFormActions {
+    padding: 12px 14px 14px;
+  }
+}
+
+/* Payroll & Gaji */
+.payrollPage {
+  max-width: min(100%, 1560px);
+}
+
+.payrollHeaderActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.payrollMetricGrid.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.payrollTabs {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.payrollTabsPanel.filterPanel {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.payrollTabList {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e5eaf3;
+  border-radius: 18px;
+  box-shadow: none;
+  display: inline-flex;
+  gap: 8px;
+  height: auto;
+  justify-content: flex-start;
+  padding: 8px;
+  width: fit-content;
+}
+
+.payrollTabList [role='tab'] {
+  border-radius: 14px;
+  color: #64748b;
+  font-size: 0.86rem;
+  font-weight: 780;
+  min-height: 42px;
+  padding-inline: 16px;
+}
+
+.payrollTabList [role='tab'][data-state='active'] {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.16), 0 10px 28px rgba(37, 99, 235, 0.1);
+  color: #0f55bd;
+}
+
+.payrollTabsMeta {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  font-weight: 720;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.payrollTabsMeta span {
+  background: #f8fafc;
+  border: 1px solid #e5eaf3;
+  border-radius: 999px;
+  padding: 8px 10px;
+}
+
+.payrollAccessBadge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 8px;
+  font-size: 0.78rem;
+  font-weight: 820;
+  padding: 8px 12px;
+}
+
+.payrollAccessBadge.isManage {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #047857;
+}
+
+.payrollAccessBadge.isView {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #0f55bd;
+}
+
+.payrollTableCard {
+  overflow: hidden;
+}
+
+.payrollTableToolbar {
+  align-items: center;
+  border-bottom: 1px solid #e8eef6;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 24px 28px;
+}
+
+.payrollTableToolbar > .uiButton,
+.payrollTableToolbar .uiButton {
+  min-height: 44px;
+}
+
+.payrollTableToolbar h2 {
+  color: #0f172a;
+  font-size: 1.2rem;
+  font-weight: 860;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.payrollTableToolbar p {
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.payrollDataTable.uiDataTableScroller {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.payrollDataTable.uiDataTableScroller > table {
+  table-layout: fixed;
+}
+
+.payrollDataTable.uiDataTableScroller th,
+.payrollDataTable.uiDataTableScroller td,
+.payrollOrderDetailTable.uiDataTableScroller th,
+.payrollOrderDetailTable.uiDataTableScroller td {
+  vertical-align: middle;
+}
+
+.payrollDataTable.uiDataTableScroller tbody td,
+.payrollDataTable.uiDataTableScroller tbody td *,
+.payrollOrderDetailTable.uiDataTableScroller tbody td,
+.payrollOrderDetailTable.uiDataTableScroller tbody td * {
+  font-weight: 560;
+  letter-spacing: 0;
+}
+
+.payrollDataTable .tableTextPrimary,
+.payrollDataTable .tableTextSecondary,
+.payrollOrderDetailTable .tableTextPrimary,
+.payrollOrderDetailTable .tableTextSecondary {
+  font-weight: inherit;
+}
+
+.payrollMoneyCell {
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}
+
+.payrollMoneyCell.isPositive {
+  color: #047857;
+}
+
+.payrollMoneyCell.isNegative {
+  color: #be123c;
+}
+
+.payrollMoneyCell.isTotal {
+  color: #0f766e;
+  font-size: 1rem;
+  font-weight: 820 !important;
+}
+
+.payrollMutedText {
+  color: #64748b;
+  display: -webkit-box;
+  font-size: 0.86rem;
+  font-weight: 560;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.payrollSoftBadge {
+  background: #f8fafc;
+  border-color: #dbe4f0;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.payrollEmptyAction {
+  display: flex;
+  justify-content: center;
+  margin-top: -28px;
+  padding-bottom: 24px;
+}
+
+.payrollMonthControl {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dbe4f0;
+  border-radius: 16px;
+  display: flex;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 14px;
+}
+
+.payrollMonthControl span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.payrollMonthControl input {
+  background: transparent;
+  border: 0;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 780;
+  outline: 0;
+  min-width: 134px;
+}
+
+.payrollEstimateMetrics.metricGrid {
+  border-bottom: 1px solid #e8eef6;
+  gap: 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 20px 24px;
+}
+
+.payrollEstimateMetrics .metricCard {
+  box-shadow: none;
+  min-height: 104px;
+}
+
+.payrollLinkButton {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #0f55bd;
+  font-size: 0.82rem;
+  font-weight: 780;
+  min-width: 42px;
+  padding: 4px 10px;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.payrollLinkButton:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.payrollSalaryDialog.masterDataFormDialogContent,
+.payrollKpiDialog.masterDataFormDialogContent,
+.payrollBulkDialog.masterDataFormDialogContent,
+.payrollOrderDetailDialog.masterDataFormDialogContent {
+  max-height: min(88vh, 980px) !important;
+}
+
+.payrollSalaryForm,
+.payrollKpiForm,
+.payrollBulkForm {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.payrollSalaryForm .masterDataDialogBody,
+.payrollKpiForm .masterDataDialogBody,
+.payrollBulkForm .masterDataDialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.payrollSalaryForm .masterDataFormActions,
+.payrollKpiForm .masterDataFormActions,
+.payrollBulkForm .masterDataFormActions,
+.payrollDetailActions {
+  border-top: 1px solid #e5eaf3;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 16px 22px;
+}
+
+.payrollInlinePanel {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.payrollInlinePanel.isNeutral {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.payrollDetailActions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.payrollDetailTotal {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payrollDetailTotal span {
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 720;
+}
+
+.payrollDetailTotal strong {
+  color: #047857;
+  font-size: 1rem;
+  font-weight: 860;
+}
+
+@media (max-width: 900px) {
+  .payrollMetricGrid.metricGrid,
+  .payrollEstimateMetrics.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .payrollHeaderActions,
+  .payrollTabsPanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payrollTabsMeta {
+    justify-content: flex-start;
+  }
+
+  .payrollTableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .payrollTableToolbar .uiInput {
+    width: 100%;
+  }
+
+  .payrollTabList {
+    overflow-x: auto;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .payrollTabList [role='tab'] {
+    flex: 0 0 auto;
+  }
+
+  .payrollSalaryDialog.masterDataFormDialogContent,
+  .payrollKpiDialog.masterDataFormDialogContent,
+  .payrollBulkDialog.masterDataFormDialogContent,
+  .payrollOrderDetailDialog.masterDataFormDialogContent {
+    max-height: calc(100vh - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+    width: calc(100vw - 28px) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .payrollMetricGrid.metricGrid,
+  .payrollEstimateMetrics.metricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .payrollTabsMeta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payrollTabsMeta span {
+    text-align: left;
+  }
+
+  .payrollMonthControl {
+    justify-content: space-between;
+  }
+
+  .payrollDetailActions,
+  .payrollSalaryForm .masterDataFormActions,
+  .payrollKpiForm .masterDataFormActions,
+  .payrollBulkForm .masterDataFormActions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .payrollDetailActions .uiButton,
+  .payrollSalaryForm .masterDataFormActions .uiButton,
+  .payrollKpiForm .masterDataFormActions .uiButton,
+  .payrollBulkForm .masterDataFormActions .uiButton {
+    width: 100%;
+  }
 }

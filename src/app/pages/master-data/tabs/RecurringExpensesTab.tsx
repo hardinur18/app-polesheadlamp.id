@@ -1,20 +1,28 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   AlertCircle,
-  Plus, Edit, Trash2, CheckCircle2, XCircle,
-  Clock, RefreshCw, Building2, Loader2, Wallet, Eye, ReceiptText, Upload, ExternalLink
+  Plus, Edit, Trash2, CheckCircle2,
+  Clock, RefreshCw, Loader2, Wallet, Eye, ReceiptText, ExternalLink
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon } from '../../../components/ui/data-table';
+import {
+  DataTable,
+  TableActionCell,
+  TableActionHeader,
+  TableActionMenu,
+  TableActionMenuItem,
+  TableStatusCell,
+  TableStatusIcon,
+  TableStatusSwitch,
+  TableText,
+} from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import { NoticeStack } from '../../../components/ui/notice-stack';
 import {
   TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from '../../../components/ui/table';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
-} from "../../../components/ui/dialog";
+import { Dialog } from "../../../components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,13 +35,11 @@ import {
 } from "../../../components/ui/alert-dialog"
 import { Badge } from '../../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
-import { Label } from '../../../components/ui/label';
 import { Textarea } from '../../../components/ui/textarea';
 import { Role } from '../data';
 import { toast } from 'sonner';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { supabase } from '@/lib/supabaseClient';
-import { uploadProofAssetImage } from '@/app/services/proofAssets';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { cn } from '../../../components/ui/utils';
@@ -43,6 +49,10 @@ import { useIsMobile } from '@/app/components/ui/use-mobile';
 import { logActivity } from '@/app/services/auditService';
 import { DEFAULT_OPERATIONAL_EXPENSE_ONLY_ACCOUNTS } from '@/app/data/operationalExpenseAccounts';
 import {
+  OPERATIONAL_EXPENSE_FORWARD_DRAFT_KEY,
+  OperationalExpenseForwardDraft,
+} from '@/app/data/operationalExpenseForwardDraft';
+import {
   OperationalEmptyState,
   OperationalKpiCard,
   OperationalKpiGrid,
@@ -51,7 +61,13 @@ import {
 } from '../../../components/ui/operational-page';
 import {
   MasterDataFormActions,
+  MasterDataCurrencyInput,
+  MasterDataDialogBody,
   MasterDataFormDialogContent,
+  MasterDataFormField,
+  MasterDataFormGrid,
+  MasterDataFormHeader,
+  MasterDataFieldLabel,
   MasterDataUnsavedChangesDialog,
   useMasterDataFormCloseGuard,
 } from '../../../components/ui/master-data-ui';
@@ -94,17 +110,23 @@ interface RecurringExpensePayment {
   created_at?: string;
 }
 
-type ExpenseTab = 'schedule' | 'unpaid' | 'paid';
-
-interface PaymentFormState {
-  paid_at: string;
-  amount: string;
-  payment_source: string;
-  operational_category: string;
-  operational_subcategory: string;
-  notes: string;
-  proof_url: string;
+interface ForwardedOperationalExpenseRow {
+  id: string;
+  expense_date: string;
+  branch_id?: string | null;
+  category: string;
+  subcategory?: string | null;
+  vendor_name?: string | null;
+  description?: string | null;
+  amount: number;
+  payment_source?: string | null;
+  source_type?: string | null;
+  source_ref?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
 }
+
+type ExpenseTab = 'schedule' | 'unpaid' | 'paid';
 
 interface RecurringExpensesTabProps {
   currentRole: Role;
@@ -112,7 +134,27 @@ interface RecurringExpensesTabProps {
 
 const todayDateInput = () => new Date().toISOString().slice(0, 10);
 const RECURRING_EXPENSE_PAYMENTS_URL = buildMakeServerUrl('/finance/recurring-expense-payments');
-const RECURRING_EXPENSE_PAY_URL = buildMakeServerUrl('/finance/recurring-expenses/pay');
+
+const RECURRING_CATEGORY_OPTIONS: Array<{ label: string; value: RecurringExpense['category'] }> = [
+  { value: 'operational', label: 'Operasional' },
+  { value: 'rent', label: 'Sewa Tempat' },
+  { value: 'salary', label: 'Gaji Karyawan' },
+  { value: 'platform', label: 'Biaya Platform' },
+  { value: 'marketing', label: 'Marketing / Iklan' },
+  { value: 'other', label: 'Lainnya' },
+];
+
+const RECURRING_CYCLE_OPTIONS: Array<{ label: string; value: RecurringExpense['cycle'] }> = [
+  { value: 'monthly', label: 'Bulanan' },
+  { value: 'yearly', label: 'Tahunan' },
+  { value: 'one_time', label: 'Sekali Bayar' },
+];
+
+const getRecurringCategoryLabel = (value?: string | null) =>
+  RECURRING_CATEGORY_OPTIONS.find((option) => option.value === value)?.label || value || '-';
+
+const getRecurringCycleLabel = (value?: string | null) =>
+  RECURRING_CYCLE_OPTIONS.find((option) => option.value === value)?.label || '-';
 
 const getPeriodKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -170,6 +212,19 @@ const getNextDueDateAfterPeriod = (item: RecurringExpense, periodKey: string) =>
   return nextPeriodKey ? getDueDateForPeriod(item, nextPeriodKey) : null;
 };
 
+const getRecurringExpenseSourceRef = (expenseId: string, periodKey: string) =>
+  `recurring:${expenseId}:${periodKey}`;
+
+const parseRecurringExpenseSourceRef = (sourceRef?: string | null) => {
+  const match = String(sourceRef || '').match(/^recurring:([^:]+):(\d{4}-\d{2})$/);
+  if (!match) return null;
+
+  return {
+    recurringExpenseId: match[1],
+    periodKey: match[2],
+  };
+};
+
 const getDefaultOperationalAccount = (category: string) => {
   const normalized = category.toLowerCase();
   const subcategory =
@@ -188,6 +243,19 @@ const getDefaultOperationalAccount = (category: string) => {
     DEFAULT_OPERATIONAL_EXPENSE_ONLY_ACCOUNTS[0]
   );
 };
+
+const DetailRow = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) => (
+  <div className="masterDataDetailRow">
+    <span className="masterDataDetailLabel">{label}</span>
+    <span className="masterDataDetailValue">{value || '-'}</span>
+  </div>
+);
 
 const parseJsonResponse = async <T,>(response: Response, fallbackMessage: string): Promise<T> => {
   const rawText = await response.text();
@@ -211,7 +279,7 @@ const parseJsonResponse = async <T,>(response: Response, fallbackMessage: string
 export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const [expenses, setExpenses] = useState<RecurringExpense[]>([]);
   const [payments, setPayments] = useState<RecurringExpensePayment[]>([]);
-  const [operationalAccounts, setOperationalAccounts] = useState(DEFAULT_OPERATIONAL_EXPENSE_ONLY_ACCOUNTS);
+  const [forwardedOperationalExpenses, setForwardedOperationalExpenses] = useState<ForwardedOperationalExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentHistoryError, setPaymentHistoryError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -222,19 +290,6 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const [deletingItem, setDeletingItem] = useState<RecurringExpense | null>(null);
   const [viewingItem, setViewingItem] = useState<RecurringExpense | null>(null);
   const [viewingPayment, setViewingPayment] = useState<RecurringExpensePayment | null>(null);
-  const [paymentItem, setPaymentItem] = useState<RecurringExpense | null>(null);
-  const [paymentForm, setPaymentForm] = useState<PaymentFormState>({
-    paid_at: todayDateInput(),
-    amount: '',
-    payment_source: '',
-    operational_category: getDefaultOperationalAccount('operational')?.category || 'Beban Operasional',
-    operational_subcategory: getDefaultOperationalAccount('operational')?.subcategory || 'Biaya Utilitas',
-    notes: '',
-    proof_url: '',
-  });
-  const [paymentInitialSnapshot, setPaymentInitialSnapshot] = useState('');
-  const [isPaying, setIsPaying] = useState(false);
-  const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [statusUpdatingIds, setStatusUpdatingIds] = useState<Set<string>>(() => new Set());
   
   const { branches, currentUser } = useMasterData();
@@ -245,6 +300,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const canEdit = hasPermission('recurring_expenses.edit');
   const canDelete = hasPermission('recurring_expenses.delete');
   const canPay = hasPermission('recurring_expenses.pay');
+  const canViewOperationalExpense = hasPermission('operational_expenses.view');
   const canCreateOperationalExpense = hasPermission('operational_expenses.create');
   const currentPeriodKey = getPeriodKey();
 
@@ -259,33 +315,61 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     onClose: closeExpenseFormDialog,
   });
 
-  const closePaymentDialog = useCallback(() => {
-    setPaymentItem(null);
-    setPaymentInitialSnapshot('');
-  }, []);
+  const forwardedPayments = useMemo<RecurringExpensePayment[]>(() => {
+    return forwardedOperationalExpenses.reduce<RecurringExpensePayment[]>((rows, row) => {
+      const parsed = parseRecurringExpenseSourceRef(row.source_ref);
+      if (!parsed) return rows;
 
-  const paymentFormCloseGuard = useMasterDataFormCloseGuard({
-    hasUnsavedChanges: Boolean(
-      paymentItem &&
-      paymentInitialSnapshot &&
-      JSON.stringify(paymentForm) !== paymentInitialSnapshot
-    ),
-    onClose: closePaymentDialog,
-  });
+      const expense = expenses.find((item) => item.id === parsed.recurringExpenseId);
+      const dueDate = expense ? getDueDateForPeriod(expense, parsed.periodKey) : row.expense_date;
+
+      rows.push({
+          id: `operational-${row.id}`,
+          recurring_expense_id: parsed.recurringExpenseId,
+          period_key: parsed.periodKey,
+          due_date: dueDate,
+          paid_at: row.expense_date,
+          amount: Number(row.amount) || 0,
+          payment_source: row.payment_source || '',
+          operational_category: row.category,
+          operational_subcategory: row.subcategory || '',
+          vendor_name: row.vendor_name || expense?.name || '',
+          notes: row.notes || row.description || '',
+          proof_url: '',
+          operational_expense_id: row.id,
+          status: 'paid',
+          paid_by: null,
+          paid_by_name: 'Biaya Operasional',
+          created_at: row.created_at || undefined,
+      });
+
+      return rows;
+    }, []);
+  }, [expenses, forwardedOperationalExpenses]);
+
+  const effectivePayments = useMemo(() => {
+    const rows = new Map<string, RecurringExpensePayment>();
+
+    [...forwardedPayments, ...payments.filter((payment) => payment.status === 'paid')].forEach((payment) => {
+      rows.set(`${payment.recurring_expense_id}:${payment.period_key}`, payment);
+    });
+
+    return Array.from(rows.values());
+  }, [forwardedPayments, payments]);
 
   const paymentByPeriod = useMemo(() => {
     const rows = new Map<string, RecurringExpensePayment>();
-    payments
+    effectivePayments
       .filter((payment) => payment.status === 'paid')
       .forEach((payment) => {
         rows.set(`${payment.recurring_expense_id}:${payment.period_key}`, payment);
       });
     return rows;
-  }, [payments]);
+  }, [effectivePayments]);
 
   const paymentsByExpense = useMemo(() => {
     const rows = new Map<string, RecurringExpensePayment[]>();
-    payments
+    effectivePayments
       .filter((payment) => payment.status === 'paid')
       .forEach((payment) => {
         const existing = rows.get(payment.recurring_expense_id) || [];
@@ -301,7 +385,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     });
 
     return rows;
-  }, [payments]);
+  }, [effectivePayments]);
 
   const getPaymentForPeriod = useCallback(
     (item: RecurringExpense, periodKey = currentPeriodKey) =>
@@ -458,18 +542,21 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
         }
       };
 
-      const [expensesResult, paymentsResult, accountsResult] = await Promise.allSettled([
+      const [expensesResult, paymentsResult, forwardedResult] = await Promise.allSettled([
         supabase
           .from('recurring_expenses')
           .select('*')
           .order('created_at', { ascending: false }),
         fetchPayments(),
-        supabase
-          .from('operational_expense_categories')
-          .select('*')
-          .eq('account_type', 'expense')
-          .eq('is_active', true)
-          .order('sort_order', { ascending: true }),
+        canViewOperationalExpense
+          ? supabase
+              .from('operational_expenses')
+              .select('id, expense_date, branch_id, category, subcategory, vendor_name, description, amount, payment_source, source_type, source_ref, notes, created_at')
+              .eq('source_type', 'recurring')
+              .order('expense_date', { ascending: false })
+              .order('created_at', { ascending: false })
+              .limit(500)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       if (expensesResult.status === 'rejected' || expensesResult.value.error) {
@@ -483,17 +570,22 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
         setPaymentHistoryError(null);
       } else {
         setPayments([]);
-        const message =
-          paymentsResult.status === 'rejected'
-            ? paymentsResult.reason?.message
-            : 'Endpoint history pembayaran rutin belum aktif.';
-        setPaymentHistoryError(`${message || 'History pembayaran rutin belum bisa dimuat.'} Jadwal tagihan tetap ditampilkan, tapi tab Sudah Dibayar dan tombol Bayar belum aktif sampai backend history pembayaran tersedia.`);
+        setPaymentHistoryError(null);
+        console.warn(
+          'Legacy recurring expense payment history unavailable. Operational expense ledger will be used instead:',
+          paymentsResult.status === 'rejected' ? paymentsResult.reason : 'Endpoint history pembayaran rutin belum aktif.',
+        );
       }
 
-      if (accountsResult.status === 'fulfilled' && !accountsResult.value.error && accountsResult.value.data?.length) {
-        setOperationalAccounts(accountsResult.value.data);
+      if (forwardedResult.status === 'fulfilled' && !forwardedResult.value.error) {
+        setForwardedOperationalExpenses((forwardedResult.value.data || []) as ForwardedOperationalExpenseRow[]);
       } else {
-        setOperationalAccounts(DEFAULT_OPERATIONAL_EXPENSE_ONLY_ACCOUNTS);
+        setForwardedOperationalExpenses([]);
+        if (forwardedResult.status === 'rejected') {
+          console.warn('Recurring operational expense ledger query failed:', forwardedResult.reason);
+        } else if (forwardedResult.value.error) {
+          console.warn('Recurring operational expense ledger query failed:', forwardedResult.value.error);
+        }
       }
     } catch (err: any) {
       console.error("Error fetching expenses:", err);
@@ -505,7 +597,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
 
   useEffect(() => {
     fetchExpenses();
-  }, []);
+  }, [canViewOperationalExpense]);
 
   // --- FILTER DATA ---
   const searchQuery = search.trim().toLowerCase();
@@ -528,7 +620,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
   const activeItems = filteredData.filter(item => item.status === 'active');
   const inactiveItems = filteredData.filter(item => item.status === 'inactive');
   const unpaidItems = activeItems.filter((item) => !isPaidForPeriod(item));
-  const paidRows = payments
+  const paidRows = effectivePayments
     .filter((payment) => payment.status === 'paid' && payment.period_key === currentPeriodKey)
     .filter((payment) => {
       const expense = expenses.find((item) => item.id === payment.recurring_expense_id);
@@ -543,22 +635,11 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
         payment.payment_source,
         payment.notes,
         payment.paid_by_name,
+        payment.operational_expense_id,
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(searchQuery));
     });
-
-  const operationalCategoryOptions = useMemo(
-    () => Array.from(new Set(operationalAccounts.map((account) => account.category).filter(Boolean))),
-    [operationalAccounts],
-  );
-
-  const operationalSubcategoryOptions = useMemo(() => {
-    const source = paymentForm.operational_category
-      ? operationalAccounts.filter((account) => account.category === paymentForm.operational_category)
-      : operationalAccounts;
-    return Array.from(new Set(source.map((account) => account.subcategory).filter(Boolean)));
-  }, [operationalAccounts, paymentForm.operational_category]);
 
   // --- HANDLERS ---
   const handleDelete = async (id: string) => {
@@ -638,55 +719,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     }
   };
 
-  const handleProofFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error('Bukti pembayaran harus berupa gambar JPG, PNG, atau WebP.');
-      event.target.value = '';
-      return;
-    }
-
-    setIsUploadingProof(true);
-    try {
-      const assetId = `recurring-payment-${paymentItem?.id || 'new'}-${Date.now()}`;
-      const proofUrl = await uploadProofAssetImage(file, assetId);
-      setPaymentForm((previous) => ({ ...previous, proof_url: proofUrl }));
-      toast.success(proofUrl.startsWith('data:')
-        ? 'Bukti pembayaran berhasil dikompres dan siap disimpan.'
-        : 'Bukti pembayaran berhasil diupload.');
-    } catch (err: any) {
-      toast.error("Gagal upload bukti pembayaran: " + (err?.message || 'Unknown error'));
-    } finally {
-      setIsUploadingProof(false);
-      event.target.value = '';
-    }
-  };
-
-  const openPaymentDialog = (item: RecurringExpense) => {
-    if (isPaidForPeriod(item)) {
-      toast.info('Tagihan periode ini sudah tercatat lunas.');
-      return;
-    }
-
-    const defaultAccount = getDefaultOperationalAccount(item.category);
-    setPaymentItem(item);
-    const nextPaymentForm = {
-      paid_at: todayDateInput(),
-      amount: String(item.amount || ''),
-      payment_source: item.bank_name ? `Transfer ${item.bank_name}` : '',
-      operational_category: defaultAccount?.category || 'Beban Operasional',
-      operational_subcategory: defaultAccount?.subcategory || 'Biaya Utilitas',
-      notes: '',
-      proof_url: '',
-    };
-    setPaymentForm(nextPaymentForm);
-    setPaymentInitialSnapshot(JSON.stringify(nextPaymentForm));
-  };
-
-  const handleSubmitPayment = async () => {
-    if (!paymentItem) return;
+  const forwardToOperationalExpenseForm = (item: RecurringExpense) => {
     if (!canPay) {
       toast.error('Akses bayar Pengeluaran Rutin belum aktif untuk akun ini.');
       return;
@@ -697,67 +730,45 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
       return;
     }
 
-    const amount = Number(paymentForm.amount);
-    if (!paymentForm.paid_at || !amount || amount <= 0 || !paymentForm.operational_category || !paymentForm.operational_subcategory) {
-      toast.error('Tanggal bayar, nominal, kategori, dan subkategori wajib diisi.');
+    if (isPaidForPeriod(item)) {
+      toast.info('Tagihan periode ini sudah tercatat di Biaya Operasional.');
       return;
     }
 
-    setIsPaying(true);
+    if (typeof window === 'undefined') return;
+
+    const defaultAccount = getDefaultOperationalAccount(item.category);
+    const dueDate = getDueDateForPeriod(item, currentPeriodKey);
+    const periodLabel = formatPeriodLabel(currentPeriodKey);
+    const sourceRef = getRecurringExpenseSourceRef(item.id, currentPeriodKey);
+
+    const draft: OperationalExpenseForwardDraft = {
+      source: 'recurring-expense',
+      source_type: 'recurring',
+      transaction_id: item.id,
+      recurring_expense_id: item.id,
+      period_key: currentPeriodKey,
+      due_date: dueDate,
+      expense_date: todayDateInput(),
+      branch_id: item.branch_id || '',
+      category: defaultAccount?.category || 'Beban Operasional',
+      subcategory: defaultAccount?.subcategory || 'Biaya Utilitas',
+      vendor_name: item.name,
+      description: `Pembayaran rutin ${item.name} periode ${periodLabel}`,
+      amount: String(item.amount || ''),
+      payment_source: item.bank_name ? `Transfer ${item.bank_name}` : '',
+      source_ref: sourceRef,
+      notes: item.description || '',
+      auto_save: false,
+      created_at: new Date().toISOString(),
+    };
+
     try {
-      const dueDate = getDueDateForPeriod(paymentItem, currentPeriodKey);
-      const paymentPayload = {
-        p_recurring_expense_id: paymentItem.id,
-        p_period_key: currentPeriodKey,
-        p_due_date: dueDate,
-        p_paid_at: paymentForm.paid_at,
-        p_amount: amount,
-        p_payment_source: paymentForm.payment_source,
-        p_operational_category: paymentForm.operational_category,
-        p_operational_subcategory: paymentForm.operational_subcategory,
-        p_vendor_name: paymentItem.name,
-        p_description: `Pembayaran rutin ${paymentItem.name} periode ${currentPeriodKey}`,
-        p_branch_id: paymentItem.branch_id || '',
-        p_notes: paymentForm.notes,
-        p_proof_url: paymentForm.proof_url,
-        p_paid_by: currentUser?.id || '',
-        p_paid_by_name: currentUser?.name || currentUser?.email || 'System',
-      };
-
-      try {
-        const headers = await getSessionBackedEdgeHeaders({ includeJsonContentType: true });
-        const response = await fetch(RECURRING_EXPENSE_PAY_URL, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(paymentPayload),
-        });
-
-        await parseJsonResponse(response, 'Gagal mencatat pembayaran');
-      } catch (edgeError) {
-        console.warn('Falling back to direct recurring expense payment RPC:', edgeError);
-        const { error } = await supabase.rpc('pay_recurring_expense', paymentPayload);
-        if (error) throw error;
-      }
-
-      toast.success('Pembayaran tersimpan dan masuk ke Biaya Operasional.');
-      setPaymentItem(null);
-      setPaymentInitialSnapshot('');
-      await fetchExpenses();
-
-      if (currentUser) {
-        logActivity(
-          { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-          "PAYMENT",
-          "Pengeluaran Rutin",
-          `Mencatat pembayaran ${paymentItem.name} periode ${currentPeriodKey}`,
-          paymentItem.id,
-          { amount, periodKey: currentPeriodKey }
-        );
-      }
-    } catch (err: any) {
-      toast.error("Gagal mencatat pembayaran: " + (err?.message || 'Unknown error'));
-    } finally {
-      setIsPaying(false);
+      window.localStorage.setItem(OPERATIONAL_EXPENSE_FORWARD_DRAFT_KEY, JSON.stringify(draft));
+      window.location.assign('/finance/operational-expenses?draft=recurring-expense');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Draft tidak bisa disimpan.';
+      toast.error(`Gagal membuka form Biaya Operasional: ${message}`);
     }
   };
 
@@ -862,179 +873,172 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
      };
 
      return (
-         <form onSubmit={handleSubmit} className={cn("space-y-4", isMobile ? "pb-4" : "")}>
-             <div className="space-y-2">
-                 <Label>Nama Tagihan / Pengeluaran</Label>
-                 <Input 
-                    required 
-                    value={formData.name} 
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                    placeholder="Contoh: Sewa Ruko, Internet Indihome"
-                 />
-             </div>
+       <form onSubmit={handleSubmit} className="masterDataManagedForm recurringExpenseManagedForm">
+         <MasterDataDialogBody>
+           <MasterDataFormGrid>
+             <MasterDataFormField span="full">
+               <MasterDataFieldLabel required>Nama Pengeluaran</MasterDataFieldLabel>
+               <Input
+                 required
+                 value={formData.name || ''}
+                 onChange={e => setFormData({ ...formData, name: e.target.value })}
+                 placeholder="Contoh: Sewa Ruko, Internet Indihome"
+               />
+             </MasterDataFormField>
 
-             <div className="space-y-2">
-                 <Label>No. WhatsApp (Opsional)</Label>
-                 <Input 
-                    value={formData.whatsapp} 
-                    onChange={e => {
-                        const val = e.target.value.replace(/\D/g, '');
-                        setFormData({...formData, whatsapp: val});
-                    }}
-                    placeholder="Contoh: 08123456789"
-                 />
-                 <p className="text-[10px] text-slate-500">
-                    *Nomor WA untuk reminder tagihan (mulai dengan 08/62)
-                 </p>
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel required>Kategori</MasterDataFieldLabel>
+               <Select
+                 value={formData.category}
+                 onValueChange={val => setFormData({ ...formData, category: val })}
+               >
+                 <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
+                 <SelectContent>
+                   {RECURRING_CATEGORY_OPTIONS.map((option) => (
+                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </MasterDataFormField>
 
-             <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                     <Label>Kategori</Label>
-                     <Select 
-                        value={formData.category} 
-                        onValueChange={val => setFormData({...formData, category: val})}
-                     >
-                         <SelectTrigger><SelectValue /></SelectTrigger>
-                         <SelectContent>
-                             <SelectItem value="operational">Operasional</SelectItem>
-                             <SelectItem value="rent">Sewa Tempat</SelectItem>
-                             <SelectItem value="salary">Gaji Karyawan</SelectItem>
-                             <SelectItem value="platform">Biaya Platform</SelectItem>
-                             <SelectItem value="marketing">Marketing / Iklan</SelectItem>
-                             <SelectItem value="other">Lainnya</SelectItem>
-                         </SelectContent>
-                     </Select>
-                 </div>
-                 <div className="space-y-2">
-                     <Label>Estimasi Nominal (Rp)</Label>
-                     <Input 
-                        value={formData.amount ? formData.amount.toLocaleString('id-ID') : ''}
-                        onChange={e => {
-                            // Remove non-digit chars
-                            const rawValue = e.target.value.replace(/\D/g, '');
-                            setFormData({...formData, amount: Number(rawValue)});
-                        }}
-                        placeholder="0"
-                     />
-                 </div>
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel required>Estimasi Nominal</MasterDataFieldLabel>
+               <MasterDataCurrencyInput
+                 value={formData.amount || ''}
+                 onValueChange={(value) => setFormData({ ...formData, amount: Number(value) })}
+                 placeholder="0"
+               />
+             </MasterDataFormField>
 
-             <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                     <Label>Siklus Pembayaran</Label>
-                     <Select 
-                        value={formData.cycle} 
-                        onValueChange={val => setFormData({...formData, cycle: val as any})}
-                     >
-                         <SelectTrigger><SelectValue /></SelectTrigger>
-                         <SelectContent>
-                             <SelectItem value="monthly">Bulanan</SelectItem>
-                             <SelectItem value="yearly">Tahunan</SelectItem>
-                             <SelectItem value="one_time">Sekali Bayar</SelectItem>
-                         </SelectContent>
-                     </Select>
-                 </div>
-                 <div className="space-y-2">
-                     <Label>Tanggal Jatuh Tempo</Label>
-                     <Input 
-                        type="number" 
-                        min="1" max="31"
-                        value={formData.due_date} 
-                        onChange={e => setFormData({...formData, due_date: Number(e.target.value)})}
-                        placeholder="Tgl 1-31"
-                     />
-                     <p className="text-[10px] text-slate-500">
-                        *Masukkan tanggal jatuh tempo (contoh: 25)
-                     </p>
-                 </div>
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel required>Siklus Pembayaran</MasterDataFieldLabel>
+               <Select
+                 value={formData.cycle}
+                 onValueChange={val => setFormData({ ...formData, cycle: val as RecurringExpense['cycle'] })}
+               >
+                 <SelectTrigger><SelectValue placeholder="Pilih siklus" /></SelectTrigger>
+                 <SelectContent>
+                   {RECURRING_CYCLE_OPTIONS.map((option) => (
+                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </MasterDataFormField>
 
-             <div className="space-y-2">
-                 <Label>Cabang (Opsional)</Label>
-                 <Select 
-                    value={formData.branch_id || 'all'} 
-                    onValueChange={val => setFormData({...formData, branch_id: val})}
-                 >
-                     <SelectTrigger><SelectValue placeholder="Pilih Cabang" /></SelectTrigger>
-                     <SelectContent>
-                         <SelectItem value="all">Semua Cabang / Kantor Pusat</SelectItem>
-                         {activeBranches.map((b: any) => (
-                             <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                         ))}
-                     </SelectContent>
-                 </Select>
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel
+                 required
+                 info={{
+                   title: 'Tanggal jatuh tempo',
+                   description: 'Isi angka 1 sampai 31. Untuk bulan yang lebih pendek, sistem otomatis memakai tanggal terakhir bulan itu.',
+                 }}
+               >
+                 Tanggal Jatuh Tempo
+               </MasterDataFieldLabel>
+               <Input
+                 type="number"
+                 min="1"
+                 max="31"
+                 value={formData.due_date || 1}
+                 onChange={e => setFormData({ ...formData, due_date: Number(e.target.value) })}
+                 placeholder="Tgl 1-31"
+               />
+             </MasterDataFormField>
 
-             <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-                 <Label className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Info Rekening / Transfer (Opsional)</Label>
-                 <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                         <Label>Nama Bank</Label>
-                         <Input 
-                            value={formData.bank_name} 
-                            onChange={e => setFormData({...formData, bank_name: e.target.value})}
-                            placeholder="BCA, Mandiri, dll"
-                         />
-                     </div>
-                     <div className="space-y-2">
-                         <Label>No. Rekening</Label>
-                         <Input 
-                            value={formData.account_number} 
-                            onChange={e => setFormData({...formData, account_number: e.target.value})}
-                            placeholder="123xxxx"
-                         />
-                     </div>
-                 </div>
-                 <div className="space-y-2">
-                     <Label>Atas Nama</Label>
-                     <Input 
-                        value={formData.account_name} 
-                        onChange={e => setFormData({...formData, account_name: e.target.value})}
-                        placeholder="Nama Pemilik Rekening"
-                     />
-                 </div>
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel optional>Cabang</MasterDataFieldLabel>
+               <Select
+                 value={formData.branch_id || 'all'}
+                 onValueChange={val => setFormData({ ...formData, branch_id: val })}
+               >
+                 <SelectTrigger><SelectValue placeholder="Pilih Cabang" /></SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="all">Umum / tanpa cabang</SelectItem>
+                   {activeBranches.map((branch: any) => (
+                     <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </MasterDataFormField>
 
-             <div className="space-y-2">
-                 <Label>Status</Label>
-                 <Select 
-                    value={formData.status} 
-                    onValueChange={val => setFormData({...formData, status: val as any})}
-                 >
-                     <SelectTrigger><SelectValue /></SelectTrigger>
-                     <SelectContent>
-                         <SelectItem value="active">Aktif</SelectItem>
-                         <SelectItem value="inactive">Tidak Aktif</SelectItem>
-                     </SelectContent>
-                 </Select>
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel optional>No. WhatsApp</MasterDataFieldLabel>
+               <Input
+                 value={formData.whatsapp || ''}
+                 onChange={e => {
+                   const val = e.target.value.replace(/\D/g, '');
+                   setFormData({ ...formData, whatsapp: val });
+                 }}
+                 placeholder="Contoh: 08123456789"
+               />
+             </MasterDataFormField>
 
-             <div className="space-y-2">
-                 <Label>Keterangan Tambahan</Label>
-                 <Textarea 
-                    value={formData.description} 
-                    onChange={e => setFormData({...formData, description: e.target.value})}
-                    placeholder="Catatan..."
-                    className="resize-none"
-                    rows={3}
-                 />
-             </div>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel optional>Nama Bank</MasterDataFieldLabel>
+               <Input
+                 value={formData.bank_name || ''}
+                 onChange={e => setFormData({ ...formData, bank_name: e.target.value })}
+                 placeholder="BCA, Mandiri, Bank Jago..."
+               />
+             </MasterDataFormField>
 
-             <MasterDataFormActions
-               onCancel={onClose}
-               saveLabel={item ? 'Simpan Perubahan' : 'Simpan Pengeluaran'}
-               isSubmitting={isSubmitting}
-               className={cn(isMobile && "flex-col-reverse")}
-             />
-         </form>
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel optional>No. Rekening</MasterDataFieldLabel>
+               <Input
+                 value={formData.account_number || ''}
+                 onChange={e => setFormData({ ...formData, account_number: e.target.value })}
+                 placeholder="123xxxx"
+               />
+             </MasterDataFormField>
+
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel optional>Atas Nama</MasterDataFieldLabel>
+               <Input
+                 value={formData.account_name || ''}
+                 onChange={e => setFormData({ ...formData, account_name: e.target.value })}
+                 placeholder="Nama pemilik rekening"
+               />
+             </MasterDataFormField>
+
+             <MasterDataFormField span="half">
+               <MasterDataFieldLabel>Status</MasterDataFieldLabel>
+               <Select
+                 value={formData.status}
+                 onValueChange={val => setFormData({ ...formData, status: val as RecurringExpense['status'] })}
+               >
+                 <SelectTrigger><SelectValue /></SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="active">Aktif</SelectItem>
+                   <SelectItem value="inactive">Tidak Aktif</SelectItem>
+                 </SelectContent>
+               </Select>
+             </MasterDataFormField>
+
+             <MasterDataFormField span="full">
+               <MasterDataFieldLabel optional>Keterangan</MasterDataFieldLabel>
+               <Textarea
+                 value={formData.description || ''}
+                 onChange={e => setFormData({ ...formData, description: e.target.value })}
+                 placeholder="Catatan tambahan..."
+                 rows={4}
+               />
+             </MasterDataFormField>
+           </MasterDataFormGrid>
+         </MasterDataDialogBody>
+
+         <MasterDataFormActions
+           onCancel={onClose}
+           saveLabel={item ? 'Simpan Perubahan' : 'Simpan Pengeluaran'}
+           isSubmitting={isSubmitting}
+           className={cn(isMobile && "flex-col-reverse")}
+         />
+       </form>
      );
   };
 
   const renderExpenseRow = (item: RecurringExpense, index: number) => {
-    const branchName = item.branch_id ? branches.find(b => b.id === item.branch_id)?.name : 'Semua Cabang';
+    const branchName = item.branch_id ? branches.find(b => b.id === item.branch_id)?.name : 'Umum / tanpa cabang';
     const statusMeta = getExpenseStatus(item);
-    const { label, color } = statusMeta;
     const isPaid = statusMeta.status === 'paid';
     const dueDate = statusMeta.displayDueDate;
     const nextDueDate = statusMeta.nextDueDate;
@@ -1044,181 +1048,125 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     return (
       <TableRow
         key={item.id}
-        className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors"
+        className="recurringExpenseClickableRow"
+        tabIndex={0}
+        onClick={() => setViewingItem(item)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setViewingItem(item);
+          }
+        }}
       >
-        <TableCell className="py-4 pl-6 text-slate-500 font-mono text-xs">
-          {index + 1}
+        <TableCell className="recurringExpenseNumberCell">{index + 1}</TableCell>
+        <TableCell>
+          <TableText
+            primary={item.name}
+            secondary={item.description || 'Pengeluaran rutin'}
+            title={`${item.name}${item.description ? ` - ${item.description}` : ''}`}
+          />
         </TableCell>
-        <TableCell className="py-4 font-medium text-slate-900 dark:text-slate-200 text-sm">
-          <div className="flex flex-col">
-            <span className="font-semibold">{item.name}</span>
-            {item.description && <span className="text-xs text-slate-400">{item.description}</span>}
-          </div>
+        <TableCell>
+          <TableText
+            primary={getRecurringCategoryLabel(item.category)}
+            secondary={`${getRecurringCycleLabel(item.cycle)} - ${branchName || '-'}`}
+          />
         </TableCell>
-        <TableCell className="py-4">
-          <Badge variant="outline" className="capitalize text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800">
-            {item.category === 'platform' ? 'Platform Fee' : item.category}
-          </Badge>
+        <TableCell className="recurringExpenseAmountCell">
+          {item.amount > 0 ? formatCurrency(item.amount) : '-'}
         </TableCell>
-        <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400">
-          {item.whatsapp ? (
-            <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-md w-fit font-mono text-xs">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-3.5 h-3.5" alt="WA" />
-              {item.whatsapp}
-            </div>
-          ) : (
-            <span className="text-slate-400 text-xs">-</span>
-          )}
-        </TableCell>
-        <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400">
-          {item.account_number ? (
-            <div className="flex flex-col">
-              <span className="font-medium text-slate-700 dark:text-slate-300 font-mono text-xs">
-                {item.bank_name ? `${item.bank_name} ` : ''}{item.account_number}
-              </span>
-              {item.account_name && (
-                <span className="text-xs text-slate-500">
-                  a.n {item.account_name}
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="text-slate-400 text-xs">-</span>
-          )}
-        </TableCell>
-        <TableCell className="py-4 font-mono text-slate-700 dark:text-slate-300">
-          {item.amount > 0 ? `Rp ${Number(item.amount).toLocaleString('id-ID')}` : '-'}
-        </TableCell>
-        <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400 capitalize">
-          <div className="flex items-center gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
-            {item.cycle === 'monthly' ? 'Bulanan' : item.cycle === 'yearly' ? 'Tahunan' : 'Sekali'}
-          </div>
-        </TableCell>
-        <TableCell className="py-4 text-sm">
+        <TableCell>
           {isPaid ? (
-            <div className="flex min-w-[150px] flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                {formatPeriodLabel(currentPeriodKey)}
-              </span>
-              <Badge variant="outline" className={cn("w-fit font-medium border px-2 py-0.5 whitespace-nowrap", color)}>
-                <CheckCircle2 className="w-3 h-3 mr-1.5" />
-                {label}
-              </Badge>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                Tempo: {formatDateLabel(dueDate)}
-              </span>
-              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                Dibayar: {formatDateLabel(statusMeta.paidAt)}
-              </span>
-            </div>
+            <TableText
+              primary={`Dibayar ${formatDateLabel(statusMeta.paidAt)}`}
+              secondary={`Tempo ${formatDateLabel(dueDate)} - berikutnya ${nextDueDate ? formatDateLabel(nextDueDate) : '-'}`}
+            />
           ) : (
-            <div className="flex min-w-[130px] flex-col gap-1">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                Jatuh tempo
-              </span>
-              <span className="font-medium text-slate-800 dark:text-slate-100">
-                {formatDateLabel(dueDate)}
-              </span>
-              <Badge variant="outline" className={cn("w-fit font-medium border px-2 py-0.5 whitespace-nowrap", color)}>
-                <Clock className="w-3 h-3 mr-1.5" />
-                {label}
+            <div className="recurringExpenseDueStack">
+              <TableText
+                primary={formatDateLabel(dueDate)}
+                secondary={nextDueDate ? `Berikutnya ${formatDateLabel(nextDueDate)}` : 'Jatuh tempo'}
+              />
+              <Badge variant="outline" className={cn('recurringExpenseDueBadge', statusMeta.color)}>
+                <Clock className="mr-1.5 h-3 w-3" />
+                {statusMeta.label}
               </Badge>
             </div>
           )}
         </TableCell>
-        <TableCell className="py-4 text-sm">
-          {nextDueDate ? (
-            <div className="flex min-w-[130px] flex-col gap-1">
-              <span className="font-medium text-slate-800 dark:text-slate-100">
-                {formatDateLabel(nextDueDate)}
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {isPaid ? 'Tagihan berikutnya' : 'Setelah periode ini'}
-              </span>
-            </div>
-          ) : (
-            <span className="text-xs text-slate-400">-</span>
-          )}
-        </TableCell>
-        <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-400">
-          <div className="flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-slate-400" />
-            {branchName || '-'}
-          </div>
+        <TableCell>
+          <TableText
+            primary={item.account_number ? `${item.bank_name || 'Bank'} ${item.account_number}` : item.whatsapp || '-'}
+            secondary={
+              item.account_number
+                ? [item.account_name ? `a.n ${item.account_name}` : '', item.whatsapp ? `WA ${item.whatsapp}` : ''].filter(Boolean).join(' - ')
+                : 'Kontak / rekening belum diisi'
+            }
+          />
         </TableCell>
         <TableStatusCell>
-          <TableStatusIcon
-            className={cn(canEdit && !isStatusUpdating && 'cursor-pointer')}
-            label={
-              isStatusUpdating
-                ? 'Update status'
-                : item.status === 'active'
-                  ? 'Aktif'
-                  : 'Non aktif'
-            }
-            onClick={() => {
+          <TableStatusSwitch
+            checked={item.status === 'active'}
+            loading={isStatusUpdating}
+            disabled={!canEdit}
+            onClick={(event) => {
+              event.stopPropagation();
               if (!canEdit || isStatusUpdating) return;
               void handleToggleStatus(item, item.status !== 'active');
             }}
-            tone={isStatusUpdating ? 'soon' : item.status === 'active' ? 'active' : 'inactive'}
+            onLabel="Aktif"
+            offLabel="Nonaktif"
           />
         </TableStatusCell>
-        <TableActionCell>
-            {isPaid ? (
-              <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700" variant="outline">
-                <CheckCircle2 className="mr-1.5 h-3 w-3" />
-                Clear
-              </Badge>
-            ) : item.status === 'active' && canPay ? (
-              <Button
-                size="sm"
-                variant={paymentActionDisabled ? 'outline' : 'default'}
-                className={cn(
-                  "h-8 px-3 text-xs",
-                  paymentActionDisabled
-                    ? "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-50"
-                    : "",
-                )}
-                disabled={paymentActionDisabled}
-                onClick={() => openPaymentDialog(item)}
-                title={
-                  !canCreateOperationalExpense
-                    ? 'Butuh akses tambah Biaya Operasional.'
-                    : undefined
-                }
-              >
-                {paymentActionDisabled ? (
-                  <AlertCircle className="mr-1.5 h-3.5 w-3.5" />
-                ) : (
-                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Bayar
-              </Button>
-            ) : null}
+        <TableActionCell onClick={(event) => event.stopPropagation()}>
+          {isPaid ? (
+            <Badge className="recurringExpenseClearBadge" variant="outline">
+              <CheckCircle2 className="mr-1.5 h-3 w-3" />
+              Clear
+            </Badge>
+          ) : item.status === 'active' && canPay ? (
+            <Button
+              size="sm"
+              variant={paymentActionDisabled ? 'outline' : 'default'}
+              className={cn('recurringExpensePayButton', paymentActionDisabled && 'isDisabled')}
+              disabled={paymentActionDisabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                forwardToOperationalExpenseForm(item);
+              }}
+              title={!canCreateOperationalExpense ? 'Butuh akses tambah Biaya Operasional.' : undefined}
+            >
+              {paymentActionDisabled ? (
+                <AlertCircle className="mr-1.5 h-3.5 w-3.5" />
+              ) : (
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Bayar
+            </Button>
+          ) : null}
 
-            <TableActionMenu contentClassName="w-48">
-                <TableActionMenuItem icon={Eye} onClick={() => setViewingItem(item)}>
-                  Lihat Detail
-                </TableActionMenuItem>
-                {canEdit && (
-                  <TableActionMenuItem
-                    icon={Edit}
-                    onClick={() => {
-                      setEditingItem(item);
-                      setExpenseFormDirty(false);
-                      setIsAddOpen(true);
-                    }}
-                  >
-                    Edit Data
-                  </TableActionMenuItem>
-                )}
-                {canDelete && (
-                  <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
-                    Hapus
-                  </TableActionMenuItem>
-                )}
-            </TableActionMenu>
+          <TableActionMenu contentClassName="w-48">
+            <TableActionMenuItem icon={Eye} onClick={() => setViewingItem(item)}>
+              Lihat Detail
+            </TableActionMenuItem>
+            {canEdit && (
+              <TableActionMenuItem
+                icon={Edit}
+                onClick={() => {
+                  setEditingItem(item);
+                  setExpenseFormDirty(false);
+                  setIsAddOpen(true);
+                }}
+              >
+                Edit Data
+              </TableActionMenuItem>
+            )}
+            {canDelete && (
+              <TableActionMenuItem danger icon={Trash2} onClick={() => setDeletingItem(item)}>
+                Hapus
+              </TableActionMenuItem>
+            )}
+          </TableActionMenu>
         </TableActionCell>
       </TableRow>
     );
@@ -1237,26 +1185,24 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
 
         <OperationalTableCard>
           <DataTable
-            actionWidth={82}
-            cellY={12}
-            columns={[64, 230, 180, 150, 220, 150, 120, 145, 175, 160, 120, 82]}
-            minWidth={1798}
+            actionWidth={154}
+            cellY={14}
+            className="recurringExpenseDataTable"
+            columns={[64, 330, 240, 170, 260, 290, 136, 154]}
+            minWidth={1644}
             rowMinHeight={82}
+            secondaryLines={2}
           >
             <table>
-              <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                  <TableHead className="w-[50px] font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6">No</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nama Pengeluaran</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Kategori</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">No. WA</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Info Rekening</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nominal Est.</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Siklus</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Jatuh Tempo</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan Selanjutnya</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Cabang</TableHead>
-                  <TableHead className="text-center font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Status</TableHead>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>No</TableHead>
+                  <TableHead>Pengeluaran</TableHead>
+                  <TableHead>Kategori / Cabang</TableHead>
+                  <TableHead>Nominal</TableHead>
+                  <TableHead>Tempo Pembayaran</TableHead>
+                  <TableHead>Rekening / Kontak</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableActionHeader />
                 </TableRow>
               </TableHeader>
@@ -1285,30 +1231,28 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
         <OperationalEmptyState
           icon={CheckCircle2}
           title="Semua tagihan bulan ini clear"
-          description="Pembayaran yang sudah dicatat ada di tab Sudah Dibayar."
+          description="Transaksi yang sudah dicatat ada di tab History Transaksi."
         />
       ) : (
         <DataTable
-          actionWidth={82}
-          cellY={12}
-          columns={[64, 230, 180, 150, 220, 150, 120, 145, 175, 160, 120, 82]}
-          minWidth={1798}
+          actionWidth={154}
+          cellY={14}
+          className="recurringExpenseDataTable"
+          columns={[64, 330, 240, 170, 260, 290, 136, 154]}
+          minWidth={1644}
           rowMinHeight={82}
+          secondaryLines={2}
         >
           <table>
-            <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-              <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                <TableHead className="w-[50px] font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4 pl-6">No</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nama Pengeluaran</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Kategori</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">No. WA</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Info Rekening</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nominal Est.</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Siklus</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Jatuh Tempo</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan Selanjutnya</TableHead>
-                <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Cabang</TableHead>
-                <TableHead className="text-center font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Status</TableHead>
+            <TableHeader>
+              <TableRow>
+                <TableHead>No</TableHead>
+                <TableHead>Pengeluaran</TableHead>
+                <TableHead>Kategori / Cabang</TableHead>
+                <TableHead>Nominal</TableHead>
+                <TableHead>Tempo Pembayaran</TableHead>
+                <TableHead>Rekening / Kontak</TableHead>
+                <TableHead>Status</TableHead>
                 <TableActionHeader />
               </TableRow>
             </TableHeader>
@@ -1325,8 +1269,8 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     <OperationalTableCard>
       <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Sudah Dibayar - {currentPeriodKey}</h3>
-          <p className="text-sm text-slate-500">History pembayaran yang sudah masuk Biaya Operasional.</p>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">History Transaksi - {currentPeriodKey}</h3>
+          <p className="text-sm text-slate-500">Transaksi rutin yang sudah tersimpan di Biaya Operasional.</p>
         </div>
         <Badge variant="outline" className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700">
           {paidRows.length} clear
@@ -1336,98 +1280,92 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
         <OperationalEmptyState
           icon={Wallet}
           title="Belum ada pembayaran bulan ini"
-          description="Pembayaran akan muncul di sini setelah form Bayar disimpan."
+          description="Transaksi akan muncul di sini setelah form Biaya Operasional disimpan."
         />
       ) : (
         <DataTable
-          actionWidth={82}
-          cellY={12}
-          columns={[250, 145, 160, 175, 220, 170, 150, 120, 160, 82]}
-          minWidth={1632}
+          actionWidth={86}
+          cellY={14}
+          className="recurringExpenseDataTable"
+          columns={[64, 300, 210, 210, 260, 190, 170, 150, 86]}
+          minWidth={1640}
           rowMinHeight={82}
+          secondaryLines={2}
         >
           <table>
-            <TableHeader className="bg-slate-50/50 dark:bg-slate-700/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                  <TableHead className="pl-6 font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Jatuh Tempo</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tanggal Bayar</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Tagihan Selanjutnya</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Kategori Operasional</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Sumber Dana</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Nominal</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Bukti</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-xs uppercase tracking-wider py-4">Input Oleh</TableHead>
+            <TableHeader>
+                <TableRow>
+                  <TableHead>No</TableHead>
+                  <TableHead>Tagihan</TableHead>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Tagihan Selanjutnya</TableHead>
+                  <TableHead>Kategori Operasional</TableHead>
+                  <TableHead>Sumber Dana</TableHead>
+                  <TableHead>Nominal</TableHead>
+                  <TableHead>Bukti / Input</TableHead>
                   <TableActionHeader />
                 </TableRow>
             </TableHeader>
             <TableBody>
-              {paidRows.map((payment) => {
+              {paidRows.map((payment, index) => {
                 const expense = expenses.find((item) => item.id === payment.recurring_expense_id);
                 const dueDate = payment.due_date || (expense ? getDueDateForPeriod(expense, payment.period_key) : null);
                 const nextDueDate = expense ? getNextDueDateAfterPeriod(expense, payment.period_key) : null;
                 return (
                   <TableRow
                     key={payment.id}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors"
+                    className="recurringExpenseClickableRow"
+                    tabIndex={0}
+                    onClick={() => setViewingPayment(payment)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setViewingPayment(payment);
+                      }
+                    }}
                   >
-                    <TableCell className="py-4 pl-6">
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">
-                        {expense?.name || payment.vendor_name || 'Pengeluaran rutin'}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        Periode {formatPeriodLabel(payment.period_key)}
-                      </div>
-                      <div className="mt-0.5 text-xs text-slate-400">
-                        {payment.operational_expense_id ? `Ledger: ${payment.operational_expense_id.slice(0, 8)}` : 'Belum ada link ledger'}
-                      </div>
+                    <TableCell className="recurringExpenseNumberCell">{index + 1}</TableCell>
+                    <TableCell>
+                      <TableText
+                        primary={expense?.name || payment.vendor_name || 'Pengeluaran rutin'}
+                        secondary={`Periode ${formatPeriodLabel(payment.period_key)}${payment.operational_expense_id ? ` - Ledger ${payment.operational_expense_id.slice(0, 8)}` : ''}`}
+                      />
                     </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-700 dark:text-slate-200">{formatDateLabel(dueDate)}</TableCell>
-                    <TableCell className="py-4">
-                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                        <CheckCircle2 className="mr-1.5 h-3 w-3" />
-                        {formatDateLabel(payment.paid_at)}
-                      </Badge>
+                    <TableCell>
+                      <TableText
+                        primary={`Bayar ${formatDateLabel(payment.paid_at)}`}
+                        secondary={`Tempo ${formatDateLabel(dueDate)}`}
+                      />
                     </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-700 dark:text-slate-200">
-                      {nextDueDate ? (
-                        <div className="flex flex-col">
-                          <span>{formatDateLabel(nextDueDate)}</span>
-                          <span className="text-xs text-slate-400">Tagihan berikutnya</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400">Selesai</span>
-                      )}
+                    <TableCell>
+                      <TableText
+                        primary={nextDueDate ? formatDateLabel(nextDueDate) : 'Selesai'}
+                        secondary={nextDueDate ? 'Tagihan berikutnya' : 'Tidak ada periode berikutnya'}
+                      />
                     </TableCell>
-                    <TableCell className="py-4">
-                      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">{payment.operational_category || '-'}</div>
-                      <div className="text-xs text-slate-500">{payment.operational_subcategory || '-'}</div>
+                    <TableCell>
+                      <TableText
+                        primary={payment.operational_category || '-'}
+                        secondary={payment.operational_subcategory || '-'}
+                      />
                     </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-300">{payment.payment_source || '-'}</TableCell>
-                    <TableCell className="py-4 font-mono font-semibold text-slate-800 dark:text-slate-100">{formatCurrency(payment.amount)}</TableCell>
-                    <TableCell className="py-4">
-                      {payment.proof_url ? (
-                        <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
-                          Ada bukti
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-500">
-                          Belum ada
-                        </Badge>
-                      )}
+                    <TableCell>
+                      <TableText primary={payment.payment_source || '-'} secondary={payment.vendor_name || '-'} />
                     </TableCell>
-                    <TableCell className="py-4 text-sm text-slate-600 dark:text-slate-300">{payment.paid_by_name || '-'}</TableCell>
-                    <TableCell className="py-4 pr-6 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                        onClick={() => setViewingPayment(payment)}
-                        title="Lihat detail pembayaran"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                    <TableCell className="recurringExpenseAmountCell">{formatCurrency(payment.amount)}</TableCell>
+                    <TableCell>
+                      <TableText
+                        primary={payment.proof_url ? 'Ada bukti' : 'Belum ada bukti'}
+                        secondary={`Input: ${payment.paid_by_name || '-'}`}
+                      />
                     </TableCell>
+                    <TableActionCell onClick={(event) => event.stopPropagation()}>
+                      <TableActionMenu contentClassName="w-48">
+                        <TableActionMenuItem icon={Eye} onClick={() => setViewingPayment(payment)}>
+                          Lihat Detail
+                        </TableActionMenuItem>
+                      </TableActionMenu>
+                    </TableActionCell>
                   </TableRow>
                 );
               })}
@@ -1448,9 +1386,15 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
     viewingPayment && viewingPaymentExpense
       ? getNextDueDateAfterPeriod(viewingPaymentExpense, viewingPayment.period_key)
       : null;
+  const viewingItemStatus = viewingItem ? getExpenseStatus(viewingItem) : null;
+  const viewingItemNextDueDate = viewingItemStatus?.nextDueDate || null;
+  const viewingItemHistory = viewingItem ? getPaymentHistoryForItem(viewingItem).slice(0, 5) : [];
+  const viewingItemBranchName = viewingItem?.branch_id
+    ? branches.find((branch) => branch.id === viewingItem.branch_id)?.name || '-'
+    : 'Umum / tanpa cabang';
 
   return (
-    <div className="masterDataTabSurface">
+    <div className="masterDataTabSurface recurringExpensesPage">
       <OperationalPageHeader
         title="Pengeluaran Rutin"
         eyebrow="Finance"
@@ -1536,7 +1480,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           {[
             { id: 'schedule' as const, label: 'Jadwal', count: activeItems.length + inactiveItems.length },
             { id: 'unpaid' as const, label: 'Belum Dibayar', count: unpaidItems.length },
-            { id: 'paid' as const, label: 'Sudah Dibayar', count: paidRows.length },
+            { id: 'paid' as const, label: 'History Transaksi', count: paidRows.length },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1591,246 +1535,23 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
       <Dialog open={isAddOpen} onOpenChange={(open) => {
         if (!open) expenseFormCloseGuard.requestClose();
       }}>
-        <MasterDataFormDialogContent size="wide">
-          <DialogHeader>
-            <DialogTitle>{editingItem ? 'Edit Pengeluaran Rutin' : 'Tambah Pengeluaran Rutin'}</DialogTitle>
-            <DialogDescription>
-              Kelola data pengeluaran rutin untuk estimasi cashflow dan reminder.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-6">
-            <ExpenseForm
-              item={editingItem}
-              onClose={expenseFormCloseGuard.requestClose}
-              onDirtyChange={setExpenseFormDirty}
-              onSaved={closeExpenseFormDialog}
-            />
-          </div>
+        <MasterDataFormDialogContent size="wide" className="recurringExpenseFormDialog">
+          <MasterDataFormHeader
+            icon={ReceiptText}
+            title={editingItem ? 'Edit Pengeluaran Rutin' : 'Tambah Pengeluaran Rutin'}
+            description="Kelola tagihan berulang, nominal estimasi, cabang, kontak vendor, dan rekening pembayaran."
+          />
+          <ExpenseForm
+            item={editingItem}
+            onClose={expenseFormCloseGuard.requestClose}
+            onDirtyChange={setExpenseFormDirty}
+            onSaved={closeExpenseFormDialog}
+          />
         </MasterDataFormDialogContent>
         <MasterDataUnsavedChangesDialog
           open={expenseFormCloseGuard.isConfirmOpen}
           onCancel={expenseFormCloseGuard.cancelClose}
           onConfirm={expenseFormCloseGuard.confirmClose}
-        />
-      </Dialog>
-
-      <Dialog open={!!paymentItem} onOpenChange={(open) => {
-        if (!open && !isPaying && !isUploadingProof) paymentFormCloseGuard.requestClose();
-      }}>
-        <MasterDataFormDialogContent size="wide">
-          <DialogHeader>
-            <DialogTitle>Catat Pembayaran Rutin</DialogTitle>
-            <DialogDescription>
-              Pembayaran akan masuk ke history dan otomatis membuat Biaya Operasional.
-            </DialogDescription>
-          </DialogHeader>
-
-          {paymentItem && (
-            <div className="space-y-4 py-2">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
-                <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">{paymentItem.name}</div>
-                <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
-                  <span>Periode {currentPeriodKey}</span>
-                  <span>Jatuh tempo {formatDateLabel(getDueDateForPeriod(paymentItem, currentPeriodKey))}</span>
-                  <span>Estimasi {formatCurrency(paymentItem.amount)}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Tanggal Bayar</Label>
-                  <Input
-                    type="date"
-                    value={paymentForm.paid_at}
-                    onChange={(event) => setPaymentForm((prev) => ({ ...prev, paid_at: event.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nominal Final</Label>
-                  <Input
-                    value={paymentForm.amount ? Number(paymentForm.amount).toLocaleString('id-ID') : ''}
-                    onChange={(event) => {
-                      const rawValue = event.target.value.replace(/\D/g, '');
-                      setPaymentForm((prev) => ({ ...prev, amount: rawValue }));
-                    }}
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Sumber Dana / Metode Bayar</Label>
-                <Input
-                  value={paymentForm.payment_source}
-                  onChange={(event) => setPaymentForm((prev) => ({ ...prev, payment_source: event.target.value }))}
-                  placeholder="Cash, BCA, Mandiri, transfer vendor..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Kategori Biaya Operasional</Label>
-                  <Select
-                    value={paymentForm.operational_category}
-                    onValueChange={(value) => {
-                      const firstSubcategory = operationalAccounts.find((account) => account.category === value)?.subcategory || '';
-                      setPaymentForm((prev) => ({
-                        ...prev,
-                        operational_category: value,
-                        operational_subcategory: firstSubcategory,
-                      }));
-                    }}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
-                    <SelectContent>
-                      {operationalCategoryOptions.map((category) => (
-                        <SelectItem key={category} value={category}>{category}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Subkategori</Label>
-                  <Select
-                    value={paymentForm.operational_subcategory}
-                    onValueChange={(value) => setPaymentForm((prev) => ({ ...prev, operational_subcategory: value }))}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Pilih subkategori" /></SelectTrigger>
-                    <SelectContent>
-                      {operationalSubcategoryOptions.map((subcategory) => (
-                        <SelectItem key={subcategory} value={subcategory}>{subcategory}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Bukti Pembayaran (Opsional)</Label>
-                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/40">
-                  <Input
-                    id="recurring-payment-proof-file"
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={handleProofFileChange}
-                    disabled={isUploadingProof || isPaying}
-                    className="sr-only"
-                  />
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {isUploadingProof ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                        ) : paymentForm.proof_url ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        ) : (
-                          <Upload className="h-4 w-4 text-slate-500" />
-                        )}
-                        <span>
-                          {isUploadingProof
-                            ? 'Mengupload bukti...'
-                            : paymentForm.proof_url
-                              ? 'Bukti pembayaran tersimpan'
-                              : 'Upload gambar bukti transfer'}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {paymentForm.proof_url
-                          ? 'Link bukti disimpan otomatis di history pembayaran.'
-                          : 'JPG, PNG, atau WebP. Gambar besar dikompres otomatis.'}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <label
-                        htmlFor="recurring-payment-proof-file"
-                        className={cn(
-                          'inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
-                          (isUploadingProof || isPaying) && 'pointer-events-none opacity-50',
-                        )}
-                      >
-                        {isUploadingProof ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Upload className="h-4 w-4" />
-                        )}
-                        {paymentForm.proof_url ? 'Ganti Bukti' : 'Pilih Gambar'}
-                      </label>
-                      {paymentForm.proof_url && (
-                        <>
-                          <a
-                            href={paymentForm.proof_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            Lihat
-                          </a>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 gap-2 text-slate-500 hover:bg-red-50 hover:text-red-600"
-                            disabled={isUploadingProof || isPaying}
-                            onClick={() => setPaymentForm((prev) => ({ ...prev, proof_url: '' }))}
-                          >
-                            <XCircle className="h-4 w-4" />
-                            Hapus
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Catatan</Label>
-                <Textarea
-                  value={paymentForm.notes}
-                  onChange={(event) => setPaymentForm((prev) => ({ ...prev, notes: event.target.value }))}
-                  placeholder="Catatan pembayaran, nomor invoice, atau info tambahan"
-                  className="resize-none"
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="masterDataFormActions">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={paymentFormCloseGuard.requestClose}
-              disabled={isPaying || isUploadingProof}
-            >
-              Batal
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSubmitPayment}
-              disabled={isPaying || isUploadingProof || !canPay || !canCreateOperationalExpense}
-              icon={
-                isPaying || isUploadingProof
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <CheckCircle2 className="h-4 w-4" />
-              }
-            >
-              {isPaying ? (
-                'Menyimpan...'
-              ) : isUploadingProof ? (
-                'Upload Bukti...'
-              ) : (
-                'Simpan Pembayaran'
-              )}
-            </Button>
-          </div>
-        </MasterDataFormDialogContent>
-        <MasterDataUnsavedChangesDialog
-          open={paymentFormCloseGuard.isConfirmOpen}
-          onCancel={paymentFormCloseGuard.cancelClose}
-          onConfirm={paymentFormCloseGuard.confirmClose}
         />
       </Dialog>
 
@@ -1861,81 +1582,54 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
 
       {/* Payment Detail Modal */}
       <Dialog open={!!viewingPayment} onOpenChange={(open) => !open && setViewingPayment(null)}>
-        <DialogContent className="sm:max-w-[620px]">
-          <DialogHeader>
-            <DialogTitle>Detail Pembayaran Rutin</DialogTitle>
-            <DialogDescription>
-              Detail pembayaran, ledger operasional, dan bukti transfer.
-            </DialogDescription>
-          </DialogHeader>
+        <MasterDataFormDialogContent size="default" className="recurringExpenseDetailDialog">
+          <MasterDataFormHeader
+            icon={CheckCircle2}
+            title="Detail Transaksi Rutin"
+            description="Ringkasan pembayaran, ledger biaya operasional, dan bukti pendukung."
+          />
 
           {viewingPayment && (
-            <div className="space-y-4 py-2">
-              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-900/40">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                      {formatPeriodLabel(viewingPayment.period_key)}
-                    </p>
-                    <h3 className="mt-1 text-base font-semibold text-slate-950 dark:text-slate-100">
-                      {viewingPaymentExpense?.name || viewingPayment.vendor_name || 'Pengeluaran rutin'}
-                    </h3>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {viewingPayment.operational_expense_id
-                        ? `Ledger ${viewingPayment.operational_expense_id}`
-                        : 'Belum ada link ledger operasional'}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700">
-                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                    Lunas
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500">Jatuh tempo</p>
-                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{formatDateLabel(viewingPaymentDueDate)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500">Tanggal bayar</p>
-                  <p className="mt-1 font-medium text-emerald-700 dark:text-emerald-300">{formatDateLabel(viewingPayment.paid_at)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500">Tagihan selanjutnya</p>
-                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
-                    {viewingPaymentNextDueDate ? formatDateLabel(viewingPaymentNextDueDate) : 'Selesai'}
+            <MasterDataDialogBody compact>
+              <div className="recurringExpenseDetailHero">
+                <div>
+                  <span>{formatPeriodLabel(viewingPayment.period_key)}</span>
+                  <h3>{viewingPaymentExpense?.name || viewingPayment.vendor_name || 'Pengeluaran rutin'}</h3>
+                  <p>
+                    {viewingPayment.operational_expense_id
+                      ? `Ledger Biaya Operasional ${viewingPayment.operational_expense_id.slice(0, 8)}`
+                      : 'Belum ada link ledger operasional'}
                   </p>
                 </div>
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500">Nominal</p>
-                  <p className="mt-1 font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(viewingPayment.amount)}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500">Kategori operasional</p>
-                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{viewingPayment.operational_category || '-'}</p>
-                  <p className="text-xs text-slate-500">{viewingPayment.operational_subcategory || '-'}</p>
-                </div>
-                <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  <p className="text-xs text-slate-500">Sumber dana</p>
-                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{viewingPayment.payment_source || '-'}</p>
-                  <p className="text-xs text-slate-500">Input oleh {viewingPayment.paid_by_name || '-'}</p>
-                </div>
+                <span className="recurringExpenseStatusPill isActive">
+                  <TableStatusIcon label="Lunas" tone="active" />
+                  Lunas
+                </span>
+              </div>
+
+              <div className="masterDataDetailRows">
+                <DetailRow label="Tanggal bayar" value={formatDateLabel(viewingPayment.paid_at)} />
+                <DetailRow label="Jatuh tempo" value={formatDateLabel(viewingPaymentDueDate)} />
+                <DetailRow label="Tagihan berikutnya" value={viewingPaymentNextDueDate ? formatDateLabel(viewingPaymentNextDueDate) : 'Selesai'} />
+                <DetailRow label="Nominal" value={formatCurrency(viewingPayment.amount)} />
+                <DetailRow label="Kategori" value={viewingPayment.operational_category || '-'} />
+                <DetailRow label="Sub Kategori" value={viewingPayment.operational_subcategory || '-'} />
+                <DetailRow label="Sumber dana" value={viewingPayment.payment_source || '-'} />
+                <DetailRow label="Input oleh" value={viewingPayment.paid_by_name || '-'} />
               </div>
 
               {viewingPayment.notes && (
-                <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Catatan</p>
+                <div className="recurringExpenseDetailNote">
+                  <span>Catatan</span>
                   {viewingPayment.notes}
                 </div>
               )}
 
-              <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+              <div className="recurringExpenseDetailCard">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bukti Transfer</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="recurringExpenseDetailCardTitle">Bukti Transfer</p>
+                    <p className="recurringExpenseDetailCardText">
                       {viewingPayment.proof_url ? 'Bukti tersimpan untuk pembayaran ini.' : 'Belum ada bukti transfer.'}
                     </p>
                   </div>
@@ -1944,7 +1638,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                       href={viewingPayment.proof_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="recurringExpenseDetailLink"
                     >
                       <ExternalLink className="h-4 w-4" />
                       Buka Bukti
@@ -1952,11 +1646,10 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                   ) : null}
                 </div>
                 {viewingPayment.proof_url ? (
-                  <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                  <div className="recurringExpenseProofPreview">
                     <img
                       src={viewingPayment.proof_url}
                       alt="Bukti transfer"
-                      className="max-h-[320px] w-full object-contain bg-white dark:bg-slate-950"
                       onError={(event) => {
                         event.currentTarget.style.display = 'none';
                       }}
@@ -1965,170 +1658,129 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
                 ) : null}
               </div>
 
-              <div className="flex justify-end pt-2">
-                <Button onClick={() => setViewingPayment(null)}>Tutup</Button>
+              <div className="masterDataFormActions">
+                <Button type="button" variant="outline" onClick={() => setViewingPayment(null)}>Tutup</Button>
               </div>
-            </div>
+            </MasterDataDialogBody>
           )}
-        </DialogContent>
+        </MasterDataFormDialogContent>
       </Dialog>
       
       {/* View Detail Modal */}
       <Dialog open={!!viewingItem} onOpenChange={(open) => !open && setViewingItem(null)}>
-        <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader>
-            <DialogTitle>Detail Pengeluaran</DialogTitle>
-            <DialogDescription>
-              Informasi lengkap mengenai pengeluaran rutin ini.
-            </DialogDescription>
-          </DialogHeader>
+        <MasterDataFormDialogContent size="wide" className="recurringExpenseDetailDialog">
+          <MasterDataFormHeader
+            icon={ReceiptText}
+            title="Detail Pengeluaran Rutin"
+            description="Ringkasan jadwal, rekening, dan history transaksi pengeluaran rutin."
+          />
           
           {viewingItem && (
-            <div className="grid gap-4 py-4">
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Nama</Label>
-                 <div className="col-span-3 font-medium text-base">{viewingItem.name}</div>
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Kategori</Label>
-                 <div className="col-span-3 capitalize">
-                    <Badge variant="outline" className="bg-slate-50">{viewingItem.category}</Badge>
-                 </div>
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Nominal</Label>
-                 <div className="col-span-3 font-mono font-medium">
-                    Rp {viewingItem.amount.toLocaleString('id-ID')}
-                 </div>
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Siklus</Label>
-                 <div className="col-span-3 capitalize text-sm">
-                    {viewingItem.cycle === 'monthly' ? 'Bulanan' : viewingItem.cycle === 'yearly' ? 'Tahunan' : 'Sekali'}
-                 </div>
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Jatuh Tempo</Label>
-                 <div className="col-span-3 text-sm">
-                    <div className="font-medium text-slate-800">
-                      {formatDateLabel(getExpenseStatus(viewingItem).displayDueDate)}
+            <MasterDataDialogBody compact>
+              <div className="recurringExpenseDetailLayout">
+                <section className="recurringExpenseDetailMain" aria-label="Ringkasan pengeluaran rutin">
+                  <div className="recurringExpenseDetailHero">
+                    <div>
+                      <span>{getRecurringCategoryLabel(viewingItem.category)}</span>
+                      <h3>{viewingItem.name}</h3>
+                      <p>{viewingItem.description || 'Pengeluaran rutin'}</p>
                     </div>
-                    <div className="text-xs text-slate-500">
-                      Tgl {viewingItem.due_date} - {getExpenseStatus(viewingItem).dueContext}
-                    </div>
-                 </div>
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Tagihan Selanjutnya</Label>
-                 <div className="col-span-3 text-sm">
-                    {getExpenseStatus(viewingItem).nextDueDate ? (
-                      <div className="font-medium text-slate-800">
-                        {formatDateLabel(getExpenseStatus(viewingItem).nextDueDate)}
-                      </div>
-                    ) : (
-                      <span className="text-slate-400">-</span>
-                    )}
-                 </div>
-               </div>
-               <div className="grid grid-cols-4 items-center gap-4">
-                 <Label className="text-right text-slate-500">Status</Label>
-                 <div className="col-span-3">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        viewingItem.status === 'active'
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-slate-200 bg-slate-50 text-slate-500",
-                      )}
-                    >
+                    <span className={cn('recurringExpenseStatusPill', viewingItem.status === 'active' ? 'isActive' : 'isInactive')}>
+                      <TableStatusIcon
+                        label={viewingItem.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                        tone={viewingItem.status === 'active' ? 'active' : 'inactive'}
+                      />
                       {viewingItem.status === 'active' ? 'Aktif' : 'Nonaktif'}
-                    </Badge>
-                 </div>
-               </div>
-               
-               <div className="border-t border-slate-100 my-1"></div>
-               
-               <div className="grid grid-cols-4 items-start gap-4">
-                 <Label className="text-right text-slate-500 mt-2">Rekening</Label>
-                 <div className="col-span-3">
+                    </span>
+                  </div>
+
+                  <div className="masterDataDetailRows">
+                    <DetailRow label="Nominal" value={formatCurrency(viewingItem.amount)} />
+                    <DetailRow label="Siklus" value={getRecurringCycleLabel(viewingItem.cycle)} />
+                    <DetailRow label="Cabang" value={viewingItemBranchName} />
+                    <DetailRow label="Jatuh tempo" value={`${formatDateLabel(viewingItemStatus?.displayDueDate)} - tgl ${viewingItem.due_date}`} />
+                    <DetailRow label="Tagihan berikutnya" value={viewingItemNextDueDate ? formatDateLabel(viewingItemNextDueDate) : '-'} />
+                  </div>
+
+                  <div className="recurringExpenseDetailCard">
+                    <p className="recurringExpenseDetailCardTitle">Rekening Pembayaran</p>
                     {viewingItem.account_number ? (
-                        <div className="flex flex-col bg-slate-50 p-3 rounded-md border border-slate-100 mt-1">
-                            <span className="font-semibold text-slate-700">{viewingItem.bank_name || 'Bank'}</span>
-                            <span className="font-mono text-lg tracking-wide select-all">{viewingItem.account_number}</span>
-                            {viewingItem.account_name && <span className="text-sm text-slate-500 mt-1">a.n {viewingItem.account_name}</span>}
-                        </div>
-                    ) : (
-                        <span className="text-slate-400 italic text-sm mt-2 block">Tidak ada info rekening</span>
-                    )}
-                 </div>
-               </div>
-               
-               {viewingItem.whatsapp && (
-                   <div className="grid grid-cols-4 items-center gap-4">
-                     <Label className="text-right text-slate-500">WhatsApp</Label>
-                     <div className="col-span-3 font-mono text-green-600 flex items-center gap-2 text-sm">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-4 h-4" alt="WA" />
-                        {viewingItem.whatsapp}
-                     </div>
-                   </div>
-               )}
-               
-               {viewingItem.description && (
-                   <div className="grid grid-cols-4 items-start gap-4">
-                     <Label className="text-right text-slate-500 mt-1">Catatan</Label>
-                     <div className="col-span-3 text-sm text-slate-600 bg-slate-50 p-2 rounded-md italic">
-                        "{viewingItem.description}"
-                     </div>
-                   </div>
-               )}
-
-               <div className="border-t border-slate-100 my-1"></div>
-
-               <div className="grid grid-cols-4 items-start gap-4">
-                 <Label className="text-right text-slate-500 mt-2">History</Label>
-                 <div className="col-span-3 space-y-2">
-                    {getPaymentHistoryForItem(viewingItem).slice(0, 5).length > 0 ? (
-                      getPaymentHistoryForItem(viewingItem)
-                        .slice(0, 5)
-                        .map((payment) => (
-                          <div key={payment.id} className="rounded-md border border-slate-100 bg-slate-50 p-2 text-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="font-medium text-slate-700">{payment.period_key}</span>
-                              <span className="font-mono text-slate-900">{formatCurrency(payment.amount)}</span>
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              Jatuh tempo {formatDateLabel(payment.due_date || getDueDateForPeriod(viewingItem, payment.period_key))}
-                              {' - '}
-                              Dibayar {formatDateLabel(payment.paid_at)}
-                              {payment.payment_source ? ` via ${payment.payment_source}` : ''}
-                            </div>
-                            {payment.proof_url && (
-                              <a
-                                href={payment.proof_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                                Lihat bukti pembayaran
-                              </a>
-                            )}
-                          </div>
-                        ))
-                    ) : (
-                      <div className="rounded-md border border-dashed border-slate-200 p-3 text-sm text-slate-500">
-                        Belum ada history pembayaran.
+                      <div className="recurringExpenseBankCard">
+                        <span>{viewingItem.bank_name || 'Bank'}</span>
+                        <strong>{viewingItem.account_number}</strong>
+                        <small>{viewingItem.account_name ? `a.n ${viewingItem.account_name}` : 'Atas nama belum diisi'}</small>
                       </div>
+                    ) : (
+                      <p className="recurringExpenseDetailCardText">Belum ada rekening pembayaran.</p>
                     )}
-                 </div>
-               </div>
+                    {viewingItem.whatsapp ? (
+                      <div className="masterDataDetailRows recurringExpenseMiniRows">
+                        <DetailRow label="WhatsApp" value={viewingItem.whatsapp} />
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
 
-               <div className="flex justify-end pt-4">
-                  <Button onClick={() => setViewingItem(null)}>Tutup</Button>
-               </div>
-            </div>
+                <section className="recurringExpenseDetailCard recurringExpenseHistoryPanel" aria-label="History transaksi">
+                  <div className="recurringExpenseHistoryHeader">
+                    <div>
+                      <p className="recurringExpenseDetailCardTitle">History Transaksi</p>
+                      <p className="recurringExpenseDetailCardText">5 transaksi terakhir yang sudah masuk Biaya Operasional.</p>
+                    </div>
+                    <Badge variant="outline" className="recurringExpenseClearBadge">
+                      {viewingItemHistory.length} data
+                    </Badge>
+                  </div>
+                  {viewingItemHistory.length > 0 ? (
+                    <div className="recurringExpenseHistoryList">
+                      {viewingItemHistory.map((payment) => (
+                        <button
+                          key={payment.id}
+                          type="button"
+                          className="recurringExpenseHistoryItem"
+                          onClick={() => {
+                            setViewingItem(null);
+                            setViewingPayment(payment);
+                          }}
+                        >
+                          <span>
+                            <strong>{formatPeriodLabel(payment.period_key)}</strong>
+                            <small>
+                              Tempo {formatDateLabel(payment.due_date || getDueDateForPeriod(viewingItem, payment.period_key))}
+                              {' - '}
+                              dibayar {formatDateLabel(payment.paid_at)}
+                              {payment.payment_source ? ` via ${payment.payment_source}` : ''}
+                            </small>
+                          </span>
+                          <b>{formatCurrency(payment.amount)}</b>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="recurringExpenseEmptyDetail">Belum ada history transaksi.</div>
+                  )}
+                </section>
+              </div>
+
+              <div className="masterDataFormActions">
+                <Button type="button" variant="outline" onClick={() => setViewingItem(null)}>Tutup</Button>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setEditingItem(viewingItem);
+                      setExpenseFormDirty(false);
+                      setViewingItem(null);
+                      setIsAddOpen(true);
+                    }}
+                  >
+                    Edit Pengeluaran
+                  </Button>
+                )}
+              </div>
+            </MasterDataDialogBody>
           )}
-        </DialogContent>
+        </MasterDataFormDialogContent>
       </Dialog>
     </div>
   );

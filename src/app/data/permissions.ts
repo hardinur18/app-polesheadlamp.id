@@ -85,10 +85,10 @@ export const PERMISSIONS = definePermissions([
 
   // --- PAYROLL & GAJI ---
   { key: 'payroll.view', label: 'Akses Menu Payroll', group: 'Gaji & Payroll' },
+  { key: 'payroll.manage', label: 'Kelola Payroll & Gaji', group: 'Gaji & Payroll', description: 'Edit gaji, KPI, bonus, dan update massal payroll' },
 
   // --- KEUANGAN ---
-  { key: 'finance.view', label: 'Akses Menu Keuangan', group: 'Keuangan', description: 'Pembayaran, Kas, Laporan' },
-  { key: 'payments.view', label: 'Akses Halaman Pembayaran', group: 'Keuangan', description: 'Status pembayaran dan invoice pelanggan' },
+  { key: 'finance.view', label: 'Akses Menu Keuangan', group: 'Keuangan', description: 'Payroll, biaya operasional, hutang piutang, dan laporan' },
   { key: 'operational_expenses.view', label: 'Lihat Biaya Operasional', group: 'Keuangan - Biaya Operasional' },
   { key: 'operational_expenses.create', label: 'Tambah Biaya Operasional', group: 'Keuangan - Biaya Operasional' },
   { key: 'operational_expenses.edit', label: 'Edit Biaya Operasional', group: 'Keuangan - Biaya Operasional' },
@@ -186,7 +186,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'leads.view',
     'order.view', 'order.view_details', 'order.payment.view', 'order.payment.edit_status', 'order.payment.edit_type', 'order.status.edit', 'order.status.mark_done', 'map.view_route', 'customer.contact.view', 'staff.contact.view',
     'daily_report.view',
-    'finance.view', 'payments.view', 'operational_expenses.view', 'operational_expenses.create', 'operational_expenses.edit', 'operational_expenses.delete', 'debts.view', 'finance_report.view', 'finance.manage',
+    'payroll.view', 'payroll.manage',
+    'finance.view', 'operational_expenses.view', 'operational_expenses.create', 'operational_expenses.edit', 'operational_expenses.delete', 'debts.view', 'finance_report.view', 'finance.manage',
     'stock.valuation.view', 'stock.valuation.export',
     'recurring_expenses.view', 'recurring_expenses.create', 'recurring_expenses.edit', 'recurring_expenses.delete', 'recurring_expenses.pay',
     'monitoring.marketing.view', 'cs_okr.view', 'cs_okr.manage', 'targets.manage'

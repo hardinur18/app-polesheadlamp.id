@@ -5,7 +5,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import permissionsRoute from "./permissions.tsx";
 import payrollRoute from "./payroll.tsx";
-import paymentsRoute from "./payments.tsx";
 import telegramRoute from "./telegram.tsx";
 import metaMessagingRoute from "./meta_messaging.tsx";
 import googleAdsRoute from "./google_ads.tsx";
@@ -65,7 +64,6 @@ app.use(
 
 app.route("/make-server-f781cd00/permissions", permissionsRoute);
 app.route("/make-server-f781cd00/payroll", payrollRoute);
-app.route("/make-server-f781cd00/payments", paymentsRoute);
 app.route("/make-server-f781cd00/telegram", telegramRoute);
 app.route("/make-server-f781cd00/meta/messaging", metaMessagingRoute);
 app.route("/make-server-f781cd00/google", googleAdsRoute);
@@ -581,6 +579,7 @@ const OPERATIONAL_EXPENSE_VIEW_PERMISSION: PermissionKey = "operational_expenses
 const OPERATIONAL_EXPENSE_CREATE_PERMISSION: PermissionKey = "operational_expenses.create";
 const OPERATIONAL_EXPENSE_EDIT_PERMISSION: PermissionKey = "operational_expenses.edit";
 const OPERATIONAL_EXPENSE_DELETE_PERMISSION: PermissionKey = "operational_expenses.delete";
+const OPERATIONAL_EXPENSE_SOURCE_TYPES = new Set(["manual", "cash_out_forward", "recurring", "adjustment", "import"]);
 const RECURRING_EXPENSE_VIEW_PERMISSION: PermissionKey = "recurring_expenses.view";
 const RECURRING_EXPENSE_PAY_PERMISSION: PermissionKey = "recurring_expenses.pay";
 const MASTER_DATA_VIEW_PERMISSION: PermissionKey = "master_data.view";
@@ -598,7 +597,14 @@ function parseOperationalExpenseAmount(value: unknown) {
 }
 
 function isOperationalExpenseDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const [, rawYear, rawMonth, rawDay] = match;
+  const year = Number(rawYear);
+  const month = Number(rawMonth);
+  const day = Number(rawDay);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
 }
 
 async function requireOperationalExpensePermission(c: any, permission: PermissionKey, forbiddenMessage = "Anda tidak memiliki akses ke Biaya Operasional.") {
@@ -696,12 +702,18 @@ async function buildOperationalExpensePayload(body: Record<string, unknown>) {
   if (!category) throw new Error("Kategori biaya operasional wajib diisi");
 
   const subcategory = normalizeOperationalExpenseText(body.subcategory);
+  if (!subcategory) throw new Error("Subkategori biaya operasional wajib diisi");
+
   const amount = parseOperationalExpenseAmount(body.amount);
   if (amount <= 0) throw new Error("Nominal biaya operasional wajib lebih besar dari 0");
 
   const branch = await resolveOperationalExpenseBranch(
     normalizeOperationalExpenseText(body.branch_id || body.branchId),
   );
+  const sourceType = normalizeOperationalExpenseText(body.source_type || body.sourceType) || "manual";
+  if (!OPERATIONAL_EXPENSE_SOURCE_TYPES.has(sourceType)) {
+    throw new Error("Tipe sumber biaya operasional tidak valid");
+  }
 
   return {
     expense_date: expenseDate,
@@ -715,7 +727,7 @@ async function buildOperationalExpensePayload(body: Record<string, unknown>) {
     amount,
     currency: normalizeOperationalExpenseText(body.currency) || "IDR",
     payment_source: normalizeOperationalExpenseText(body.payment_source || body.paymentSource),
-    source_type: normalizeOperationalExpenseText(body.source_type || body.sourceType) || "manual",
+    source_type: sourceType,
     source_ref: normalizeOperationalExpenseText(body.source_ref || body.sourceRef),
     notes: normalizeOperationalExpenseText(body.notes),
   };

@@ -224,14 +224,6 @@ export const AUTH_APP_ROUTES: AppRouteDefinition[] = [
     permission: 'payroll.view',
   },
   {
-    id: 'payments',
-    tabId: 'payments',
-    path: '/finance/payments',
-    title: 'Pembayaran',
-    access: 'permission',
-    permission: 'payments.view',
-  },
-  {
     id: 'recurring-expenses',
     tabId: 'recurring-expenses',
     path: '/finance/recurring-expenses',
