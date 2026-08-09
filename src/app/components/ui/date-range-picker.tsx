@@ -17,10 +17,16 @@ import {
 
 export function DatePickerWithRange({
   className,
+  popoverClassName,
+  compact = false,
+  numberOfMonths = compact ? 1 : 2,
   date,
   setDate,
 }: {
   className?: string
+  popoverClassName?: string
+  compact?: boolean
+  numberOfMonths?: 1 | 2
   date: DateRange | undefined
   setDate: (date: DateRange | undefined) => void
 }) {
@@ -94,11 +100,14 @@ export function DatePickerWithRange({
           </Button>
         </PopoverTrigger>
         <PopoverContent 
-          className="z-[60] w-auto overflow-hidden rounded-xl border border-slate-200 bg-white p-0 shadow-xl dark:border-slate-700 dark:bg-slate-900" 
+          className={cn(
+            "z-[60] w-auto overflow-hidden rounded-xl border border-slate-200 bg-white p-0 shadow-xl dark:border-slate-700 dark:bg-slate-900",
+            popoverClassName,
+          )}
           align="start"
         >
-          <div className="flex flex-col sm:flex-row">
-            <div className="flex min-w-[140px] flex-col gap-1 border-r border-slate-100 bg-slate-50/50 p-2 dark:border-slate-800 dark:bg-slate-950/70">
+          <div className={cn("dateRangePickerLayout flex flex-col sm:flex-row", compact && "isCompact")}>
+            <div className="dateRangePresetList flex min-w-[140px] flex-col gap-1 border-r border-slate-100 bg-slate-50/50 p-2 dark:border-slate-800 dark:bg-slate-950/70">
               {presets.map((preset) => (
                 <Button
                   key={preset.label}
@@ -113,16 +122,29 @@ export function DatePickerWithRange({
                 </Button>
               ))}
             </div>
-            <div className="bg-white p-2 dark:bg-slate-900">
+            <div className="dateRangeCalendarPanel bg-white p-2 dark:bg-slate-900">
               <Calendar
                 initialFocus
                 mode="range"
                 defaultMonth={date?.from}
                 selected={date}
                 onSelect={setDate}
-                numberOfMonths={2}
+                numberOfMonths={numberOfMonths}
                 locale={id}
                 className="pointer-events-auto bg-white dark:bg-slate-900"
+                classNames={compact ? {
+                  months: "flex flex-col gap-2",
+                  month: "flex flex-col gap-3",
+                  caption: "flex justify-center pt-1 relative items-center w-full",
+                  caption_label: "text-sm font-semibold",
+                  nav: "flex items-center gap-1",
+                  nav_button: "h-8 w-8 border-0 bg-transparent p-0 text-slate-500 opacity-100 shadow-none hover:bg-transparent hover:text-slate-900 focus-visible:ring-0 focus-visible:ring-offset-0",
+                  nav_button_previous: "absolute left-0",
+                  nav_button_next: "absolute right-0",
+                  head_cell: "text-muted-foreground rounded-md w-9 font-medium text-[0.72rem]",
+                  row: "flex w-full mt-1.5",
+                  day: "h-9 w-9 p-0 rounded-xl text-sm font-semibold aria-selected:opacity-100",
+                } : undefined}
               />
             </div>
           </div>

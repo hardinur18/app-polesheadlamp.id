@@ -1,7 +1,7 @@
 import * as React from 'react';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { CircleHelp, Loader2, Save, Trash2, X } from 'lucide-react';
+import { AlertCircle, CircleHelp, Loader2, Save, Trash2, X } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -293,6 +293,95 @@ export type MasterDataFieldInfo = {
   title: string;
   description: string;
 };
+
+type MasterDataFieldNoticeProps = {
+  className?: string;
+  description: ReactNode;
+  title?: ReactNode;
+  tone?: 'info' | 'warning';
+};
+
+export function MasterDataFieldNotice({
+  className,
+  description,
+  title = 'Catatan',
+  tone = 'warning',
+}: MasterDataFieldNoticeProps) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isWarning = tone === 'warning';
+
+  const cancelScheduledClose = React.useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+
+  const scheduleClose = React.useCallback(() => {
+    cancelScheduledClose();
+    closeTimer.current = setTimeout(() => {
+      setIsOpen(false);
+      closeTimer.current = null;
+    }, 120);
+  }, [cancelScheduledClose]);
+
+  React.useEffect(() => cancelScheduledClose, [cancelScheduledClose]);
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex h-5 w-5 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2',
+            isWarning
+              ? 'text-amber-500 hover:bg-amber-50 hover:text-amber-600 focus-visible:ring-amber-200 dark:hover:bg-amber-950/40'
+              : 'text-blue-500 hover:bg-blue-50 hover:text-blue-600 focus-visible:ring-blue-200 dark:hover:bg-blue-950/40',
+            className,
+          )}
+          aria-label={typeof title === 'string' ? title : 'Catatan field'}
+          onClick={() => setIsOpen((value) => !value)}
+          onMouseEnter={() => {
+            cancelScheduledClose();
+            setIsOpen(true);
+          }}
+          onMouseLeave={scheduleClose}
+        >
+          <AlertCircle className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="top"
+        sideOffset={8}
+        className={cn(
+          'w-fit min-w-[14rem] max-w-[min(26rem,calc(100vw-2rem))] rounded-2xl border bg-white p-3 text-left shadow-xl dark:bg-slate-900',
+          isWarning ? 'border-amber-200 dark:border-amber-900/70' : 'border-blue-200 dark:border-blue-900/70',
+        )}
+        onMouseEnter={cancelScheduledClose}
+        onMouseLeave={scheduleClose}
+      >
+        <div className="flex items-start gap-2.5">
+          <span
+            className={cn(
+              'mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
+              isWarning ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/50' : 'bg-blue-50 text-blue-600 dark:bg-blue-950/50',
+            )}
+          >
+            <AlertCircle className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            {title ? <p className="text-sm font-bold leading-snug text-slate-900 dark:text-slate-100">{title}</p> : null}
+            <div className="mt-1 text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+              {description}
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 type MasterDataFieldLabelProps = React.LabelHTMLAttributes<HTMLLabelElement> & {
   children: ReactNode;

@@ -16,7 +16,6 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CheckCircle,
-  Filter,
   Trash2,
   ArrowUpDown,
   Eye,
@@ -32,18 +31,28 @@ import { toast } from "sonner";
 import { copyToClipboard } from '@/lib/clipboard';
 
 import { Button } from "@/app/components/ui/button";
+import { Checkbox } from "@/app/components/ui/checkbox";
 import { Input } from "@/app/components/ui/input";
 import { Textarea } from "@/app/components/ui/textarea";
 import { Card } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/app/components/ui/table";
+  DataTable,
+  TableActionCell,
+  TableActionHeader,
+  TableActionMenu,
+  TableActionMenuItem,
+  TableText,
+} from "@/app/components/ui/data-table";
+import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
+import {
+  MasterDataCurrencyInput,
+  MasterDataFieldLabel,
+  MasterDataFormDialogContent,
+  MasterDataFormField,
+  MasterDataFormGrid,
+  MasterDataFormHeader,
+} from "@/app/components/ui/master-data-ui";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription } from "@/app/components/ui/sheet";
 import { useIsMobile } from "@/app/components/ui/use-mobile";
 import {
@@ -66,10 +75,6 @@ import {
 } from "@/app/components/ui/alert-dialog";
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@/app/components/ui/dialog";
 import { DatePickerWithRange } from "@/app/components/ui/date-range-picker";
 import {
@@ -79,7 +84,6 @@ import {
   OperationalPageHeader,
   OperationalPageShell,
   OperationalTableCard,
-  RequiredLabel,
 } from "@/app/components/ui/operational-page";
 
 import { useMasterData } from '@/app/pages/master-data/context';
@@ -93,6 +97,7 @@ import {
   OPERATIONAL_EXPENSE_FORWARD_DRAFT_KEY,
   type OperationalExpenseForwardDraft,
 } from '@/app/data/operationalExpenseForwardDraft';
+import { isTechnicianRole } from '@/app/data/roleHelpers';
 
 // --- Types (Classic Interface) ---
 
@@ -569,7 +574,6 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Paid' | 'Unpaid'>('all');
   const [technicianFilter, setTechnicianFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -602,6 +606,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
       description: string;
       confirmLabel: string;
   } | null>(null);
+  const [pendingDeleteReport, setPendingDeleteReport] = useState<DailyReport | null>(null);
   const [pendingTransactionCancel, setPendingTransactionCancel] = useState<OperationalTransactionRow | null>(null);
   const [forwardedExpenseRefs, setForwardedExpenseRefs] = useState<string[]>([]);
   const cancelledOperationalTransactionActionIds = useMemo(
@@ -1479,9 +1484,15 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
 
   // --- Filter Logic ---
 
-  // Derive unique technicians from the currently fetched reports (for filter dropdown)
   const availableTechnicians = useMemo(() => {
-    const techMap = new Map();
+    const techMap = new Map<string, string>();
+
+    users
+      .filter((user) => user.status === 'active' && isTechnicianRole(user.role))
+      .forEach((user) => {
+        techMap.set(user.id, user.name);
+      });
+
     reports.forEach(r => {
         if (r.technicianId && r.technicianName) {
             techMap.set(r.technicianId, r.technicianName);
@@ -1490,7 +1501,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
     return Array.from(techMap.entries())
         .map(([id, name]) => ({ id, name }))
         .sort((a, b) => a.name.localeCompare(b.name));
-  }, [reports]);
+  }, [reports, users]);
 
   const filteredReports = useMemo(() => {
       return reports.filter(r => {
@@ -1857,22 +1868,18 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
   const transactionTabOptions: Array<{
     value: OperationalTransactionTab;
     label: string;
-    activeClass: string;
   }> = [
     {
       value: 'all',
       label: 'Semua',
-      activeClass: 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-600',
     },
     {
       value: 'finance',
       label: 'Rekap Finance',
-      activeClass: 'border-emerald-600 bg-emerald-600 text-white shadow-sm hover:bg-emerald-600',
     },
     {
       value: 'request',
       label: 'Req Transfer',
-      activeClass: 'border-violet-600 bg-violet-600 text-white shadow-sm hover:bg-violet-600',
     },
   ];
 
@@ -2127,13 +2134,17 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
      }
   };
 
-  const handleDelete = async () => {
-    if (!formData?.id) return;
-    if (!window.confirm("Yakin ingin menghapus laporan ini? Data yang dihapus tidak dapat dikembalikan.")) return;
+  const requestDeleteReport = (targetReport: DailyReport | null) => {
+    if (!targetReport?.id) return;
+    setPendingDeleteReport(targetReport);
+  };
+
+  const handleDelete = async (targetReport: DailyReport | null = formData) => {
+    if (!targetReport?.id) return;
     
     setIsSaving(true);
     try {
-        const { error } = await supabase.from('technician_daily_reports').delete().eq('id', formData.id);
+        const { error } = await supabase.from('technician_daily_reports').delete().eq('id', targetReport.id);
         if (error) throw error;
         
         toast.success("Laporan berhasil dihapus");
@@ -2142,7 +2153,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
             { id: currentUser.id, name: currentUser.name, role: currentUser.role },
             'DELETE', 'Laporan Harian',
             `Menghapus laporan harian teknisi`,
-            formData.id
+            targetReport.id
           );
         }
         setInitialFormData(null);
@@ -2155,6 +2166,266 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
     }
   };
 
+  const mainReportTabs = [
+    { value: 'daily', label: 'List Harian', icon: LayoutList },
+    { value: 'summary', label: 'Rekap Teknisi', icon: Users },
+    { value: 'transactions', label: 'Transaksi', icon: ArrowRightLeft },
+  ] as const;
+
+  const renderMainReportTabs = () => (
+    <div className="operationalReportTabs" role="tablist" aria-label="Navigasi laporan operasional">
+      {mainReportTabs.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={viewMode === value}
+          onClick={() => setViewMode(value)}
+          className={cn('operationalReportTab', viewMode === value && 'isActive')}
+        >
+          <Icon className="h-4 w-4" />
+          <span>{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderDailyTopFilters = () => (
+    <div className="operationalReportControlFilters isDaily">
+      <div className="operationalReportFilterControl operationalReportFilterDateType">
+        <Select value={dateTypeFilter} onValueChange={(v: any) => setDateTypeFilter(v)}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0 dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex min-w-0 items-center gap-2">
+              <CalendarIcon className="h-4 w-4 shrink-0 text-slate-500" />
+              <SelectValue placeholder="Tipe tanggal" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="service_date">Tgl Service</SelectItem>
+            <SelectItem value="created_at">Waktu Input</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <DatePickerWithRange
+        date={dateRange}
+        setDate={setDateRange}
+        className="operationalReportFilterControl operationalReportDateRange"
+        compact
+        popoverClassName="operationalReportDateRangePopover"
+      />
+
+      <div className="operationalReportFilterControl operationalReportFilterSearch relative">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          placeholder="Cari teknisi atau role..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-sm font-medium shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:ring-offset-0 dark:border-slate-700 dark:bg-slate-900"
+        />
+      </div>
+
+      <div className="operationalReportFilterControl operationalReportFilterTechnician">
+        <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0 dark:border-slate-700 dark:bg-slate-900">
+            <SelectValue placeholder="Semua Teknisi" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Teknisi</SelectItem>
+            {availableTechnicians.map((technician) => (
+              <SelectItem key={technician.id} value={technician.id}>
+                {technician.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="operationalReportFilterControl operationalReportFilterRole">
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0 dark:border-slate-700 dark:bg-slate-900">
+            <SelectValue placeholder="Semua Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Role</SelectItem>
+            <SelectItem value="Karyawan">Karyawan</SelectItem>
+            <SelectItem value="Freelance">Freelance</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="operationalReportFilterControl operationalReportFilterStatus">
+        <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0 dark:border-slate-700 dark:bg-slate-900">
+            <SelectValue placeholder="Semua Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Status</SelectItem>
+            <SelectItem value="Paid">Sudah Dibayar</SelectItem>
+            <SelectItem value="Unpaid">Belum Dibayar</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+
+  const renderSummaryTopFilters = () => (
+    <div className="operationalReportControlFilters isSummary">
+      <div className="operationalReportFilterControl operationalReportFilterDateType">
+        <Select value={dateTypeFilter} onValueChange={(v: any) => setDateTypeFilter(v)}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <CalendarIcon className="h-4 w-4 shrink-0 text-slate-500" />
+              <SelectValue placeholder="Tipe tanggal" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="service_date">Tgl Service</SelectItem>
+            <SelectItem value="created_at">Waktu Input</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <DatePickerWithRange
+        date={dateRange}
+        setDate={setDateRange}
+        className="operationalReportFilterControl operationalReportDateRange"
+        compact
+        popoverClassName="operationalReportDateRangePopover"
+      />
+      <div className="operationalReportFilterControl operationalReportFilterSearch relative">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          placeholder="Cari teknisi..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-sm font-medium shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:ring-offset-0"
+        />
+      </div>
+      <div className="operationalReportFilterControl operationalReportFilterTechnician">
+        <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <SelectValue placeholder="Semua Teknisi" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Teknisi</SelectItem>
+            {availableTechnicians.map(t => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="operationalReportFilterControl operationalReportFilterRole">
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <SelectValue placeholder="Semua Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Role</SelectItem>
+            <SelectItem value="Karyawan">Karyawan</SelectItem>
+            <SelectItem value="Freelance">Freelance</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="operationalReportFilterControl operationalReportFilterStatus">
+        <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <SelectValue placeholder="Semua Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Status</SelectItem>
+            <SelectItem value="Paid">Sudah Dibayar</SelectItem>
+            <SelectItem value="Unpaid">Belum Dibayar</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+
+  const renderTransactionTopFilters = () => (
+    <div className="operationalReportControlFilters isTransactions">
+      <div className="operationalReportFilterControl operationalReportTransactionTabs">
+        <div className="operationalReportInlineTabs" role="tablist" aria-label="Filter transaksi operasional">
+          {transactionTabOptions.map((tab) => {
+            const isActive = transactionTab === tab.value;
+
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setTransactionTab(tab.value)}
+                className={cn('operationalReportInlineTab', isActive && 'isActive')}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <DatePickerWithRange
+        date={dateRange}
+        setDate={setDateRange}
+        className="operationalReportFilterControl operationalReportDateRange"
+        compact
+        popoverClassName="operationalReportDateRangePopover"
+      />
+      <div className="operationalReportFilterControl operationalReportFilterSearch relative">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          placeholder="Cari teknisi atau transaksi..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-sm font-medium shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:ring-offset-0"
+        />
+      </div>
+      <div className="operationalReportFilterControl operationalReportFilterTechnician">
+        <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <SelectValue placeholder="Semua Teknisi" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Teknisi</SelectItem>
+            {availableTechnicians.map(t => (
+              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="operationalReportFilterControl operationalReportFilterRole">
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <SelectValue placeholder="Semua Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Role</SelectItem>
+            <SelectItem value="Karyawan">Karyawan</SelectItem>
+            <SelectItem value="Freelance">Freelance</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="operationalReportFilterControl operationalReportFilterStatus">
+        <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+          <SelectTrigger className="h-12 w-full rounded-xl border-slate-200 bg-white px-4 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0">
+            <SelectValue placeholder="Semua Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Status</SelectItem>
+            <SelectItem value="Paid">Sudah Dibayar</SelectItem>
+            <SelectItem value="Unpaid">Belum Dibayar</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+
+  const renderTopFilters = () => {
+    if (viewMode === 'summary') return renderSummaryTopFilters();
+    if (viewMode === 'transactions') return renderTransactionTopFilters();
+    return renderDailyTopFilters();
+  };
+
   return (
     <OperationalPageShell>
       <OperationalPageHeader
@@ -2163,54 +2434,21 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         title="Laporan Operasional"
         subtitle="Rekap harian setoran, komisi, dan performa teknisi."
         actions={(
-          <div className="flex w-full flex-col gap-2 sm:w-auto md:flex-row md:items-center">
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
-              <button
-                onClick={() => setViewMode('daily')}
-                className={cn(
-                  'flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-all',
-                  viewMode === 'daily'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
-                )}
-              >
-                <LayoutList className="h-4 w-4" />
-                List Harian
-              </button>
-              <button
-                onClick={() => setViewMode('summary')}
-                className={cn(
-                  'flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-all',
-                  viewMode === 'summary'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
-                )}
-              >
-                <Users className="h-4 w-4" />
-                Rekap Teknisi
-              </button>
-              <button
-                onClick={() => setViewMode('transactions')}
-                className={cn(
-                  'flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-all',
-                  viewMode === 'transactions'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
-                )}
-              >
-                <ArrowRightLeft className="h-4 w-4" />
-                Transaksi
-              </button>
-            </div>
-            {hasPermission('daily_report.create') && (
-              <Button onClick={handleOpenNewForm} className="h-9 gap-2 bg-blue-600 text-white hover:bg-blue-700">
-                <PlusCircle className="h-4 w-4" />
-                Buat Laporan
-              </Button>
-            )}
-          </div>
+          hasPermission('daily_report.create') ? (
+            <Button onClick={handleOpenNewForm} className="h-11 gap-2 bg-blue-600 text-white hover:bg-blue-700">
+              <PlusCircle className="h-4 w-4" />
+              Buat Laporan
+            </Button>
+          ) : null
         )}
       />
+
+      <div className="operationalReportControlStack">
+        {renderMainReportTabs()}
+        <div className="operationalReportFilterCard">
+          {renderTopFilters()}
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <OperationalKpiGrid className="grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
@@ -2244,88 +2482,23 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
       {/* Main Content Area */}
       {viewMode === 'daily' ? (
       /* --- VIEW: DAILY LIST (Existing) --- */
-      <OperationalTableCard>
-        {/* Advanced Filter Bar */}
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white dark:bg-slate-900">
-          <div className="space-y-1">
-             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Riwayat Laporan</h2>
-             <p className="text-sm text-slate-500 dark:text-slate-400">
-                Menampilkan {filteredReports.length} laporan 
-                {dateRange?.from ? ` dari ${format(dateRange.from, 'dd MMM')}${dateRange.to ? ` - ${format(dateRange.to, 'dd MMM yyyy')}` : ''}` : ' (Semua Waktu)'}
-             </p>
-          </div>
-          
-          <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto mt-2 md:mt-0">
-             {/* Row 1 Mobile: Search + Filter */}
-             <div className="flex w-full md:w-auto gap-2">
-                 <div className="relative flex-1 md:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <Input 
-                       placeholder="Cari teknisi..." 
-                       value={searchQuery}
-                       onChange={(e) => setSearchQuery(e.target.value)}
-                       className="pl-9 h-10 text-sm border-slate-200 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800 rounded-lg focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-0"
-                    />
-                 </div>
-
-                 <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden md:block mx-1" />
-
-                 <Button 
-                    variant="outline" 
-                    onClick={() => setIsFilterOpen(true)}
-                    className={cn(
-                      "h-10 border-slate-200 shadow-sm bg-blue-50 dark:bg-blue-900/20 hover:bg-slate-50 dark:hover:bg-slate-800 relative shrink-0",
-                      // Mobile: Square Icon Button
-                      "w-10 p-0 md:w-auto md:px-4 md:gap-2 text-blue-600", 
-                      (technicianFilter !== 'all' || statusFilter !== 'all' || roleFilter !== 'all') && "border-blue-200 bg-blue-100 text-blue-700 hover:bg-blue-200"
-                    )}
-                 >
-                    <Filter className="w-4 h-4" />
-                    <span className="hidden md:inline">Filter</span>
-                    {(technicianFilter !== 'all' || statusFilter !== 'all' || roleFilter !== 'all') ? (
-                        <>
-                           {/* Mobile Badge */}
-                           <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white md:hidden ring-2 ring-white">
-                               {[technicianFilter, statusFilter, roleFilter].filter(x => x !== 'all').length}
-                           </span>
-                           {/* Desktop Badge */}
-                           <Badge variant="secondary" className="hidden md:flex bg-blue-200 text-blue-700 hover:bg-blue-200 h-5 px-1.5 min-w-[20px] justify-center ml-0.5">
-                               {[technicianFilter, statusFilter, roleFilter].filter(x => x !== 'all').length}
-                           </Badge>
-                        </>
-                    ) : (
-                        // Empty badge placeholder to maintain layout if needed, or remove
-                        null
-                    )}
-                 </Button>
-             </div>
-
-             {/* Row 2 Mobile: Dates */}
-             <div className="flex w-full md:w-auto gap-2">
-                 <Select value={dateTypeFilter} onValueChange={(v: any) => setDateTypeFilter(v)}>
-                    <SelectTrigger className="w-[130px] md:w-[150px] h-10 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm rounded-lg focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 shrink-0 text-xs md:text-sm px-3">
-                       <div className="flex items-center gap-2 truncate">
-                            <CalendarIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <SelectValue placeholder="Tipe" />
-                       </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                       <SelectItem value="service_date">Tgl Service</SelectItem>
-                       <SelectItem value="created_at">Waktu Input</SelectItem>
-                    </SelectContent>
-                 </Select>
-
-                 <div className="flex-1 md:flex-none min-w-0">
-                    <DatePickerWithRange 
-                        date={dateRange} 
-                        setDate={setDateRange}
-                        className="w-full md:w-[260px] h-10 border-slate-200 bg-white shadow-sm rounded-lg hover:bg-white text-xs md:text-sm px-3 truncate" 
-                    />
-                 </div>
-             </div>
+      <OperationalTableCard className="operationalReportTableCard">
+        <div className="operationalReportTableHeader">
+          <div>
+            <MasterDataTableTitle
+              title="Riwayat Laporan"
+              count={filteredReports.length}
+              icon={LayoutList}
+              variant="active"
+            />
+            <p className="operationalReportTableSubtitle">
+              {dateRange?.from
+                ? `Periode ${format(dateRange.from, 'dd MMM yyyy', { locale: id })}${dateRange.to ? ` sampai ${format(dateRange.to, 'dd MMM yyyy', { locale: id })}` : ''}`
+                : 'Semua laporan operasional yang tersedia'}
+            </p>
           </div>
         </div>
-        
+
         {/* Mobile View: Cards */}
         <div className="md:hidden space-y-4 p-4 bg-slate-50/50 dark:bg-slate-950/50 min-h-[400px]">
              {filteredReports.length === 0 ? (
@@ -2343,11 +2516,11 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                             {/* Header */}
                             <div className="flex justify-between items-start">
                                 <div className="flex items-start gap-3">
-                                    <input 
-                                        type="checkbox"
-                                        className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600 mt-0.5"
+                                    <Checkbox
+                                        className="mt-0.5"
                                         checked={selectedReportIds.includes(r.id!)}
-                                        onChange={() => handleToggleSelect(r.id!)}
+                                        onCheckedChange={() => handleToggleSelect(r.id!)}
+                                        aria-label={`Pilih laporan ${r.technicianName}`}
                                     />
                                     <div>
                                         <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">
@@ -2455,10 +2628,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                                     <Edit className="w-3.5 h-3.5 mr-1.5" />
                                     Edit
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={() => {
-                                    setFormData(r);
-                                    handleDelete();
-                                }} className="h-9 w-9 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 border-slate-200 dark:border-slate-700 shrink-0">
+                                <Button variant="outline" size="sm" onClick={() => requestDeleteReport(r)} className="h-9 w-9 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-200 border-slate-200 dark:border-slate-700 shrink-0">
                                     <Trash2 className="w-4 h-4" />
                                 </Button>
                             </div>
@@ -2468,419 +2638,226 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
              )}
         </div>
         
-        <div className="hidden md:block overflow-x-auto">
-        <Table className="w-full">
-          <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-              <TableHead className="w-[50px] h-14 px-4 text-center">
-                  <input 
-                    type="checkbox"
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
+        <DataTable
+          className="hidden md:block operationalReportDataTable"
+          columns={['56px', '64px', '150px', '220px', '150px', '180px', '170px', '170px', '150px', '150px', '84px']}
+          minWidth={1544}
+          rowMinHeight={88}
+          cellX={16}
+          cellY={14}
+          primaryLines={2}
+          secondaryLines={2}
+        >
+          <table>
+            <thead>
+              <tr>
+                <th className="text-center">
+                  <Checkbox
+                    className="mx-auto"
                     checked={filteredReports.length > 0 && selectedReportIds.length === filteredReports.length}
-                    onChange={handleToggleSelectAll}
+                    onCheckedChange={handleToggleSelectAll}
+                    aria-label="Pilih semua laporan"
                   />
-              </TableHead>
-              <TableHead className="w-[140px] h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400">
-                  <div className="flex items-center gap-2 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200">
-                      Tgl Service
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                  </div>
-              </TableHead>
-              <TableHead className="w-[240px] h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400">
-                  <div className="flex items-center gap-2">
-                      Teknisi & Role
-                  </div>
-              </TableHead>
-              <TableHead className="w-[160px] h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                      Statistik Order
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                  </div>
-              </TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                      Pendapatan
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                  </div>
-              </TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right">
-                  Hak & Biaya
-              </TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right">
-                  Settlement
-              </TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-center">
-                  Status Setoran (In)
-              </TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-center">
-                  Status Bayar (Out)
-              </TableHead>
-              <TableHead className="w-[80px] h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-center sticky right-0 bg-slate-50 dark:bg-slate-800">
-                  Aksi
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredReports.length === 0 ? (
-               <TableRow>
-                 <TableCell colSpan={10} className="text-center py-24 text-slate-400">
+                </th>
+                <th className="text-center">No</th>
+                <th>
+                  <span className="inline-flex items-center gap-2">
+                    Tgl Service
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </span>
+                </th>
+                <th>Teknisi / Role</th>
+                <th>
+                  <span className="inline-flex items-center gap-2">
+                    Statistik
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </span>
+                </th>
+                <th className="text-right">
+                  <span className="inline-flex items-center justify-end gap-2">
+                    Pendapatan
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </span>
+                </th>
+                <th className="text-right">Hak & Biaya</th>
+                <th className="text-right">Settlement</th>
+                <th className="text-center">Setoran</th>
+                <th className="text-center">Pembayaran</th>
+                <TableActionHeader />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredReports.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="py-20 text-center text-slate-400">
                     <OperationalEmptyState
-                        icon={Briefcase}
-                        title="Belum ada laporan"
-                        description={dateRange?.from ? 'Tidak ada data pada rentang tanggal ini.' : 'Belum ada data laporan.'}
-                        className="py-12"
+                      icon={Briefcase}
+                      title="Belum ada laporan"
+                      description={dateRange?.from ? 'Tidak ada data pada rentang tanggal ini.' : 'Belum ada data laporan.'}
+                      className="py-10"
                     />
-                 </TableCell>
-               </TableRow>
-            ) : (
-               filteredReports.map((r) => {
+                  </td>
+                </tr>
+              ) : (
+                filteredReports.map((r, rowIndex) => {
                   const calcs = calculateFinancials(r);
                   const hasNote = r.notes || r.otherCostDesc;
-                  
+                  const payoutPaid = isTechnicianPayoutPaid(r.paymentStatus);
+                  const isPaidViaTransfer = payoutPaid && r.technicianDepositAmount >= (calcs.cashOnHand - 1000);
+                  const settlementSecondary = [
+                    calcs.cashOnHand > 0 ? `Cash ${formatRupiah(calcs.cashOnHand)}` : null,
+                    r.technicianDepositAmount > 0 ? `Setor ${formatRupiah(r.technicianDepositAmount)}` : null,
+                    r.role === 'Freelance' && calcs.balance === 0 && calcs.netHakTeknisi > 0 ? `Potong hak ${formatRupiah(calcs.netHakTeknisi)}` : null,
+                  ].filter(Boolean).join(' . ');
+                  const costSecondary = [
+                    calcs.savingAmount > 0 ? `Save ${formatRupiah(calcs.savingAmount)}` : null,
+                    r.transportCost > 0 ? `Transport ${formatRupiah(r.transportCost)}` : null,
+                    r.otherCost > 0 ? `Lainnya ${formatRupiah(r.otherCost)}` : null,
+                    hasNote ? String(r.notes || r.otherCostDesc) : null,
+                  ].filter(Boolean).join(' . ');
+
                   return (
-                    <TableRow key={r.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50/60 transition-colors group align-top">
-                      <TableCell className="px-4 py-4 align-top text-center w-[50px]">
-                          <input 
-                            type="checkbox"
-                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600 mt-1"
-                            checked={selectedReportIds.includes(r.id!)}
-                            onChange={() => handleToggleSelect(r.id!)}
-                          />
-                      </TableCell>
-                      {/* Kolom 1: Waktu */}
-                      <TableCell className="px-4 py-4 align-top w-[140px]">
-                         <div className="flex flex-col gap-1">
-                            <span className="font-bold text-sm text-slate-900 dark:text-slate-100 leading-tight">{format(new Date(r.date), 'dd MMM yyyy', { locale: id })}</span>
-                            <div className="flex flex-col">
-                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium capitalize">
-                                    {format(new Date(r.date), 'EEEE', { locale: id })}
-                                </span>
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5" title="Waktu Input Data">
-                                    Input: {r.createdAt ? format(new Date(r.createdAt), 'dd/MM HH:mm') : '-'}
-                                </span>
+                    <tr
+                      key={r.id}
+                      onClick={() => handleViewDetail(r)}
+                      className="operationalReportClickableRow"
+                    >
+                      <td className="text-center" onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                          className="mx-auto"
+                          checked={selectedReportIds.includes(r.id!)}
+                          onCheckedChange={() => handleToggleSelect(r.id!)}
+                          aria-label={`Pilih laporan ${r.technicianName}`}
+                        />
+                      </td>
+                      <td className="text-center text-sm font-semibold text-slate-500">{rowIndex + 1}</td>
+                      <td>
+                        <TableText
+                          primary={format(new Date(r.date), 'dd MMM yyyy', { locale: id })}
+                          secondary={`${format(new Date(r.date), 'EEEE', { locale: id })}${r.createdAt ? ` . Input ${format(new Date(r.createdAt), 'dd/MM HH:mm')}` : ''}`}
+                        />
+                      </td>
+                      <td>
+                        <TableText primary={r.technicianName} secondary={r.role} />
+                      </td>
+                      <td>
+                        <TableText
+                          primary={`${r.totalFinished}/${r.totalOrders} order`}
+                          secondary={`Visit ${r.totalVisit} . HS ${r.totalHomeService}`}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <TableText
+                          className="items-end"
+                          primary={formatRupiah(calcs.totalRevenue)}
+                          secondary={`Cash ${new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(r.revenueCash)} . Transfer ${new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(r.revenueTransfer)}`}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <TableText
+                          className="items-end"
+                          primary={formatRupiah(calcs.commissionAmount)}
+                          primaryClassName="text-emerald-700"
+                          secondary={costSecondary || '-'}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <TableText
+                          className="items-end"
+                          primary={formatRupiah(calcs.targetSetor)}
+                          secondary={settlementSecondary || '-'}
+                        />
+                      </td>
+                      <td className="text-center">
+                        {(() => {
+                          const bal = calcs.balance;
+                          if (calcs.cashOnHand === 0 && bal === 0) {
+                            return <Badge variant="outline" className="border-slate-200 bg-slate-50 text-[10px] text-slate-400">CLEAR</Badge>;
+                          }
+                          if (bal === 0) {
+                            return (
+                              <div className="flex flex-col items-center gap-1">
+                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-600">LUNAS</Badge>
+                                {r.role === 'Freelance' && calcs.netHakTeknisi > 0 ? <span className="text-[10px] font-medium text-slate-400">Potong gaji</span> : null}
+                              </div>
+                            );
+                          }
+                          if (bal > 0) {
+                            return (
+                              <div className="flex flex-col items-center gap-1">
+                                <Badge variant="outline" className="border-red-200 bg-red-50 text-[10px] text-red-600">KURANG</Badge>
+                                <span className="text-[10px] font-bold text-red-600">{formatRupiah(bal)}</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-[10px] text-blue-600">LEBIH</Badge>
+                              <span className="text-[10px] font-bold text-blue-600">{formatRupiah(Math.abs(bal))}</span>
                             </div>
-                         </div>
-                      </TableCell>
-
-                      {/* Kolom 2: Teknisi */}
-                      <TableCell className="px-4 py-4 align-top w-[240px]">
-                         <div className="flex flex-col gap-1.5">
-                            <div className="font-bold text-sm text-slate-900 dark:text-slate-100 leading-tight">{r.technicianName}</div>
-                            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                <User className="w-3.5 h-3.5 text-slate-400" />
-                                <span>{r.role}</span>
+                          );
+                        })()}
+                      </td>
+                      <td className="text-center">
+                        {calcs.balance < 0 ? (
+                          payoutPaid ? (
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-600">SUDAH TRF</Badge>
+                          ) : (
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge variant="outline" className="border-purple-200 bg-purple-50 text-[10px] text-purple-600">HUTANG KANTOR</Badge>
+                              <span className="text-[10px] font-medium text-purple-600">{formatRupiah(Math.abs(calcs.balance))}</span>
                             </div>
-                         </div>
-                      </TableCell>
-
-                      {/* Kolom 3: Order Stats */}
-                      <TableCell className="px-4 py-4 align-top w-[160px]">
-                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                             <div className="flex flex-col gap-0.5">
-                                 <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                                     <span>Total:</span>
-                                     <span className="font-medium text-blue-600">{r.totalOrders}</span>
-                                 </div>
-                                 <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                                     <span>Selesai:</span>
-                                     <span className="font-medium text-emerald-600">{r.totalFinished}</span>
-                                 </div>
-                             </div>
-                             
-                             <div className="flex flex-col gap-0.5 border-l border-slate-100 dark:border-slate-800 pl-4">
-                                 <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                                     <span>Visit:</span>
-                                     <span className="font-medium text-slate-700 dark:text-slate-300">{r.totalVisit}</span>
-                                 </div>
-                                 <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                                     <span>HS:</span>
-                                     <span className="font-medium text-slate-700 dark:text-slate-300">{r.totalHomeService}</span>
-                                 </div>
-                             </div>
-                         </div>
-                      </TableCell>
-
-                      {/* Kolom 4: Pendapatan */}
-                      <TableCell className="px-4 py-4 text-right align-top">
-                         <div className="flex flex-col gap-2 items-end">
-                            <span className="font-bold text-sm text-slate-900 dark:text-slate-100 leading-tight">{formatRupiah(calcs.totalRevenue)}</span>
-                            
-                            <div className="bg-slate-100 dark:bg-slate-800 rounded px-2 py-1 flex items-center gap-3 text-[10px] text-slate-600 dark:text-slate-400 font-medium">
-                                <div className="flex items-center gap-1">
-                                    <span className="text-slate-400">C:</span>
-                                    <span>{new Intl.NumberFormat('id-ID', { notation: "compact", maximumFractionDigits: 1 }).format(r.revenueCash)}</span>
-                                </div>
-                                <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-                                <div className="flex items-center gap-1">
-                                    <span className="text-slate-400">T:</span>
-                                    <span>{new Intl.NumberFormat('id-ID', { notation: "compact", maximumFractionDigits: 1 }).format(r.revenueTransfer)}</span>
-                                </div>
+                          )
+                        ) : calcs.officeDebt > 0 ? (
+                          payoutPaid ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-600">SUDAH TRF</Badge>
+                              <span className="text-[10px] font-medium text-emerald-600">{formatRupiah(calcs.officeDebt)}</span>
                             </div>
-                         </div>
-                      </TableCell>
-
-                      {/* Kolom 5: Hak & Biaya */}
-                      <TableCell className="px-4 py-4 text-right align-top">
-                         <div className="flex flex-col gap-1 items-end text-xs">
-                            <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                                <span className="text-slate-400 text-[10px]">Komisi:</span>
-                                <div className="flex items-center text-xs">
-                                    <span className="font-medium text-emerald-600">
-                                       {formatRupiah(calcs.commissionAmount)}
-                                    </span>
-                                    {calcs.savingAmount > 0 && (
-                                        <span className="text-teal-600 ml-1 font-medium text-[11px]" title={`Save: ${formatRupiah(calcs.savingAmount)}`}>
-                                           (S: {formatRupiah(calcs.savingAmount)})
-                                        </span>
-                                    )}
-                                </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge variant="outline" className="border-purple-200 bg-purple-50 text-[10px] text-purple-600">BELUM BAYAR</Badge>
+                              <span className="text-[10px] font-medium text-purple-600">{formatRupiah(calcs.officeDebt)}</span>
                             </div>
-                            
-                            {(r.transportCost > 0 || r.otherCost > 0) && (
-                                <div className="flex flex-col gap-0.5 text-[11px] pt-1 mt-1 border-t border-dashed border-slate-200 dark:border-slate-700">
-                                    {r.transportCost > 0 && (
-                                        <div className="flex items-center justify-end gap-2 text-orange-600">
-                                            <span className="text-orange-600/70">Bensin:</span>
-                                            <span className="font-medium">
-                                                {formatRupiah(r.transportCost)}
-                                                <span className="text-orange-400 ml-1 text-[10px]">
-                                                    | {calcs.totalRevenue > 0 ? ((r.transportCost / calcs.totalRevenue) * 100).toFixed(1) : 0}%
-                                                </span>
-                                            </span>
-                                        </div>
-                                    )}
-                                    {r.otherCost > 0 && (
-                                        <div className="flex items-center justify-end gap-2 text-orange-600">
-                                            <span className="text-orange-600/70">Lain:</span>
-                                            <span className="font-medium">
-                                                {formatRupiah(r.otherCost)}
-                                                <span className="text-orange-400 ml-1 text-[10px]">
-                                                    | {calcs.totalRevenue > 0 ? ((r.otherCost / calcs.totalRevenue) * 100).toFixed(1) : 0}%
-                                                </span>
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            
-                            {hasNote && (
-                                <div className="flex items-center gap-1 text-[10px] text-amber-600 mt-1 max-w-[120px] justify-end truncate">
-                                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{r.notes || r.otherCostDesc}</span>
-                                </div>
-                            )}
-                         </div>
-                      </TableCell>
-
-                      {/* Kolom 6: Settlement (Neraca Transparan) */}
-                      <TableCell className="px-4 py-4 text-right align-top">
-                         <div className="flex flex-col gap-1 items-end">
-                            {/* 1. Cash On Hand (Modal) */}
-                            {calcs.cashOnHand > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 dark:text-slate-400">Cash:</span>
-                                    <span className="font-bold text-xs text-slate-700 dark:text-slate-300">{formatRupiah(calcs.cashOnHand)}</span>
-                                </div>
-                            )}
-
-                            {/* 2. Actual Setor (Kredit) */}
-                            {r.technicianDepositAmount > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-blue-600">Setor:</span>
-                                    <span className="font-bold text-xs text-blue-600">-{formatRupiah(r.technicianDepositAmount)}</span>
-                                </div>
-                            )}
-
-                            {/* 3. Hak Teknisi (Deduction - hanya jika Freelance untuk menjelaskan balance 0) */}
-                            {r.role === 'Freelance' && calcs.balance === 0 && calcs.netHakTeknisi > 0 && (
-                                <div className="flex items-center gap-2 mt-1 pt-1 border-t border-dashed border-slate-200 dark:border-slate-700">
-                                    <span className="text-[9px] text-slate-400 italic">Potong Hak:</span>
-                                    <span className="text-[9px] text-slate-500 italic">-{formatRupiah(calcs.netHakTeknisi)}</span>
-                                </div>
-                            )}
-                         </div>
-                      </TableCell>
-
-                      {/* Kolom 7: Status Setoran (Balance) */}
-                      <TableCell className="px-4 py-4 text-center align-top">
-                          {(() => {
-                              const bal = calcs.balance;
-
-                              if (calcs.cashOnHand === 0 && bal === 0) {
-                                  return (
-                                      <Badge variant="outline" className="border-slate-200 text-slate-400 bg-slate-50 text-[10px]">
-                                          CLEAR
-                                      </Badge>
-                                  );
-                              }
-
-                              if (bal === 0) {
-                                  return (
-                                      <div className="flex flex-col items-center gap-1">
-                                          <Badge variant="outline" className="border-emerald-200 text-emerald-600 bg-emerald-50 text-[10px]">
-                                              LUNAS
-                                          </Badge>
-                                          {r.role === 'Freelance' && calcs.netHakTeknisi > 0 && (
-                                              <span className="text-[9px] text-slate-400">(Potong Gaji)</span>
-                                          )}
-                                      </div>
-                                  );
-                              } else if (bal > 0) {
-                                  // Kurang Setor
-                                  return (
-                                      <div className="flex flex-col items-center gap-1">
-                                          <Badge variant="outline" className="border-red-200 text-red-600 bg-red-50 text-[10px]">
-                                              KURANG
-                                          </Badge>
-                                          <span className="text-[10px] text-red-600 font-bold whitespace-nowrap">
-                                             {formatRupiah(bal)}
-                                          </span>
-                                      </div>
-                                  );
-                              } else {
-                                  // Lebih Setor (Minus Balance)
-                                  return (
-                                      <div className="flex flex-col items-center gap-1">
-                                          <Badge variant="outline" className="border-blue-200 text-blue-600 bg-blue-50 text-[10px]">
-                                              LEBIH
-                                          </Badge>
-                                          <span className="text-[10px] text-blue-600 font-bold whitespace-nowrap">
-                                             {formatRupiah(Math.abs(bal))}
-                                          </span>
-                                      </div>
-                                  );
-                              }
-                          })()}
-                      </TableCell>
-
-                      {/* Kolom 8: Status Bayar (Office Debt / Transfer Balik) */}
-                      <TableCell className="px-4 py-4 text-center align-top">
-                          {(() => {
-                              const payoutPaid = isTechnicianPayoutPaid(r.paymentStatus);
-
-                              // Jika Balance < 0 (Lebih Setor), itu artinya Kantor Hutang ke Teknisi
-                              if (calcs.balance < 0) {
-                                  if (payoutPaid) {
-                                      return (
-                                          <div className="flex flex-col items-center gap-1">
-                                              <Badge variant="outline" className="border-emerald-200 text-emerald-600 bg-emerald-50 text-[10px]">
-                                                  SUDAH TRF
-                                              </Badge>
-                                          </div>
-                                      );
-                                  }
-
-                                  return (
-                                      <div className="flex flex-col items-center gap-1">
-                                           <Badge variant="outline" className="border-purple-200 text-purple-600 bg-purple-50 text-[10px]">
-                                              HUTANG KANTOR
-                                          </Badge>
-                                          <span className="text-[10px] text-purple-600 font-medium whitespace-nowrap">
-                                             (Trf Balik: {formatRupiah(Math.abs(calcs.balance))})
-                                          </span>
-                                      </div>
-                                  );
-                              }
-
-                              // Jika Karyawan Biasa -> Hutang Gaji Akhir Bulan (Tidak muncul di harian, kecuali di fitur lain)
-                              // Tapi jika ada unpaid office debt (selain balance harian):
-                              if (calcs.officeDebt > 0) {
-                                  if (payoutPaid) {
-                                      return (
-                                          <div className="flex flex-col items-center gap-1">
-                                              <Badge variant="outline" className="border-emerald-200 text-emerald-600 bg-emerald-50 text-[10px]">
-                                                  SUDAH TRF
-                                              </Badge>
-                                              <span className="text-[10px] text-emerald-600 font-medium whitespace-nowrap">
-                                                  {formatRupiah(calcs.officeDebt)}
-                                              </span>
-                                          </div>
-                                      );
-                                  }
-
-                                  return (
-                                      <div className="flex flex-col items-center gap-1">
-                                          <Badge variant="outline" className="border-purple-200 text-purple-600 bg-purple-50 text-[10px]">
-                                              BELUM BAYAR
-                                          </Badge>
-                                          <span className="text-[10px] text-purple-600 font-medium whitespace-nowrap">
-                                              {formatRupiah(calcs.officeDebt)}
-                                          </span>
-                                      </div>
-                                  );
-                              }
-                              
-                              // Logic Tambahan: Jika Status Paid TAPI officeDebt 0 (karena sudah lunas),
-                              // Kita cek apakah lunasnya via Transfer Manual (Setoran Full).
-                              // Jika ya, tampilkan history "SUDAH TRF" agar tidak strip (-).
-                              const isPaidViaTransfer = payoutPaid && r.technicianDepositAmount >= (calcs.cashOnHand - 1000);
-                              
-                              // Logic Potong Langsung (Auto Deduct)
-                              // Jika Balance 0 (Klop) DAN Hak Teknisi > 0 DAN Cash On Hand > Actual Setor
-                              // Berarti sisa cash diambil sebagai hak.
-                              // Kondisi ini bisa terjadi meski paymentStatus 'Unpaid' (karena secara cash flow sudah impas)
-                              if (calcs.balance === 0 && calcs.netHakTeknisi > 0 && calcs.cashOnHand > r.technicianDepositAmount) {
-                                   return (
-                                      <div className="flex flex-col items-center gap-1">
-                                          <Badge variant="outline" className="border-emerald-200 text-emerald-600 bg-emerald-50 text-[10px]">
-                                              AMBIL CASH
-                                          </Badge>
-                                          <span className="text-[10px] text-emerald-600 font-medium whitespace-nowrap">
-                                              {formatRupiah(calcs.netHakTeknisi)}
-                                          </span>
-                                      </div>
-                                  );
-                              }
-
-                              if (isPaidViaTransfer && calcs.netHakTeknisi > 0) {
-                                  return (
-                                      <div className="flex flex-col items-center gap-1">
-                                          <Badge variant="outline" className="border-emerald-200 text-emerald-600 bg-emerald-50 text-[10px]">
-                                              SUDAH TRF
-                                          </Badge>
-                                          <span className="text-[10px] text-emerald-600 font-medium whitespace-nowrap">
-                                              {formatRupiah(calcs.netHakTeknisi)}
-                                          </span>
-                                      </div>
-                                  );
-                              }
-
-                              return (
-                                  <Badge variant="outline" className="border-slate-200 text-slate-300 bg-slate-50 text-[10px]">
-                                      -
-                                  </Badge>
-                              );
-                          })()}
-                      </TableCell>
-
-                      {/* Kolom 7: Aksi */}
-                      <TableCell className="px-4 py-4 text-center align-top sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.05)]">
-                        <div className="flex items-center justify-center gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleViewDetail(r)} className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">
-                               <Eye className="w-4 h-4" />
-                            </Button>
-                            {hasPermission('daily_report.edit') && (
-                            <Button variant="ghost" size="sm" onClick={() => handleEditReport(r)} className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">
-                               <Edit className="w-4 h-4" />
-                            </Button>
-                            )}
-                            {hasPermission('daily_report.delete') && (
-                            <Button variant="ghost" size="sm" onClick={() => {
-                                setFormData(r);
-                                handleDelete();
-                            }} className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded">
-                               <Trash2 className="w-4 h-4" />
-                            </Button>
-                            )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-               })
-            )}
-          </TableBody>
-        </Table>
-        </div>
+                          )
+                        ) : calcs.balance === 0 && calcs.netHakTeknisi > 0 && calcs.cashOnHand > r.technicianDepositAmount ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-600">AMBIL CASH</Badge>
+                            <span className="text-[10px] font-medium text-emerald-600">{formatRupiah(calcs.netHakTeknisi)}</span>
+                          </div>
+                        ) : isPaidViaTransfer && calcs.netHakTeknisi > 0 ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] text-emerald-600">SUDAH TRF</Badge>
+                            <span className="text-[10px] font-medium text-emerald-600">{formatRupiah(calcs.netHakTeknisi)}</span>
+                          </div>
+                        ) : (
+                          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-[10px] text-slate-300">-</Badge>
+                        )}
+                      </td>
+                      <TableActionCell onClick={(event) => event.stopPropagation()}>
+                        <TableActionMenu>
+                          <TableActionMenuItem icon={Eye} onClick={() => handleViewDetail(r)}>
+                            Detail
+                          </TableActionMenuItem>
+                          {hasPermission('daily_report.edit') && (
+                            <TableActionMenuItem icon={Edit} onClick={() => handleEditReport(r)}>
+                              Edit
+                            </TableActionMenuItem>
+                          )}
+                          {hasPermission('daily_report.delete') && (
+                            <TableActionMenuItem danger icon={Trash2} onClick={() => requestDeleteReport(r)}>
+                              Hapus
+                            </TableActionMenuItem>
+                          )}
+                        </TableActionMenu>
+                      </TableActionCell>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </DataTable>
 
         {/* Floating Bulk Action Bar */}
         {selectedReportIds.length > 0 && (
@@ -2952,174 +2929,91 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
             />
         </OperationalKpiGrid>
 
-      <OperationalTableCard>
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white dark:bg-slate-900">
-          <div className="space-y-1">
-             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Rekap Performa Teknisi</h2>
-             <p className="text-sm text-slate-500 dark:text-slate-400">
-                Ringkasan performa dan keuangan per teknisi {dateRange?.from ? ` (${format(dateRange.from, 'dd MMM')}${dateRange.to ? ` - ${format(dateRange.to, 'dd MMM yyyy')}` : ''})` : ''}
-             </p>
-          </div>
-
-          <div className="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto mt-2 md:mt-0">
-             {/* Search */}
-             <div className="relative flex-1 md:w-64 w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
-                   placeholder="Cari teknisi..." 
-                   value={searchQuery}
-                   onChange={(e) => setSearchQuery(e.target.value)}
-                   className="pl-9 h-10 text-sm border-slate-200 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800 rounded-lg focus-visible:ring-1 focus-visible:ring-blue-500 focus-visible:ring-offset-0"
-                />
-             </div>
-
-             {/* Technician Dropdown Filter */}
-             <div className="w-full md:w-[200px]">
-                <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                    <SelectTrigger className="h-10 text-sm border-slate-200 dark:border-slate-700 shadow-sm bg-white dark:bg-slate-800 rounded-lg focus:ring-1 focus:ring-blue-500 focus:ring-offset-0">
-                        <div className="flex items-center gap-2 truncate">
-                            <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <SelectValue placeholder="Semua Teknisi" />
-                        </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Semua Teknisi</SelectItem>
-                        {availableTechnicians.map(t => (
-                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-             </div>
-
-             {/* Filters */}
-             <div className="flex w-full md:w-auto gap-2">
-                 <Select value={dateTypeFilter} onValueChange={(v: any) => setDateTypeFilter(v)}>
-                    <SelectTrigger className="w-[130px] md:w-[150px] h-10 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm rounded-lg focus:ring-1 focus:ring-blue-500 focus:ring-offset-0 shrink-0 text-xs md:text-sm px-3">
-                       <div className="flex items-center gap-2 truncate">
-                            <CalendarIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <SelectValue placeholder="Tipe" />
-                       </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                       <SelectItem value="service_date">Tgl Service</SelectItem>
-                       <SelectItem value="created_at">Waktu Input</SelectItem>
-                    </SelectContent>
-                 </Select>
-
-                 <div className="flex-1 md:flex-none min-w-0">
-                    <DatePickerWithRange 
-                        date={dateRange} 
-                        setDate={setDateRange}
-                        className="w-full md:w-[260px] h-10 border-slate-200 bg-white shadow-sm rounded-lg hover:bg-white text-xs md:text-sm px-3 truncate" 
-                    />
-                 </div>
-             </div>
+      <OperationalTableCard className="operationalReportTableCard">
+        <div className="operationalReportTableHeader">
+          <div>
+            <MasterDataTableTitle title="Rekap Performa Teknisi" count={technicianSummary.length} icon={Users} variant="active" />
+            <p className="operationalReportTableSubtitle">
+              Ringkasan performa dan keuangan per teknisi
+              {dateRange?.from ? ` periode ${format(dateRange.from, 'dd MMM yyyy', { locale: id })}${dateRange.to ? ` sampai ${format(dateRange.to, 'dd MMM yyyy', { locale: id })}` : ''}` : ''}
+            </p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-        <Table className="w-full min-w-[1200px]">
-          <TableHeader>
-            <TableRow className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 sticky left-0 bg-slate-50 z-10 w-[200px]">Teknisi</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-center w-[100px]">Job</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[150px]">Total Omset</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[140px]">Komisi</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[140px]">Save Komisi</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[140px]">Transport</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[140px]">Biaya Lain</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[150px]">Setoran Masuk</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-right w-[150px]">Kurang Setor</TableHead>
-              <TableHead className="h-14 px-4 text-xs font-bold text-slate-600 dark:text-slate-400 text-center sticky right-0 bg-slate-50 dark:bg-slate-800 z-10 w-[80px]">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <DataTable
+          className="operationalReportDataTable"
+          columns={['64px', '220px', '120px', '160px', '150px', '150px', '150px', '150px', '160px', '170px', '84px']}
+          minWidth={1574}
+          rowMinHeight={88}
+          cellX={16}
+          cellY={14}
+          primaryLines={2}
+          secondaryLines={2}
+        >
+        <table>
+          <thead>
+            <tr>
+              <th className="text-center">No</th>
+              <th>Teknisi</th>
+              <th className="text-center">Job</th>
+              <th className="text-right">Total Omset</th>
+              <th className="text-right">Komisi</th>
+              <th className="text-right">Save Komisi</th>
+              <th className="text-right">Transport</th>
+              <th className="text-right">Biaya Lain</th>
+              <th className="text-right">Setoran Masuk</th>
+              <th className="text-right">Kurang Setor</th>
+              <TableActionHeader />
+            </tr>
+          </thead>
+          <tbody>
             {technicianSummary.length === 0 ? (
-               <TableRow>
-                 <TableCell colSpan={10} className="text-center py-12 text-slate-500 dark:text-slate-400">
+               <tr>
+                 <td colSpan={11} className="py-12 text-center text-slate-500 dark:text-slate-400">
                     <OperationalEmptyState
                         icon={Users}
                         title="Belum ada data rekap"
                         description="Sesuaikan filter untuk melihat data."
                         className="py-12"
                     />
-                 </TableCell>
-               </TableRow>
+                 </td>
+               </tr>
             ) : (
-               technicianSummary.map((tech: any) => {
+               technicianSummary.map((tech: any, rowIndex: number) => {
                   const getPct = (val: number) => tech.totalRevenue > 0 ? ((val / tech.totalRevenue) * 100).toFixed(1) : '0';
                   
                   return (
-                  <TableRow key={tech.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50/60 transition-colors group">
-                     {/* Teknisi */}
-                     <TableCell className="px-4 py-4 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 transition-colors z-10">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200">
-                                {tech.name.charAt(0)}
-                            </div>
-                            <div>
-                                <div className="font-bold text-sm text-slate-900 truncate max-w-[140px]" title={tech.name}>{tech.name}</div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">{tech.role}</div>
-                            </div>
-                        </div>
-                     </TableCell>
-                     
-                     {/* Job */}
-                     <TableCell className="px-4 py-4 text-center">
-                        <div className="inline-flex flex-col items-center">
-                            <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full mb-1">
-                                {tech.totalFinished} / {tech.totalOrders}
-                            </span>
-                            <div className="text-[10px] text-slate-400">
-                                {tech.totalVisit} Visit . {tech.totalHomeService} HS
-                            </div>
-                        </div>
-                     </TableCell>
-                     
-                     {/* Omset */}
-                     <TableCell className="px-4 py-4 text-right">
-                        <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{formatRupiah(tech.totalRevenue)}</span>
-                     </TableCell>
-                     
-                     {/* Komisi */}
-                     <TableCell className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-0.5">
-                            <span className="font-semibold text-xs text-emerald-600">{formatRupiah(tech.totalCommission)}</span>
-                            <span className="text-[10px] text-slate-400">{getPct(tech.totalCommission)}%</span>
-                        </div>
-                     </TableCell>
-                     
-                     {/* Save */}
-                     <TableCell className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-0.5">
-                            <span className="font-semibold text-xs text-teal-600">{formatRupiah(tech.totalSaving)}</span>
-                            <span className="text-[10px] text-slate-400">{getPct(tech.totalSaving)}%</span>
-                        </div>
-                     </TableCell>
-                     
-                     {/* Transport */}
-                     <TableCell className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-0.5">
-                            <span className="font-semibold text-xs text-orange-600">{formatRupiah(tech.totalTransport)}</span>
-                            <span className="text-[10px] text-slate-400">{getPct(tech.totalTransport)}%</span>
-                        </div>
-                     </TableCell>
-                     
-                     {/* Biaya Lain */}
-                     <TableCell className="px-4 py-4 text-right">
-                        <div className="flex flex-col items-end gap-0.5">
-                            <span className="font-semibold text-xs text-red-600">{formatRupiah(tech.totalOtherCost)}</span>
-                            <span className="text-[10px] text-slate-400">{getPct(tech.totalOtherCost)}%</span>
-                        </div>
-                     </TableCell>
-                     
-                     {/* Setoran */}
-                     <TableCell className="px-4 py-4 text-right">
-                        <span className="font-bold text-sm text-blue-600">{formatRupiah(tech.totalDeposit)}</span>
-                     </TableCell>
-                     
-                     {/* Kurang Setor */}
-                     <TableCell className="px-4 py-4 text-right">
+                  <tr key={tech.id}>
+                     <td className="text-center text-sm font-semibold text-slate-500">{rowIndex + 1}</td>
+                     <td>
+                        <TableText primary={tech.name} secondary={tech.role} />
+                     </td>
+                     <td className="text-center">
+                        <TableText
+                          className="items-center text-center"
+                          primary={`${tech.totalFinished}/${tech.totalOrders}`}
+                          secondary={`${tech.totalVisit} Visit . ${tech.totalHomeService} HS`}
+                        />
+                     </td>
+                     <td className="text-right">
+                        <TableText className="items-end" primary={formatRupiah(tech.totalRevenue)} />
+                     </td>
+                     <td className="text-right">
+                        <TableText className="items-end" primary={formatRupiah(tech.totalCommission)} primaryClassName="text-emerald-700" secondary={`${getPct(tech.totalCommission)}%`} />
+                     </td>
+                     <td className="text-right">
+                        <TableText className="items-end" primary={formatRupiah(tech.totalSaving)} primaryClassName="text-teal-700" secondary={`${getPct(tech.totalSaving)}%`} />
+                     </td>
+                     <td className="text-right">
+                        <TableText className="items-end" primary={formatRupiah(tech.totalTransport)} primaryClassName="text-orange-700" secondary={`${getPct(tech.totalTransport)}%`} />
+                     </td>
+                     <td className="text-right">
+                        <TableText className="items-end" primary={formatRupiah(tech.totalOtherCost)} primaryClassName="text-red-700" secondary={`${getPct(tech.totalOtherCost)}%`} />
+                     </td>
+                     <td className="text-right">
+                        <TableText className="items-end" primary={formatRupiah(tech.totalDeposit)} primaryClassName="text-blue-700" />
+                     </td>
+                     <td className="text-right">
                         {(() => {
                             const balance = tech.totalDebt;
                             if (balance > 500) {
@@ -3130,21 +3024,21 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                                 return <span className="font-bold text-[11px] text-slate-400 bg-slate-100 px-2 py-1 rounded border border-slate-200">Lunas</span>;
                             }
                         })()}
-                     </TableCell>
-                     
-                     {/* Aksi */}
-                     <TableCell className="px-4 py-4 text-center sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/60 transition-colors z-10 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.05)]">
-                        <Button variant="ghost" size="sm" onClick={() => handleCopySummary(tech)} className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded">
-                            <Copy className="w-4 h-4" />
-                        </Button>
-                     </TableCell>
-                  </TableRow>
+                     </td>
+                     <TableActionCell>
+                        <TableActionMenu>
+                          <TableActionMenuItem icon={Copy} onClick={() => handleCopySummary(tech)}>
+                            Salin rekap
+                          </TableActionMenuItem>
+                        </TableActionMenu>
+                     </TableActionCell>
+                  </tr>
                   );
                })
             )}
-          </TableBody>
-        </Table>
-        </div>
+          </tbody>
+        </table>
+        </DataTable>
       </OperationalTableCard>
     </div>
       ) : (
@@ -3176,95 +3070,56 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
             />
         </OperationalKpiGrid>
 
-        <OperationalTableCard>
-          <div className="flex flex-col gap-4 border-b border-slate-100 bg-white p-5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold text-slate-900">Transaksi Operasional</h2>
-              <p className="text-sm text-slate-500">
-                Rekap dari Salin Tagihan, Buat Rekap Finance, dan Buat Req Transfer untuk proses validator finance.
-              </p>
-            </div>
-
-            <div className="flex w-full flex-col gap-2 md:flex-row xl:w-auto">
-              <div className="relative w-full md:w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  placeholder="Cari teknisi..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-10 bg-white pl-9 text-sm"
-                />
+        <OperationalTableCard className="operationalReportTableCard">
+          <div className="operationalReportTableHeader">
+            <div className="operationalReportTableTopline">
+              <div>
+                <MasterDataTableTitle title="Transaksi Operasional" count={operationalTransactions.length} icon={ArrowRightLeft} variant="active" />
+                <p className="operationalReportTableSubtitle">
+                  Rekap salin tagihan, rekap finance, dan req transfer untuk validator finance.
+                </p>
               </div>
-              <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                <SelectTrigger className="h-10 w-full bg-white md:w-[200px]">
-                  <SelectValue placeholder="Semua Teknisi" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Teknisi</SelectItem>
-                  {availableTechnicians.map(t => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <DatePickerWithRange
-                date={dateRange}
-                setDate={setDateRange}
-                className="h-10 w-full bg-white md:w-[260px]"
-              />
             </div>
           </div>
 
-          <div className="border-b border-slate-100 bg-white px-5 py-3">
-            <div className="inline-flex w-full gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1 md:w-auto">
-              {transactionTabOptions.map((tab) => {
-                const isActive = transactionTab === tab.value;
-
-                return (
-                  <Button
-                    key={tab.value}
-                    type="button"
-                    variant="outline"
-                    onClick={() => setTransactionTab(tab.value)}
-                    className={cn(
-                      "h-9 flex-1 rounded-md border-transparent bg-transparent px-4 text-xs font-semibold text-slate-600 shadow-none hover:border-slate-200 hover:bg-white md:flex-none md:min-w-[140px]",
-                      isActive && tab.activeClass,
-                    )}
-                  >
-                    {tab.label}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <Table className="w-full min-w-[1120px]">
-              <TableHeader>
-                <TableRow className="border-b border-slate-100 bg-slate-50 hover:bg-slate-50">
-                  <TableHead className="h-12 px-4 text-xs font-semibold text-slate-600">Tanggal</TableHead>
-                  <TableHead className="h-12 px-4 text-xs font-semibold text-slate-600">Teknisi</TableHead>
-                  <TableHead className="h-12 px-4 text-xs font-semibold text-slate-600">Transaksi</TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-semibold text-slate-600">Arah</TableHead>
-                  <TableHead className="h-12 px-4 text-right text-xs font-semibold text-slate-600">Nominal</TableHead>
-                  <TableHead className="h-12 px-4 text-center text-xs font-semibold text-slate-600">Status</TableHead>
-                  <TableHead className="h-12 px-4 text-xs font-semibold text-slate-600">Rincian</TableHead>
-                  <TableHead className="h-12 px-4 text-right text-xs font-semibold text-slate-600">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+          <DataTable
+            className="operationalReportDataTable"
+            columns={['64px', '150px', '210px', '240px', '120px', '150px', '150px', '320px', '84px']}
+            minWidth={1488}
+            rowMinHeight={92}
+            cellX={16}
+            cellY={14}
+            primaryLines={2}
+            secondaryLines={2}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-center">No</th>
+                  <th>Tanggal</th>
+                  <th>Teknisi</th>
+                  <th>Transaksi</th>
+                  <th className="text-center">Arah</th>
+                  <th className="text-right">Nominal</th>
+                  <th className="text-center">Status</th>
+                  <th>Rincian</th>
+                  <TableActionHeader />
+                </tr>
+              </thead>
+              <tbody>
                 {operationalTransactions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8}>
+                  <tr>
+                    <td colSpan={9}>
                       <OperationalEmptyState
                         icon={ArrowRightLeft}
                         title="Belum ada transaksi"
                         description="Pilih laporan lalu klik Buat Rekap Finance atau Buat Req Transfer untuk mencatat transaksi."
                         className="py-12"
                       />
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </tr>
                 ) : (
-                  operationalTransactions.map((tx) => {
+                  operationalTransactions.map((tx, rowIndex) => {
                     const canValidateDeposit = canValidateOperationalTransactions && tx.type === 'deposit' && tx.reportIds.length > 0 && tx.reports.some((report) => report.technicianDepositAmount > 0) && tx.status !== 'done';
                     const canValidatePayout = canValidateOperationalTransactions && tx.type === 'payout' && tx.reportIds.length > 0 && tx.status !== 'done';
                     const templateLabel = getOperationalTransactionTemplateLabel(tx);
@@ -3274,19 +3129,22 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                     const isForwardedExpense = tx.type === 'payout' && forwardedExpenseRefs.includes(forwardRef);
 
                     return (
-                    <TableRow key={tx.id} className={cn("border-b border-slate-100", transactionVisual.rowClass)}>
-                      <TableCell className="px-4 py-4 align-top">
-                        <div className="font-semibold text-slate-900">{tx.dateLabel}</div>
-                        <div className="mt-0.5 text-[11px] text-slate-400">
-                          {tx.reportCount} laporan
-                          {tx.requestedAt ? ` - Forward: ${format(new Date(tx.requestedAt), 'dd/MM HH:mm')}` : ''}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-4 align-top">
-                        <div className="font-semibold text-slate-900">{tx.technicianName}</div>
-                        <div className="mt-0.5 text-xs text-slate-500">{tx.role}</div>
-                      </TableCell>
-                      <TableCell className="px-4 py-4 align-top">
+                    <tr
+                      key={tx.id}
+                      onClick={() => handleViewDetail(tx.reports)}
+                      className={cn("cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50", transactionVisual.rowClass)}
+                    >
+                      <td className="text-center text-sm font-semibold text-slate-500">{rowIndex + 1}</td>
+                      <td>
+                        <TableText
+                          primary={tx.dateLabel}
+                          secondary={`${tx.reportCount} laporan${tx.requestedAt ? ` . Forward ${format(new Date(tx.requestedAt), 'dd/MM HH:mm')}` : ''}`}
+                        />
+                      </td>
+                      <td>
+                        <TableText primary={tx.technicianName} secondary={tx.role} />
+                      </td>
+                      <td>
                         <div className="flex flex-col items-start gap-1">
                           <Badge variant="outline" className={cn("text-[10px] font-semibold uppercase tracking-wide", transactionVisual.categoryClass)}>
                             {transactionVisual.categoryLabel}
@@ -3299,21 +3157,21 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                           {getOperationalTransactionSourceLabel(tx)}
                           {tx.requestedAt ? ` - ${format(new Date(tx.requestedAt), 'dd/MM HH:mm')}` : ''}
                         </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-4 text-center align-top">
+                      </td>
+                      <td className="text-center">
                         <Badge
                           variant="outline"
                           className={cn("text-[10px] font-semibold", transactionVisual.directionClass)}
                         >
                           {transactionVisual.directionLabel}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-4 text-right align-top">
+                      </td>
+                      <td className="text-right">
                         <div className={cn("font-semibold", transactionVisual.amountClass)}>
                           {formatRupiah(tx.amount)}
                         </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-4 text-center align-top">
+                      </td>
+                      <td className="text-center">
                         <Badge
                           variant="outline"
                           className={cn(
@@ -3325,110 +3183,86 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                         >
                           {tx.statusLabel}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[260px] px-4 py-4 align-top text-xs text-slate-500">
-                        {tx.description}
-                      </TableCell>
-                      <TableCell className="px-4 py-4 text-right align-top">
-                        <div className="flex flex-wrap justify-end gap-1.5">
-                          <Button variant="outline" size="sm" onClick={() => handleViewDetail(tx.reports)} className="h-8 px-3 text-xs">
+                      </td>
+                      <td>
+                        <TableText primary={tx.description} secondary={tx.sourceLabel} />
+                      </td>
+                      <TableActionCell onClick={(event) => event.stopPropagation()}>
+                        <TableActionMenu contentClassName="w-56">
+                          <TableActionMenuItem icon={Eye} onClick={() => handleViewDetail(tx.reports)}>
                             Detail
-                          </Button>
+                          </TableActionMenuItem>
                           {templateLabel && (
-                            <Button variant="ghost" size="sm" onClick={() => handleCopy(tx.templateText!)} className="h-8 px-2 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-900">
+                            <TableActionMenuItem icon={Copy} onClick={() => handleCopy(tx.templateText!)}>
                               {templateLabel}
-                            </Button>
+                            </TableActionMenuItem>
                           )}
                           {canValidateDeposit && (
-                            <Button size="sm" onClick={() => requestTransactionValidation(tx, 'deposit')} className="h-8 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700">
-                              Validasi Setoran
-                            </Button>
+                            <TableActionMenuItem icon={CheckCircle2} onClick={() => requestTransactionValidation(tx, 'deposit')}>
+                              Validasi setoran
+                            </TableActionMenuItem>
                           )}
                           {canValidatePayout && (
-                            <Button size="sm" onClick={() => requestTransactionValidation(tx, 'payout')} className="h-8 bg-blue-600 px-3 text-xs text-white hover:bg-blue-700">
-                              Validasi Transfer
-                            </Button>
+                            <TableActionMenuItem icon={CheckCircle2} onClick={() => requestTransactionValidation(tx, 'payout')}>
+                              Validasi transfer
+                            </TableActionMenuItem>
                           )}
                           {tx.type === 'payout' && tx.status === 'done' && isForwardedExpense && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled
-                              title="Transaksi ini sudah pernah diteruskan ke Biaya Operasional dari browser ini."
-                              className="h-8 px-2 text-xs text-emerald-600 opacity-80"
-                            >
+                            <TableActionMenuItem disabled icon={CheckCircle2}>
                               Sudah diforward
-                            </Button>
+                            </TableActionMenuItem>
                           )}
                           {tx.type === 'payout' && tx.status === 'done' && !isForwardedExpense && canForwardOperationalExpenses && (
-                            <Button variant="ghost" size="sm" onClick={() => handleForwardToOperationalExpenses(tx)} className="h-8 px-2 text-xs text-violet-600 hover:bg-violet-50 hover:text-violet-700">
-                              Forward Biaya
-                            </Button>
+                            <TableActionMenuItem icon={ArrowRightLeft} onClick={() => handleForwardToOperationalExpenses(tx)}>
+                              Forward biaya
+                            </TableActionMenuItem>
                           )}
                           {tx.type === 'payout' && tx.status === 'done' && !isForwardedExpense && !canForwardOperationalExpenses && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled
-                              title="Akses tambah Biaya Operasional belum aktif."
-                              className="h-8 px-2 text-xs text-slate-400 opacity-70"
-                            >
+                            <TableActionMenuItem disabled icon={ArrowRightLeft}>
                               Forward terkunci
-                            </Button>
+                            </TableActionMenuItem>
                           )}
                           {tx.type === 'payout' && tx.status !== 'done' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled
-                              title="Forward Biaya aktif setelah Validasi Transfer."
-                              className="h-8 px-2 text-xs text-slate-400 opacity-70"
-                            >
+                            <TableActionMenuItem disabled icon={ArrowRightLeft}>
                               Forward setelah validasi
-                            </Button>
+                            </TableActionMenuItem>
                           )}
-                          <Button variant={tx.status === 'done' || hasPrimaryValidation ? 'ghost' : 'outline'} size="sm" onClick={() => setPendingTransactionCancel(tx)} className={cn(
-                              "h-8 px-3 text-xs",
-                              tx.status === 'done'
-                                ? "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                : hasPrimaryValidation
-                                  ? "text-slate-500 hover:bg-red-50 hover:text-red-700"
-                                  : "border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                            )}>
-                              {tx.status === 'done' ? 'Hapus dari daftar' : 'Batalkan'}
-                            </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                          <TableActionMenuItem
+                            danger={tx.status !== 'done'}
+                            icon={tx.status === 'done' ? Trash2 : X}
+                            onClick={() => setPendingTransactionCancel(tx)}
+                          >
+                            {tx.status === 'done' ? 'Hapus dari daftar' : 'Batalkan'}
+                          </TableActionMenuItem>
+                        </TableActionMenu>
+                      </TableActionCell>
+                    </tr>
                     );
                   })
                 )}
-              </TableBody>
-            </Table>
-          </div>
+              </tbody>
+            </table>
+          </DataTable>
         </OperationalTableCard>
       </div>
       )}
 
       {/* DETAIL DIALOG */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className={cn(
-            "bg-white dark:bg-slate-900 rounded-xl",
-            selectedDetailReports.length > 1 ? "max-w-2xl" : "max-w-md"
-        )}>
-          <DialogHeader className="border-b border-slate-100 pb-4">
-            <DialogTitle className="flex items-center gap-2 text-lg">
-                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
-                    <Briefcase className="w-4 h-4 text-blue-600" />
-                </div>
-                {selectedDetailReports.length > 1 ? 'Detail Transaksi' : 'Detail Laporan'}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedDetailReports.length > 1
+        <MasterDataFormDialogContent
+          preventOutsideClose={false}
+          size={selectedDetailReports.length > 1 ? 'wide' : 'default'}
+          className="operationalReportDetailDialog"
+        >
+          <MasterDataFormHeader
+            icon={Briefcase}
+            title={selectedDetailReports.length > 1 ? 'Detail Transaksi' : 'Detail Laporan'}
+            description={
+              selectedDetailReports.length > 1
                 ? 'Daftar laporan harian yang membentuk transaksi gabungan ini.'
-                : 'Informasi lengkap laporan operasional teknisi.'}
-            </DialogDescription>
-          </DialogHeader>
+                : 'Informasi lengkap laporan operasional teknisi.'
+            }
+          />
           
           {selectedDetailReports.length > 1 ? (() => {
              const sortedDetails = [...selectedDetailReports].sort((a, b) => getReportDateTime(a) - getReportDateTime(b));
@@ -3805,7 +3639,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
               </Button>
               )}
           </div>
-        </DialogContent>
+        </MasterDataFormDialogContent>
       </Dialog>
 
       {/* MODAL */}
@@ -3846,19 +3680,19 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                        {/* LEFT COLUMN */}
                        <div className="lg:col-span-7 space-y-8">
                            {/* Info Dasar */}
-                           <div className="grid grid-cols-2 gap-6">
-                              <div className="space-y-2">
-                                <RequiredLabel>Tanggal Laporan</RequiredLabel>
+                           <MasterDataFormGrid className="grid-cols-1 md:grid-cols-2">
+                              <MasterDataFormField span="half">
+                                <MasterDataFieldLabel required>Tanggal Laporan</MasterDataFieldLabel>
                                 <Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="bg-white dark:bg-slate-800" />
-                              </div>
-                              <div className="space-y-2">
-                                <RequiredLabel>Nama Teknisi</RequiredLabel>
+                              </MasterDataFormField>
+                              <MasterDataFormField span="half">
+                                <MasterDataFieldLabel required>Nama Teknisi</MasterDataFieldLabel>
                                 <Select value={formData.technicianId} onValueChange={handleTechnicianChange} disabled={!!formData.id}>
                                   <SelectTrigger className="bg-white dark:bg-slate-800"><SelectValue placeholder="Pilih Teknisi" /></SelectTrigger>
                                   <SelectContent>{activeTechnicians.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                                 </Select>
-                              </div>
-                           </div>
+                              </MasterDataFormField>
+                           </MasterDataFormGrid>
                            
                            {/* Cards Statistik */}
                            <div className="space-y-4">
@@ -3910,15 +3744,11 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                                 
                                 {/* Row 1: Amount & Method */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="relative w-full">
-                                      <span className="absolute left-3 top-2.5 text-sm text-slate-400 z-10 font-medium">Rp</span>
-                                      <Input 
-                                        className="pl-9 h-10 text-sm font-bold bg-slate-50 border-slate-200 focus:bg-white transition-all w-full" 
-                                        placeholder="0"
-                                        value={new Intl.NumberFormat('id-ID').format(formData.technicianDepositAmount || 0)} 
-                                        onChange={e => setFormData({...formData, technicianDepositAmount: Number(e.target.value.replace(/\./g,''))})} 
-                                      />
-                                    </div>
+                                    <MasterDataCurrencyInput
+                                      className="h-10 bg-slate-50 text-sm font-bold transition-all focus:bg-white"
+                                      value={formData.technicianDepositAmount || 0}
+                                      onValueChange={(value) => setFormData({...formData, technicianDepositAmount: Number(value || 0)})}
+                                    />
                                     <div className="w-full">
                                         <Select value={formData.depositType} onValueChange={(v:any) => setFormData({...formData, depositType: v})}>
                                             <SelectTrigger className="h-10 bg-slate-50 border-slate-200 w-full"><SelectValue /></SelectTrigger>
@@ -4015,14 +3845,14 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                               <div className="grid grid-cols-2 gap-4">
                                  <div>
                                     <Label className="text-xs mb-1 block">Transport (Rp)</Label>
-                                    <Input value={new Intl.NumberFormat('id-ID').format(formData.transportCost||0)} onChange={e => setFormData({...formData, transportCost: Number(e.target.value.replace(/\./g,''))})} className="bg-slate-50 border-slate-200" />
+                                    <MasterDataCurrencyInput value={formData.transportCost || 0} onValueChange={(value) => setFormData({...formData, transportCost: Number(value || 0)})} className="bg-slate-50 border-slate-200" />
                                     <p className="text-[10px] text-slate-500 mt-1 text-right font-medium">
                                         {calcs.totalRevenue > 0 ? ((formData.transportCost / calcs.totalRevenue) * 100).toFixed(1) : '0'}% dari Omset
                                     </p>
                                  </div>
                                  <div>
                                     <Label className="text-xs mb-1 block">Lainnya (Rp)</Label>
-                                    <Input value={new Intl.NumberFormat('id-ID').format(formData.otherCost||0)} onChange={e => setFormData({...formData, otherCost: Number(e.target.value.replace(/\./g,''))})} className="bg-slate-50 border-slate-200" />
+                                    <MasterDataCurrencyInput value={formData.otherCost || 0} onValueChange={(value) => setFormData({...formData, otherCost: Number(value || 0)})} className="bg-slate-50 border-slate-200" />
                                     <p className="text-[10px] text-slate-500 mt-1 text-right font-medium">
                                         {calcs.totalRevenue > 0 ? ((formData.otherCost / calcs.totalRevenue) * 100).toFixed(1) : '0'}% dari Omset
                                     </p>
@@ -4191,7 +4021,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
            
            <SheetFooter className="p-6 border-t border-slate-100 bg-white gap-3 shrink-0 pb-8 sm:pb-6">
              {formData?.id && (
-               <Button variant="destructive" onClick={handleDelete} disabled={isSaving} className="w-full sm:w-auto order-2 sm:order-none sm:mr-auto">
+               <Button variant="destructive" onClick={() => requestDeleteReport(formData)} disabled={isSaving} className="w-full sm:w-auto order-2 sm:order-none sm:mr-auto">
                  Hapus
                </Button>
              )}
@@ -4203,115 +4033,34 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         </SheetContent>
       </Sheet>
 
-      {/* Filter Sheet */}
-      <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-        <SheetContent 
-            side={isMobile ? "bottom" : "right"} 
-            className={cn(
-                "flex flex-col p-0 gap-0 [&>button]:hidden", // Hide default close button
-                isMobile ? "h-[85vh] rounded-t-2xl" : "h-full w-[400px]"
-            )}
-        >
-           <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white sticky top-0 z-10 shrink-0">
-               <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                       <Filter className="w-5 h-5" />
-                   </div>
-                   <div className="flex flex-col">
-                       <h2 className="text-lg font-bold text-slate-900 leading-tight">Filter Data</h2>
-                       <p className="text-xs text-slate-500 dark:text-slate-400">Sesuaikan tampilan laporan</p>
-                   </div>
-               </div>
-               {!isMobile && (
-                 <Button variant="ghost" size="icon" onClick={() => setIsFilterOpen(false)} className="rounded-full hover:bg-slate-100">
-                    <ArrowRightLeft className="w-5 h-5 text-slate-400 rotate-180" /> 
-                 </Button>
-               )}
-           </div>
-
-           <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white dark:bg-slate-900">
-               {/* Technician */}
-               <div className="space-y-3">
-                   <Label className="text-sm font-semibold text-slate-700">Teknisi</Label>
-                   <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                        <SelectTrigger className="w-full h-12 border-slate-200 bg-slate-50/50 shadow-sm rounded-xl focus:ring-2 focus:ring-blue-100 px-4">
-                           <div className="flex items-center gap-3">
-                              <User className="w-4 h-4 text-slate-500" />
-                              <SelectValue placeholder="Semua Teknisi" />
-                           </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                           <SelectItem value="all">Semua Teknisi</SelectItem>
-                           {Array.from(new Set(reports.map(rep => rep.technicianId))).map(techId => {
-                               const tech = reports.find(rep => rep.technicianId === techId);
-                               return tech ? (
-                                   <SelectItem key={techId} value={techId}>{tech.technicianName}</SelectItem>
-                               ) : null;
-                           })}
-                        </SelectContent>
-                   </Select>
-               </div>
-
-               {/* Role Filter (New) */}
-               <div className="space-y-3">
-                   <Label className="text-sm font-semibold text-slate-700">Role / Status Kerja</Label>
-                   <Select value={roleFilter} onValueChange={setRoleFilter}>
-                        <SelectTrigger className="w-full h-12 border-slate-200 bg-slate-50/50 shadow-sm rounded-xl focus:ring-2 focus:ring-blue-100 px-4">
-                           <div className="flex items-center gap-3">
-                              <Briefcase className="w-4 h-4 text-slate-500" />
-                              <SelectValue placeholder="Semua Role" />
-                           </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                           <SelectItem value="all">Semua Role</SelectItem>
-                           <SelectItem value="Karyawan">Karyawan</SelectItem>
-                           <SelectItem value="Freelance">Freelance</SelectItem>
-                        </SelectContent>
-                   </Select>
-               </div>
-               
-               {/* Status Filter */}
-               <div className="space-y-3">
-                   <Label className="text-sm font-semibold text-slate-700">Status Pembayaran</Label>
-                   <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                        <SelectTrigger className="w-full h-12 border-slate-200 bg-slate-50/50 shadow-sm rounded-xl focus:ring-2 focus:ring-blue-100 px-4">
-                           <div className="flex items-center gap-3">
-                              <Wallet className="w-4 h-4 text-slate-500" />
-                              <SelectValue placeholder="Semua Status" />
-                           </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                           <SelectItem value="all">Semua Status</SelectItem>
-                           <SelectItem value="Paid">Lunas (Paid)</SelectItem>
-                           <SelectItem value="Unpaid">Belum Lunas (Unpaid)</SelectItem>
-                        </SelectContent>
-                   </Select>
-               </div>
-           </div>
-
-           <div className="p-4 border-t border-slate-100 bg-slate-50 mt-auto shrink-0 pb-8 sm:pb-4">
-               <div className="flex gap-3">
-                   <Button 
-                        variant="outline" 
-                        className="flex-1 h-12 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-100"
-                        onClick={() => {
-                            setTechnicianFilter('all');
-                            setRoleFilter('all');
-                            setStatusFilter('all');
-                        }}
-                   >
-                       Reset
-                   </Button>
-                   <Button 
-                        className="flex-[2] h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-200"
-                        onClick={() => setIsFilterOpen(false)}
-                   >
-                       Terapkan Filter
-                   </Button>
-               </div>
-           </div>
-        </SheetContent>
-      </Sheet>
+      <AlertDialog open={Boolean(pendingDeleteReport)} onOpenChange={(open) => {
+        if (!open && !isSaving) setPendingDeleteReport(null);
+      }}>
+        <AlertDialogContent className="max-w-md rounded-2xl border-slate-200 bg-white shadow-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus laporan operasional?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Laporan {pendingDeleteReport?.technicianName || 'teknisi'} tanggal {pendingDeleteReport?.date ? format(new Date(pendingDeleteReport.date), 'dd MMM yyyy', { locale: id }) : '-'} akan dihapus permanen dari list harian.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingDeleteReport(null)} disabled={isSaving}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const target = pendingDeleteReport;
+                setPendingDeleteReport(null);
+                void handleDelete(target);
+              }}
+              disabled={isSaving}
+              className="dangerButton"
+            >
+              Hapus Laporan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={Boolean(pendingBulkAction)} onOpenChange={(open) => {
         if (!open) setPendingBulkAction(null);

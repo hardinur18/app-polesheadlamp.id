@@ -74,8 +74,10 @@ export function OperationalKpiGrid({ children, className, ...props }: Operationa
 }
 
 type OperationalKpiCardProps = {
+  description?: React.ReactNode;
   label: string;
   value: React.ReactNode;
+  valueTitle?: string;
   icon?: LucideIcon;
   tone?: 'default' | 'blue' | 'emerald' | 'rose' | 'amber' | 'violet';
   className?: string;
@@ -90,7 +92,15 @@ const kpiToneClass: Record<NonNullable<OperationalKpiCardProps['tone']>, string>
   violet: 'violet text-violet-700 dark:text-violet-300',
 };
 
-export function OperationalKpiCard({ label, value, icon: Icon, tone = 'default', className }: OperationalKpiCardProps) {
+export function OperationalKpiCard({
+  description,
+  label,
+  value,
+  valueTitle,
+  icon: Icon,
+  tone = 'default',
+  className,
+}: OperationalKpiCardProps) {
   return (
     <div className={cn(
       'metricCard',
@@ -103,9 +113,10 @@ export function OperationalKpiCard({ label, value, icon: Icon, tone = 'default',
           <Icon className="h-5 w-5" />
         </span>
       )}
-      <span>
+      <span className="metricContent">
         <small>{label}</small>
-        <span className="metricValue">{value}</span>
+        <span className="metricValue" title={valueTitle}>{value}</span>
+        {description ? <em>{description}</em> : null}
       </span>
     </div>
   );

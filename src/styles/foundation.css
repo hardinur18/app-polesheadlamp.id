@@ -2306,6 +2306,7 @@
   align-items: center;
   gap: 14px;
   min-height: 116px;
+  min-width: 0;
   padding: 20px;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -2317,8 +2318,10 @@
   transition: box-shadow 220ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.metricCard > span:last-child {
+.metricCard > span:last-child,
+.metricContent {
   min-width: 0;
+  max-width: 100%;
 }
 
 .metricCard::before {
@@ -2362,11 +2365,13 @@
   display: block;
   margin-top: 4px;
   color: var(--ink);
-  font-size: 1.45rem;
+  font-size: clamp(1rem, 7cqi, 1.45rem);
   font-weight: 800;
   letter-spacing: 0;
-  line-height: 1.1;
+  line-height: 1.14;
+  max-width: 100%;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .metricCard em {
@@ -2378,6 +2383,19 @@
   font-weight: 600;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+@container (max-width: 220px) {
+  .metricIcon {
+    height: 42px;
+    width: 42px;
+  }
+
+  .metricCard strong,
+  .metricValue {
+    font-size: clamp(0.92rem, 8.5cqi, 1.1rem);
+    line-height: 1.18;
+  }
 }
 
 .metricCard.blue::before { background: linear-gradient(90deg, #60a5fa, #3b82f6); }
@@ -10974,7 +10992,7 @@ body {
 }
 
 .payrollMetricGrid.metricGrid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
 }
 
 .payrollTabs {
@@ -11073,6 +11091,88 @@ body {
   padding: 24px 28px;
 }
 
+.payrollTableToolbarActions {
+  align-items: center;
+  display: flex;
+  flex: 0 1 520px;
+  gap: 12px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.payrollSearchField {
+  flex: 1 1 280px;
+  max-width: 340px;
+  min-width: 220px;
+  position: relative;
+}
+
+.payrollSelectionSwitch {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e5eaf3;
+  border-radius: 999px;
+  color: #526179;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.payrollSelectionSwitch span {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 780;
+}
+
+.payrollSelectionSwitch [data-slot='switch'] {
+  background: #dbe4f0;
+}
+
+.payrollSelectionSwitch [data-slot='switch'][data-state='checked'] {
+  background: #0f6bdc;
+}
+
+.payrollSelectionBar {
+  align-items: center;
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
+  border-bottom: 1px solid #e8eef6;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px 28px;
+}
+
+.payrollSelectionBar strong,
+.payrollSelectionBar span {
+  display: block;
+}
+
+.payrollSelectionBar strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 820;
+  line-height: 1.25;
+}
+
+.payrollSelectionBar span {
+  color: #738197;
+  font-size: 0.78rem;
+  font-weight: 680;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.payrollSelectionActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .payrollTableToolbar > .uiButton,
 .payrollTableToolbar .uiButton {
   min-height: 44px;
@@ -11097,9 +11197,14 @@ body {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  --table-cell-x: 14px;
+  --table-cell-y: 16px;
+  --table-text-max: 100%;
 }
 
 .payrollDataTable.uiDataTableScroller > table {
+  width: var(--table-min-width);
+  min-width: var(--table-min-width);
   table-layout: fixed;
 }
 
@@ -11108,6 +11213,19 @@ body {
 .payrollOrderDetailTable.uiDataTableScroller th,
 .payrollOrderDetailTable.uiDataTableScroller td {
   vertical-align: middle;
+}
+
+.payrollDataTable.uiDataTableScroller th {
+  height: 50px;
+  padding-inline: var(--table-cell-x);
+}
+
+.payrollDataTable.uiDataTableScroller td {
+  padding-inline: var(--table-cell-x);
+}
+
+.payrollDataTable.uiDataTableScroller .tableTextStack {
+  align-content: center;
 }
 
 .payrollDataTable.uiDataTableScroller tbody td,
@@ -11123,6 +11241,53 @@ body {
 .payrollOrderDetailTable .tableTextPrimary,
 .payrollOrderDetailTable .tableTextSecondary {
   font-weight: inherit;
+}
+
+.payrollSelectCell {
+  padding-inline: 0 !important;
+  text-align: center;
+}
+
+.payrollSelectCell [data-slot='checkbox'] {
+  border-color: #cbd7e6;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  display: inline-flex;
+  margin: 0 auto;
+}
+
+.payrollDataTable.uiDataTableScroller th.payrollSelectCell,
+.payrollDataTable.uiDataTableScroller td.payrollSelectCell {
+  line-height: 0;
+  text-align: center !important;
+  vertical-align: middle;
+}
+
+.payrollDataTable.uiDataTableScroller th.payrollSelectCell > *,
+.payrollDataTable.uiDataTableScroller td.payrollSelectCell > * {
+  vertical-align: middle;
+}
+
+.payrollSelectCell [data-slot='checkbox']:hover {
+  border-color: #93c5fd;
+}
+
+.payrollSelectCell [data-slot='checkbox'][data-state='checked'] {
+  background: #0f6bdc;
+  border-color: #0f6bdc;
+}
+
+.payrollSelectCell [data-slot='checkbox'] svg {
+  stroke-width: 2.4;
+}
+
+.payrollTableIndexCell {
+  color: #64748b;
+  text-align: center !important;
+}
+
+.payrollNumericHeader,
+.payrollMoneyCell {
+  text-align: right !important;
 }
 
 .payrollMoneyCell {
@@ -11199,16 +11364,94 @@ body {
   min-width: 134px;
 }
 
+.payrollEstimateToolbarActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.payrollEstimateActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.payrollRunStatusBadge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 820;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.payrollRunStatusBadge.draft {
+  background: #f8fafc;
+  border-color: #dbe4f0;
+  color: #64748b;
+}
+
+.payrollRunStatusBadge.locked {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #0f55bd;
+}
+
+.payrollRunStatusBadge.posted {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #047857;
+}
+
 .payrollEstimateMetrics.metricGrid {
   border-bottom: 1px solid #e8eef6;
   gap: 14px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 20px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  padding: 22px 24px 24px;
 }
 
 .payrollEstimateMetrics .metricCard {
-  box-shadow: none;
-  min-height: 104px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border-color: #dfe7f2;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.05);
+  min-height: 112px;
+  padding: 18px 20px;
+}
+
+.payrollEstimateMetrics .metricCard:hover {
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.payrollEstimateMetrics .metricCard.noIcon {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.payrollEstimateMetrics .metricCard small {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 780;
+}
+
+.payrollEstimateMetrics .metricValue {
+  font-size: clamp(1.02rem, 6cqi, 1.38rem);
+  margin-top: 6px;
+}
+
+.payrollEstimateMetrics .metricCard em {
+  color: #64748b;
+  font-size: 0.76rem;
+  margin-top: 8px;
 }
 
 .payrollLinkButton {
@@ -11234,6 +11477,10 @@ body {
 .payrollBulkDialog.masterDataFormDialogContent,
 .payrollOrderDetailDialog.masterDataFormDialogContent {
   max-height: min(88vh, 980px) !important;
+}
+
+.payrollRunDetailDialog.masterDataFormDialogContent {
+  max-height: min(88vh, 1020px) !important;
 }
 
 .payrollSalaryForm,
@@ -11301,6 +11548,47 @@ body {
   font-weight: 860;
 }
 
+.payrollRunSummaryStrip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.payrollRunSummaryStrip > div {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #e5eaf3;
+  border-radius: 14px;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.payrollRunSummaryStrip span {
+  color: #738197;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.payrollRunSummaryStrip strong {
+  color: #0f172a;
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 840;
+  line-height: 1.35;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.payrollRunDetailActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 900px) {
   .payrollMetricGrid.metricGrid,
   .payrollEstimateMetrics.metricGrid {
@@ -11311,6 +11599,32 @@ body {
   .payrollTabsPanel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .payrollTableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .payrollTableToolbarActions {
+    flex: 1 1 auto;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .payrollSearchField {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .payrollSelectionBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .payrollSelectionActions {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .payrollTabsMeta {
@@ -11340,10 +11654,27 @@ body {
   .payrollSalaryDialog.masterDataFormDialogContent,
   .payrollKpiDialog.masterDataFormDialogContent,
   .payrollBulkDialog.masterDataFormDialogContent,
-  .payrollOrderDetailDialog.masterDataFormDialogContent {
+  .payrollOrderDetailDialog.masterDataFormDialogContent,
+  .payrollRunDetailDialog.masterDataFormDialogContent {
     max-height: calc(100vh - 28px) !important;
     max-width: calc(100vw - 28px) !important;
     width: calc(100vw - 28px) !important;
+  }
+
+  .payrollEstimateToolbarActions,
+  .payrollEstimateActions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .payrollEstimateActions .uiButton,
+  .payrollMonthControl {
+    width: 100%;
+  }
+
+  .payrollRunSummaryStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -11367,6 +11698,7 @@ body {
   }
 
   .payrollDetailActions,
+  .payrollRunDetailActions,
   .payrollSalaryForm .masterDataFormActions,
   .payrollKpiForm .masterDataFormActions,
   .payrollBulkForm .masterDataFormActions {
@@ -11375,9 +11707,491 @@ body {
   }
 
   .payrollDetailActions .uiButton,
+  .payrollRunDetailActions .uiButton,
   .payrollSalaryForm .masterDataFormActions .uiButton,
   .payrollKpiForm .masterDataFormActions .uiButton,
   .payrollBulkForm .masterDataFormActions .uiButton {
     width: 100%;
+  }
+
+  .payrollRunSummaryStrip {
+    grid-template-columns: 1fr;
+  }
+}
+
+.operationalReportControlStack {
+  display: grid;
+  gap: 14px;
+}
+
+.operationalReportTabs {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+  display: flex;
+  gap: 7px;
+  min-height: 48px;
+  overflow-x: auto;
+  padding: 6px;
+}
+
+.operationalReportFilterCard {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border: 1px solid #edf2f7;
+  border-radius: 26px;
+  box-shadow: 0 24px 58px -46px rgba(15, 23, 42, 0.45);
+  min-height: 126px;
+  overflow: visible;
+  padding: 18px;
+}
+
+.operationalReportTab {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 15px;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.operationalReportTab svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-2);
+  stroke-width: 2;
+}
+
+.operationalReportTab:hover {
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink-2);
+}
+
+.operationalReportTab.isActive {
+  background: #ffffff;
+  border-color: rgba(59, 130, 246, 0.16);
+  box-shadow: 0 12px 26px -20px rgba(37, 99, 235, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.82) inset;
+  color: var(--blue-ink);
+}
+
+.operationalReportTab.isActive svg {
+  color: var(--blue-ink);
+}
+
+.operationalReportControlFilters {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.operationalReportControlFilters.isDaily {
+  grid-template-areas:
+    "dateType dateRange dateRange search search"
+    "technician technician role role status";
+  grid-template-columns: minmax(178px, 0.64fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+}
+
+.operationalReportFilterControl {
+  min-width: 0;
+  width: 100%;
+}
+
+.operationalReportFilterControl .uiInput,
+.operationalReportFilterControl .uiSelectTrigger,
+.operationalReportFilterControl button[role="combobox"] {
+  height: 48px;
+  min-height: 48px;
+  width: 100%;
+}
+
+.operationalReportFilterSearch {
+  grid-area: search;
+}
+
+.operationalReportFilterDateType {
+  grid-area: dateType;
+}
+
+.operationalReportDateRange {
+  grid-area: dateRange;
+}
+
+.operationalReportFilterTechnician {
+  grid-area: technician;
+}
+
+.operationalReportFilterRole {
+  grid-area: role;
+}
+
+.operationalReportFilterStatus {
+  grid-area: status;
+}
+
+.operationalReportDateRange.filterDateField {
+  display: block;
+  gap: 0;
+}
+
+.operationalReportDateRange .filterDateButton {
+  background: #ffffff;
+  border-color: rgb(226 232 240);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-sm);
+  font-size: 0.875rem;
+  font-weight: 700;
+  height: 3rem;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.operationalReportDateRange .filterDateButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operationalReportDateRangePopover {
+  border-color: rgba(203, 213, 225, 0.92);
+  border-radius: 18px;
+  box-shadow: 0 26px 70px -38px rgba(15, 23, 42, 0.48);
+  max-width: min(calc(100vw - 32px), 520px);
+}
+
+.operationalReportDateRangePopover .dateRangePickerLayout.isCompact {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+}
+
+.operationalReportDateRangePopover .dateRangePresetList {
+  background: #fbfdff;
+  border-right-color: #e8eef6;
+  gap: 2px;
+  min-width: 148px;
+  padding: 12px 10px;
+}
+
+.operationalReportDateRangePopover .dateRangePresetList button {
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+  height: 32px;
+  justify-content: flex-start;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.operationalReportDateRangePopover .dateRangePresetList button:hover,
+.operationalReportDateRangePopover .dateRangePresetList button:focus-visible {
+  background: #f1f6ff;
+  box-shadow: none;
+  color: #075bc7;
+}
+
+.operationalReportDateRangePopover .dateRangeCalendarPanel {
+  padding: 10px 12px 12px;
+}
+
+.operationalReportDateRangePopover .rdp {
+  margin: 0;
+}
+
+.operationalReportDateRangePopover .rdp .rdp-nav_button,
+.operationalReportDateRangePopover .rdp button[name="previous-month"],
+.operationalReportDateRangePopover .rdp button[name="next-month"] {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #64748b;
+}
+
+.operationalReportDateRangePopover .rdp .rdp-nav_button:hover,
+.operationalReportDateRangePopover .rdp button[name="previous-month"]:hover,
+.operationalReportDateRangePopover .rdp button[name="next-month"]:hover {
+  background: transparent;
+  color: #0f172a;
+}
+
+.operationalReportControlFilters.isSummary {
+  grid-template-areas:
+    "dateType dateRange dateRange search search"
+    "technician technician role role status";
+  grid-template-columns: minmax(178px, 0.64fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+}
+
+.operationalReportControlFilters.isTransactions {
+  grid-template-areas:
+    "transactionTabs transactionTabs dateRange dateRange search"
+    "technician technician role role status";
+  grid-template-columns: minmax(220px, 0.88fr) minmax(0, 0.88fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr);
+}
+
+.operationalReportTransactionTabs {
+  grid-area: transactionTabs;
+}
+
+.operationalReportTableCard {
+  overflow: hidden;
+}
+
+.operationalReportTableHeader {
+  background: #ffffff;
+  border-bottom: 1px solid #edf2f7;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 24px 28px;
+}
+
+.operationalReportTableHeader.isStacked {
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 22px;
+}
+
+.operationalReportTableTopline {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.operationalReportTableSubtitle {
+  color: #64748b;
+  font-size: 0.96rem;
+  font-weight: 680;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.operationalReportInlineTabs {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  height: 48px;
+  padding: 5px;
+  width: 100%;
+}
+
+.operationalReportInlineTab {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #64748b;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 820;
+  justify-content: center;
+  min-height: 36px;
+  min-width: 0;
+  padding: 0 16px;
+  flex: 1 1 0;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  white-space: nowrap;
+}
+
+.operationalReportInlineTab:hover {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.operationalReportInlineTab.isActive {
+  background: #ffffff;
+  border-color: #d7e3f4;
+  box-shadow: 0 12px 28px -22px rgba(15, 23, 42, 0.65);
+  color: #075bc7;
+}
+
+.operationalReportDataTable.uiDataTableScroller {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.operationalReportDataTable.uiDataTableScroller > table {
+  table-layout: fixed;
+}
+
+.operationalReportDataTable.uiDataTableScroller th {
+  background: #f3f6fc;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 860;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.operationalReportDataTable.uiDataTableScroller td {
+  vertical-align: middle;
+}
+
+.operationalReportDataTable .tableTextStack {
+  max-width: 100%;
+}
+
+.operationalReportDataTable .items-end {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.operationalReportClickableRow {
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.operationalReportClickableRow:hover {
+  background: #f8fbff;
+}
+
+.operationalReportDetailDialog.masterDataFormDialogContent {
+  border-radius: 26px;
+}
+
+@media (max-width: 1280px) {
+  .operationalReportControlFilters.isDaily,
+  .operationalReportControlFilters.isSummary,
+  .operationalReportControlFilters.isTransactions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .operationalReportControlFilters.isDaily {
+    grid-template-areas:
+      "dateType dateRange dateRange"
+      "search search technician"
+      "role status status";
+  }
+
+  .operationalReportControlFilters.isSummary {
+    grid-template-areas:
+      "dateType dateRange dateRange"
+      "search search technician"
+      "role status status";
+  }
+
+  .operationalReportControlFilters.isTransactions {
+    grid-template-areas:
+      "transactionTabs transactionTabs transactionTabs"
+      "dateRange search technician"
+      "role status status";
+  }
+
+  .operationalReportTableTopline {
+    flex-direction: column;
+  }
+
+  .operationalReportInlineTabs {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .operationalReportControlStack {
+    gap: 12px;
+  }
+
+  .operationalReportFilterCard {
+    border-radius: 22px;
+    padding: 14px;
+  }
+
+  .operationalReportTabs {
+    border-radius: 20px;
+    padding: 6px;
+  }
+
+  .operationalReportTab {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+
+  .operationalReportTableHeader {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .operationalReportControlFilters.isDaily,
+  .operationalReportControlFilters.isSummary,
+  .operationalReportControlFilters.isTransactions {
+    grid-template-columns: 1fr;
+  }
+
+  .operationalReportControlFilters.isDaily {
+    grid-template-areas:
+      "dateType"
+      "dateRange"
+      "search"
+      "technician"
+      "role"
+      "status";
+  }
+
+  .operationalReportControlFilters.isSummary {
+    grid-template-areas:
+      "dateType"
+      "dateRange"
+      "search"
+      "technician"
+      "role"
+      "status";
+  }
+
+  .operationalReportControlFilters.isTransactions {
+    grid-template-areas:
+      "transactionTabs"
+      "dateRange"
+      "search"
+      "technician"
+      "role"
+      "status";
+  }
+
+  .operationalReportDateRangePopover .dateRangePickerLayout.isCompact {
+    grid-template-columns: 1fr;
+  }
+
+  .operationalReportDateRangePopover .dateRangePresetList {
+    border-bottom: 1px solid #e8eef6;
+    border-right: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .operationalReportInlineTabs {
+    overflow-x: auto;
+  }
+
+  .operationalReportInlineTab {
+    flex: 1 0 auto;
+    min-width: 132px;
+  }
+
+  .operationalReportDetailDialog.masterDataFormDialogContent {
+    max-height: calc(100vh - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+    width: calc(100vw - 28px) !important;
   }
 }
