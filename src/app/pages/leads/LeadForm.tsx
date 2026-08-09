@@ -40,7 +40,10 @@ import {
 } from "../../components/ui/collapsible";
 import { cn } from "../../components/ui/utils";
 import { Check, ChevronDown, ChevronsUpDown } from 'lucide-react';
-import { DialogFooter } from '../../components/ui/dialog';
+import {
+  MasterDataDialogBody,
+  MasterDataFormActions,
+} from '../../components/ui/master-data-ui';
 import { Lead, Branch, Platform, VehicleType, User, SubChannel } from '../master-data/data';
 import { useMasterData } from '../master-data/context';
 import { LEAD_SOCIAL_PLATFORM_OPTIONS, getLeadSocialPlatformLabel } from './socialContact';
@@ -273,9 +276,10 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="masterDataForm leadManagedForm">
+        <MasterDataDialogBody compact className="leadManagedFormBody">
         {/* Row 1: Name & Phone */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="leadFormGrid">
           <FormField
             control={form.control}
             name="name"
@@ -304,13 +308,13 @@ export const LeadForm: React.FC<LeadFormProps> = ({
           />
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-slate-200 p-4">
-          <Collapsible open={openSocialHelp} onOpenChange={setOpenSocialHelp} className="space-y-3">
-            <div className="flex items-start justify-between gap-3">
+        <div className="leadSocialSection">
+          <Collapsible open={openSocialHelp} onOpenChange={setOpenSocialHelp} className="leadSocialCollapsible">
+            <div className="leadSocialSectionHeader">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900">Kontak Sosial</h3>
-                  <span className="text-[11px] font-medium text-slate-400">Opsional</span>
+                <div className="leadSocialTitleRow">
+                  <h3>Kontak Sosial</h3>
+                  <span>Opsional</span>
                 </div>
               </div>
 
@@ -319,7 +323,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                  className="leadSocialToggle"
                   aria-label="Lihat panduan kontak sosial"
                 >
                   <ChevronDown
@@ -333,7 +337,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             </div>
 
             <CollapsibleContent>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+              <div className="leadSocialHelp">
                 <p>Isi username tanpa simbol "@".</p>
                 <p>Link room chat dipakai kalau kamu punya URL DM yang spesifik.</p>
                 <p>Kalau link profil kosong, sistem otomatis pakai username sebagai fallback.</p>
@@ -341,7 +345,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             </CollapsibleContent>
           </Collapsible>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="leadFormGrid">
             <FormField
               control={form.control}
               name="socialPlatform"
@@ -401,7 +405,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="leadFormGrid">
             <FormField
               control={form.control}
               name="socialChatUrl"
@@ -441,7 +445,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         </div>
 
         {/* Row 2: Source & Vehicle */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="leadFormGrid">
           <FormField
             control={form.control}
             name="platformId"
@@ -575,7 +579,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         </div>
 
         {/* Row 3: CS (Conditional) & Branch */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="leadFormGrid">
           <FormField
             control={form.control}
             name="csId"
@@ -662,7 +666,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         </div>
 
         {/* Row 4: Status */}
-        <div className="grid grid-cols-1 gap-4">
+        <div className="leadFormGrid single">
            <FormField
             control={form.control}
             name="status"
@@ -711,15 +715,12 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             </FormItem>
           )}
         />
+        </MasterDataDialogBody>
 
-        <DialogFooter className="mt-6 gap-2 sm:gap-0">
-          <Button type="button" variant="outline" onClick={onCancel} className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 w-full sm:w-auto">
-            Batal
-          </Button>
-          <Button type="submit" className="bg-blue-600 hover:bg-blue-700 shadow-sm w-full sm:w-auto">
-            {item ? 'Simpan Perubahan' : 'Tambah Prospek'}
-          </Button>
-        </DialogFooter>
+        <MasterDataFormActions
+          onCancel={onCancel}
+          saveLabel={item ? 'Simpan Perubahan' : 'Tambah Prospek'}
+        />
       </form>
     </Form>
   );

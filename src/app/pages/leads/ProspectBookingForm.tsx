@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { DialogFooter } from '../../components/ui/dialog';
+import {
+  MasterDataDialogBody,
+  MasterDataFieldLabel,
+} from '../../components/ui/master-data-ui';
 import { AVAILABLE_TIME_SLOTS, Lead, ProspectBooking } from '../master-data/data';
 import { useMasterData } from '../master-data/context';
 import { isTechnicianRole } from '@/app/data/roleHelpers';
@@ -189,10 +192,11 @@ export function ProspectBookingForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 py-4">
+    <form onSubmit={handleSubmit} className="masterDataForm leadBookingForm">
+      <MasterDataDialogBody compact className="leadManagedFormBody">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label>Nama Prospek <span className="text-red-500">*</span></Label>
+          <MasterDataFieldLabel required>Nama Prospek</MasterDataFieldLabel>
           <Input
             value={formData.customerName}
             onChange={(event) => handleChange('customerName', event.target.value)}
@@ -201,7 +205,7 @@ export function ProspectBookingForm({
           />
         </div>
         <div className="space-y-2">
-          <Label>No. WhatsApp <span className="text-red-500">*</span></Label>
+          <MasterDataFieldLabel required>No. WhatsApp</MasterDataFieldLabel>
           <Input
             value={formData.customerPhone}
             onChange={(event) => handleChange('customerPhone', event.target.value)}
@@ -213,7 +217,7 @@ export function ProspectBookingForm({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label>Tanggal Booking <span className="text-red-500">*</span></Label>
+          <MasterDataFieldLabel required>Tanggal Booking</MasterDataFieldLabel>
           <Input
             type="date"
             value={formData.scheduleDate}
@@ -223,7 +227,7 @@ export function ProspectBookingForm({
           />
         </div>
         <div className="space-y-2">
-          <Label>Jam Booking <span className="text-red-500">*</span></Label>
+          <MasterDataFieldLabel required>Jam Booking</MasterDataFieldLabel>
           <Select value={formData.scheduleTime} onValueChange={(value) => handleChange('scheduleTime', value)} disabled={lockSlotSelection}>
             <SelectTrigger>
               <SelectValue placeholder="Pilih jam booking" />
@@ -241,7 +245,7 @@ export function ProspectBookingForm({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label>Cabang <span className="text-red-500">*</span></Label>
+          <MasterDataFieldLabel required>Cabang</MasterDataFieldLabel>
           <Select
             value={formData.branchId}
             disabled={lockSlotSelection}
@@ -268,7 +272,7 @@ export function ProspectBookingForm({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Area</Label>
+          <MasterDataFieldLabel optional>Area</MasterDataFieldLabel>
           <Select
             value={formData.areaId || 'none_area'}
             onValueChange={(value) => handleChange('areaId', value === 'none_area' ? undefined : value)}
@@ -290,7 +294,7 @@ export function ProspectBookingForm({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="space-y-2">
-          <Label>Layanan</Label>
+          <MasterDataFieldLabel optional>Layanan</MasterDataFieldLabel>
           <Select
             value={formData.serviceId || 'none_service'}
             onValueChange={(value) => handleChange('serviceId', value === 'none_service' ? undefined : value)}
@@ -311,7 +315,7 @@ export function ProspectBookingForm({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>Teknisi {isTechnicianRequired && <span className="text-red-500">*</span>}</Label>
+          <MasterDataFieldLabel required={isTechnicianRequired} optional={!isTechnicianRequired}>Teknisi</MasterDataFieldLabel>
           <Select
             value={formData.technicianId || 'none_technician'}
             disabled={lockSlotSelection}
@@ -334,7 +338,7 @@ export function ProspectBookingForm({
 
       {allowStatusSelection && (
         <div className="space-y-2">
-          <Label>Status Booking</Label>
+          <MasterDataFieldLabel>Status Booking</MasterDataFieldLabel>
           <Select value={formData.status} onValueChange={(value) => handleChange('status', value as ProspectBooking['status'])}>
             <SelectTrigger>
               <SelectValue placeholder="Pilih status booking" />
@@ -351,7 +355,7 @@ export function ProspectBookingForm({
       )}
 
       <div className="space-y-2">
-        <Label>Alamat Singkat</Label>
+        <MasterDataFieldLabel optional>Alamat Singkat</MasterDataFieldLabel>
         <Textarea
           value={formData.address || ''}
           onChange={(event) => handleChange('address', event.target.value)}
@@ -361,7 +365,7 @@ export function ProspectBookingForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Link Maps</Label>
+        <MasterDataFieldLabel optional>Link Maps</MasterDataFieldLabel>
         <Input
           value={formData.mapsUrl || ''}
           onChange={(event) => handleChange('mapsUrl', event.target.value)}
@@ -370,7 +374,7 @@ export function ProspectBookingForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Catatan CS</Label>
+        <MasterDataFieldLabel optional>Catatan CS</MasterDataFieldLabel>
         <Textarea
           value={formData.notes || ''}
           onChange={(event) => handleChange('notes', event.target.value)}
@@ -378,8 +382,9 @@ export function ProspectBookingForm({
           className="min-h-[110px]"
         />
       </div>
+      </MasterDataDialogBody>
 
-      <DialogFooter className="gap-2 sm:gap-0">
+      <DialogFooter className="masterDataFormActions">
         <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
           Batal
         </Button>

@@ -1,22 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Search, Plus, Phone, Settings,
-  Edit, Trash2, MoreVertical, User as UserIcon, Lock, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, ListFilter, Copy, ExternalLink, CalendarClock, Ban, MessageCircle
+import {
+  Search, Plus, Phone,
+  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
-import { Modal } from '../components/ui/Modal';
-import { Label } from "../components/ui/label";
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from '../components/ui/table';
 import { Badge } from '../components/ui/badge';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+  Dialog, DialogFooter
 } from '../components/ui/dialog';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger, SheetFooter, SheetClose
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
 } from '../components/ui/sheet';
 import {
   DropdownMenu,
@@ -43,7 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Tabs, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { logActivity } from '@/app/services/auditService';
@@ -60,7 +55,7 @@ import { OrderForm } from './orders/OrderForm';
 import { Order } from './master-data/data';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/clipboard';
-import { DatePickerWithRange } from '../components/ui/date-range-picker';
+import { PeriodFilterPicker } from '../components/ui/period-filter-picker';
 import { DateRange } from 'react-day-picker';
 import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import {
@@ -72,6 +67,25 @@ import {
   OperationalPageShell,
   OperationalTableCard,
 } from '../components/ui/operational-page';
+import {
+  DataTable,
+  TableActionCell,
+  TableActionHeader,
+  TableActionMenu,
+  TableActionMenuItem,
+  TableText,
+} from '../components/ui/data-table';
+import { MasterDataTableTitle } from '../components/ui/master-data-table-title';
+import {
+  MasterDataDialogBody,
+  MasterDataFormActions,
+  MasterDataFormDialogContent,
+  MasterDataFormHeader,
+  MasterDataFormGrid,
+  MasterDataFormField,
+  MasterDataFieldLabel,
+} from '../components/ui/master-data-ui';
+import { Switch } from '../components/ui/switch';
 import {
   formatLeadSocialHandle,
   getLeadSocialPlatformLabel,
@@ -152,8 +166,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
   // Pagination & Selection State
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(100);
+  const [itemsPerPage] = useState(50);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showSelection, setShowSelection] = useState(false);
 
   // Bulk Edit State
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
@@ -162,6 +177,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
   // WA Template Selection State
   const [selectedWaLead, setSelectedWaLead] = useState<Lead | null>(null);
+  const [detailLead, setDetailLead] = useState<Lead | null>(null);
 
   const activePlatforms = useMemo(() => platforms.filter(p => p.status === 'active'), [platforms]);
   const activeVehicles = useMemo(() => vehicles.filter(v => v.status === 'active'), [vehicles]);
@@ -556,12 +572,55 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       setSelectedIds(new Set());
   }, [filteredData]);
 
+  useEffect(() => {
+      if (!showSelection) {
+          setSelectedIds(new Set());
+      }
+  }, [showSelection]);
+
   // Pagination Logic
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const paginatedLeads = useMemo(() => {
       const start = (currentPage - 1) * itemsPerPage;
       return filteredData.slice(start, start + itemsPerPage);
   }, [filteredData, currentPage, itemsPerPage]);
+
+  const selectedOnPageCount = useMemo(() => {
+      return paginatedLeads.filter((lead) => selectedIds.has(lead.id)).length;
+  }, [paginatedLeads, selectedIds]);
+
+  const allPageSelected = paginatedLeads.length > 0 && selectedOnPageCount === paginatedLeads.length;
+
+  const isDefaultDateRange = Boolean(
+      dateRange?.from &&
+      !dateRange?.to &&
+      startOfDay(dateRange.from).getTime() === startOfDay(new Date()).getTime()
+  ) || Boolean(
+      dateRange?.from &&
+      dateRange?.to &&
+      startOfDay(dateRange.from).getTime() === startOfDay(new Date()).getTime() &&
+      startOfDay(dateRange.to).getTime() === startOfDay(new Date()).getTime()
+  );
+
+  const hasActiveFilters = Boolean(
+      search ||
+      statusFilter !== 'all' ||
+      advertiserFilter !== 'all' ||
+      platformFilter !== 'all' ||
+      subChannelFilter !== 'all' ||
+      csFilter !== 'all' ||
+      !isDefaultDateRange
+  );
+
+  const resetFilters = () => {
+      setSearch('');
+      setStatusFilter('all');
+      setAdvertiserFilter('all');
+      setCsFilter('all');
+      setPlatformFilter('all');
+      setSubChannelFilter('all');
+      setDateRange({ from: new Date(), to: new Date() });
+  };
 
   const handleSelectAll = (checked: boolean) => {
       if (checked) {
@@ -983,34 +1042,13 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
           title="Kotak Masuk Prospek"
           subtitle="Kelola leads, follow up, booking awal, dan konversi menjadi pesanan."
           actions={
-            <div className="flex flex-wrap items-center gap-2">
-                 {/* View Toggle */}
-                 <div className="flex h-9 flex-shrink-0 items-center rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setViewMode('list')}
-                        className={viewMode === 'list' ? "h-7 bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100" : "h-7 text-slate-500 dark:text-slate-400"}
-                    >
-                        <LayoutList className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">List</span>
-                    </Button>
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setViewMode('kanban')}
-                        className={viewMode === 'kanban' ? "h-7 bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100" : "h-7 text-slate-500 dark:text-slate-400"}
-                    >
-                        <KanbanSquare className="w-4 h-4 md:mr-2" /> <span className="hidden md:inline">Board</span>
-                    </Button>
-                 </div>
-
-                 {/* Add Button */}
+            <div className="leadHeaderActions">
                  {hasPermission('leads.create') && (
                   <>
-                    {/* Mobile: Icon Only */}
-                    <Button 
+                    <Button
                       size="sm"
-                      className="h-9 w-9 rounded-lg bg-blue-600 p-0 text-white shadow-sm hover:bg-blue-700 md:hidden"
+                      aria-label="Tambah prospek"
+                      className="leadAddIconButton"
                       onClick={() => {
                         openAddLeadForm();
                       }}
@@ -1018,47 +1056,35 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                       <Plus className="h-5 w-5" />
                     </Button>
 
-                    {/* Desktop: With Text */}
-                    <div className="hidden md:block">
-                        <Button 
-                          className="h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                          onClick={() => {
-                            openAddLeadForm();
-                          }}
-                        >
-                          <Plus className="mr-2 h-4 w-4" /> Tambah Prospek
-                        </Button>
-                    </div>
+                    <Button
+                      className="leadAddButton"
+                      icon={<Plus className="h-4 w-4" />}
+                      onClick={() => {
+                        openAddLeadForm();
+                      }}
+                    >
+                      Tambah Prospek
+                    </Button>
                   </>
                  )}
             </div>
           }
         />
 
-          {/* Bottom Row (Mobile Only): Date, Status */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide md:hidden">
-              <div className="flex-shrink-0">
-                <DatePickerWithRange 
-                  date={dateRange}
-                  setDate={setDateRange}
-                  className="w-[200px] h-9 rounded-lg" 
-                />
-              </div>
-
-              <div className="flex-shrink-0">
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-9 w-[110px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-xs shadow-sm rounded-lg">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Semua</SelectItem>
-                    {['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'].map(status => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-          </div>
+        <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'list' | 'kanban')} className="masterDataTabsShell leadViewTabsShell">
+          <TabsViewport>
+            <TabsRail className="masterDataTabs leadViewTabs">
+              <TabsTrigger value="list" className="masterDataTab leadViewTab">
+                <LayoutList className="h-4 w-4" />
+              <span>List Prospek</span>
+              </TabsTrigger>
+              <TabsTrigger value="kanban" className="masterDataTab leadViewTab">
+                <KanbanSquare className="h-4 w-4" />
+                <span>Board Follow Up</span>
+              </TabsTrigger>
+            </TabsRail>
+          </TabsViewport>
+        </Tabs>
 
         {/* Stats Cards */}
         <OperationalKpiGrid>
@@ -1070,820 +1096,583 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         </OperationalKpiGrid>
 
 
-        {/* Filter Toolbar - New Compact Design */}
-        <OperationalFilterPanel className="flex flex-col gap-4">
-            {/* Row 1: Status Filter (Horizontal Scroll Pills) - Desktop Only */}
-            <div className="hidden md:flex items-center gap-3 overflow-x-auto w-full pb-2 md:pb-0 scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
-               {/* Desktop Date Picker */}
-               <div className="flex-shrink-0">
-                  <DatePickerWithRange 
-                    date={dateRange}
-                    setDate={setDateRange}
-                    className="h-10"
-                  />
-               </div>
-               
-               {/* Divider */}
-                <div className="mx-2 h-8 w-px bg-slate-200 dark:bg-slate-700" />
-
-               <div className="flex items-center gap-2">
-                 <Button 
-                  variant={statusFilter === 'all' ? 'default' : 'outline'} 
-                  size="sm" 
-                  onClick={() => setStatusFilter('all')}
-                  className={`h-9 rounded-full px-5 font-medium transition-all ${statusFilter === 'all' ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-100 dark:bg-blue-600 dark:ring-blue-950/80" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"}`}
-                >
-                  Semua
-                </Button>
-                 {['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'].map(status => (
-                    <Button 
-                      key={status}
-                      variant={statusFilter === status ? 'default' : 'outline'} 
-                      size="sm" 
-                      onClick={() => setStatusFilter(status)}
-                      className={`h-9 rounded-full px-5 font-medium transition-all ${statusFilter === status ? "bg-slate-900 text-white shadow-md ring-2 ring-slate-100 dark:bg-blue-600 dark:ring-blue-950/80" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"}`}
-                    >
-                      {status}
-                    </Button>
-                 ))}
-               </div>
+        <OperationalFilterPanel className="leadFilterPanel">
+          <div className="leadFilterGrid">
+            <div className="leadFilterDate leadFilterItem">
+              <PeriodFilterPicker
+                date={dateRange}
+                setDate={setDateRange}
+                className="leadPeriodPicker"
+                contentClassName="leadPeriodPopover"
+                triggerLabelMode="compact"
+              />
             </div>
 
-            {/* Row 2: Search & Filter Trigger */}
-            <div className="flex gap-3 items-center w-full">
-              <div className="relative flex-1 group">
-                <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400 transition-colors group-focus-within:text-blue-500 dark:text-slate-400" />
-                <Input 
-                  placeholder="Cari nama, nomor telepon, atau catatan..." 
-                  className="h-10 w-full rounded-lg border-slate-200 bg-white pl-10 text-slate-700 shadow-sm transition-all placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-400"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              
-              <Sheet>
-                  <SheetTrigger asChild>
-                      <Button variant="outline" className="relative h-10 gap-2 border-slate-200 bg-white px-4 text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                          <ListFilter className="w-4 h-4" />
-                          <span className="hidden sm:inline">Filter</span>
-                          {/* Active Filter Indicator */}
-                          {(advertiserFilter !== 'all' || platformFilter !== 'all' || subChannelFilter !== 'all' || csFilter !== 'all' || (dateRange?.from && dateRange.from.getDate() !== new Date().getDate())) && (
-                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                              </span>
-                          )}
-                      </Button>
-                  </SheetTrigger>
-                  <SheetContent 
-                      side={isDesktop ? "right" : "bottom"} 
-                      className={isDesktop 
-                          ? "h-full w-[400px] sm:max-w-[400px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 p-0 shadow-xl"
-                          : "h-[85vh] rounded-t-2xl px-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800"
-                      }
-                  >
-                      <SheetHeader className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800">
-                          <SheetTitle className="text-base font-semibold">Filter Prospek</SheetTitle>
-                          <SheetDescription className="text-xs">Tampilkan data spesifik berdasarkan kriteria</SheetDescription>
-                      </SheetHeader>
-                      <div className="p-6 space-y-6 overflow-y-auto max-h-[calc(85vh-100px)]">
-                            {!isAdvertiserView && (
-                            <div className="space-y-2">
-                                <Label>Advertiser</Label>
-                                <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
-                                    <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 shadow-sm">
-                                        <SelectValue placeholder="Pilih Advertiser" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Semua Advertiser</SelectItem>
-                                        {availableAdvertisers.map(user => (
-                                        <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            )}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="leadFilterControl leadFilterItem">
+                <SelectValue placeholder="Semua Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                {['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'].map(status => (
+                  <SelectItem key={status} value={status}>{status}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                             {/* CS Filter */}
-                            {(isAdminManagementUser || isAdvertiserView) && (
-                            <div className="space-y-2">
-                                <Label>CS / Staff</Label>
-                                <Select value={csFilter} onValueChange={setCsFilter}>
-                                    <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 shadow-sm">
-                                        <SelectValue placeholder="Pilih CS" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">Semua CS</SelectItem>
-                                        {availableCS.map((user) => (
-                                            <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            )}
+            <Select value={platformFilter} onValueChange={(val) => {
+              setPlatformFilter(val);
+              setSubChannelFilter('all');
+            }}>
+              <SelectTrigger className="leadFilterControl leadFilterItem">
+                <SelectValue placeholder="Semua Sumber" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Sumber</SelectItem>
+                {availablePlatforms.map(platform => (
+                  <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                            <div className="space-y-2">
-                                <Label>Sumber (Platform)</Label>
-                                <Select value={platformFilter} onValueChange={(val) => {
-                                   setPlatformFilter(val);
-                                   setSubChannelFilter('all');
-                                }}>
-                                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 shadow-sm">
-                                    <SelectValue placeholder="Pilih Sumber" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="all">Semua Sumber</SelectItem>
-                                    {availablePlatforms.map(platform => (
-                                      <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                            </div>
+            <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
+              <SelectTrigger className="leadFilterControl leadFilterItem">
+                <SelectValue placeholder="Semua Sub Channel" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Sub Channel</SelectItem>
+                {availableSubChannels.map(sc => (
+                  <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                            <div className="space-y-2">
-                                <Label>Sub Channel</Label>
-                                <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
-                                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 shadow-sm">
-                                    <SelectValue placeholder="Pilih Sub Channel" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="all">Semua Sub Ch</SelectItem>
-                                    {availableSubChannels.map(sc => (
-                                      <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                            </div>
-                      </div>
-                      <SheetFooter className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 sm:justify-between">
-                           <Button variant="ghost" onClick={() => {
-                               setAdvertiserFilter('all');
-                               setCsFilter('all');
-                               setPlatformFilter('all');
-                               setSubChannelFilter('all');
-                               setDateRange({ from: new Date(), to: new Date() });
-                           }}>
-                               Reset Filter
-                           </Button>
-                           <SheetClose asChild>
-                               <Button>Terapkan</Button>
-                           </SheetClose>
-                      </SheetFooter>
-                  </SheetContent>
-              </Sheet>
+            {(isAdminManagementUser || isAdvertiserView) && (
+              <Select value={csFilter} onValueChange={setCsFilter}>
+                <SelectTrigger className="leadFilterControl leadFilterItem">
+                  <SelectValue placeholder="Semua CS" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua CS</SelectItem>
+                  {availableCS.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {!isAdvertiserView && (
+              <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
+                <SelectTrigger className="leadFilterControl leadFilterItem">
+                  <SelectValue placeholder="Semua Advertiser" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Advertiser</SelectItem>
+                  {availableAdvertisers.map(user => (
+                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <div className="leadSearchBox leadFilterItem">
+              <Search className="leadSearchIcon" />
+              <Input
+                placeholder="Cari nama, nomor, platform, atau catatan..."
+                className="leadSearchInput"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="leadResetButton"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span>Reset</span>
+            </Button>
+          </div>
         </OperationalFilterPanel>
 
         {/* Content Card */}
         {viewMode === 'list' ? (
-        <OperationalTableCard>
-          
-          {/* Mass Action Bar */}
-          {selectedIds.size > 0 && (
-              <div className="bg-blue-50 border border-blue-100 p-2 px-4 rounded-lg flex items-center justify-between mb-4 animate-in fade-in slide-in-from-top-2 mx-4 md:mx-4 mt-0 md:mt-4">
-                  <div className="flex items-center gap-3 text-sm text-blue-700">
-                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-medium">{selectedIds.size} prospek terpilih</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="h-8 text-xs text-slate-500 hover:text-slate-700">
-                          Batal
-                      </Button>
-                      
-                      {hasPermission('leads.edit') && (
-                      <Button size="sm" variant="outline" onClick={() => setIsBulkEditOpen(true)} className="h-8 text-xs shadow-sm bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900">
-                          <Edit className="w-3.5 h-3.5 mr-1.5" />
-                          Edit ({selectedIds.size})
-                      </Button>
-                      )}
-
-                      {hasPermission('leads.delete') && (
-                      <Button size="sm" variant="destructive" onClick={handleMassDelete} className="h-8 text-xs shadow-sm">
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                          Hapus ({selectedIds.size})
-                      </Button>
-                      )}
-                  </div>
+          <OperationalTableCard className="leadTableCard">
+            <div className="leadTableHeader">
+              <MasterDataTableTitle title="Data Prospek" count={filteredData.length} icon={UserIcon} />
+              <div className="leadTableHeaderActions">
+                {showSelection && selectedIds.size > 0 && hasPermission('leads.edit') && (
+                  <Button type="button" variant="outline" className="leadBulkButton" onClick={() => setIsBulkEditOpen(true)}>
+                    <Edit className="h-4 w-4" />
+                    <span>Edit Massal</span>
+                  </Button>
+                )}
+                {showSelection && selectedIds.size > 0 && hasPermission('leads.delete') && (
+                  <Button type="button" variant="danger" className="leadBulkDangerButton" onClick={handleMassDelete}>
+                    <Trash2 className="h-4 w-4" />
+                    <span>Hapus Massal</span>
+                  </Button>
+                )}
+                <label className="leadSelectionSwitch">
+                  <Switch checked={showSelection} onCheckedChange={setShowSelection} />
+                  <span>Pilih baris</span>
+                </label>
               </div>
-          )}
+            </div>
 
-          {/* Data Table (DESKTOP) */}
-          <div className="hidden md:block rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm transition-all duration-300">
-            <div className="pb-2">
-            <Table className="min-w-[1720px] table-fixed">
-              <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50">
-                <TableRow className="border-b border-slate-100 dark:border-slate-700 hover:bg-transparent">
-                  <TableHead className="w-[50px] py-4 pl-4">
-                    <Checkbox 
-                        className="border-slate-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                        checked={paginatedLeads.length > 0 && Array.from(selectedIds).filter(id => paginatedLeads.find(o => o.id === id)).length === paginatedLeads.length}
-                        onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
-                    />
-                  </TableHead>
-                  <TableHead className="w-[50px] py-4 text-center text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">No</TableHead>
-                  <TableHead className="w-[110px] py-4 pl-6 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Waktu</TableHead>
-                  <TableHead className="w-[240px] py-4 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Nama & Kontak</TableHead>
-                  <TableHead className="w-[180px] py-4 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">CS / Staff</TableHead>
-                  <TableHead className="w-[220px] py-4 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Sumber | Sub Channel</TableHead>
-                  <TableHead className="w-[180px] py-4 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Mobil</TableHead>
-                  <TableHead className="w-[320px] py-4 text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">Catatan</TableHead>
-                  <TableHead className="sticky right-[188px] z-10 w-[180px] min-w-[180px] bg-slate-50/95 py-4 text-center text-xs font-semibold uppercase tracking-wider text-slate-600 shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.08)] backdrop-blur dark:bg-slate-800/95 dark:text-slate-300">Status</TableHead>
-                  {!isAdvertiserView && (
-                    <TableHead className="sticky right-0 z-20 w-[188px] min-w-[188px] bg-slate-50/95 py-4 pr-6 text-right text-xs font-semibold uppercase tracking-wider text-slate-600 shadow-[-6px_0_12px_-6px_rgba(15,23,42,0.12)] backdrop-blur dark:bg-slate-800/95 dark:text-slate-300">Aksi</TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedLeads.length === 0 ? (
-                   <TableRow>
-                     <TableCell colSpan={isAdvertiserView ? 10 : 11}>
+            {showSelection && (
+              <div className="leadSelectionToolbar">
+                <div>
+                  <strong>{selectedIds.size} dipilih</strong>
+                  <span>{paginatedLeads.length} data aktif di halaman ini</span>
+                </div>
+                <div className="leadSelectionToolbarActions">
+                  <Button type="button" variant="outline" onClick={() => handleSelectAll(true)}>
+                    Pilih semua
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setSelectedIds(new Set())} disabled={selectedIds.size === 0}>
+                    Bersihkan
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <DataTable
+              className="leadDataTable"
+              columns={[showSelection ? 58 : null, 68, 180, 260, 220, 230, 200, 300, 200, !isAdvertiserView ? 92 : null]}
+              minWidth={showSelection ? 1808 : 1750}
+              rowMinHeight={84}
+              cellY={16}
+              textMax={260}
+            >
+              <table>
+                <thead>
+                  <tr>
+                    {showSelection && (
+                      <th className="leadSelectCell">
+                        <Checkbox
+                          className="leadSoftCheckbox"
+                          checked={allPageSelected}
+                          onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                        />
+                      </th>
+                    )}
+                    <th>No</th>
+                    <th>Waktu</th>
+                    <th>Prospek</th>
+                    <th>CS / Staff</th>
+                    <th>Sumber</th>
+                    <th>Mobil</th>
+                    <th>Catatan</th>
+                    <th>Status</th>
+                    {!isAdvertiserView && <TableActionHeader />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={isAdvertiserView ? (showSelection ? 9 : 8) : (showSelection ? 10 : 9)}>
                         <OperationalEmptyState
                           icon={UserIcon}
                           title="Tidak ada data prospek ditemukan"
                           description="Coba ubah filter, tanggal, atau kata kunci pencarian."
                         />
-                     </TableCell>
-                   </TableRow>
-                ) : (
-                  paginatedLeads.map((item, index) => (
-                    <TableRow key={item.id} className={`group border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/80 dark:border-slate-700 dark:hover:bg-slate-800/70 ${selectedIds.has(item.id) ? 'bg-[rgba(59,130,246,0.08)] ring-1 ring-inset ring-blue-500/10 dark:bg-[rgba(37,99,235,0.18)] dark:ring-blue-400/15' : ''}`}>
-                      <TableCell className="py-4 pl-4 align-top w-[40px]">
-                        <Checkbox 
-                            className="border-slate-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                            checked={selectedIds.has(item.id)}
-                            onCheckedChange={(checked) => handleSelectRow(item.id, checked as boolean)}
-                        />
-                      </TableCell>
-                      <TableCell className="w-[50px] py-4 align-top text-center text-sm font-medium text-slate-500 dark:text-slate-300">
-                        {(currentPage - 1) * itemsPerPage + index + 1}
-                      </TableCell>
-                      <TableCell className="w-[110px] py-4 pl-6 align-top">
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-slate-900 dark:text-slate-200 text-sm">
-                            {new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                          </span>
-                          <span className="text-xs text-slate-500 dark:text-slate-300">
-                            {new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[240px] py-4 align-top">
-                        <div className="flex min-w-0 flex-col">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="truncate font-semibold text-slate-900 dark:text-slate-200 text-sm" title={item.name}>{item.name}</span>
-                            <AutoWhatsAppLeadBadge lead={item} className="shrink-0" />
-                          </div>
-                          {!isAdvertiserView && (
-                            <div className="mt-0.5 flex items-center text-xs text-slate-500 dark:text-slate-300">
-                              <Phone className="w-3 h-3 mr-1" />
-                              <span className="truncate" title={item.phone}>{item.phone}</span>
-                            </div>
-                          )}
-                          {!isAdvertiserView && getLeadSocialHandle(item) && (
-                            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-700 dark:bg-slate-900/40">
-                              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                {item.socialPlatform && (
-                                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
-                                    {getLeadSocialPlatformLabel(item.socialPlatform)}
-                                  </Badge>
-                                )}
-                                <span className="max-w-full truncate text-xs font-medium text-slate-700 dark:text-slate-200" title={getLeadSocialHandle(item)}>
-                                  {getLeadSocialHandle(item)}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="w-[180px] py-4 align-top">
-                        {item.csId ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center border border-slate-200 dark:border-slate-600">
-                              <UserIcon className="w-3 h-3 text-slate-500 dark:text-slate-300" />
-                            </div>
-                            <span className="truncate text-sm text-slate-700 dark:text-slate-200" title={getCSName(item.csId)}>{getCSName(item.csId)}</span>
-                          </div>
-                        ) : (
-                          <span className="text-xs italic text-slate-400 dark:text-slate-300">Belum assign</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="w-[220px] py-4 align-top">
-                         <div className="flex flex-col gap-1.5">
-                           <div className="flex items-center gap-2 flex-wrap">
-                               <span className="font-medium text-slate-700 dark:text-slate-200 text-sm">
-                                  {isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-'}
-                               </span>
-                               <span className="text-slate-300 dark:text-slate-600 text-sm">|</span>
-                               <span className="text-sm text-slate-500 dark:text-slate-300">
-                                  {isAutoWhatsAppLead(item) && !item.subChannelId ? 'Auto API' : getSubChannelName(item.subChannelId)}
-                               </span>
-                           </div>
-                           <AutoWhatsAppLeadBadge lead={item} />
-                         </div>
-                      </TableCell>
-                      <TableCell className="w-[180px] py-4 text-sm text-slate-700 dark:text-slate-300 align-top">
-                        {getVehicleName(item.vehicleId)}
-                      </TableCell>
-                      <TableCell className="w-[320px] py-4 align-top">
-                        <div className="flex max-w-[320px] flex-col">
-                          <p
-                            className="truncate text-sm text-slate-600 dark:text-slate-200"
-                            title={normalizeLeadNotes(item.notes) || undefined}
-                          >
-                            {getLeadNotesPreview(item.notes)}
-                          </p>
-                          <span className="mt-1 text-[10px] italic text-slate-400 dark:text-slate-300">
-                             Kontak: {item.lastContact || 'Belum ada'}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="sticky right-[188px] z-10 w-[180px] min-w-[180px] bg-white py-4 text-center align-top shadow-[-4px_0_10px_-6px_rgba(15,23,42,0.06)] transition-colors group-hover:bg-slate-50/80 dark:bg-slate-900 dark:group-hover:bg-slate-800/80">
-                        <div className="flex flex-col items-center gap-1">
-                          <Badge 
-                            variant="outline"
-                            className={`uppercase text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-sm ${getStatusBadgeVariant(item.status)}`}
-                          >
-                            {item.status}
-                          </Badge>
-                          {getLeadBooking(item.id) && (
-                            <div className="text-center">
-                              <div className="text-[10px] font-semibold text-violet-600">
-                                Booking {getBookingStatusLabel(getLeadBooking(item.id))}
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {getBookingSummary(item.id)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      {!isAdvertiserView && (
-                      <TableCell className="sticky right-0 z-20 w-[188px] min-w-[188px] bg-white py-4 pr-6 text-right align-top shadow-[-6px_0_12px_-6px_rgba(15,23,42,0.1)] transition-colors group-hover:bg-slate-50/80 dark:bg-slate-900 dark:group-hover:bg-slate-800/80">
-                        <div className="flex min-w-max justify-end gap-1">
-                          {getLeadSocialUrl(item) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20"
-                              title={getLeadSocialPrimaryActionLabel(item)}
-                              onClick={() => handleLeadSocialOpen(item)}
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </Button>
-                          )}
-                          {getLeadSocialHandle(item) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-                              title="Salin username sosial"
-                              onClick={() => void handleLeadSocialCopy(item)}
-                            >
-                              <Copy className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <div className="relative inline-block">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-[#25D366] hover:text-[#128C7E] hover:bg-green-50 dark:hover:bg-green-900/20 relative">
-                                        <WhatsappIcon className="w-5 h-5" />
-                                        {(item.templateHistory?.length || 0) > 0 && (
-                                            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white font-bold ring-2 ring-white dark:ring-slate-800">
-                                                {item.templateHistory?.length}
-                                            </span>
-                                        )}
-                                    </Button>
-                                </div>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="z-50 w-56 border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
-                                <DropdownMenuLabel className="dark:text-slate-200">Kirim Pesan WA</DropdownMenuLabel>
-                                <DropdownMenuSeparator className="dark:bg-slate-700" />
-                                {leadTemplates.length > 0 ? (
-                                    <>
-                                        {leadTemplates.map(template => (
-                                            <DropdownMenuItem 
-                                                key={template.id}
-                                                className={`cursor-pointer dark:text-slate-300 dark:focus:bg-slate-700 ${isTemplateUsed(item, template.id) ? 'bg-slate-50 dark:bg-slate-800/50' : ''}`}
-                                                onClick={() => handleWhatsappClick(item, template)}
-                                            >
-                                                <div className="flex items-center w-full justify-between gap-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <span>{template.title}</span>
-                                                        {(item.templateHistory?.filter(h => h.templateId === template.id).length || 0) > 0 && (
-                                                              <span className="min-w-[1.5rem] rounded-md bg-slate-100 px-1.5 py-0.5 text-center text-[10px] text-slate-500 dark:bg-slate-700 dark:text-slate-300">
-                                                                  {item.templateHistory?.filter(h => h.templateId === template.id).length}x
-                                                              </span>
-                                                        )}
-                                                    </div>
-                                                    {isTemplateUsed(item, template.id) && <Check className="w-3 h-3 text-green-500 ml-2 flex-shrink-0" />}
-                                                </div>
-                                            </DropdownMenuItem>
-                                        ))}
-                                        <DropdownMenuSeparator className="dark:bg-slate-700" />
-                                    </>
-                                ) : (
-                                    <div className="px-2 py-2 text-center text-xs italic text-slate-400 dark:text-slate-300">Belum ada template</div>
-                                )}
-                                <DropdownMenuItem className="cursor-pointer font-medium text-green-600 dark:text-green-400 dark:focus:bg-slate-700" onClick={() => handleWhatsappClick(item)}>
-                                    Chat Tanpa Template
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                          </DropdownMenu>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedLeads.map((item, index) => {
+                      const booking = getLeadBooking(item.id);
+                      const socialHandle = getLeadSocialHandle(item);
+                      const platformLabel = isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-';
+                      const subChannelLabel = isAutoWhatsAppLead(item) && !item.subChannelId ? 'Auto API' : getSubChannelName(item.subChannelId);
+                      const rowNumber = (currentPage - 1) * itemsPerPage + index + 1;
 
-                          <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xl z-50">
+                      return (
+                        <tr
+                          key={item.id}
+                          role="button"
+                          tabIndex={0}
+                          className={`leadClickableRow ${selectedIds.has(item.id) ? 'isSelected' : ''}`}
+                          onClick={() => setDetailLead(item)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              setDetailLead(item);
+                            }
+                          }}
+                        >
+                          {showSelection && (
+                            <td className="leadSelectCell" onClick={(event) => event.stopPropagation()}>
+                              <Checkbox
+                                className="leadSoftCheckbox"
+                                checked={selectedIds.has(item.id)}
+                                onCheckedChange={(checked) => handleSelectRow(item.id, checked as boolean)}
+                              />
+                            </td>
+                          )}
+                          <td className="leadNoCell">{rowNumber}</td>
+                          <td>
+                            <TableText
+                              primary={new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              secondary={new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                            />
+                          </td>
+                          <td>
+                            <div className="leadNameCell">
+                              <TableText
+                                primary={item.name}
+                                secondary={!isAdvertiserView ? item.phone : undefined}
+                                title={`${item.name} - ${item.phone}`}
+                              />
+                              <div className="leadInlineMeta">
+                                <AutoWhatsAppLeadBadge lead={item} />
+                                {!isAdvertiserView && socialHandle && (
+                                  <span title={socialHandle}>
+                                    {item.socialPlatform ? getLeadSocialPlatformLabel(item.socialPlatform) : 'Sosial'}: {socialHandle}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <TableText
+                              primary={item.csId ? getCSName(item.csId) : '-'}
+                              secondary={item.advertiserId ? users.find((user) => user.id === item.advertiserId)?.name : undefined}
+                            />
+                          </td>
+                          <td>
+                            <TableText primary={platformLabel} secondary={subChannelLabel} />
+                          </td>
+                          <td>
+                            <TableText primary={getVehicleName(item.vehicleId)} />
+                          </td>
+                          <td>
+                            <TableText
+                              primary={getLeadNotesPreview(item.notes, 82)}
+                              secondary={item.lastContact ? `Kontak: ${item.lastContact}` : 'Belum ada kontak'}
+                              title={normalizeLeadNotes(item.notes)}
+                            />
+                          </td>
+                          <td>
+                            <div className="leadStatusStack">
+                              <Badge variant="outline" className={`leadStatusBadge ${getStatusBadgeVariant(item.status)}`}>
+                                {item.status}
+                              </Badge>
+                              {booking && (
+                                <span className="leadBookingMeta" title={getBookingSummary(item.id)}>
+                                  Booking {getBookingStatusLabel(booking)} · {getBookingSummary(item.id)}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          {!isAdvertiserView && (
+                            <TableActionCell onClick={(event) => event.stopPropagation()}>
+                              <TableActionMenu contentClassName="w-56">
+                                <TableActionMenuItem icon={Eye} onClick={() => setDetailLead(item)}>
+                                  Detail
+                                </TableActionMenuItem>
+                                <TableActionMenuItem icon={Phone} onClick={() => setSelectedWaLead(item)}>
+                                  Template WA
+                                </TableActionMenuItem>
+                                {getLeadSocialUrl(item) && (
+                                  <TableActionMenuItem icon={ExternalLink} onClick={() => handleLeadSocialOpen(item)}>
+                                    {getLeadSocialPrimaryActionLabel(item)}
+                                  </TableActionMenuItem>
+                                )}
+                                {socialHandle && (
+                                  <TableActionMenuItem icon={Copy} onClick={() => void handleLeadSocialCopy(item)}>
+                                    Salin Username
+                                  </TableActionMenuItem>
+                                )}
                                 {canEditLead(item) && (
-                                  <DropdownMenuItem 
-                                      onClick={() => openEditLeadForm(item)} 
-                                      className="dark:text-slate-200 dark:focus:bg-slate-700 cursor-pointer"
-                                  >
-                                    <Edit className="w-4 h-4 mr-2" /> Edit
-                                  </DropdownMenuItem>
+                                  <TableActionMenuItem icon={Edit} onClick={() => openEditLeadForm(item)}>
+                                    Edit
+                                  </TableActionMenuItem>
                                 )}
                                 {item.status !== 'Closing' && (
-                                  <DropdownMenuItem onClick={() => openBookingForm(item)} className="text-violet-600 dark:text-violet-300 dark:focus:bg-slate-700 cursor-pointer">
-                                    <CalendarClock className="w-4 h-4 mr-2" /> Booking Jadwal
-                                  </DropdownMenuItem>
+                                  <TableActionMenuItem icon={CalendarClock} onClick={() => openBookingForm(item)}>
+                                    Booking Jadwal
+                                  </TableActionMenuItem>
                                 )}
                                 {item.status !== 'Closing' && getActiveLeadBooking(item.id) && (
-                                    <DropdownMenuItem
-                                        onClick={() => void handleCancelLeadBooking(item, getActiveLeadBooking(item.id))}
-                                        className="text-amber-600 dark:text-amber-400 dark:focus:bg-slate-700 cursor-pointer"
-                                    >
-                                      <Ban className="w-4 h-4 mr-2" /> Batalkan Booking
-                                    </DropdownMenuItem>
+                                  <TableActionMenuItem icon={Ban} onClick={() => void handleCancelLeadBooking(item, getActiveLeadBooking(item.id))}>
+                                    Batalkan Booking
+                                  </TableActionMenuItem>
                                 )}
                                 {item.status !== 'Closing' && (
-                                    <DropdownMenuItem onClick={() => setForwardLead(item)} className="text-blue-600 dark:text-blue-400 dark:focus:bg-slate-700 cursor-pointer">
-                                        <ArrowRightCircle className="w-4 h-4 mr-2" /> Proses Order
-                                    </DropdownMenuItem>
-                                )}
-                                {getLeadSocialHandle(item) && (
-                                    <DropdownMenuItem onClick={() => void handleLeadSocialCopy(item)} className="dark:text-slate-200 dark:focus:bg-slate-700 cursor-pointer">
-                                        <Copy className="w-4 h-4 mr-2" /> Salin Username Sosial
-                                    </DropdownMenuItem>
+                                  <TableActionMenuItem icon={ArrowRightCircle} onClick={() => setForwardLead(item)}>
+                                    Proses Order
+                                  </TableActionMenuItem>
                                 )}
                                 {canDeleteLead(item) && (
-                                  <>
-                                    <DropdownMenuSeparator className="dark:bg-slate-700" />
-                                    <DropdownMenuItem 
-                                        onClick={() => setDeleteId(item.id)} 
-                                        className="text-red-600 dark:text-red-400 dark:focus:bg-slate-700 cursor-pointer"
-                                    >
-                                      <Trash2 className="w-4 h-4 mr-2" /> Hapus
-                                    </DropdownMenuItem>
-                                  </>
+                                  <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteId(item.id)}>
+                                    Hapus
+                                  </TableActionMenuItem>
                                 )}
-                              </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-            </div>
-            {/* Pagination Controls */}
-            <div className="flex items-center justify-between border-t border-slate-200 p-4 dark:border-slate-800">
-              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                   <div className="flex items-center">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400" 
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      >
-                         &lt;
-                      </Button>
-                      <div className="flex items-center justify-center min-w-[32px] font-medium text-slate-700 dark:text-slate-200">
-                        {currentPage}
-                      </div>
-                      <span className="mx-1 text-slate-400 dark:text-slate-500">/</span>
-                      <span className="mr-2 text-slate-400 dark:text-slate-400">{totalPages}</span>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400" 
-                        disabled={currentPage === totalPages || totalPages === 0}
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      >
-                         &gt;
-                      </Button>
-                   </div>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-300">Tampilkan:</span>
-                  <Select 
-                     value={itemsPerPage.toString()} 
-                     onValueChange={(val) => {
-                         setItemsPerPage(Number(val));
-                         setCurrentPage(1);
-                     }}
-                  >
-                      <SelectTrigger className="w-[140px] h-8 text-xs bg-white dark:bg-slate-800 border border-blue-200 dark:border-slate-700 hover:border-blue-300 focus:ring-blue-200 text-slate-700 dark:text-slate-300 rounded-md shadow-sm">
-                          <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="z-[200]">
-                          <SelectItem value="50">50 / Halaman</SelectItem>
-                          <SelectItem value="100">100 / Halaman</SelectItem>
-                          <SelectItem value="200">200 / Halaman</SelectItem>
-                          <SelectItem value="300">300 / Halaman</SelectItem>
-                      </SelectContent>
-                  </Select>
+                              </TableActionMenu>
+                            </TableActionCell>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </DataTable>
+
+            <div className="leadPaginationBar">
+              <span>
+                Menampilkan {paginatedLeads.length ? (currentPage - 1) * itemsPerPage + 1 : 0}-
+                {Math.min(currentPage * itemsPerPage, filteredData.length)} dari {filteredData.length} data, maks. 50 baris per halaman
+              </span>
+              <div className="leadPaginationActions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <strong>{totalPages === 0 ? 0 : currentPage} / {totalPages || 0}</strong>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          </div>
-
-          {/* Mobile Card List (Generic for Table View) */}
-          <div className="md:hidden p-4 space-y-3">
-             {/* Simplified mobile view per user request */}
-             {filteredData.map(item => {
-                return (
-                <div key={item.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm">
-                    <div className="flex justify-between items-start mb-2">
-                        <div>
-                           <div className="flex min-w-0 items-center gap-2">
-                             <h4 className="truncate font-bold text-slate-900 dark:text-slate-100">{item.name}</h4>
-                             <AutoWhatsAppLeadBadge lead={item} className="shrink-0" />
-                           </div>
-                           {!isAdvertiserView && (
-                               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{item.phone}</p>
-                           )}
-                        </div>
-                        <Badge className={getStatusBadgeVariant(item.status)} variant="outline">{item.status}</Badge>
-                    </div>
-                    
-                    <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500 dark:text-slate-400 mb-1">
-                        <span className="font-medium text-slate-700 dark:text-slate-300">
-                           {isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-'}
-                        </span>
-                        <span>|</span>
-                        <span>{isAutoWhatsAppLead(item) && !item.subChannelId ? 'Auto API' : getSubChannelName(item.subChannelId)}</span>
-                        <AutoWhatsAppLeadBadge lead={item} className="ml-1" />
-                    </div>
-
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                        CS: {csUsers.find(u => u.id === item.csId)?.name || '-'}
-                    </div>
-
-                    {getLeadBooking(item.id) && (
-                        <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/70 px-2.5 py-2 text-[11px] text-violet-700">
-                            <div className="font-semibold">Booking {getBookingStatusLabel(getLeadBooking(item.id))}</div>
-                            <div className="text-violet-600/80">{getBookingSummary(item.id)}</div>
-                        </div>
-                    )}
-
-                    {!isAdvertiserView && getLeadSocialHandle(item) && (
-                        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-700 dark:bg-slate-900/40">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                {item.socialPlatform && (
-                                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
-                                        {getLeadSocialPlatformLabel(item.socialPlatform)}
-                                    </Badge>
-                                )}
-                                <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                                    {getLeadSocialHandle(item)}
-                                </span>
-                            </div>
-                        </div>
-                    )}
-                    
-                    {/* Actions Footer - Completely hidden for Advertiser */}
-                    {!isAdvertiserView && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2">
-                             <Button 
-                                size="sm" variant="outline" 
-                                className="h-8 text-xs border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/30 w-full"
-                                onClick={(e) => { e.stopPropagation(); setSelectedWaLead(item); }}
-                            >
-                                <Phone className="w-3 h-3 mr-1" /> WA
-                            </Button>
-                            {getLeadSocialUrl(item) && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-8 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/30"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleLeadSocialOpen(item);
-                                    }}
-                                >
-                                    <ExternalLink className="w-3 h-3 mr-1" />
-                                    {getLeadSocialPrimaryActionLabel(item)}
-                                </Button>
-                            )}
-
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                                        <MoreVertical className="w-4 h-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    {canEditLead(item) && (
-                                      <DropdownMenuItem onClick={() => openEditLeadForm(item)}>
-                                          <Edit className="w-4 h-4 mr-2" /> Edit
-                                      </DropdownMenuItem>
-                                    )}
-                                    {item.status !== 'Closing' && (
-                                        <DropdownMenuItem onClick={() => openBookingForm(item)}>
-                                            <CalendarClock className="w-4 h-4 mr-2" /> Booking Jadwal
-                                        </DropdownMenuItem>
-                                    )}
-                                    {item.status !== 'Closing' && getActiveLeadBooking(item.id) && (
-                                        <DropdownMenuItem onClick={() => void handleCancelLeadBooking(item, getActiveLeadBooking(item.id))} className="text-amber-600">
-                                            <Ban className="w-4 h-4 mr-2" /> Batalkan Booking
-                                        </DropdownMenuItem>
-                                    )}
-                                    {item.status !== 'Closing' && (
-                                        <DropdownMenuItem onClick={() => setForwardLead(item)}>
-                                            <ArrowRightCircle className="w-4 h-4 mr-2" /> Proses Order
-                                        </DropdownMenuItem>
-                                    )}
-                                    {getLeadSocialHandle(item) && (
-                                        <DropdownMenuItem onClick={() => void handleLeadSocialCopy(item)}>
-                                            <Copy className="w-4 h-4 mr-2" /> Salin Username Sosial
-                                        </DropdownMenuItem>
-                                    )}
-                                    {canDeleteLead(item) && (
-                                      <>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="text-red-600">
-                                            <Trash2 className="w-4 h-4 mr-2" /> Hapus
-                                        </DropdownMenuItem>
-                                      </>
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                    )}
-                </div>
-                );
-             })}
-          </div>
-
-           {/* Bulk Edit Modal */}
-            <Modal
-                title={`Edit Massal (${selectedIds.size} Prospek)`}
-                isOpen={isBulkEditOpen}
-                onClose={() => setIsBulkEditOpen(false)}
-                className="max-w-md"
-            >
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Pilih Kolom yang akan diedit</Label>
-                        <Select value={bulkField} onValueChange={(val) => { setBulkField(val); setBulkValue(''); }}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Pilih Kolom" />
-                            </SelectTrigger>
-                            <SelectContent className="z-[250]">
-                                <SelectItem value="status">Status</SelectItem>
-                                <SelectItem value="csId">CS / Staff</SelectItem>
-                                <SelectItem value="advertiserId">Advertiser</SelectItem>
-                                <SelectItem value="platformId">Sumber (Platform)</SelectItem>
-                                <SelectItem value="vehicleId">Kendaraan</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {bulkField && (
-                        <div className="space-y-2">
-                            <Label>Pilih Nilai Baru</Label>
-                            {bulkField === 'status' ? (
-                                <Select value={bulkValue} onValueChange={setBulkValue}>
-                                    <SelectTrigger><SelectValue placeholder="Pilih Status" /></SelectTrigger>
-                                    <SelectContent className="z-[250]">
-                                        <SelectItem value="Pending">Pending</SelectItem>
-                                        <SelectItem value="Follow Up">Follow Up</SelectItem>
-                                        <SelectItem value="Booking">Booking</SelectItem>
-                                        <SelectItem value="Closing">Closing</SelectItem>
-                                        <SelectItem value="Cancel">Cancel</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            ) : bulkField === 'csId' ? (
-                                <Select value={bulkValue} onValueChange={setBulkValue}>
-                                    <SelectTrigger><SelectValue placeholder="Pilih CS" /></SelectTrigger>
-                                    <SelectContent className="z-[250]">
-                                        {csUsers.map(u => (
-                                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : bulkField === 'advertiserId' ? (
-                                <Select value={bulkValue} onValueChange={setBulkValue}>
-                                    <SelectTrigger><SelectValue placeholder="Pilih Advertiser" /></SelectTrigger>
-                                    <SelectContent className="z-[250]">
-                                        {advertiserUsers.map(u => (
-                                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : bulkField === 'platformId' ? (
-                                <Select value={bulkValue} onValueChange={setBulkValue}>
-                                    <SelectTrigger><SelectValue placeholder="Pilih Sumber" /></SelectTrigger>
-                                    <SelectContent className="z-[250]">
-                                        {activePlatforms.map(p => (
-                                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : bulkField === 'vehicleId' ? (
-                                <Select value={bulkValue} onValueChange={setBulkValue}>
-                                    <SelectTrigger><SelectValue placeholder="Pilih Kendaraan" /></SelectTrigger>
-                                    <SelectContent className="z-[250]">
-                                        {activeVehicles.map(v => (
-                                            <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : null}
-                        </div>
-                    )}
-                    
-                    <div className="flex justify-end gap-2 pt-4">
-                        <Button variant="ghost" onClick={() => setIsBulkEditOpen(false)}>Batal</Button>
-                        <Button onClick={handleBulkUpdate} disabled={!bulkField || !bulkValue}>Simpan Perubahan</Button>
-                    </div>
-                </div>
-            </Modal>
-        </OperationalTableCard>
+          </OperationalTableCard>
         ) : (
             /* KANBAN VIEW */
             kanbanView
         )}
       </div>
 
-      {/* Add/Edit Sheet (Replaces Modal) */}
-      <Sheet open={isAddOpen} onOpenChange={handleAddSheetOpenChange}>
-        <SheetContent 
-            side={isDesktop ? "right" : "bottom"} 
-            className={isDesktop 
-                ? "h-full w-[600px] sm:max-w-[600px] bg-slate-50 dark:bg-slate-950 p-0 overflow-hidden border-l border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl"
-                : "h-[95vh] w-full bg-slate-50 dark:bg-slate-950 p-0 overflow-hidden rounded-t-2xl border-slate-200 dark:border-slate-800 flex flex-col"
-            }
-        >
-          <SheetHeader className="shrink-0 border-b border-slate-200 bg-white px-6 py-4 text-left dark:border-slate-800 dark:bg-slate-900">
-            <SheetTitle className="text-lg font-semibold text-slate-900 dark:text-slate-200">{editingItem ? 'Edit Prospek' : 'Tambah Prospek Baru'}</SheetTitle>
-            <SheetDescription className="text-xs text-slate-500 dark:text-slate-400">
-              Isi formulir berikut untuk {editingItem ? 'memperbarui data' : 'menambahkan'} prospek baru.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="px-6 py-4 overflow-y-auto flex-1 pb-10 scrollbar-hide">
-            <LeadForm 
-              key={editingItem ? `edit-${editingItem.id}` : `new-${leadFormInstanceKey}`}
-              item={editingItem}
-              platforms={activePlatforms}
-              vehicles={activeVehicles}
-              csUsers={csUsers}
-              advertiserUsers={advertiserUsers}
-              currentUser={currentUser}
-              onSubmit={handleSubmit}
-              onCancel={() => setIsAddOpen(false)}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+      <Dialog open={isBulkEditOpen} onOpenChange={setIsBulkEditOpen}>
+        <MasterDataFormDialogContent size="default" className="leadBulkDialog">
+          <MasterDataFormHeader
+            icon={Edit}
+            title={`Edit Massal (${selectedIds.size} Prospek)`}
+            description="Pilih satu kolom untuk diperbarui ke semua prospek yang sedang dipilih."
+          />
+          <form
+            className="masterDataForm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleBulkUpdate();
+            }}
+          >
+            <MasterDataDialogBody compact>
+              <MasterDataFormGrid>
+                <MasterDataFormField span="full">
+                  <MasterDataFieldLabel required>Pilih Kolom</MasterDataFieldLabel>
+                  <Select value={bulkField} onValueChange={(val) => { setBulkField(val); setBulkValue(''); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih kolom yang akan diedit" />
+                    </SelectTrigger>
+                    <SelectContent className="z-[250]">
+                      <SelectItem value="status">Status</SelectItem>
+                      <SelectItem value="csId">CS / Staff</SelectItem>
+                      <SelectItem value="advertiserId">Advertiser</SelectItem>
+                      <SelectItem value="platformId">Sumber</SelectItem>
+                      <SelectItem value="vehicleId">Kendaraan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </MasterDataFormField>
 
-      <Sheet open={!!bookingLead} onOpenChange={(open) => !open && setBookingLead(null)}>
-        <SheetContent
-            side={isDesktop ? "right" : "bottom"}
-            className={isDesktop
-            ? "h-full w-[620px] sm:max-w-[620px] bg-slate-50 dark:bg-slate-950 p-0 overflow-hidden border-l border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl"
-            : "h-[95vh] w-full bg-slate-50 dark:bg-slate-950 p-0 overflow-hidden rounded-t-2xl border-slate-200 dark:border-slate-800 flex flex-col"
-          }
-        >
-          <SheetHeader className="shrink-0 border-b border-slate-200 bg-white px-6 py-4 text-left dark:border-slate-800 dark:bg-slate-900">
-            <SheetTitle className="text-lg font-semibold text-slate-900 dark:text-slate-200">
-              {selectedLeadBooking ? 'Edit Booking Prospek' : 'Booking Jadwal Prospek'}
-            </SheetTitle>
-            <SheetDescription className="text-xs text-slate-500 dark:text-slate-400">
-              Simpan booking awal dari prospek tanpa harus melengkapi data pesanan penuh.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="px-6 py-4 overflow-y-auto flex-1 pb-10 scrollbar-hide">
-            {bookingLead && (
-              <ProspectBookingForm
-                lead={bookingLead}
-                booking={selectedLeadBooking}
-                onSubmit={handleBookingSubmit}
-                onCancelBooking={(booking) => void handleCancelLeadBooking(bookingLead, booking)}
-                onCancel={() => setBookingLead(null)}
-              />
+                {bulkField && (
+                  <MasterDataFormField span="full">
+                    <MasterDataFieldLabel required>Nilai Baru</MasterDataFieldLabel>
+                    {bulkField === 'status' ? (
+                      <Select value={bulkValue} onValueChange={setBulkValue}>
+                        <SelectTrigger><SelectValue placeholder="Pilih status" /></SelectTrigger>
+                        <SelectContent className="z-[250]">
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Follow Up">Follow Up</SelectItem>
+                          <SelectItem value="Booking">Booking</SelectItem>
+                          <SelectItem value="Closing">Closing</SelectItem>
+                          <SelectItem value="Cancel">Cancel</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : bulkField === 'csId' ? (
+                      <Select value={bulkValue} onValueChange={setBulkValue}>
+                        <SelectTrigger><SelectValue placeholder="Pilih CS" /></SelectTrigger>
+                        <SelectContent className="z-[250]">
+                          {csUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : bulkField === 'advertiserId' ? (
+                      <Select value={bulkValue} onValueChange={setBulkValue}>
+                        <SelectTrigger><SelectValue placeholder="Pilih advertiser" /></SelectTrigger>
+                        <SelectContent className="z-[250]">
+                          {advertiserUsers.map((user) => (
+                            <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : bulkField === 'platformId' ? (
+                      <Select value={bulkValue} onValueChange={setBulkValue}>
+                        <SelectTrigger><SelectValue placeholder="Pilih sumber" /></SelectTrigger>
+                        <SelectContent className="z-[250]">
+                          {activePlatforms.map((platform) => (
+                            <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : bulkField === 'vehicleId' ? (
+                      <Select value={bulkValue} onValueChange={setBulkValue}>
+                        <SelectTrigger><SelectValue placeholder="Pilih kendaraan" /></SelectTrigger>
+                        <SelectContent className="z-[250]">
+                          {activeVehicles.map((vehicle) => (
+                            <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : null}
+                  </MasterDataFormField>
+                )}
+              </MasterDataFormGrid>
+            </MasterDataDialogBody>
+            <MasterDataFormActions
+              onCancel={() => setIsBulkEditOpen(false)}
+              saveLabel="Simpan Perubahan"
+              submitDisabled={!bulkField || !bulkValue}
+            />
+          </form>
+        </MasterDataFormDialogContent>
+      </Dialog>
+
+      <Dialog open={isAddOpen} onOpenChange={handleAddSheetOpenChange}>
+        <MasterDataFormDialogContent size="wide" className="leadFormDialog">
+          <MasterDataFormHeader
+            icon={UserIcon}
+            title={editingItem ? 'Edit Prospek' : 'Tambah Prospek Baru'}
+            description={`Isi data untuk ${editingItem ? 'memperbarui' : 'menambahkan'} prospek.`}
+          />
+          <LeadForm
+            key={editingItem ? `edit-${editingItem.id}` : `new-${leadFormInstanceKey}`}
+            item={editingItem}
+            platforms={activePlatforms}
+            vehicles={activeVehicles}
+            csUsers={csUsers}
+            advertiserUsers={advertiserUsers}
+            currentUser={currentUser}
+            onSubmit={handleSubmit}
+            onCancel={() => setIsAddOpen(false)}
+          />
+        </MasterDataFormDialogContent>
+      </Dialog>
+
+      <Dialog open={!!bookingLead} onOpenChange={(open) => !open && setBookingLead(null)}>
+        <MasterDataFormDialogContent size="wide" className="leadFormDialog">
+          <MasterDataFormHeader
+            icon={CalendarClock}
+            title={selectedLeadBooking ? 'Edit Booking Prospek' : 'Booking Jadwal Prospek'}
+            description="Simpan booking awal dari prospek tanpa melengkapi data pesanan penuh."
+          />
+          {bookingLead && (
+            <ProspectBookingForm
+              lead={bookingLead}
+              booking={selectedLeadBooking}
+              onSubmit={handleBookingSubmit}
+              onCancelBooking={(booking) => void handleCancelLeadBooking(bookingLead, booking)}
+              onCancel={() => setBookingLead(null)}
+            />
+          )}
+        </MasterDataFormDialogContent>
+      </Dialog>
+
+      <Dialog open={!!detailLead} onOpenChange={(open) => !open && setDetailLead(null)}>
+        <MasterDataFormDialogContent size="wide" className="leadDetailDialog">
+          <MasterDataFormHeader
+            icon={UserIcon}
+            title="Detail Prospek"
+            description="Ringkasan data prospek, sumber, status, dan booking."
+          />
+          {detailLead && (
+            <MasterDataDialogBody compact>
+              <div className="leadDetailHero">
+                <div>
+                  <h3>{detailLead.name}</h3>
+                  <p>{isAdvertiserView ? 'Kontak disembunyikan' : detailLead.phone}</p>
+                </div>
+                <Badge variant="outline" className={`leadStatusBadge ${getStatusBadgeVariant(detailLead.status)}`}>
+                  {detailLead.status}
+                </Badge>
+              </div>
+              <div className="leadDetailGrid">
+                <div className="leadDetailItem">
+                  <span>Waktu</span>
+                  <strong>{new Date(detailLead.timestamp).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</strong>
+                </div>
+                <div className="leadDetailItem">
+                  <span>CS / Staff</span>
+                  <strong>{detailLead.csId ? getCSName(detailLead.csId) : '-'}</strong>
+                </div>
+                <div className="leadDetailItem">
+                  <span>Sumber</span>
+                  <strong>
+                    {isAutoWhatsAppLead(detailLead) ? 'WhatsApp' : detailLead.platformId ? getPlatformName(detailLead.platformId) : '-'}
+                  </strong>
+                </div>
+                <div className="leadDetailItem">
+                  <span>Sub Channel</span>
+                  <strong>{isAutoWhatsAppLead(detailLead) && !detailLead.subChannelId ? 'Auto API' : getSubChannelName(detailLead.subChannelId)}</strong>
+                </div>
+                <div className="leadDetailItem">
+                  <span>Mobil</span>
+                  <strong>{getVehicleName(detailLead.vehicleId)}</strong>
+                </div>
+                <div className="leadDetailItem">
+                  <span>Kontak Terakhir</span>
+                  <strong>{detailLead.lastContact || '-'}</strong>
+                </div>
+                <div className="leadDetailItem spanFull">
+                  <span>Catatan</span>
+                  <strong>{normalizeLeadNotes(detailLead.notes) || '-'}</strong>
+                </div>
+                {getLeadBooking(detailLead.id) && (
+                  <div className="leadDetailItem spanFull">
+                    <span>Booking</span>
+                    <strong>
+                      {getBookingStatusLabel(getLeadBooking(detailLead.id))} · {getBookingSummary(detailLead.id)}
+                    </strong>
+                  </div>
+                )}
+              </div>
+            </MasterDataDialogBody>
+          )}
+          <DialogFooter className="masterDataFormActions">
+            <Button type="button" variant="outline" onClick={() => setDetailLead(null)}>
+              Tutup
+            </Button>
+            {!isAdvertiserView && detailLead && canEditLead(detailLead) && (
+              <Button
+                type="button"
+                icon={<Edit className="h-4 w-4" />}
+                onClick={() => {
+                  const lead = detailLead;
+                  setDetailLead(null);
+                  openEditLeadForm(lead);
+                }}
+              >
+                Edit Prospek
+              </Button>
             )}
-          </div>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </MasterDataFormDialogContent>
+      </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
@@ -1957,19 +1746,21 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       <Sheet open={!!selectedWaLead} onOpenChange={(open) => !open && setSelectedWaLead(null)}>
         <SheetContent 
             side={isDesktop ? "right" : "bottom"} 
-            className={isDesktop 
-                ? "h-full w-[400px] sm:max-w-[400px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 p-0 shadow-xl flex flex-col"
-                : "max-h-[85vh] rounded-t-2xl px-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col"
-            }
+            className={isDesktop ? "leadTemplateSheet" : "leadTemplateSheet leadTemplateSheetMobile"}
         >
-            <SheetHeader className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                <SheetTitle className="text-base font-semibold">Pilih Template Pesan</SheetTitle>
-                <SheetDescription className="text-xs">Kirim pesan WhatsApp ke <span className="font-medium text-slate-900 dark:text-slate-200">{selectedWaLead?.name}</span></SheetDescription>
+            <SheetHeader className="leadTemplateHeader">
+                <SheetTitle className="leadTemplateTitle">
+                  <Phone className="h-5 w-5" />
+                  <span>Pilih Template Pesan</span>
+                </SheetTitle>
+                <SheetDescription className="leadTemplateDescription">
+                  Kirim pesan WhatsApp ke <strong>{selectedWaLead?.name}</strong>
+                </SheetDescription>
             </SheetHeader>
-            <div className="p-4 space-y-2 overflow-y-auto scrollbar-hide">
+            <div className="leadTemplateBody">
                 <Button 
                     variant="outline" 
-                    className="w-full justify-start text-left h-auto py-3 font-normal border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20"
+                    className="leadTemplateBlankButton"
                     onClick={() => {
                         if (selectedWaLead) {
                             handleWhatsappClick(selectedWaLead);
@@ -1977,28 +1768,26 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                         }
                     }}
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0">
-                            <Phone className="w-4 h-4 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div className="flex flex-col text-left">
-                            <span className="font-semibold text-sm">Chat Tanpa Template</span>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">Buka chat WhatsApp kosong</span>
-                        </div>
+                    <div className="leadTemplateOptionInner">
+                        <span className="leadTemplateIcon isWhatsapp">
+                          <Phone className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <strong>Chat Tanpa Template</strong>
+                          <small>Buka chat WhatsApp kosong</small>
+                        </span>
                     </div>
                 </Button>
                 
-                <div className="flex items-center gap-2 my-2">
-                   <div className="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div>
-                   <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Template Tersedia</span>
-                   <div className="h-px bg-slate-100 dark:bg-slate-800 flex-1"></div>
+                <div className="leadTemplateDivider">
+                   <span>Template Tersedia</span>
                 </div>
                 
                 {leadTemplates.length > 0 ? leadTemplates.map(template => (
                     <Button
                         key={template.id}
                         variant="ghost"
-                        className={`w-full justify-start text-left h-auto py-3 px-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg border border-transparent ${selectedWaLead && isTemplateUsed(selectedWaLead, template.id) ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800' : ''}`}
+                        className={`leadTemplateItem ${selectedWaLead && isTemplateUsed(selectedWaLead, template.id) ? 'isUsed' : ''}`}
                         onClick={() => {
                              if (selectedWaLead) {
                                  handleWhatsappClick(selectedWaLead, template);
@@ -2006,26 +1795,26 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                              }
                         }}
                     >
-                         <div className="flex items-center w-full gap-3">
-                             <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 border border-slate-200 dark:border-slate-700">
-                                 <span className="text-xs">📝</span>
-                             </div>
-                             <div className="flex flex-col flex-1 min-w-0 text-left">
-                                 <div className="flex justify-between items-center w-full">
-                                    <span className="font-semibold text-sm truncate pr-2 text-slate-900 dark:text-slate-100">{template.title}</span>
+                         <div className="leadTemplateOptionInner">
+                             <span className="leadTemplateIcon">
+                               <MessageCircle className="h-4 w-4" />
+                             </span>
+                             <span className="leadTemplateCopy">
+                                 <span className="leadTemplateNameRow">
+                                    <strong>{template.title}</strong>
                                     {selectedWaLead && isTemplateUsed(selectedWaLead, template.id) && (
-                                        <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 h-5 px-1.5 font-normal">
+                                        <Badge variant="secondary" className="leadTemplateUsedBadge">
                                             Dikirim {selectedWaLead.templateHistory?.filter(h => h.templateId === template.id).length}x
                                         </Badge>
                                     )}
-                                 </div>
-                                 <span className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">{template.message}</span>
-                             </div>
+                                 </span>
+                                 <small>{template.message}</small>
+                             </span>
                          </div>
                     </Button>
                 )) : (
-                    <div className="text-center py-8 text-slate-400 text-xs flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xl">📭</div>
+                    <div className="leadTemplateEmpty">
+                        <MessageCircle className="h-5 w-5" />
                         <span>Belum ada template tersedia</span>
                     </div>
                 )}

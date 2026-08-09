@@ -54,6 +54,8 @@ type PeriodFilterPickerProps = {
   date?: DateRange;
   setDate: (date?: DateRange) => void;
   className?: string;
+  contentClassName?: string;
+  triggerLabelMode?: "full" | "compact";
 };
 
 const toDateKey = (date: Date) => {
@@ -74,6 +76,12 @@ const formatDateLabel = (value: string) => {
   const parsed = parseDateKey(value);
   if (!parsed) return "-";
   return format(parsed, "dd/MM/yyyy", { locale: localeId });
+};
+
+const formatShortDateLabel = (value: string) => {
+  const parsed = parseDateKey(value);
+  if (!parsed) return "-";
+  return format(parsed, "d MMM yyyy", { locale: localeId });
 };
 
 function PeriodCaption({ displayMonth }: CaptionProps) {
@@ -128,7 +136,7 @@ const dayPickerClassNames = {
   day_hidden: "invisible",
 };
 
-export function PeriodFilterPicker({ date, setDate, className }: PeriodFilterPickerProps) {
+export function PeriodFilterPicker({ date, setDate, className, contentClassName, triggerLabelMode = "full" }: PeriodFilterPickerProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [panelMode, setPanelMode] = React.useState<PeriodPanelMode>("month");
   const [pickerMonth, setPickerMonth] = React.useState(() => new Date());
@@ -172,12 +180,20 @@ export function PeriodFilterPicker({ date, setDate, className }: PeriodFilterPic
   const summaryLabel = React.useMemo(() => {
     if (!dateFrom && !dateTo) return `Semua Waktu (${timezoneLabel})`;
     if (isCurrentMonthRange) return `Bulan Ini (${timezoneLabel})`;
+    if (triggerLabelMode === "compact") {
+      if (activeRelativePreset) return `${activeRelativePreset.label} (${timezoneLabel})`;
+      if (dateFrom && dateTo) {
+        if (dateFrom === dateTo) return `${formatShortDateLabel(dateFrom)} (${timezoneLabel})`;
+        return `${formatShortDateLabel(dateFrom)} - ${formatShortDateLabel(dateTo)}`;
+      }
+      return `${formatShortDateLabel(dateFrom || dateTo)} (${timezoneLabel})`;
+    }
     if (activeRelativePreset) {
       return `${activeRelativePreset.label} ${formatDateLabel(dateFrom)}-${formatDateLabel(dateTo)} (${timezoneLabel})`;
     }
     if (dateFrom && dateTo) return `${formatDateLabel(dateFrom)} - ${formatDateLabel(dateTo)} (${timezoneLabel})`;
     return `${formatDateLabel(dateFrom || dateTo)} (${timezoneLabel})`;
-  }, [activeRelativePreset, dateFrom, dateTo, isCurrentMonthRange, timezoneLabel]);
+  }, [activeRelativePreset, dateFrom, dateTo, isCurrentMonthRange, timezoneLabel, triggerLabelMode]);
 
   const applyRange = React.useCallback((fromDate: Date, toDate: Date) => {
     setDate({ from: fromDate, to: toDate });
@@ -226,7 +242,7 @@ export function PeriodFilterPicker({ date, setDate, className }: PeriodFilterPic
           <span className="min-w-0 truncate">{summaryLabel}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="periodPickerContent">
+      <PopoverContent align="start" className={cn("periodPickerContent", contentClassName)}>
         <div className="periodPickerShell">
           <aside className="periodPickerSidebar">
             <div className="periodPickerPresetGroup">
