@@ -905,187 +905,253 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
   // Kanban Component (Memoized View)
   const kanbanView = useMemo(() => {
-      const stages: LeadStatus[] = ['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'];
-      
-      return (
-          <div className="flex gap-4 overflow-x-auto pb-6 px-4 snap-x snap-mandatory">
-              {stages.map(stage => {
-                  const items = filteredData.filter(i => i.status === stage);
+    const stages: LeadStatus[] = ['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'];
+
+    return (
+      <div className="leadKanbanBoard" aria-label="Board follow up prospek">
+        {stages.map((stage) => {
+          const items = filteredData.filter((item) => item.status === stage);
+
+          return (
+            <section key={stage} className="leadKanbanColumn" aria-label={`Kolom ${stage}`}>
+              <div className="leadKanbanColumnHeader">
+                <div className="leadKanbanColumnTitle">
+                  <Badge className={`leadStatusBadge ${getStatusBadgeVariant(stage)}`} variant="outline">
+                    {stage}
+                  </Badge>
+                  <span className="leadKanbanCount">{items.length}</span>
+                </div>
+              </div>
+
+              <div className="leadKanbanList">
+                {items.length === 0 ? (
+                  <div className="leadKanbanEmpty">
+                    <strong>Belum ada prospek</strong>
+                    <span>Tidak ada data pada status ini.</span>
+                  </div>
+                ) : items.map((item) => {
+                  const booking = getLeadBooking(item.id);
+                  const activeBooking = getActiveLeadBooking(item.id);
+                  const socialHandle = getLeadSocialHandle(item);
+                  const socialUrl = getLeadSocialUrl(item);
+
                   return (
-                      <div key={stage} className="min-w-[300px] w-[300px] flex-none snap-center flex flex-col bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 h-[calc(100vh-250px)]">
-                          {/* Column Header */}
-                          <div className={`p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-white dark:bg-slate-800 rounded-t-xl sticky top-0 z-10`}>
-                              <div className="flex items-center gap-2">
-                                  <Badge className={getStatusBadgeVariant(stage)} variant="outline">{stage}</Badge>
-                                  <span className="text-xs text-slate-400 font-medium">({items.length})</span>
-                              </div>
+                    <article
+                      key={item.id}
+                      className="leadKanbanCard"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setDetailLead(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setDetailLead(item);
+                        }
+                      }}
+                    >
+                      <div className="leadKanbanCardHeader">
+                        <div className="leadKanbanCardTitle">
+                          <div className="leadKanbanNameRow">
+                            <h4>{item.name}</h4>
+                            <AutoWhatsAppLeadBadge lead={item} className="shrink-0" />
                           </div>
-                          
-                          {/* Items List */}
-                          <div className="p-3 space-y-3 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-600">
-                              {items.map(item => (
-                                  <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow cursor-pointer group relative">
-                                      <div className="flex justify-between items-start mb-2">
-                                          <div>
-                                              <div className="flex min-w-0 items-center gap-2">
-                                                <h4 className="truncate font-semibold text-slate-900 dark:text-slate-100 text-sm">{item.name}</h4>
-                                                <AutoWhatsAppLeadBadge lead={item} className="shrink-0" />
-                                              </div>
-                                              {!isAdvertiserView && (
-                                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{item.phone}</p>
-                                              )}
-                                          </div>
-                                          <DropdownMenu>
-                                              <DropdownMenuTrigger asChild>
-                                                  <Button variant="ghost" size="icon" className="h-6 w-6 -mr-2 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                      <MoreVertical className="h-3 w-3" />
-                                                  </Button>
-                                              </DropdownMenuTrigger>
-                                              <DropdownMenuContent align="end">
-                                                {canEditLead(item) && (
-                                                  <DropdownMenuItem onClick={() => openEditLeadForm(item)}>Edit</DropdownMenuItem>
-                                                )}
-                                                {item.status !== 'Closing' && (
-                                                    <DropdownMenuItem onClick={() => openBookingForm(item)}>
-                                                        Booking Jadwal
-                                                    </DropdownMenuItem>
-                                                )}
-                                                {item.status !== 'Closing' && getActiveLeadBooking(item.id) && (
-                                                    <DropdownMenuItem onClick={() => void handleCancelLeadBooking(item, getActiveLeadBooking(item.id))}>
-                                                        <Ban className="w-4 h-4 mr-2" /> Batalkan Booking
-                                                    </DropdownMenuItem>
-                                                )}
-                                                <DropdownMenuItem onClick={() => { setForwardLead(item); }}>Proses Order</DropdownMenuItem>
-                                                {canEditLead(item) && (
-                                                  <>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuLabel>Ubah Status</DropdownMenuLabel>
-                                                    {stages.filter(s => s !== stage).map(s => (
-                                                        <DropdownMenuItem key={s} onClick={() => updateLead({ ...item, status: s })}>
-                                                            Move to {s}
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                                  </>
-                                                )}
-                                                {canDeleteLead(item) && (
-                                                  <>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="text-red-600">
-                                                        <Trash2 className="w-4 h-4 mr-2" /> Hapus
-                                                    </DropdownMenuItem>
-                                                  </>
-                                                )}
-                                              </DropdownMenuContent>
-                                          </DropdownMenu>
-                                      </div>
-                                      
-                                      <div className="space-y-2 mt-3">
-                                          {(item.platformId || isAutoWhatsAppLead(item)) && (
-                                              <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                                                  <AutoWhatsAppLeadBadge lead={item} />
-                                                  {item.platformId && (
-                                                    <>
-                                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal">
-                                                          {getPlatformName(item.platformId)}
-                                                      </Badge>
-                                                      <span>• {getVehicleName(item.vehicleId)}</span>
-                                                    </>
-                                                  )}
-                                              </div>
-                                          )}
-                                          
-                                          {item.notes && (
-                                              <p
-                                                  className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 break-all bg-slate-50 dark:bg-slate-900/50 p-2 rounded border border-slate-100 dark:border-slate-700"
-                                                  title={normalizeLeadNotes(item.notes)}
-                                              >
-                                                  "{getLeadNotesPreview(item.notes, 110)}"
-                                              </p>
-                                          )}
+                          {!isAdvertiserView && <span className="leadKanbanPhone">{item.phone}</span>}
+                        </div>
 
-                                          {getLeadBooking(item.id) && (
-                                              <div className="rounded-lg border border-violet-200 bg-violet-50/80 p-2 text-[11px] text-violet-700">
-                                                  <div className="font-semibold">Booking {getBookingStatusLabel(getLeadBooking(item.id))}</div>
-                                                  <div>{getBookingSummary(item.id)}</div>
-                                              </div>
-                                          )}
-
-                                          {!isAdvertiserView && getLeadSocialHandle(item) && (
-                                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-700 dark:bg-slate-900/40">
-                                                  <div className="flex items-center gap-2 text-[11px]">
-                                                      {item.socialPlatform && (
-                                                          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
-                                                              {getLeadSocialPlatformLabel(item.socialPlatform)}
-                                                          </Badge>
-                                                      )}
-                                                      <span className="font-medium text-slate-700 dark:text-slate-200">
-                                                          {getLeadSocialHandle(item)}
-                                                      </span>
-                                                  </div>
-                                              </div>
-                                          )}
-
-                                          <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-100 dark:border-slate-700">
-                                              <div className="flex items-center gap-1.5">
-                                                 <UserIcon className="w-3 h-3 text-slate-400" />
-                                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[80px]">
-                                                     {getCSName(item.csId)}
-                                                 </span>
-                                              </div>
-                                              <span className="text-[10px] text-slate-400">
-                                                  {new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                                              </span>
-                                          </div>
-                                          
-                                          {/* Quick Actions */}
-                                          {!isAdvertiserView && (
-                                          <div className="flex gap-2 pt-2">
-                                              <Button 
-                                                  size="sm" variant="outline" 
-                                                  className="h-7 text-xs border-green-200 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/30"
-                                                  onClick={(e) => { e.stopPropagation(); setSelectedWaLead(item); }}
-                                              >
-                                                  <Phone className="w-3 h-3 mr-1" /> WA
-                                              </Button>
-                                              {getLeadSocialUrl(item) && (
-                                                  <Button
-                                                      size="sm"
-                                                      variant="outline"
-                                                      className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/30"
-                                                      onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          handleLeadSocialOpen(item);
-                                                      }}
-                                                  >
-                                                      <ExternalLink className="w-3 h-3 mr-1" />
-                                                      {getLeadSocialPrimaryActionLabel(item)}
-                                                  </Button>
-                                              )}
-                                              {getLeadSocialHandle(item) && (
-                                                  <Button
-                                                      size="icon"
-                                                      variant="ghost"
-                                                      className="h-7 w-7 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-                                                      onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          void handleLeadSocialCopy(item);
-                                                      }}
-                                                  >
-                                                      <Copy className="w-3.5 h-3.5" />
-                                                  </Button>
-                                              )}
-                                          </div>
-                                          )}
-                                      </div>
-                                  </div>
-                              ))}
-                          </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="leadKanbanMoreButton"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                            {canEditLead(item) && (
+                              <DropdownMenuItem onClick={() => openEditLeadForm(item)}>Edit</DropdownMenuItem>
+                            )}
+                            {item.status !== 'Closing' && (
+                              <DropdownMenuItem onClick={() => openBookingForm(item)}>
+                                Booking Jadwal
+                              </DropdownMenuItem>
+                            )}
+                            {item.status !== 'Closing' && activeBooking && (
+                              <DropdownMenuItem onClick={() => void handleCancelLeadBooking(item, activeBooking)}>
+                                <Ban className="w-4 h-4 mr-2" /> Batalkan Booking
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => { setForwardLead(item); }}>Proses Order</DropdownMenuItem>
+                            {canEditLead(item) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel>Ubah Status</DropdownMenuLabel>
+                                {stages.filter((targetStage) => targetStage !== stage).map((targetStage) => (
+                                  <DropdownMenuItem key={targetStage} onClick={() => updateLead({ ...item, status: targetStage })}>
+                                    Pindah ke {targetStage}
+                                  </DropdownMenuItem>
+                                ))}
+                              </>
+                            )}
+                            {canDeleteLead(item) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setDeleteId(item.id)} className="text-red-600">
+                                  <Trash2 className="w-4 h-4 mr-2" /> Hapus
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                  )
-              })}
-          </div>
-      )
-  }, [filteredData, currentUser, updateLead, getPlatformName, getVehicleName, getCSName, getStatusBadgeVariant, isAdvertiserView, latestBookingByLeadId]);
+
+                      <div className="leadKanbanMetaGrid">
+                        <div className="leadKanbanMetaPill">
+                          <span>Sumber</span>
+                          <strong>{isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-'}</strong>
+                        </div>
+                        <div className="leadKanbanMetaPill">
+                          <span>Mobil</span>
+                          <strong>{getVehicleName(item.vehicleId)}</strong>
+                        </div>
+                      </div>
+
+                      {item.notes && (
+                        <p className="leadKanbanNote" title={normalizeLeadNotes(item.notes)}>
+                          {getLeadNotesPreview(item.notes, 118)}
+                        </p>
+                      )}
+
+                      {booking && (
+                        <div className="leadKanbanBooking" title={getBookingSummary(item.id)}>
+                          <strong>Booking {getBookingStatusLabel(booking)}</strong>
+                          <span>{getBookingSummary(item.id)}</span>
+                        </div>
+                      )}
+
+                      {!isAdvertiserView && socialHandle && (
+                        <div className="leadKanbanSocial">
+                          {item.socialPlatform && <span>{getLeadSocialPlatformLabel(item.socialPlatform)}</span>}
+                          <strong>{socialHandle}</strong>
+                        </div>
+                      )}
+
+                      <div className="leadKanbanFooter">
+                        <div className="leadKanbanOwner">
+                          <UserIcon className="h-3.5 w-3.5" />
+                          <span>{getCSName(item.csId)}</span>
+                        </div>
+                        <time dateTime={item.timestamp}>
+                          {new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        </time>
+                      </div>
+
+                      {!isAdvertiserView && (
+                        <div className="leadKanbanActions" onClick={(event) => event.stopPropagation()}>
+                          <div className="leadKanbanFollowUps" aria-label="Template follow up">
+                            {visibleFollowUpTemplates.length > 0 ? visibleFollowUpTemplates.map((template) => {
+                              const usageCount = getTemplateUsageCount(item, template.id);
+                              const latestHistory = getLatestTemplateHistory(item, template.id);
+                              const isUsed = usageCount > 0;
+                              const tooltipText = isUsed
+                                ? `${template.title} sudah dipakai ${usageCount}x${latestHistory ? ` · ${formatTemplateSentAt(latestHistory.sentAt)}` : ''}`
+                                : `${template.title} belum dipakai`;
+
+                              return (
+                                <Tooltip key={template.id}>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={`leadFollowUpButton ${isUsed ? 'isUsed' : ''}`}
+                                      disabled={!canSendLeadTemplate}
+                                      onClick={() => {
+                                        if (!canSendLeadTemplate) return;
+                                        handleWhatsappClick(item, template);
+                                      }}
+                                      aria-label={tooltipText}
+                                    >
+                                      {isUsed ? <CheckCircle2 className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="leadFollowUpTooltip">
+                                    <div>
+                                      <strong>{template.title}</strong>
+                                      <span>{isUsed ? `Dipakai ${usageCount}x` : 'Belum dipakai'}</span>
+                                      {latestHistory && <small>{formatTemplateSentAt(latestHistory.sentAt)} · {getTemplateSenderName(latestHistory.sentBy)}</small>}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            }) : (
+                              <span className="leadFollowUpEmpty">-</span>
+                            )}
+                            {hiddenFollowUpTemplateCount > 0 && (
+                              <button
+                                type="button"
+                                className="leadFollowUpMore"
+                                disabled={!canSendLeadTemplate}
+                                onClick={() => {
+                                  if (!canSendLeadTemplate) return;
+                                  setSelectedWaLead(item);
+                                }}
+                                aria-label={`Lihat ${hiddenFollowUpTemplateCount} template lain`}
+                              >
+                                +{hiddenFollowUpTemplateCount}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="leadKanbanQuickActions">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="leadKanbanQuickButton"
+                              onClick={() => setSelectedWaLead(item)}
+                              aria-label="Buka template WhatsApp"
+                            >
+                              <Phone className="h-4 w-4" />
+                            </Button>
+                            {socialUrl && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="leadKanbanQuickButton"
+                                onClick={() => handleLeadSocialOpen(item)}
+                                aria-label={getLeadSocialPrimaryActionLabel(item)}
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {socialHandle && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="leadKanbanQuickButton"
+                                onClick={() => void handleLeadSocialCopy(item)}
+                                aria-label="Salin kontak sosial"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    );
+  }, [filteredData, updateLead, getStatusBadgeVariant, isAdvertiserView, visibleFollowUpTemplates, hiddenFollowUpTemplateCount, canSendLeadTemplate]);
 
   return (
     <OperationalPageShell>
