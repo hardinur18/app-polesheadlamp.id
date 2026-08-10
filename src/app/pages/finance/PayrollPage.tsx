@@ -22,6 +22,7 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Switch } from '@/app/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import {
+  createDataTableColumns,
   DataTable,
   TableActionCell,
   TableActionHeader,
@@ -926,8 +927,14 @@ export const PayrollPage = () => {
                     
                     <MasterDataDialogBody compact>
                     <DataTable
-                        columns={['72px', '160px', 'minmax(220px,1.3fr)', 'minmax(160px,1fr)', '96px', '160px']}
-                        minWidth={880}
+                        columns={createDataTableColumns([
+                            'number',
+                            'date',
+                            'name',
+                            'text',
+                            'quantity',
+                            'money',
+                        ])}
                         rowMinHeight={72}
                         className="payrollOrderDetailTable"
                     >
@@ -1034,8 +1041,18 @@ export const PayrollPage = () => {
                         </div>
 
                         <DataTable
-                            columns={['56px', 'minmax(220px,1.2fr)', '130px', '120px', '120px', '120px', '120px', '120px', '96px', '140px']}
-                            minWidth={1180}
+                            columns={createDataTableColumns([
+                                'number',
+                                'name',
+                                'money',
+                                'money',
+                                'money',
+                                'money',
+                                'money',
+                                'quantity',
+                                'quantity',
+                                'money',
+                            ])}
                             rowMinHeight={70}
                             className="payrollDataTable payrollRunItemsTable"
                         >
@@ -2179,21 +2196,20 @@ export const PayrollPage = () => {
                 )}
                 <div className="p-0">
                     <DataTable
-                        columns={[
-                          canManagePayroll && isSalarySelectionMode && '44px',
-                          '56px',
-                          '220px',
-                          '112px',
-                          '128px',
-                          '122px',
-                          '136px',
-                          '100px',
-                          '142px',
-                          '146px',
-                          '210px',
-                          canManagePayroll && '84px',
-                        ]}
-                        minWidth={canManagePayroll ? 1500 : 1360}
+                        columns={createDataTableColumns([
+                          canManagePayroll && isSalarySelectionMode && { preset: 'checkbox', width: 44, minWidth: 44 },
+                          'number',
+                          'name',
+                          'status',
+                          'money',
+                          'money',
+                          'money',
+                          'money',
+                          'money',
+                          'text',
+                          'quantity',
+                          canManagePayroll && 'action',
+                        ])}
                         rowMinHeight={76}
                         className="payrollDataTable"
                     >
@@ -2320,8 +2336,14 @@ export const PayrollPage = () => {
                     )}
                 </div>
                 <DataTable
-                    columns={['56px', '320px', '178px', '150px', '280px', canManagePayroll && '84px']}
-                    minWidth={canManagePayroll ? 1060 : 960}
+                    columns={createDataTableColumns([
+                        'number',
+                        'name',
+                        'status',
+                        'money',
+                        'description',
+                        canManagePayroll && 'action',
+                    ])}
                     rowMinHeight={72}
                     className="payrollDataTable"
                 >
@@ -2480,8 +2502,21 @@ export const PayrollPage = () => {
                 </OperationalKpiGrid>
 
                 <DataTable
-                    columns={['56px', '210px', '126px', '122px', '108px', '100px', '138px', '138px', '184px', '88px', '82px', '126px', '164px']}
-                    minWidth={1642}
+                    columns={createDataTableColumns([
+                        'number',
+                        'name',
+                        'money',
+                        'money',
+                        'money',
+                        'money',
+                        'money',
+                        'money',
+                        'text',
+                        'quantity',
+                        'quantity',
+                        'money',
+                        'money',
+                    ])}
                     rowMinHeight={76}
                     className="payrollDataTable payrollEstimateTable"
                 >
@@ -2591,8 +2626,18 @@ export const PayrollPage = () => {
                 </div>
 
                 <DataTable
-                    columns={['56px', '180px', '140px', '116px', '146px', '146px', '146px', '146px', '150px', '96px']}
-                    minWidth={1320}
+                    columns={createDataTableColumns([
+                        'number',
+                        'date',
+                        'status',
+                        'quantity',
+                        'money',
+                        'money',
+                        'money',
+                        'money',
+                        'text',
+                        'action',
+                    ])}
                     rowMinHeight={76}
                     className="payrollDataTable payrollHistoryTable"
                 >

@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   MasterDataFormDialogContent,
@@ -123,8 +123,14 @@ export const ServicesTab: React.FC<ServicesTabProps> = ({ currentRole: _currentR
             <DataTable
               actionWidth={82}
               cellY={12}
-              columns={[64, 300, 220, 190, 90, (canEdit || canDelete) ? 82 : null]}
-              minWidth={canEdit || canDelete ? 946 : 864}
+              columns={createDataTableColumns([
+                'number',
+                'name',
+                'text',
+                'money',
+                'status',
+                (canEdit || canDelete) && 'action',
+              ])}
               rowMinHeight={64}
             >
             <table>

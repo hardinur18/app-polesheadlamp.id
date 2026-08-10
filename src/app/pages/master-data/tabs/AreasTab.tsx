@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   MasterDataFormDialogContent,
@@ -128,8 +128,13 @@ export const AreasTab: React.FC<AreasTabProps> = ({ currentRole: _currentRole })
               actionWidth={82}
               cellY={12}
               className="masterDataAreaTable"
-              columns={[64, 300, 300, 90, (canEdit || canDelete) ? 82 : null]}
-              minWidth={canEdit || canDelete ? 836 : 754}
+              columns={createDataTableColumns([
+                'number',
+                'name',
+                'name',
+                'status',
+                (canEdit || canDelete) && 'action',
+              ])}
               rowMinHeight={64}
             >
             <table>

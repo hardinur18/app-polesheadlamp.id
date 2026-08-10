@@ -19,7 +19,7 @@ import { StockCard } from "./StockCard";
 import { STOCK_UPDATED_EVENT, emitStockUpdated, groupTransactionsByProduct, reconcileProductStock, toStockNumber, type StockTransactionLike } from "../utils/stockLedger";
 import { isMissingStockTransactionScopeColumnError, omitStockTransactionScope, retryWithoutInvalidStockScope, type StockScopeField } from "../utils/stockTransactionScope";
 import { isTechnicianRole } from "@/app/data/roleHelpers";
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableText } from "@/app/components/ui/data-table";
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableText } from "@/app/components/ui/data-table";
 import { MasterDataDialogBody, MasterDataFormActions, MasterDataFieldLabel, MasterDataFormDialogContent } from "@/app/components/ui/master-data-ui";
 import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import {
@@ -637,9 +637,19 @@ export function ProductList() {
         <DataTable
           actionWidth={hasProductActions ? 82 : undefined}
           cellY={12}
-          columns={[64, 340, 240, 160, 220, 112, 152, 152, 168, hasProductActions ? 82 : null]}
+          columns={createDataTableColumns([
+            'number',
+            'name',
+            'text',
+            'text',
+            'text',
+            'quantity',
+            'money',
+            'money',
+            'money',
+            hasProductActions && 'action',
+          ])}
           className="inventoryProductTable"
-          minWidth={hasProductActions ? 1588 : 1506}
           rowMinHeight={66}
           textMax={260}
         >

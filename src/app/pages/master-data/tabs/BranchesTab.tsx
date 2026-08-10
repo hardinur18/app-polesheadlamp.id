@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   Dialog, DialogHeader, DialogTitle, DialogDescription
@@ -143,8 +143,16 @@ export const BranchesTab: React.FC<BranchesTabProps> = ({ currentRole: _currentR
             actionWidth={82}
             cellY={12}
             className="masterDataBranchTable"
-            columns={[64, 230, 300, 190, 110, 150, 90, (canEdit || canDelete) ? 82 : null]}
-            minWidth={canEdit || canDelete ? 1216 : 1134}
+            columns={createDataTableColumns([
+              'number',
+              'name',
+              'name',
+              'text',
+              'compact',
+              'text',
+              'status',
+              (canEdit || canDelete) && 'action',
+            ])}
             rowMinHeight={66}
           >
             <table>

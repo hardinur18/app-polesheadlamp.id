@@ -78,6 +78,7 @@ import {
   TableRow,
 } from '../components/ui/table';
 import {
+  createDataTableColumns,
   DataTable,
   TableActionCell,
   TableActionHeader,
@@ -1946,8 +1947,17 @@ export function Kas() {
             </div>
             <DataTable
               className="kasExpenseDataTable"
-              columns={selectionMode ? [52, 64, 148, 268, 176, 332, 212, 184, 76] : [64, 148, 268, 176, 332, 212, 184, 76]}
-              minWidth={selectionMode ? 1512 : 1460}
+              columns={createDataTableColumns([
+                selectionMode && 'checkbox',
+                'number',
+                'date',
+                'name',
+                'text',
+                'description',
+                'text',
+                'money',
+                'action',
+              ])}
               rowMinHeight={72}
               cellX={18}
               cellY={14}

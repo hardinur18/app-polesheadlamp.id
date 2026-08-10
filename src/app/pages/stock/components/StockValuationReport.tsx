@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx';
 import { toast } from "sonner";
 import { usePermissions } from "@/app/hooks/usePermissions";
 import { STOCK_UPDATED_EVENT, groupTransactionsByProduct, reconcileProductStock, type StockTransactionLike } from "../utils/stockLedger";
-import { DataTable, TableText } from "@/app/components/ui/data-table";
+import { createDataTableColumns, DataTable, TableText } from "@/app/components/ui/data-table";
 import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import {
   OperationalEmptyState,
@@ -179,7 +179,12 @@ export function StockValuationReport() {
 
       <OperationalTableCard className="inventoryTableCard">
         <MasterDataTableTitle title="Laporan Valuasi Aset" count={products.length} variant="active" icon={Boxes} />
-        <DataTable columns={[64, 320, 170, 132, 150, 168]} minWidth={1004} rowMinHeight={66} cellY={12} textMax={300}>
+        <DataTable
+          columns={createDataTableColumns(['number', 'name', 'text', 'quantity', 'money', 'money'])}
+          rowMinHeight={66}
+          cellY={12}
+          textMax={300}
+        >
         <table>
             <TableHeader>
                 <TableRow>

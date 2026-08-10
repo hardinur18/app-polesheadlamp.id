@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableText } from '../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableText } from '../../components/ui/data-table';
 import {
   MasterDataFormDialogContent,
   MasterDataUnsavedChangesDialog,
@@ -804,8 +804,16 @@ Password : `;
                                     <DataTable
                                       actionWidth={82}
                                       cellY={12}
-                                      columns={[72, 120, 320, 240, 200, 200, isCsGroup ? 200 : null, canOpenAnyUserActionMenu ? 82 : null]}
-                                      minWidth={isCsGroup ? 1434 : 1234}
+                                      columns={createDataTableColumns([
+                                        'number',
+                                        'compact',
+                                        'name',
+                                        'status',
+                                        'text',
+                                        'text',
+                                        isCsGroup && 'text',
+                                        canOpenAnyUserActionMenu && 'action',
+                                      ])}
                                       rowMinHeight={72}
                                     >
                                     <table>

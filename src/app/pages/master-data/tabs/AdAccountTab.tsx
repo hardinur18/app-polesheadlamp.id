@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusSwitch, TableText } from '../../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusSwitch, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   MasterDataFieldLabel,
@@ -2322,22 +2322,21 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             <DataTable
               actionWidth={82}
               cellY={12}
-              columns={[
-                isBulkSelectMode ? 54 : null,
-                64,
-                260,
-                180,
-                220,
-                190,
-                190,
-                118,
-                142,
-                88,
-                82,
-                90,
-                (canEdit || canDelete) ? 82 : null,
-              ]}
-              minWidth={canEdit || canDelete ? (isBulkSelectMode ? 1790 : 1736) : (isBulkSelectMode ? 1708 : 1654)}
+              columns={createDataTableColumns([
+                isBulkSelectMode && 'checkbox',
+                'number',
+                'name',
+                'text',
+                'text',
+                'text',
+                'text',
+                'status',
+                'status',
+                'quantity',
+                'quantity',
+                'status',
+                (canEdit || canDelete) && 'action',
+              ])}
               rowMinHeight={76}
             >
               <table>
@@ -2622,8 +2621,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             <DataTable
               actionWidth={82}
               cellY={12}
-              columns={[64, 190, 300, 240, 260, 140, canEdit ? 82 : null]}
-              minWidth={canEdit ? 1276 : 1194}
+              columns={createDataTableColumns(['number', 'text', 'name', 'text', 'name', 'status', canEdit && 'action'])}
               rowMinHeight={76}
             >
               <table>
@@ -2833,8 +2831,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             <div className="tablePanel">
               <DataTable
                 cellY={12}
-                columns={[64, 260, 190, 220, 220, 190, 130, 130]}
-                minWidth={1404}
+                columns={createDataTableColumns(['number', 'name', 'text', 'text', 'text', 'text', 'status', 'status'])}
                 rowMinHeight={72}
               >
                 <table>
@@ -2935,8 +2932,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         <div className="tablePanel">
           <DataTable
             cellY={12}
-            columns={[72, 240, 120, 280, 220, 220, 120, 120]}
-            minWidth={1392}
+            columns={createDataTableColumns(['number', 'name', 'quantity', 'description', 'text', 'text', 'status', 'status'])}
             rowMinHeight={72}
           >
             <table>
@@ -3004,8 +3000,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         <div className="tablePanel">
           <DataTable
             cellY={12}
-            columns={[72, 260, 120, 280, 220, 220, 120, 120]}
-            minWidth={1412}
+            columns={createDataTableColumns(['number', 'name', 'quantity', 'description', 'text', 'text', 'status', 'status'])}
             rowMinHeight={72}
           >
             <table>

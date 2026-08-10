@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Edit, Trash2, FileText } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import {
   Dialog, DialogHeader, DialogTitle, DialogDescription
 } from '../../../components/ui/dialog';
@@ -141,8 +141,14 @@ export const SourcesTab: React.FC<SourcesTabProps> = ({ currentRole }) => {
                 <DataTable
                   actionWidth={82}
                   cellY={12}
-                  columns={[64, 300, 280, 220, 90, canManage ? 82 : null]}
-                  minWidth={canManage ? 1036 : 954}
+                  columns={createDataTableColumns([
+                    'number',
+                    'name',
+                    'name',
+                    'text',
+                    'status',
+                    canManage && 'action',
+                  ])}
                   rowMinHeight={64}
                 >
                   <table>

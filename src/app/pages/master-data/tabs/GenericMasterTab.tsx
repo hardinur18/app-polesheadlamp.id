@@ -26,7 +26,7 @@ import {
 } from "../../../components/ui/alert-dialog"
 import { Badge } from '../../../components/ui/badge';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableStatusCell, TableStatusIcon, TableText } from '../../../components/ui/data-table';
 import { MasterDataTableTitle } from '../../../components/ui/master-data-table-title';
 import {
   MasterDataFormDialogContent,
@@ -318,8 +318,13 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
             <DataTable
               actionWidth={82}
               cellY={12}
-              columns={[72, 260, ...(columns?.map(() => 220) || []), 90, (canEdit || canDelete) ? 82 : null]}
-              minWidth={columns?.length ? 504 + columns.length * 220 : 504}
+              columns={createDataTableColumns([
+                'number',
+                'name',
+                ...(columns?.map(() => 'text' as const) || []),
+                'status',
+                (canEdit || canDelete) && 'action',
+              ])}
               rowMinHeight={64}
             >
             <table>

@@ -18,7 +18,7 @@ import { logActivity } from "@/app/services/auditService";
 import { STOCK_UPDATED_EVENT, computeLedgerState, emitStockUpdated, groupTransactionsByProduct, reconcileProductStock, roundCurrencyValue, roundStockQuantity, sortStockTransactions, toStockNumber, type StockTransactionLike } from "../utils/stockLedger";
 import { isMissingStockTransactionScopeColumnError, omitStockTransactionScope, retryWithoutInvalidStockScope, type StockScopeField } from "../utils/stockTransactionScope";
 import { isTechnicianRole } from "@/app/data/roleHelpers";
-import { DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableText } from "@/app/components/ui/data-table";
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableActionMenu, TableActionMenuItem, TableText } from "@/app/components/ui/data-table";
 import { MasterDataDialogBody, MasterDataFieldLabel, MasterDataFormActions, MasterDataFormDialogContent } from "@/app/components/ui/master-data-ui";
 import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import {
@@ -1484,9 +1484,18 @@ export function StockTransactions() {
         <DataTable
           actionWidth={hasTransactionActions ? 82 : undefined}
           cellY={12}
-          columns={["5%", "9%", "23%", "23%", "8%", "13%", "12%", "7%", hasTransactionActions ? "56px" : null]}
+          columns={createDataTableColumns([
+            'number',
+            'status',
+            'name',
+            'text',
+            'quantity',
+            'money',
+            'money',
+            'description',
+            hasTransactionActions && 'action',
+          ])}
           className="inventoryTransactionTable"
-          minWidth="100%"
           primaryLines={1}
           rowMinHeight={58}
           secondaryLines={1}

@@ -58,6 +58,30 @@ const AVAILABLE_VARIABLES = [
 
 const normalizeCategory = (category?: WATemplate['category']): TemplateCategory => category || 'General';
 
+const LEAD_TEMPLATE_TITLE_ORDER = [
+  'salam pertama',
+  'sapaan awal',
+  'follow up penawaran',
+  'upsell',
+  'upsel',
+];
+
+const getLeadTemplateOrder = (template: WATemplate) => {
+  if (normalizeCategory(template.category) !== 'Leads') return 100;
+
+  const title = template.title.trim().toLowerCase();
+  const index = LEAD_TEMPLATE_TITLE_ORDER.findIndex((keyword) => title.includes(keyword));
+  return index === -1 ? 90 : index;
+};
+
+const sortTemplatesForDisplay = (left: WATemplate, right: WATemplate) => {
+  const leftOrder = getLeadTemplateOrder(left);
+  const rightOrder = getLeadTemplateOrder(right);
+
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  return left.title.localeCompare(right.title, 'id-ID', { sensitivity: 'base' });
+};
+
 const createTemplateId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID().slice(0, 8).toUpperCase();
@@ -90,7 +114,7 @@ export const WATemplatesPage = () => {
         || template.id.toLowerCase().includes(normalizedSearch);
 
       return matchesCategory && matchesSearch;
-    });
+    }).sort(sortTemplatesForDisplay);
   }, [categoryFilter, search, waTemplates]);
 
   const groupedTemplates = useMemo(() => {

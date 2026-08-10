@@ -11,9 +11,6 @@ import {
   Dialog, DialogFooter
 } from '../components/ui/dialog';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription
-} from '../components/ui/sheet';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -38,6 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../components/ui/tooltip';
 import { Tabs, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -48,7 +50,6 @@ import {
   isCsRole,
   isOwnerLikeRole,
 } from '@/app/data/roleHelpers';
-import { useMediaQuery } from '../hooks/use-media-query';
 import { Lead, LeadStatus, ProspectBooking, User, WATemplate } from './master-data/data';
 import { LeadForm } from './leads/LeadForm';
 import { OrderForm } from './orders/OrderForm';
@@ -68,6 +69,7 @@ import {
   OperationalTableCard,
 } from '../components/ui/operational-page';
 import {
+  createDataTableColumns,
   DataTable,
   TableActionCell,
   TableActionHeader,
@@ -125,6 +127,28 @@ const AutoWhatsAppLeadBadge = ({ lead, className }: { lead: Lead; className?: st
   ) : null
 );
 
+const LEAD_TEMPLATE_TITLE_ORDER = [
+  'salam pertama',
+  'sapaan awal',
+  'follow up penawaran',
+  'upsell',
+  'upsel',
+];
+
+const getLeadTemplateOrder = (template: WATemplate) => {
+  const title = template.title.trim().toLowerCase();
+  const index = LEAD_TEMPLATE_TITLE_ORDER.findIndex((keyword) => title.includes(keyword));
+  return index === -1 ? 90 : index;
+};
+
+const sortLeadTemplatesForDisplay = (left: WATemplate, right: WATemplate) => {
+  const leftOrder = getLeadTemplateOrder(left);
+  const rightOrder = getLeadTemplateOrder(right);
+
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  return left.title.localeCompare(right.title, 'id-ID', { sensitivity: 'base' });
+};
+
 export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void }) => {
   const {
     leads,
@@ -144,8 +168,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     updateWATemplate,
   } = useMasterData();
   const { hasPermission } = usePermissions();
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Lead | null>(null);
@@ -225,9 +247,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       return users.filter(u => uniqueIds.has(u.id));
   }, [roleBasedLeads, users]);
 
-  // Filter templates strictly for 'Leads' or 'General'
+  // Prospek only shows templates from the Prospek/Leads category.
   const leadTemplates = useMemo(() => {
-      return waTemplates.filter(t => t.category === 'Leads' || t.category === 'General' || !t.category);
+      return waTemplates
+        .filter(t => t.category === 'Leads')
+        .sort(sortLeadTemplatesForDisplay);
   }, [waTemplates]);
 
   const latestBookingByLeadId = useMemo(() => {
@@ -399,6 +423,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         };
         
         updateLead(updatedLead);
+        setDetailLead((current) => (current?.id === lead.id ? updatedLead : current));
+        setSelectedWaLead((current) => (current?.id === lead.id ? updatedLead : current));
 
         // Increment usage count
         updateWATemplate({ 
@@ -414,6 +440,34 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const isTemplateUsed = (lead: Lead, templateId: string) => {
       return lead.templateHistory?.some(h => h.templateId === templateId);
   };
+
+  const getTemplateUsageCount = (lead: Lead, templateId: string) => (
+    lead.templateHistory?.filter((history) => history.templateId === templateId).length || 0
+  );
+
+  const getLatestTemplateHistory = (lead: Lead, templateId: string) => (
+    [...(lead.templateHistory || [])]
+      .filter((history) => history.templateId === templateId)
+      .sort((left, right) => new Date(right.sentAt).getTime() - new Date(left.sentAt).getTime())[0]
+  );
+
+  const formatTemplateSentAt = (sentAt?: string) => {
+    if (!sentAt) return '';
+    try {
+      return new Date(sentAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return sentAt;
+    }
+  };
+
+  const getTemplateSenderName = (sentBy?: string) => {
+    if (!sentBy) return '-';
+    return users.find((user) => user.id === sentBy)?.name || '-';
+  };
+
+  const visibleFollowUpTemplates = leadTemplates.slice(0, 4);
+  const hiddenFollowUpTemplateCount = Math.max(leadTemplates.length - visibleFollowUpTemplates.length, 0);
+  const canSendLeadTemplate = !isAdvertiserView && (isAdminManagementUser || isCsUser || isOwnerLikeUser);
 
   // --- PERMISSION LOGIC ---
   const canEditLead = (lead: Lead) => {
@@ -1242,8 +1296,19 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
             <DataTable
               className="leadDataTable"
-              columns={[showSelection ? 58 : null, 68, 180, 260, 220, 230, 200, 300, 200, !isAdvertiserView ? 92 : null]}
-              minWidth={showSelection ? 1808 : 1750}
+              columns={createDataTableColumns([
+                showSelection && { preset: 'checkbox', width: 48, minWidth: 48 },
+                { preset: 'number', width: 56, minWidth: 56 },
+                { preset: 'date', width: 'clamp(124px, 9vw, 148px)', minWidth: 124 },
+                { preset: 'name', width: 'clamp(210px, 16vw, 270px)', minWidth: 210 },
+                { preset: 'text', width: 'clamp(174px, 12vw, 220px)', minWidth: 174 },
+                { preset: 'text', width: 'clamp(156px, 11vw, 204px)', minWidth: 156 },
+                { preset: 'text', width: 'clamp(180px, 13vw, 230px)', minWidth: 180 },
+                { preset: 'description', width: 'clamp(222px, 16vw, 286px)', minWidth: 222 },
+                { preset: 'status', width: 150, minWidth: 150 },
+                { preset: 'compact', width: 176, minWidth: 176, className: 'leadFollowUpColumn' },
+                !isAdvertiserView && { preset: 'action', width: 64, minWidth: 64 },
+              ])}
               rowMinHeight={84}
               cellY={16}
               textMax={260}
@@ -1268,13 +1333,14 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                     <th>Mobil</th>
                     <th>Catatan</th>
                     <th>Status</th>
+                    <th>Follow Up</th>
                     {!isAdvertiserView && <TableActionHeader />}
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdvertiserView ? (showSelection ? 9 : 8) : (showSelection ? 10 : 9)}>
+                      <td colSpan={isAdvertiserView ? (showSelection ? 10 : 9) : (showSelection ? 11 : 10)}>
                         <OperationalEmptyState
                           icon={UserIcon}
                           title="Tidak ada data prospek ditemukan"
@@ -1368,15 +1434,71 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                               )}
                             </div>
                           </td>
+                          <td onClick={(event) => event.stopPropagation()}>
+                            <div className="leadFollowUpCell" aria-label="Template follow up">
+                              {visibleFollowUpTemplates.length > 0 ? visibleFollowUpTemplates.map((template) => {
+                                const usageCount = getTemplateUsageCount(item, template.id);
+                                const latestHistory = getLatestTemplateHistory(item, template.id);
+                                const isUsed = usageCount > 0;
+                                const tooltipText = isUsed
+                                  ? `${template.title} sudah dipakai ${usageCount}x${latestHistory ? ` · ${formatTemplateSentAt(latestHistory.sentAt)}` : ''}`
+                                  : `${template.title} belum dipakai`;
+
+                                return (
+                                  <Tooltip key={template.id}>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className={`leadFollowUpButton ${isUsed ? 'isUsed' : ''}`}
+                                        disabled={!canSendLeadTemplate}
+                                        onClick={() => {
+                                          if (!canSendLeadTemplate) return;
+                                          handleWhatsappClick(item, template);
+                                        }}
+                                        aria-label={tooltipText}
+                                      >
+                                        {isUsed ? <CheckCircle2 className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="leadFollowUpTooltip">
+                                      <div>
+                                        <strong>{template.title}</strong>
+                                        <span>{isUsed ? `Dipakai ${usageCount}x` : 'Belum dipakai'}</span>
+                                        {latestHistory && <small>{formatTemplateSentAt(latestHistory.sentAt)} · {getTemplateSenderName(latestHistory.sentBy)}</small>}
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                );
+                              }) : (
+                                <span className="leadFollowUpEmpty">-</span>
+                              )}
+                              {hiddenFollowUpTemplateCount > 0 && (
+                                <button
+                                  type="button"
+                                  className="leadFollowUpMore"
+                                  disabled={!canSendLeadTemplate}
+                                  onClick={() => {
+                                    if (!canSendLeadTemplate) return;
+                                    setSelectedWaLead(item);
+                                  }}
+                                  aria-label={`Lihat ${hiddenFollowUpTemplateCount} template lain`}
+                                >
+                                  +{hiddenFollowUpTemplateCount}
+                                </button>
+                              )}
+                            </div>
+                          </td>
                           {!isAdvertiserView && (
                             <TableActionCell onClick={(event) => event.stopPropagation()}>
                               <TableActionMenu contentClassName="w-56">
                                 <TableActionMenuItem icon={Eye} onClick={() => setDetailLead(item)}>
                                   Detail
                                 </TableActionMenuItem>
-                                <TableActionMenuItem icon={Phone} onClick={() => setSelectedWaLead(item)}>
-                                  Template WA
-                                </TableActionMenuItem>
+                                {canSendLeadTemplate && (
+                                  <TableActionMenuItem icon={Phone} onClick={() => setSelectedWaLead(item)}>
+                                    Template WA
+                                  </TableActionMenuItem>
+                                )}
                                 {getLeadSocialUrl(item) && (
                                   <TableActionMenuItem icon={ExternalLink} onClick={() => handleLeadSocialOpen(item)}>
                                     {getLeadSocialPrimaryActionLabel(item)}
@@ -1651,6 +1773,39 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   </div>
                 )}
               </div>
+              <section className="leadFollowUpHistory">
+                <div className="leadFollowUpHistoryHeader">
+                  <div>
+                    <span>Follow Up</span>
+                    <strong>Riwayat Template</strong>
+                  </div>
+                  <Badge variant="outline" className="leadFollowUpHistoryCount">
+                    {detailLead.templateHistory?.length || 0} aktivitas
+                  </Badge>
+                </div>
+                {(detailLead.templateHistory?.length || 0) > 0 ? (
+                  <div className="leadFollowUpHistoryList">
+                    {[...(detailLead.templateHistory || [])]
+                      .sort((left, right) => new Date(right.sentAt).getTime() - new Date(left.sentAt).getTime())
+                      .map((history, historyIndex) => (
+                        <div key={`${history.templateId}-${history.sentAt}-${historyIndex}`} className="leadFollowUpHistoryItem">
+                          <span className="leadFollowUpHistoryIcon">
+                            <CheckCircle2 className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <strong>{history.templateName}</strong>
+                            <span>{formatTemplateSentAt(history.sentAt)} · {getTemplateSenderName(history.sentBy)}</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="leadFollowUpHistoryEmpty">
+                    <MessageCircle className="h-4 w-4" />
+                    <span>Belum ada template follow up yang dipakai.</span>
+                  </div>
+                )}
+              </section>
             </MasterDataDialogBody>
           )}
           <DialogFooter className="masterDataFormActions">
@@ -1742,22 +1897,15 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
             onSuccess={(order) => handleOrderSuccess(order)}
          />
       )}
-      {/* WA Template Selection Sheet */}
-      <Sheet open={!!selectedWaLead} onOpenChange={(open) => !open && setSelectedWaLead(null)}>
-        <SheetContent 
-            side={isDesktop ? "right" : "bottom"} 
-            className={isDesktop ? "leadTemplateSheet" : "leadTemplateSheet leadTemplateSheetMobile"}
-        >
-            <SheetHeader className="leadTemplateHeader">
-                <SheetTitle className="leadTemplateTitle">
-                  <Phone className="h-5 w-5" />
-                  <span>Pilih Template Pesan</span>
-                </SheetTitle>
-                <SheetDescription className="leadTemplateDescription">
-                  Kirim pesan WhatsApp ke <strong>{selectedWaLead?.name}</strong>
-                </SheetDescription>
-            </SheetHeader>
-            <div className="leadTemplateBody">
+      {/* WA Template Selection Dialog */}
+      <Dialog open={!!selectedWaLead} onOpenChange={(open) => !open && setSelectedWaLead(null)}>
+        <MasterDataFormDialogContent size="default" className="leadTemplateDialog">
+            <MasterDataFormHeader
+              icon={Phone}
+              title="Pilih Template Pesan"
+              description={<>Kirim pesan WhatsApp ke <strong>{selectedWaLead?.name}</strong>.</>}
+            />
+            <MasterDataDialogBody compact className="leadTemplateBody">
                 <Button 
                     variant="outline" 
                     className="leadTemplateBlankButton"
@@ -1818,9 +1966,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                         <span>Belum ada template tersedia</span>
                     </div>
                 )}
-            </div>
-        </SheetContent>
-      </Sheet>
+            </MasterDataDialogBody>
+        </MasterDataFormDialogContent>
+      </Dialog>
     </OperationalPageShell>
   );
 };

@@ -7,6 +7,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import {
+  createDataTableColumns,
   DataTable,
   TableActionCell,
   TableActionHeader,
@@ -1188,8 +1189,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
             actionWidth={154}
             cellY={14}
             className="recurringExpenseDataTable"
-            columns={[64, 330, 240, 170, 260, 290, 136, 154]}
-            minWidth={1644}
+            columns={createDataTableColumns(['number', 'name', 'text', 'money', 'text', 'description', 'status', 'action'])}
             rowMinHeight={82}
             secondaryLines={2}
           >
@@ -1238,8 +1238,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           actionWidth={154}
           cellY={14}
           className="recurringExpenseDataTable"
-          columns={[64, 330, 240, 170, 260, 290, 136, 154]}
-          minWidth={1644}
+          columns={createDataTableColumns(['number', 'name', 'text', 'money', 'text', 'description', 'status', 'action'])}
           rowMinHeight={82}
           secondaryLines={2}
         >
@@ -1287,8 +1286,7 @@ export const RecurringExpensesTab: React.FC<RecurringExpensesTabProps> = () => {
           actionWidth={86}
           cellY={14}
           className="recurringExpenseDataTable"
-          columns={[64, 300, 210, 210, 260, 190, 170, 150, 86]}
-          minWidth={1640}
+          columns={createDataTableColumns(['number', 'name', 'date', 'date', 'description', 'text', 'money', 'text', 'action'])}
           rowMinHeight={82}
           secondaryLines={2}
         >

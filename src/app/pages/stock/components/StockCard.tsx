@@ -9,7 +9,7 @@ import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { useMasterData } from "@/app/pages/master-data/context";
 import { STOCK_UPDATED_EVENT, sortStockTransactions } from "../utils/stockLedger";
-import { DataTable, TableText } from "@/app/components/ui/data-table";
+import { createDataTableColumns, DataTable, TableText } from "@/app/components/ui/data-table";
 import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import { MasterDataFormDialogContent } from "@/app/components/ui/master-data-ui";
 import { InventoryTablePagination, useInventoryTablePagination } from "./InventoryTablePagination";
@@ -201,7 +201,22 @@ export function StockCard({ open, onOpenChange, product }: StockCardProps) {
         {/* Table */}
         <div className="inventoryStockCardBody">
           <MasterDataTableTitle title="Riwayat Kartu Stok" count={transactions.length} variant="active" icon={Package} className="inventoryStockCardTitle" />
-          <DataTable columns={[58, 126, 118, 140, 150, 110, 140, 110, 220]} minWidth={1172} rowMinHeight={62} cellY={11} textMax={220}>
+          <DataTable
+            columns={createDataTableColumns([
+              'number',
+              'date',
+              'status',
+              'text',
+              'text',
+              'quantity',
+              'money',
+              'quantity',
+              'description',
+            ])}
+            rowMinHeight={62}
+            cellY={11}
+            textMax={220}
+          >
           <table>
             <TableHeader>
               <TableRow>

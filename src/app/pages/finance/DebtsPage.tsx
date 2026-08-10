@@ -47,7 +47,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/app/components/ui/command";
 import { Check } from "lucide-react";
-import { DataTable, TableActionCell, TableActionHeader, TableText } from '@/app/components/ui/data-table';
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableText } from '@/app/components/ui/data-table';
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
@@ -225,7 +225,12 @@ const DebtGroupCard = ({ person, type, canManage, onSettle, onEdit, onDelete }: 
             
             {isOpen && (
                 <div className="debtGroupTable">
-                    <DataTable columns={[64, 124, 300, 110, 154, 120]} minWidth={872} rowMinHeight={58} cellY={11} textMax={280}>
+                    <DataTable
+                      columns={createDataTableColumns(['number', 'date', 'description', 'status', 'money', 'action'])}
+                      rowMinHeight={58}
+                      cellY={11}
+                      textMax={280}
+                    >
                       <table>
                         <TableHeader>
                             <TableRow>

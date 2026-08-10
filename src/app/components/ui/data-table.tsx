@@ -15,12 +15,68 @@ type DataTableProps = React.HTMLAttributes<HTMLDivElement> & {
   actionWidth?: number | string;
   cellX?: number | string;
   cellY?: number | string;
-  columns?: Array<number | string | false | null | undefined>;
+  columns?: DataTableColumn[];
   minWidth?: number | string;
   primaryLines?: number;
   rowMinHeight?: number | string;
   secondaryLines?: number;
   textMax?: number | string;
+};
+
+export type DataTableColumnPreset =
+  | 'action'
+  | 'checkbox'
+  | 'compact'
+  | 'date'
+  | 'description'
+  | 'money'
+  | 'name'
+  | 'number'
+  | 'quantity'
+  | 'status'
+  | 'text'
+  | 'wide';
+
+export type DataTableColumnAlign = 'center' | 'left' | 'right';
+
+export type DataTableColumnConfig = {
+  align?: DataTableColumnAlign;
+  className?: string;
+  minWidth?: number;
+  preset?: DataTableColumnPreset;
+  width?: number | string;
+};
+
+export type DataTableColumn =
+  | DataTableColumnConfig
+  | DataTableColumnPreset
+  | false
+  | null
+  | number
+  | string
+  | undefined;
+
+type ResolvedDataTableColumn = {
+  align?: DataTableColumnAlign;
+  className?: string;
+  minWidth: number;
+  preset?: DataTableColumnPreset;
+  width: string;
+};
+
+const DATA_TABLE_COLUMN_PRESETS: Record<DataTableColumnPreset, Pick<ResolvedDataTableColumn, 'align' | 'minWidth' | 'width'>> = {
+  action: { align: 'center', minWidth: 82, width: '82px' },
+  checkbox: { align: 'center', minWidth: 56, width: '56px' },
+  compact: { align: 'center', minWidth: 112, width: 'clamp(104px, 8vw, 132px)' },
+  date: { align: 'left', minWidth: 136, width: 'clamp(136px, 10vw, 164px)' },
+  description: { align: 'left', minWidth: 280, width: 'clamp(280px, 22vw, 380px)' },
+  money: { align: 'right', minWidth: 148, width: 'clamp(148px, 10vw, 176px)' },
+  name: { align: 'left', minWidth: 240, width: 'clamp(240px, 18vw, 340px)' },
+  number: { align: 'center', minWidth: 64, width: '64px' },
+  quantity: { align: 'center', minWidth: 104, width: 'clamp(96px, 7vw, 120px)' },
+  status: { align: 'center', minWidth: 132, width: 'clamp(124px, 9vw, 152px)' },
+  text: { align: 'left', minWidth: 190, width: 'clamp(190px, 14vw, 260px)' },
+  wide: { align: 'left', minWidth: 320, width: 'clamp(300px, 24vw, 420px)' },
 };
 
 function toCssLength(value: number | string | undefined) {
@@ -31,6 +87,43 @@ function toCssLength(value: number | string | undefined) {
 function toCssCount(value: number | undefined) {
   if (typeof value !== 'number') return undefined;
   return String(Math.max(1, Math.floor(value)));
+}
+
+function isColumnPreset(value: string): value is DataTableColumnPreset {
+  return value in DATA_TABLE_COLUMN_PRESETS;
+}
+
+function resolveDataTableColumn(column: DataTableColumn): ResolvedDataTableColumn | null {
+  if (column === false || column === null || column === undefined) return null;
+
+  if (typeof column === 'number') {
+    return { minWidth: column, width: `${column}px` };
+  }
+
+  if (typeof column === 'string') {
+    if (isColumnPreset(column)) {
+      return { preset: column, ...DATA_TABLE_COLUMN_PRESETS[column] };
+    }
+
+    return { minWidth: 120, width: column };
+  }
+
+  const preset = column.preset;
+  const presetConfig = preset ? DATA_TABLE_COLUMN_PRESETS[preset] : undefined;
+  const width = toCssLength(column.width) || presetConfig?.width || DATA_TABLE_COLUMN_PRESETS.text.width;
+  const minWidth = column.minWidth || presetConfig?.minWidth || 120;
+
+  return {
+    align: column.align || presetConfig?.align,
+    className: column.className,
+    minWidth,
+    preset,
+    width,
+  };
+}
+
+export function createDataTableColumns(columns: DataTableColumn[]) {
+  return columns;
 }
 
 export function DataTable({
@@ -58,15 +151,18 @@ export function DataTable({
   const resolvedSecondaryLines = toCssCount(secondaryLines);
   const resolvedTextMax = toCssLength(textMax);
   const resolvedColumns = columns?.flatMap((column) => {
-    if (column === false || column === null || column === undefined) return [];
-    const width = toCssLength(column);
-    return width ? [width] : [];
+    const resolvedColumn = resolveDataTableColumn(column);
+    return resolvedColumn ? [resolvedColumn] : [];
   });
 
   if (resolvedActionWidth) cssVars['--table-action-width'] = resolvedActionWidth;
   if (resolvedCellX) cssVars['--table-cell-x'] = resolvedCellX;
   if (resolvedCellY) cssVars['--table-cell-y'] = resolvedCellY;
-  if (resolvedMinWidth) cssVars['--table-min-width'] = resolvedMinWidth;
+  if (resolvedMinWidth) {
+    cssVars['--table-min-width'] = resolvedMinWidth;
+  } else if (resolvedColumns?.length) {
+    cssVars['--table-min-width'] = `${resolvedColumns.reduce((total, column) => total + column.minWidth, 0)}px`;
+  }
   if (resolvedRowMinHeight) cssVars['--table-row-min-h'] = resolvedRowMinHeight;
   if (resolvedPrimaryLines) cssVars['--table-primary-lines'] = resolvedPrimaryLines;
   if (resolvedSecondaryLines) cssVars['--table-secondary-lines'] = resolvedSecondaryLines;
@@ -78,31 +174,92 @@ export function DataTable({
       style={cssVars}
       {...props}
     >
-      {resolvedColumns?.length ? injectColumnGroup(children, resolvedColumns) : children}
+      {resolvedColumns?.length ? injectTableColumns(children, resolvedColumns) : children}
     </div>
   );
 }
 
-function injectColumnGroup(children: ReactNode, columns: string[]) {
+function injectTableColumns(children: ReactNode, columns: ResolvedDataTableColumn[]) {
   const columnGroup = (
     <colgroup>
-      {columns.map((width, index) => (
-        <col key={`${width}-${index}`} style={{ width }} />
+      {columns.map((column, index) => (
+        <col key={`${column.width}-${index}`} style={{ width: column.width }} />
       ))}
     </colgroup>
   );
 
   return React.Children.map(children, (child) => {
-    if (!React.isValidElement<{ children?: ReactNode }>(child) || child.type !== 'table') {
+    if (!React.isValidElement<{ children?: ReactNode }>(child)) {
+      return child;
+    }
+
+    const elementName = getElementName(child);
+
+    if (!['Table', 'table'].includes(elementName)) {
       return child;
     }
 
     const tableChildren = React.Children.toArray(child.props.children).filter((tableChild) => {
-      return !(React.isValidElement(tableChild) && tableChild.type === 'colgroup');
+      return !(React.isValidElement(tableChild) && getElementName(tableChild) === 'colgroup');
     });
 
-    return React.cloneElement(child, undefined, columnGroup, ...tableChildren);
+    return React.cloneElement(
+      child,
+      undefined,
+      columnGroup,
+      ...tableChildren.map((tableChild) => injectColumnClasses(tableChild, columns)),
+    );
   });
+}
+
+function injectColumnClasses(child: ReactNode, columns: ResolvedDataTableColumn[]): ReactNode {
+  if (!React.isValidElement<{ children?: ReactNode; className?: string }>(child)) return child;
+  const elementName = getElementName(child);
+
+  if (['TableBody', 'TableFooter', 'TableHeader', 'tbody', 'tfoot', 'thead'].includes(elementName)) {
+    return React.cloneElement(
+      child,
+      undefined,
+      React.Children.map(child.props.children, (sectionChild) => injectColumnClasses(sectionChild, columns)),
+    );
+  }
+
+  if (!['TableRow', 'tr'].includes(elementName)) return child;
+
+  let columnIndex = 0;
+  const rowChildren = React.Children.map(child.props.children, (cell) => {
+    if (!React.isValidElement<{ className?: string }>(cell)) return cell;
+
+    const column = columns[columnIndex];
+    columnIndex += 1;
+
+    if (!column) return cell;
+
+    return React.cloneElement(cell, {
+      className: cn(cell.props.className, getDataTableColumnClassName(column)),
+    });
+  });
+
+  return React.cloneElement(child, undefined, rowChildren);
+}
+
+function getElementName(element: React.ReactElement) {
+  if (typeof element.type === 'string') return element.type;
+  if (typeof element.type !== 'function' && (typeof element.type !== 'object' || element.type === null)) return '';
+
+  const elementType = element.type as { displayName?: string; name?: string };
+  if (typeof elementType.displayName === 'string') return elementType.displayName;
+  if (typeof elementType.name === 'string') return elementType.name;
+  return '';
+}
+
+function getDataTableColumnClassName(column: ResolvedDataTableColumn) {
+  return cn(
+    'dataTableColumn',
+    column.preset && `dataTableColumn--${column.preset}`,
+    column.align && `dataTableColumn--align-${column.align}`,
+    column.className,
+  );
 }
 
 type TableTextProps = {

@@ -57,20 +57,15 @@
 
 .leadFilterPanel {
   overflow: visible;
-  padding: 22px 24px;
+  padding: 24px;
 }
 
 .leadFilterGrid {
   align-items: center;
   display: grid;
-  gap: 14px 16px;
-  grid-template-columns:
-    minmax(230px, 1.05fr)
-    minmax(190px, 0.9fr)
-    minmax(190px, 0.9fr)
-    minmax(220px, 1fr)
-    minmax(190px, 0.9fr)
-    minmax(210px, 0.95fr);
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  max-width: 100%;
 }
 
 .leadFilterGrid > * {
@@ -90,9 +85,15 @@
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
   font-size: 15px;
   font-weight: 760;
-  height: 56px;
-  min-height: 56px;
+  height: 56px !important;
+  min-height: 56px !important;
   line-height: 1.2;
+}
+
+.leadFilterControl.uiSelectTrigger {
+  align-items: center;
+  display: flex;
+  padding-inline: 18px 16px;
 }
 
 .leadFilterControl {
@@ -114,10 +115,10 @@
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
   display: inline-flex;
   font-size: 15px;
-  height: 56px;
+  height: 56px !important;
   justify-content: flex-start;
   max-width: 100%;
-  min-height: 56px;
+  min-height: 56px !important;
   min-width: 0;
   overflow: hidden;
   padding-inline: 18px;
@@ -282,8 +283,8 @@
   border-radius: 16px;
   font-weight: 820;
   gap: 10px;
-  height: 56px;
-  min-height: 56px;
+  height: 56px !important;
+  min-height: 56px !important;
   padding-inline: 18px;
   width: 100%;
 }
@@ -365,6 +366,7 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  --table-cell-x: 18px;
 }
 
 .leadDataTable table {
@@ -384,6 +386,23 @@
 .leadDataTable th,
 .leadDataTable td {
   vertical-align: middle;
+}
+
+.leadDataTable .leadFollowUpColumn {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  text-align: center !important;
+}
+
+.leadDataTable .dataTableColumn--action,
+.leadDataTable .tableActionHeader,
+.leadDataTable .tableActionCell {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.leadDataTable .tableActionCell .rowActions {
+  justify-content: center;
 }
 
 .leadDataTable .tableTextPrimary {
@@ -433,7 +452,103 @@
 }
 
 .leadStatusStack {
-  align-items: flex-start;
+  align-items: center;
+  width: 100%;
+}
+
+.leadFollowUpCell {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.leadFollowUpButton,
+.leadFollowUpMore {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dce7f5;
+  border-radius: 999px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+  color: #64748b;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 820;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  width: 28px;
+}
+
+.leadFollowUpButton:not(:disabled):hover,
+.leadFollowUpMore:not(:disabled):hover {
+  background: #eff6ff;
+  border-color: #b9d6ff;
+  color: #0b63ce;
+  transform: translateY(-1px);
+}
+
+.leadFollowUpButton.isUsed {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.leadFollowUpButton.isUsed:not(:disabled):hover {
+  background: #dffbea;
+  border-color: #7de3bb;
+  color: #047857;
+}
+
+.leadFollowUpButton:disabled,
+.leadFollowUpMore:disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+
+.leadFollowUpMore {
+  background: #f8fbff;
+  color: #0b63ce;
+  width: auto;
+  min-width: 30px;
+  padding: 0 8px;
+}
+
+.leadFollowUpEmpty {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  font-weight: 720;
+}
+
+.leadFollowUpTooltip {
+  background: #0f172a !important;
+  border: 1px solid rgba(226, 232, 240, 0.12) !important;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+  color: #fff !important;
+  max-width: 260px;
+  padding: 10px 12px !important;
+}
+
+.leadFollowUpTooltip div {
+  display: grid;
+  gap: 3px;
+}
+
+.leadFollowUpTooltip strong {
+  font-size: 0.78rem;
+  font-weight: 820;
+}
+
+.leadFollowUpTooltip span,
+.leadFollowUpTooltip small {
+  color: #cbd5e1;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .leadInlineMeta {
@@ -464,9 +579,10 @@
 
 .leadBookingMeta {
   color: #7c3aed;
+  display: block;
   font-size: 11px;
   font-weight: 720;
-  max-width: 172px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -640,58 +756,21 @@
   min-height: 52px;
 }
 
-.leadTemplateSheet {
-  background: #fff !important;
-  border-left: 1px solid #e4edf8 !important;
-  box-shadow: -24px 0 72px rgba(15, 23, 42, 0.16) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100%;
-  max-width: 430px !important;
-  padding: 0 !important;
-  width: min(430px, calc(100vw - 28px)) !important;
+.leadTemplateDialog.masterDataFormDialogContent {
+  max-width: min(620px, calc(100vw - 32px)) !important;
 }
 
-.leadTemplateHeader {
-  border-bottom: 1px solid #e9eff7;
-  display: grid;
-  gap: 6px;
-  padding: 28px 28px 22px;
-  text-align: left;
-}
-
-.leadTemplateTitle {
-  align-items: center;
-  color: #0f172a;
-  display: flex;
-  font-size: 1.05rem;
-  font-weight: 860;
-  gap: 10px;
-  line-height: 1.2;
-}
-
-.leadTemplateTitle svg {
-  color: #0b63ce;
-}
-
-.leadTemplateDescription {
-  color: #64748b;
-  font-size: 0.88rem;
-  font-weight: 560;
-}
-
-.leadTemplateDescription strong {
+.leadTemplateDialog .masterDataFormDescription strong {
   color: #26364f;
-  font-weight: 800;
+  font-weight: 820;
 }
 
 .leadTemplateBody {
   display: grid;
-  flex: 1 1 auto;
-  gap: 10px;
+  gap: 12px;
   min-height: 0;
-  overflow-y: auto;
-  padding: 18px;
+  overflow-y: auto !important;
+  padding: 20px 24px 24px !important;
 }
 
 .leadTemplateBlankButton.uiButton,
@@ -893,6 +972,111 @@
   overflow-wrap: anywhere;
 }
 
+.leadFollowUpHistory {
+  background: #fff;
+  border: 1px solid #e6edf6;
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.leadFollowUpHistoryHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.leadFollowUpHistoryHeader span {
+  color: #7b8ba1;
+  display: block;
+  font-size: 12px;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.leadFollowUpHistoryHeader strong {
+  color: #0f172a;
+  display: block;
+  font-size: 17px;
+  font-weight: 860;
+  margin-top: 3px;
+}
+
+.leadFollowUpHistoryCount {
+  background: #eff6ff !important;
+  border-color: #cfe0ff !important;
+  color: #0b63ce !important;
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+.leadFollowUpHistoryList {
+  display: grid;
+  gap: 10px;
+}
+
+.leadFollowUpHistoryItem {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #e8f0fb;
+  border-radius: 14px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.leadFollowUpHistoryIcon {
+  align-items: center;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  color: #059669;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.leadFollowUpHistoryItem div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.leadFollowUpHistoryItem strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 840;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leadFollowUpHistoryItem span:not(.leadFollowUpHistoryIcon) {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 620;
+}
+
+.leadFollowUpHistoryEmpty {
+  align-items: center;
+  border: 1px dashed #cbd7e6;
+  border-radius: 14px;
+  color: #7b8ba1;
+  display: flex;
+  font-size: 0.84rem;
+  font-weight: 720;
+  gap: 8px;
+  justify-content: center;
+  min-height: 76px;
+}
+
 @media (max-width: 1320px) {
   .leadFilterGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1026,22 +1210,14 @@
     width: calc(100vw - 28px) !important;
   }
 
-  .leadTemplateSheetMobile {
-    border-left: 0 !important;
-    border-radius: 24px 24px 0 0 !important;
-    border-top: 1px solid #e4edf8 !important;
-    height: auto;
-    max-height: 86vh;
-    max-width: 100vw !important;
-    width: 100vw !important;
-  }
-
-  .leadTemplateHeader {
-    padding: 24px 22px 18px;
+  .leadTemplateDialog.masterDataFormDialogContent {
+    max-height: calc(100vh - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+    width: calc(100vw - 28px) !important;
   }
 
   .leadTemplateBody {
-    padding: 16px;
+    padding: 16px !important;
   }
 }
 
@@ -5253,6 +5429,79 @@
 .uiDataTableHasColumns td:not(.tableActionCell) {
   width: auto !important;
   min-width: 0;
+}
+
+.uiDataTableScroller .dataTableColumn {
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.uiDataTableScroller .dataTableColumn--align-center,
+.uiDataTableScroller .dataTableColumn--checkbox,
+.uiDataTableScroller .dataTableColumn--number,
+.uiDataTableScroller .dataTableColumn--quantity,
+.uiDataTableScroller .dataTableColumn--status,
+.uiDataTableScroller .dataTableColumn--action {
+  text-align: center !important;
+}
+
+.uiDataTableScroller .dataTableColumn--align-right,
+.uiDataTableScroller .dataTableColumn--money {
+  text-align: right !important;
+}
+
+.uiDataTableScroller .dataTableColumn--money,
+.uiDataTableScroller .dataTableColumn--quantity {
+  font-variant-numeric: tabular-nums;
+}
+
+.uiDataTableScroller td.dataTableColumn--money > *,
+.uiDataTableScroller td.dataTableColumn--quantity > * {
+  margin-left: auto;
+}
+
+.uiDataTableScroller .dataTableColumn--status > *,
+.uiDataTableScroller .dataTableColumn--action > *,
+.uiDataTableScroller .dataTableColumn--checkbox > *,
+.uiDataTableScroller .dataTableColumn--number > *,
+.uiDataTableScroller .dataTableColumn--quantity > * {
+  justify-content: center;
+}
+
+.uiDataTableScroller .dataTableColumn--action .rowActions {
+  justify-content: center;
+}
+
+.uiDataTableScroller .dataTableColumn--checkbox {
+  line-height: 0;
+}
+
+.uiDataTableScroller .dataTableColumn--checkbox [data-slot='checkbox'] {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto;
+  border-color: #cbd7e6 !important;
+  background: #ffffff !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.uiDataTableScroller .dataTableColumn--checkbox [data-slot='checkbox']:hover {
+  border-color: #93c5fd !important;
+  background: #f8fbff !important;
+}
+
+.uiDataTableScroller .dataTableColumn--checkbox [data-slot='checkbox'][data-state='checked'],
+.uiDataTableScroller .dataTableColumn--checkbox [data-slot='checkbox'][data-state='indeterminate'] {
+  border-color: #0f6bdc !important;
+  background: #0f6bdc !important;
+}
+
+.uiDataTableScroller .dataTableColumn--checkbox [data-slot='checkbox'] svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
 }
 
 .tableScroller th {

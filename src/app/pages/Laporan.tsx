@@ -37,6 +37,7 @@ import { Textarea } from "@/app/components/ui/textarea";
 import { Card } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import {
+  createDataTableColumns,
   DataTable,
   TableActionCell,
   TableActionHeader,
@@ -2640,8 +2641,19 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         
         <DataTable
           className="hidden md:block operationalReportDataTable"
-          columns={['56px', '64px', '150px', '220px', '150px', '180px', '170px', '170px', '150px', '150px', '84px']}
-          minWidth={1544}
+          columns={createDataTableColumns([
+            'checkbox',
+            'number',
+            'date',
+            'name',
+            'quantity',
+            'money',
+            'money',
+            'money',
+            'status',
+            'status',
+            'action',
+          ])}
           rowMinHeight={88}
           cellX={16}
           cellY={14}
@@ -2942,8 +2954,19 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
 
         <DataTable
           className="operationalReportDataTable"
-          columns={['64px', '220px', '120px', '160px', '150px', '150px', '150px', '150px', '160px', '170px', '84px']}
-          minWidth={1574}
+          columns={createDataTableColumns([
+            'number',
+            'name',
+            'quantity',
+            'money',
+            'money',
+            'money',
+            'money',
+            'money',
+            'money',
+            'money',
+            'action',
+          ])}
           rowMinHeight={88}
           cellX={16}
           cellY={14}
@@ -3084,8 +3107,17 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
 
           <DataTable
             className="operationalReportDataTable"
-            columns={['64px', '150px', '210px', '240px', '120px', '150px', '150px', '320px', '84px']}
-            minWidth={1488}
+            columns={createDataTableColumns([
+              'number',
+              'date',
+              'name',
+              'text',
+              'status',
+              'money',
+              'status',
+              'description',
+              'action',
+            ])}
             rowMinHeight={92}
             cellX={16}
             cellY={14}

@@ -8,7 +8,7 @@ import { useMasterData } from "@/app/pages/master-data/context";
 import { logActivity } from "@/app/services/auditService";
 import { MasterDataTableTitle } from "@/app/components/ui/master-data-table-title";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/ui/table";
-import { DataTable, TableActionCell, TableActionHeader, TableText } from "@/app/components/ui/data-table";
+import { createDataTableColumns, DataTable, TableActionCell, TableActionHeader, TableText } from "@/app/components/ui/data-table";
 import { OperationalEmptyState, OperationalTableCard } from "@/app/components/ui/operational-page";
 
 export function StockSettings() {
@@ -102,7 +102,12 @@ export function StockSettings() {
     <div className="inventorySettingsGrid">
       <OperationalTableCard className="inventoryTableCard">
           <MasterDataTableTitle title="Jenis Layanan Aktif" count={activeServices.length} variant="active" icon={List} />
-          <DataTable columns={[64, 260, 180, 110]} minWidth={614} rowMinHeight={58} cellY={11} textMax={260}>
+          <DataTable
+            columns={createDataTableColumns(['number', 'name', 'text', 'status'])}
+            rowMinHeight={58}
+            cellY={11}
+            textMax={260}
+          >
             <table>
               <TableHeader>
                 <TableRow>
@@ -149,7 +154,13 @@ export function StockSettings() {
                 Tambah
             </Button>
           </div>
-          <DataTable actionWidth={82} columns={[64, 320, 82]} minWidth={466} rowMinHeight={58} cellY={11} textMax={300}>
+          <DataTable
+            actionWidth={82}
+            columns={createDataTableColumns(['number', 'name', 'action'])}
+            rowMinHeight={58}
+            cellY={11}
+            textMax={300}
+          >
             <table>
               <TableHeader>
                 <TableRow>

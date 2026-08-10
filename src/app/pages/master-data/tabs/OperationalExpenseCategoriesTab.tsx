@@ -15,6 +15,7 @@ import { DEFAULT_OPERATIONAL_EXPENSE_ACCOUNTS } from '@/app/data/operationalExpe
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
 import {
+  createDataTableColumns,
   DataTable,
   TableActionCell,
   TableActionHeader,
@@ -508,7 +509,12 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
         </OperationalTableCard>
       ) : activeView === 'categories' ? (
         <div className="tablePanel">
-          <DataTable actionWidth={82} cellY={12} columns={[72, 360, 180, 140, 104, (canEdit || canDelete) ? 82 : null]} minWidth={canEdit || canDelete ? 938 : 856} rowMinHeight={64}>
+          <DataTable
+            actionWidth={82}
+            cellY={12}
+            columns={createDataTableColumns(['number', 'name', 'text', 'quantity', 'status', (canEdit || canDelete) && 'action'])}
+            rowMinHeight={64}
+          >
             <table>
               <thead>
                 <tr>
@@ -558,7 +564,12 @@ export function OperationalExpenseCategoriesTab({ setPageNotices }: OperationalE
         </div>
       ) : (
         <div className="tablePanel">
-          <DataTable actionWidth={82} cellY={12} columns={[72, 320, 260, 120, 360, 104, (canEdit || canDelete) ? 82 : null]} minWidth={canEdit || canDelete ? 1318 : 1236} rowMinHeight={64}>
+          <DataTable
+            actionWidth={82}
+            cellY={12}
+            columns={createDataTableColumns(['number', 'name', 'text', 'compact', 'description', 'status', (canEdit || canDelete) && 'action'])}
+            rowMinHeight={64}
+          >
             <table>
               <thead>
                 <tr>
