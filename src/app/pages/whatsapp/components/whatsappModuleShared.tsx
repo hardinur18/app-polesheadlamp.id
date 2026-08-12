@@ -1,16 +1,11 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import {
-  BarChart3,
   Check,
   CheckCheck,
   Clock,
-  Database,
   FileText,
-  LayoutDashboard,
-  Megaphone,
   MessagesSquare,
   Settings2,
-  Smartphone,
   Sparkles,
   Users,
   XCircle,
@@ -27,15 +22,10 @@ import type {
 import type { WhatsAppWorkspaceIconKey } from '../whatsappWorkspace';
 
 const WORKSPACE_ICONS: Record<WhatsAppWorkspaceIconKey, ComponentType<{ className?: string }>> = {
-  dashboard: LayoutDashboard,
   chats: MessagesSquare,
   contacts: Users,
   templates: FileText,
-  broadcasts: Megaphone,
-  analytics: BarChart3,
-  storage: Database,
   settings: Settings2,
-  accounts: Smartphone,
 };
 
 export function getWorkspaceIcon(iconKey: WhatsAppWorkspaceIconKey) {

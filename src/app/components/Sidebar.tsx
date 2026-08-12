@@ -4,7 +4,7 @@ import {
   Megaphone, UserPlus, ClipboardList, Calendar, Map,
   Wallet, ArrowRightLeft, ScrollText, FileBarChart, Package, ShieldCheck, MessageSquare,
   Share2, RefreshCw, Briefcase, TrendingUp, DollarSign, Repeat, ChevronDown,
-  Smartphone, FileText, BarChart3, Images, Target, Activity
+  FileText, Images, Target, Activity
 } from 'lucide-react';
 import { cn } from './ui/utils';
 import appLogo from "@/assets/polesheadlamp-app-logo-round.png";
@@ -95,15 +95,10 @@ const NAV_GROUPS: NavGroup[] = [
         id: 'whatsapp',
         permission: 'whatsapp.view',
         children: [
-          { icon: LayoutDashboard, label: 'Dashboard', id: 'whatsapp-dashboard', permission: 'whatsapp.view' },
           { icon: MessageSquare, label: 'Chats', id: 'whatsapp-chats', permission: 'whatsapp.view' },
           { icon: Users, label: 'Kontak', id: 'whatsapp-contacts', permission: 'whatsapp.view' },
-          { icon: FileText, label: 'Template', id: 'whatsapp-templates', permission: 'whatsapp.templates.manage' },
-          { icon: Megaphone, label: 'Broadcast', id: 'whatsapp-broadcasts', permission: 'whatsapp.broadcast.manage' },
-          { icon: BarChart3, label: 'Analytics', id: 'whatsapp-analytics', permission: 'whatsapp.view' },
-          { icon: Database, label: 'Storage', id: 'whatsapp-storage', permission: 'whatsapp.view' },
-          { icon: Settings, label: 'Pengaturan Inbox', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
-          { icon: Smartphone, label: 'Akun WA', id: 'whatsapp-accounts', permission: 'whatsapp.settings.manage' },
+          { icon: FileText, label: 'Template Pesan', id: 'whatsapp-templates', permission: 'whatsapp.templates.manage' },
+          { icon: Settings, label: 'Pengaturan WhatsApp', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
         ],
       },
       {

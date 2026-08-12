@@ -51,11 +51,10 @@ export const PERMISSIONS = definePermissions([
   { key: 'proof_assets.delete', label: 'Hapus Galeri Bukti', group: 'Galeri Bukti' },
 
   // --- WHATSAPP ---
-  { key: 'whatsapp.view', label: 'Akses Modul WhatsApp', group: 'WhatsApp', description: 'Buka dashboard, chats, kontak, analytics, dan storage WhatsApp' },
+  { key: 'whatsapp.view', label: 'Akses Modul WhatsApp', group: 'WhatsApp', description: 'Buka chats dan kontak WhatsApp' },
   { key: 'whatsapp.chats.reply', label: 'Balas Chat WhatsApp', group: 'WhatsApp', description: 'Kirim balasan teks dan lampiran dari inbox WhatsApp' },
-  { key: 'whatsapp.broadcast.manage', label: 'Kelola Broadcast WhatsApp', group: 'WhatsApp', description: 'Buka dan mengirim broadcast template WhatsApp' },
   { key: 'whatsapp.templates.manage', label: 'Kelola Template WhatsApp', group: 'WhatsApp', description: 'Sync dan membuat template Kirimdev/Meta' },
-  { key: 'whatsapp.settings.manage', label: 'Kelola Pengaturan WhatsApp', group: 'WhatsApp', description: 'Akses akun, status provider, webhook, dan sync inbox WhatsApp' },
+  { key: 'whatsapp.settings.manage', label: 'Kelola Pengaturan WhatsApp', group: 'WhatsApp', description: 'Akses status provider, nomor WA, webhook, dan sync inbox WhatsApp' },
 
   // --- IKLAN & AFFILIATE ---
   { key: 'ads.view_daily', label: 'Akses Iklan Harian', group: 'Iklan' },

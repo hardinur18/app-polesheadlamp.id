@@ -6,6 +6,7 @@ import {
   Loader2,
   Lock,
   RefreshCcw,
+  Smartphone,
   Webhook,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,6 +36,8 @@ function ConfigRow({ label, value }: { label: string; value: React.ReactNode }) 
 export function WhatsAppInboxSettingsPage() {
   const { data, loading, refreshing, error, reload } = useWhatsAppOverview();
   const kirimdev = data?.kirimdev;
+  const accounts = data?.accounts || [];
+  const connectedAccounts = accounts.filter((account) => account.status === 'connected').length;
 
   const webhookUrl = React.useMemo(() => {
     if (!kirimdev?.webhookPath) return '';
@@ -173,6 +176,61 @@ export function WhatsAppInboxSettingsPage() {
             </Card>
 
             <div className="space-y-6">
+              <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="p-5">
+                  <div className="flex items-center gap-3">
+                    <Smartphone className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        Nomor Terhubung
+                      </h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Ringkasan nomor WA yang dikenali dari provider.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <ConfigRow label="Total nomor" value={formatNumber(accounts.length)} />
+                    <ConfigRow label="Terhubung" value={formatNumber(connectedAccounts)} />
+                  </div>
+
+                  {accounts.length > 0 ? (
+                    <div className="mt-4 space-y-3">
+                      {accounts.map((account) => (
+                        <div
+                          key={account.id}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-800"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {account.displayPhoneNumber || account.phoneNumberId}
+                            </div>
+                            <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                              {account.label}
+                            </div>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={
+                              account.status === 'connected'
+                                ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                : 'border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300'
+                            }
+                          >
+                            {account.status === 'connected' ? 'Terhubung' : account.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      Belum ada nomor yang dikenali dari provider.
+                    </div>
+                  )}
+                </div>
+              </Card>
+
               <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div className="p-5">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">

@@ -155,10 +155,6 @@ const ConversationChannelSettingsPage = React.lazy(() =>
   import('../../pages/conversations/ConversationChannelSettingsPage').then((module) => ({ default: module.ConversationChannelSettingsPage })),
 );
 
-const WhatsAppDashboardPage = React.lazy(() =>
-  import('../../pages/whatsapp/WhatsAppDashboardPage').then((module) => ({ default: module.WhatsAppDashboardPage })),
-);
-
 const WhatsAppChatsPage = React.lazy(() =>
   import('../../pages/whatsapp/WhatsAppChatsPage').then((module) => ({ default: module.WhatsAppChatsPage })),
 );
@@ -171,24 +167,8 @@ const WhatsAppTemplatesPage = React.lazy(() =>
   import('../../pages/whatsapp/WhatsAppTemplatesPage').then((module) => ({ default: module.WhatsAppTemplatesPage })),
 );
 
-const WhatsAppBroadcastsPage = React.lazy(() =>
-  import('../../pages/whatsapp/WhatsAppBroadcastsPage').then((module) => ({ default: module.WhatsAppBroadcastsPage })),
-);
-
-const WhatsAppAnalyticsPage = React.lazy(() =>
-  import('../../pages/whatsapp/WhatsAppAnalyticsPage').then((module) => ({ default: module.WhatsAppAnalyticsPage })),
-);
-
-const WhatsAppStoragePage = React.lazy(() =>
-  import('../../pages/whatsapp/WhatsAppStoragePage').then((module) => ({ default: module.WhatsAppStoragePage })),
-);
-
 const WhatsAppInboxSettingsPage = React.lazy(() =>
   import('../../pages/whatsapp/WhatsAppInboxSettingsPage').then((module) => ({ default: module.WhatsAppInboxSettingsPage })),
-);
-
-const WhatsAppAccountsPage = React.lazy(() =>
-  import('../../pages/whatsapp/WhatsAppAccountsPage').then((module) => ({ default: module.WhatsAppAccountsPage })),
 );
 
 const PayrollPage = React.lazy(() =>
@@ -524,24 +504,14 @@ export function AppLayout() {
       case 'conversation-channel-settings':
         return <ConversationChannelSettingsPage />;
       case 'whatsapp':
-      case 'whatsapp-dashboard':
-        return <WhatsAppDashboardPage />;
       case 'whatsapp-chats':
         return <WhatsAppChatsPage />;
       case 'whatsapp-contacts':
         return <WhatsAppContactsPage />;
       case 'whatsapp-templates':
         return <WhatsAppTemplatesPage />;
-      case 'whatsapp-broadcasts':
-        return <WhatsAppBroadcastsPage />;
-      case 'whatsapp-analytics':
-        return <WhatsAppAnalyticsPage />;
-      case 'whatsapp-storage':
-        return <WhatsAppStoragePage />;
       case 'whatsapp-inbox-settings':
         return <WhatsAppInboxSettingsPage />;
-      case 'whatsapp-accounts':
-        return <WhatsAppAccountsPage />;
       default: {
         const placeholderMeta = getAppLayoutPlaceholderMeta(activeTab);
 

@@ -62,7 +62,6 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
 
   if (
     updated.includes('whatsapp.chats.reply') ||
-    updated.includes('whatsapp.broadcast.manage') ||
     updated.includes('whatsapp.templates.manage') ||
     updated.includes('whatsapp.settings.manage')
   ) {
