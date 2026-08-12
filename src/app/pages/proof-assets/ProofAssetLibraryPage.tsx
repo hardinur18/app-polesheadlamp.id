@@ -87,7 +87,6 @@ import {
 } from '@/app/services/proofAssets';
 import {
   fetchWhatsAppContacts,
-  sendWhatsAppMessage,
   WhatsAppContact,
 } from '@/app/services/whatsappModuleService';
 
@@ -145,6 +144,12 @@ const normalizeWhatsAppPhone = (value: string | null | undefined) => {
 const formatWhatsAppPhone = (phone: string) => {
   const normalized = normalizeWhatsAppPhone(phone);
   return normalized ? `+${normalized}` : '-';
+};
+
+const buildWhatsAppManualUrl = (phone: string, caption: string) => {
+  const normalizedPhone = normalizeWhatsAppPhone(phone);
+  const encodedCaption = encodeURIComponent(caption.trim());
+  return `https://wa.me/${normalizedPhone}${encodedCaption ? `?text=${encodedCaption}` : ''}`;
 };
 
 const assetMatchesSearch = (asset: ProofAsset, search: string, vehicleName: string) => {
@@ -320,11 +325,6 @@ export function ProofAssetLibraryPage() {
     return filtered.slice(0, MAX_FORWARD_CONTACT_OPTIONS);
   }, [contactOptions, contactSearch]);
 
-  const defaultWhatsAppChannelId = React.useMemo(
-    () => whatsAppContacts.find((contact) => contact.channelId)?.channelId || 'whatsapp',
-    [whatsAppContacts],
-  );
-
   const resetForm = React.useCallback(() => {
     setEditingAsset(null);
     setVehicleComboboxOpen(false);
@@ -498,7 +498,7 @@ export function ProofAssetLibraryPage() {
     setContactSearch('');
   };
 
-  const handleSendForwardAsset = async () => {
+  const handleOpenForwardWhatsApp = async () => {
     if (!forwardAsset) return;
 
     const selectedPhone = selectedContact?.phone || '';
@@ -508,36 +508,20 @@ export function ProofAssetLibraryPage() {
       return;
     }
 
-    const imageUrl = getProofAssetPublicUrl(forwardAsset.imagePath);
-    if (!/^https:\/\//i.test(imageUrl)) {
-      toast.error('Gambar harus punya URL publik HTTPS untuk dikirim ke WhatsApp.');
-      return;
-    }
-
+    const caption = forwardCaption.trim() || forwardAsset.caption || forwardAsset.title;
+    window.open(buildWhatsAppManualUrl(targetPhone, caption), '_blank', 'noopener,noreferrer');
     setForwardSending(true);
     try {
-      await sendWhatsAppMessage({
-        channelId: selectedContact?.channelId || defaultWhatsAppChannelId,
-        to: targetPhone,
-        text: forwardCaption.trim() || forwardAsset.caption || forwardAsset.title,
-        media: {
-          type: 'image',
-          url: imageUrl,
-          fileName: `${forwardAsset.title || forwardAsset.id}.jpg`,
-          mimeType: null,
-        },
-      });
-
       const updatedAsset = await incrementProofAssetUsage(forwardAsset.id).catch(() => null);
       setAssets((current) => current.map((asset) => {
         if (asset.id !== forwardAsset.id) return asset;
         return updatedAsset || { ...asset, usageCount: asset.usageCount + 1 };
       }));
 
-      toast.success('Gambar berhasil dikirim ke WhatsApp.');
+      toast.success('WhatsApp dibuka dengan caption.');
       closeForwardDialog(true);
     } catch (err: any) {
-      toast.error(err?.message || 'Gagal mengirim gambar ke WhatsApp.');
+      toast.error(err?.message || 'WhatsApp terbuka, tapi gagal mencatat penggunaan aset.');
     } finally {
       setForwardSending(false);
     }
@@ -981,13 +965,13 @@ export function ProofAssetLibraryPage() {
                 <Button type="button" variant="outline" onClick={() => closeForwardDialog()} disabled={forwardSending}>
                   Batal
                 </Button>
-                <Button type="button" onClick={handleSendForwardAsset} disabled={forwardSending || !targetPhone}>
+                <Button type="button" onClick={handleOpenForwardWhatsApp} disabled={forwardSending || !targetPhone}>
                   {forwardSending ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="mr-2 h-4 w-4" />
                   )}
-                  Kirim WhatsApp
+                  Buka WhatsApp
                 </Button>
               </div>
             </MasterDataFormDialogContent>
