@@ -8,10 +8,13 @@ import {
   EyeOff,
   Images,
   Loader2,
+  MessageCircle,
   Pencil,
+  Phone,
   Plus,
   RefreshCw,
   Search,
+  Send,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -20,14 +23,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/app/components/ui/dialog';
+import { Dialog } from '@/app/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +51,14 @@ import {
   CommandList,
 } from '@/app/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/app/components/ui/popover';
+import { TableActionMenu, TableActionMenuItem } from '@/app/components/ui/data-table';
+import {
+  MasterDataFormActions,
+  MasterDataFormDialogContent,
+  MasterDataFormField,
+  MasterDataFormGrid,
+  MasterDataFormHeader,
+} from '@/app/components/ui/master-data-ui';
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
@@ -74,12 +78,18 @@ import {
   deleteProofAsset,
   deleteProofAssetImage,
   getProofAssetPublicUrl,
+  incrementProofAssetUsage,
   listProofAssets,
   normalizeProofAssetTags,
   ProofAsset,
   updateProofAsset,
   uploadProofAssetImage,
 } from '@/app/services/proofAssets';
+import {
+  fetchWhatsAppContacts,
+  sendWhatsAppMessage,
+  WhatsAppContact,
+} from '@/app/services/whatsappModuleService';
 
 const ALL_FILTER_VALUE = 'all';
 const NONE_VEHICLE_VALUE = 'none';
@@ -87,6 +97,7 @@ const NONE_YEAR_VALUE = 'none';
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const MIN_PROOF_ASSET_YEAR = 1980;
 const MAX_PROOF_ASSET_YEAR = new Date().getFullYear() + 1;
+const MAX_FORWARD_CONTACT_OPTIONS = 60;
 const PROOF_ASSET_YEAR_OPTIONS = Array.from(
   { length: MAX_PROOF_ASSET_YEAR - MIN_PROOF_ASSET_YEAR + 1 },
   (_, index) => String(MAX_PROOF_ASSET_YEAR - index),
@@ -112,7 +123,29 @@ const emptyFormState: ProofAssetFormState = {
   isActive: true,
 };
 
+type ProofAssetContactOption = {
+  id: string;
+  name: string;
+  phone: string;
+  source: string;
+  channelId: string;
+  searchValue: string;
+};
+
 const formatNumber = (value: number) => new Intl.NumberFormat('id-ID').format(value || 0);
+
+const normalizeWhatsAppPhone = (value: string | null | undefined) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) return `62${digits.slice(1)}`;
+  if (digits.startsWith('8')) return `62${digits}`;
+  return digits;
+};
+
+const formatWhatsAppPhone = (phone: string) => {
+  const normalized = normalizeWhatsAppPhone(phone);
+  return normalized ? `+${normalized}` : '-';
+};
 
 const assetMatchesSearch = (asset: ProofAsset, search: string, vehicleName: string) => {
   const query = search.trim().toLowerCase();
@@ -129,11 +162,12 @@ const assetMatchesSearch = (asset: ProofAsset, search: string, vehicleName: stri
 };
 
 export function ProofAssetLibraryPage() {
-  const { vehicles, currentUser } = useMasterData();
+  const { vehicles, currentUser, leads, orders } = useMasterData();
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('proof_assets.create');
   const canEdit = hasPermission('proof_assets.edit');
   const canDelete = hasPermission('proof_assets.delete');
+  const canForwardWhatsApp = hasPermission('whatsapp.chats.reply');
 
   const [assets, setAssets] = React.useState<ProofAsset[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -150,6 +184,16 @@ export function ProofAssetLibraryPage() {
   const [selectedFilePreview, setSelectedFilePreview] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   const [deletingAsset, setDeletingAsset] = React.useState<ProofAsset | null>(null);
+  const [forwardAsset, setForwardAsset] = React.useState<ProofAsset | null>(null);
+  const [whatsAppContacts, setWhatsAppContacts] = React.useState<WhatsAppContact[]>([]);
+  const [contactsLoading, setContactsLoading] = React.useState(false);
+  const [contactsLoaded, setContactsLoaded] = React.useState(false);
+  const [selectedContactId, setSelectedContactId] = React.useState('');
+  const [manualWhatsAppNumber, setManualWhatsAppNumber] = React.useState('');
+  const [forwardCaption, setForwardCaption] = React.useState('');
+  const [forwardSending, setForwardSending] = React.useState(false);
+  const [contactComboboxOpen, setContactComboboxOpen] = React.useState(false);
+  const [contactSearch, setContactSearch] = React.useState('');
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const activeVehicles = React.useMemo(
@@ -189,6 +233,19 @@ export function ProofAssetLibraryPage() {
     return () => URL.revokeObjectURL(objectUrl);
   }, [selectedFile]);
 
+  React.useEffect(() => {
+    if (!forwardAsset || contactsLoaded || contactsLoading) return;
+
+    setContactsLoading(true);
+    fetchWhatsAppContacts()
+      .then((response) => setWhatsAppContacts(response.contacts || []))
+      .catch(() => setWhatsAppContacts([]))
+      .finally(() => {
+        setContactsLoaded(true);
+        setContactsLoading(false);
+      });
+  }, [contactsLoaded, contactsLoading, forwardAsset]);
+
   const filteredAssets = React.useMemo(() => {
     return assets.filter((asset) => {
       const vehicleName = asset.vehicleTypeId ? vehicleNameById.get(asset.vehicleTypeId) || '' : '';
@@ -213,6 +270,60 @@ export function ProofAssetLibraryPage() {
       usage,
     };
   }, [assets]);
+
+  const contactOptions = React.useMemo(() => {
+    const optionMap = new Map<string, ProofAssetContactOption>();
+    const addOption = (
+      name: string | null | undefined,
+      phone: string | null | undefined,
+      source: string,
+      channelId = 'whatsapp',
+    ) => {
+      const normalizedPhone = normalizeWhatsAppPhone(phone);
+      if (!normalizedPhone || optionMap.has(normalizedPhone)) return;
+      const contactName = String(name || '').trim() || formatWhatsAppPhone(normalizedPhone);
+      optionMap.set(normalizedPhone, {
+        id: normalizedPhone,
+        name: contactName,
+        phone: normalizedPhone,
+        source,
+        channelId,
+        searchValue: `${contactName} ${normalizedPhone} ${source}`.toLowerCase(),
+      });
+    };
+
+    leads.forEach((lead) => addOption(lead.name, lead.phone, 'Prospek'));
+    orders.forEach((order) => addOption(order.customerName, order.customerPhone, 'Pesanan'));
+    whatsAppContacts.forEach((contact) => addOption(
+      contact.name,
+      contact.phoneNumber,
+      'Kontak WA',
+      contact.channelId || 'whatsapp',
+    ));
+
+    return Array.from(optionMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, 'id-ID', { sensitivity: 'base' }),
+    );
+  }, [leads, orders, whatsAppContacts]);
+
+  const selectedContact = React.useMemo(
+    () => contactOptions.find((contact) => contact.id === selectedContactId) || null,
+    [contactOptions, selectedContactId],
+  );
+
+  const visibleContactOptions = React.useMemo(() => {
+    const query = contactSearch.trim().toLowerCase();
+    const filtered = query
+      ? contactOptions.filter((contact) => contact.searchValue.includes(query))
+      : contactOptions;
+
+    return filtered.slice(0, MAX_FORWARD_CONTACT_OPTIONS);
+  }, [contactOptions, contactSearch]);
+
+  const defaultWhatsAppChannelId = React.useMemo(
+    () => whatsAppContacts.find((contact) => contact.channelId)?.channelId || 'whatsapp',
+    [whatsAppContacts],
+  );
 
   const resetForm = React.useCallback(() => {
     setEditingAsset(null);
@@ -368,6 +479,70 @@ export function ProofAssetLibraryPage() {
     }
   };
 
+  const openForwardDialog = (asset: ProofAsset) => {
+    setForwardAsset(asset);
+    setSelectedContactId('');
+    setManualWhatsAppNumber('');
+    setForwardCaption(asset.caption || asset.title);
+    setContactComboboxOpen(false);
+    setContactSearch('');
+  };
+
+  const closeForwardDialog = (force = false) => {
+    if (forwardSending && !force) return;
+    setForwardAsset(null);
+    setSelectedContactId('');
+    setManualWhatsAppNumber('');
+    setForwardCaption('');
+    setContactComboboxOpen(false);
+    setContactSearch('');
+  };
+
+  const handleSendForwardAsset = async () => {
+    if (!forwardAsset) return;
+
+    const selectedPhone = selectedContact?.phone || '';
+    const targetPhone = selectedPhone || normalizeWhatsAppPhone(manualWhatsAppNumber);
+    if (!targetPhone || targetPhone.length < 10) {
+      toast.error('Nomor WhatsApp belum valid.');
+      return;
+    }
+
+    const imageUrl = getProofAssetPublicUrl(forwardAsset.imagePath);
+    if (!/^https:\/\//i.test(imageUrl)) {
+      toast.error('Gambar harus punya URL publik HTTPS untuk dikirim ke WhatsApp.');
+      return;
+    }
+
+    setForwardSending(true);
+    try {
+      await sendWhatsAppMessage({
+        channelId: selectedContact?.channelId || defaultWhatsAppChannelId,
+        to: targetPhone,
+        text: forwardCaption.trim() || forwardAsset.caption || forwardAsset.title,
+        media: {
+          type: 'image',
+          url: imageUrl,
+          fileName: `${forwardAsset.title || forwardAsset.id}.jpg`,
+          mimeType: null,
+        },
+      });
+
+      const updatedAsset = await incrementProofAssetUsage(forwardAsset.id).catch(() => null);
+      setAssets((current) => current.map((asset) => {
+        if (asset.id !== forwardAsset.id) return asset;
+        return updatedAsset || { ...asset, usageCount: asset.usageCount + 1 };
+      }));
+
+      toast.success('Gambar berhasil dikirim ke WhatsApp.');
+      closeForwardDialog(true);
+    } catch (err: any) {
+      toast.error(err?.message || 'Gagal mengirim gambar ke WhatsApp.');
+    } finally {
+      setForwardSending(false);
+    }
+  };
+
   const previewUrl =
     selectedFilePreview ||
     (editingAsset ? getProofAssetPublicUrl(editingAsset.imagePath) : '');
@@ -375,8 +550,11 @@ export function ProofAssetLibraryPage() {
     ? vehicleNameById.get(formState.vehicleTypeId) || 'Tipe mobil tidak tersedia'
     : 'Belum pilih';
 
+  const canSubmitForm =
+    (editingAsset ? canEdit : canCreate) && !saving;
+
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="proofAssetPage">
       <OperationalPageHeader
         eyebrow="Library"
         icon={Images}
@@ -408,19 +586,19 @@ export function ProofAssetLibraryPage() {
         <OperationalKpiCard label="Terpakai" value={formatNumber(stats.usage)} icon={CheckCircle2} tone="blue" />
       </OperationalKpiGrid>
 
-      <OperationalFilterPanel>
-        <div className="grid gap-3 lg:grid-cols-[1fr_220px_180px]">
-          <div className="relative">
+      <OperationalFilterPanel className="proofAssetFilterPanel">
+        <div className="proofAssetFilterGrid">
+          <div className="proofAssetSearchWrap">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="pl-9"
+              className="proofAssetFilterControl pl-9"
               placeholder="Cari judul, tipe mobil, tahun, tags, caption, atau ID"
             />
           </div>
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-            <SelectTrigger>
+            <SelectTrigger className="proofAssetFilterControl">
               <SelectValue placeholder="Semua tipe mobil" />
             </SelectTrigger>
             <SelectContent>
@@ -433,7 +611,7 @@ export function ProofAssetLibraryPage() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as AssetStatusFilter)}>
-            <SelectTrigger>
+            <SelectTrigger className="proofAssetFilterControl">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -445,7 +623,7 @@ export function ProofAssetLibraryPage() {
         </div>
       </OperationalFilterPanel>
 
-      <OperationalTableCard>
+      <OperationalTableCard className="proofAssetTablePanel">
         {loading ? (
           <div className="flex min-h-[320px] items-center justify-center">
             <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
@@ -477,7 +655,7 @@ export function ProofAssetLibraryPage() {
             )}
           </div>
         ) : (
-          <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="proofAssetGalleryGrid">
             {filteredAssets.map((asset) => {
               const vehicleName = asset.vehicleTypeId
                 ? vehicleNameById.get(asset.vehicleTypeId) || 'Tipe mobil tidak tersedia'
@@ -487,18 +665,27 @@ export function ProofAssetLibraryPage() {
               return (
                 <article
                   key={asset.id}
-                  className="group overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:shadow-[0_10px_28px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+                  role="button"
+                  tabIndex={0}
+                  className="proofAssetCard group"
+                  onClick={() => setPreviewAsset(asset)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setPreviewAsset(asset);
+                    }
+                  }}
                 >
-                  <div className="relative aspect-[4/3] bg-slate-100 dark:bg-slate-800">
+                  <div className="proofAssetImageWrap">
                     <img
                       src={imageUrl}
                       alt={asset.title}
-                      className="h-full w-full object-cover"
+                      className="proofAssetImage"
                       loading="lazy"
                     />
-                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/35 to-transparent opacity-70" />
-                    <div className="absolute left-3 top-3">
-                      <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-white/88 px-2 text-[11px] font-medium text-slate-700 shadow-sm backdrop-blur dark:bg-slate-950/75 dark:text-slate-200">
+                    <div className="proofAssetImageShade" />
+                    <div className="proofAssetCardStatus">
+                      <span className="proofAssetStatusPill">
                         <span className={cn(
                           'h-1.5 w-1.5 rounded-full',
                           asset.isActive ? 'bg-emerald-500' : 'bg-slate-400',
@@ -506,48 +693,39 @@ export function ProofAssetLibraryPage() {
                         {asset.isActive ? 'Aktif' : 'Nonaktif'}
                       </span>
                     </div>
-                    <div className="absolute right-3 top-3 flex gap-1.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="secondary"
-                        className="h-8 w-8 rounded-full bg-white/88 text-slate-600 shadow-sm backdrop-blur hover:bg-white"
-                        aria-label={`Lihat ${asset.title}`}
-                        title="Lihat detail"
-                        onClick={() => setPreviewAsset(asset)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                    <div
+                      className="proofAssetCardMenu"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <TableActionMenu>
+                        <TableActionMenuItem icon={Eye} onSelect={() => setPreviewAsset(asset)}>
+                          Lihat Detail
+                        </TableActionMenuItem>
+                        {canForwardWhatsApp && (
+                          <TableActionMenuItem icon={Send} onSelect={() => openForwardDialog(asset)}>
+                            Kirim WhatsApp
+                          </TableActionMenuItem>
+                        )}
                         {canEdit && (
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="secondary"
-                            className="h-8 w-8 rounded-full bg-white/88 text-slate-600 shadow-sm backdrop-blur hover:bg-white"
-                            onClick={() => openEditForm(asset)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          <TableActionMenuItem icon={Pencil} onSelect={() => openEditForm(asset)}>
+                            Edit Aset
+                          </TableActionMenuItem>
                         )}
                         {canDelete && (
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="secondary"
-                            className="h-8 w-8 rounded-full bg-white/88 text-red-500 shadow-sm backdrop-blur hover:bg-white hover:text-red-600"
-                            onClick={() => setDeletingAsset(asset)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <TableActionMenuItem danger icon={Trash2} onSelect={() => setDeletingAsset(asset)}>
+                            Hapus Aset
+                          </TableActionMenuItem>
                         )}
+                      </TableActionMenu>
                     </div>
                   </div>
-                  <div className="p-3">
+                  <div className="proofAssetCardBody">
                     <div className="min-w-0 space-y-1">
-                      <h2 className="truncate text-sm font-semibold leading-5 text-slate-900 dark:text-slate-100">
+                      <h2 className="proofAssetCardTitle">
                         {asset.title}
                       </h2>
-                      <div className="flex min-w-0 items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="proofAssetCardMeta">
                         <Car className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                         <span className="truncate">{vehicleName}{asset.year ? ` - ${asset.year}` : ''}</span>
                       </div>
@@ -563,21 +741,256 @@ export function ProofAssetLibraryPage() {
       <Dialog open={Boolean(previewAsset)} onOpenChange={(open) => !open && setPreviewAsset(null)}>
         {previewAsset && (() => {
           const imageUrl = getProofAssetPublicUrl(previewAsset.imagePath);
+          const vehicleName = previewAsset.vehicleTypeId
+            ? vehicleNameById.get(previewAsset.vehicleTypeId) || 'Tipe mobil tidak tersedia'
+            : '-';
 
           return (
-            <DialogContent className="max-h-[94dvh] w-auto max-w-[calc(100vw-1rem)] overflow-hidden border border-slate-200 bg-white p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
-              <DialogHeader className="sr-only">
-                <DialogTitle>{previewAsset.title}</DialogTitle>
-                <DialogDescription>Preview gambar aset.</DialogDescription>
-              </DialogHeader>
-              <div className="flex max-h-[88dvh] max-w-[calc(100vw-1rem)] items-center justify-center bg-white p-1 dark:bg-slate-950">
-                <img
-                  src={imageUrl}
-                  alt={previewAsset.title}
-                  className="block max-h-[88dvh] max-w-[calc(100vw-1rem)] rounded-md object-contain"
-                />
+            <MasterDataFormDialogContent
+              preventOutsideClose={false}
+              size="wide"
+              className="proofAssetDetailDialog"
+            >
+              <MasterDataFormHeader
+                icon={Images}
+                title="Detail Galeri Bukti"
+                description="Preview gambar dan metadata aset bukti."
+              />
+              <div className="proofAssetDetailBody">
+                <div className="proofAssetDetailLayout">
+                  <div className="proofAssetDetailImageFrame">
+                    <img src={imageUrl} alt={previewAsset.title} className="proofAssetDetailImage" />
+                  </div>
+                  <div className="proofAssetDetailInfo">
+                    <div className="proofAssetDetailHero">
+                      <span className={cn('proofAssetStatusBadge', previewAsset.isActive ? 'isActive' : 'isInactive')}>
+                        {previewAsset.isActive ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                      <h2>{previewAsset.title}</h2>
+                      <p>{previewAsset.id}</p>
+                    </div>
+                    <div className="proofAssetDetailRows">
+                      <div>
+                        <span>Tipe Mobil</span>
+                        <strong>{vehicleName}</strong>
+                      </div>
+                      <div>
+                        <span>Tahun</span>
+                        <strong>{previewAsset.year || '-'}</strong>
+                      </div>
+                      <div>
+                        <span>Terpakai</span>
+                        <strong>{formatNumber(previewAsset.usageCount)} kali</strong>
+                      </div>
+                      <div>
+                        <span>Tags</span>
+                        <strong>{previewAsset.tags.length ? previewAsset.tags.join(', ') : '-'}</strong>
+                      </div>
+                      <div className="proofAssetDetailRowWide">
+                        <span>Caption</span>
+                        <strong>{previewAsset.caption || '-'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </DialogContent>
+              <div className="proofAssetDetailActions">
+                <Button type="button" variant="outline" onClick={() => setPreviewAsset(null)}>
+                  Tutup
+                </Button>
+                {canForwardWhatsApp && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const asset = previewAsset;
+                      setPreviewAsset(null);
+                      openForwardDialog(asset);
+                    }}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    Kirim WhatsApp
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const asset = previewAsset;
+                      setPreviewAsset(null);
+                      openEditForm(asset);
+                    }}
+                  >
+                    Edit Aset
+                  </Button>
+                )}
+              </div>
+            </MasterDataFormDialogContent>
+          );
+        })()}
+      </Dialog>
+
+      <Dialog open={Boolean(forwardAsset)} onOpenChange={(open) => !open && closeForwardDialog()}>
+        {forwardAsset && (() => {
+          const imageUrl = getProofAssetPublicUrl(forwardAsset.imagePath);
+          const vehicleName = forwardAsset.vehicleTypeId
+            ? vehicleNameById.get(forwardAsset.vehicleTypeId) || 'Tipe mobil tidak tersedia'
+            : '-';
+          const manualTarget = normalizeWhatsAppPhone(manualWhatsAppNumber);
+          const targetPhone = selectedContact?.phone || manualTarget;
+
+          return (
+            <MasterDataFormDialogContent
+              preventOutsideClose={false}
+              size="wide"
+              className="proofAssetForwardDialog"
+            >
+              <MasterDataFormHeader
+                icon={Send}
+                title="Kirim Gambar ke WhatsApp"
+                description="Pilih kontak atau isi nomor manual, lalu kirim gambar galeri dengan caption."
+              />
+
+              <div className="proofAssetForwardBody">
+                <section className="proofAssetForwardPreview">
+                  <div className="proofAssetForwardImageFrame">
+                    <img src={imageUrl} alt={forwardAsset.title} className="proofAssetForwardImage" />
+                  </div>
+                  <div className="proofAssetForwardPreviewMeta">
+                    <strong>{forwardAsset.title}</strong>
+                    <span>{vehicleName}{forwardAsset.year ? ` - ${forwardAsset.year}` : ''}</span>
+                  </div>
+                </section>
+
+                <div className="proofAssetForwardFields">
+                  <MasterDataFormGrid>
+                    <MasterDataFormField span="full">
+                      <Label>Kontak tersimpan</Label>
+                      <Popover open={contactComboboxOpen} onOpenChange={setContactComboboxOpen}>
+                        <PopoverTrigger
+                          type="button"
+                          role="combobox"
+                          aria-expanded={contactComboboxOpen}
+                          className={cn(
+                            'uiSelectTrigger proofAssetContactTrigger',
+                            !selectedContact && 'text-slate-500',
+                          )}
+                        >
+                          <span className="truncate">
+                            {selectedContact
+                              ? `${selectedContact.name} - ${formatWhatsAppPhone(selectedContact.phone)}`
+                              : contactsLoading
+                                ? 'Memuat kontak...'
+                                : 'Pilih kontak tersimpan'}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-[var(--radix-popover-trigger-width)] min-w-[360px] p-0"
+                        >
+                          <Command shouldFilter={false}>
+                            <CommandInput
+                              value={contactSearch}
+                              onValueChange={setContactSearch}
+                              placeholder="Cari nama atau nomor..."
+                            />
+                            <CommandList>
+                              <CommandEmpty>
+                                {contactsLoading ? 'Memuat kontak...' : 'Kontak tidak ditemukan.'}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                <CommandItem
+                                  value="manual"
+                                  onSelect={() => {
+                                    setSelectedContactId('');
+                                    setContactSearch('');
+                                    setContactComboboxOpen(false);
+                                  }}
+                                >
+                                  <Phone className="mr-2 h-4 w-4 text-slate-500" />
+                                  Input nomor manual
+                                  <Check className={cn('ml-auto h-4 w-4', !selectedContact ? 'opacity-100' : 'opacity-0')} />
+                                </CommandItem>
+                                {visibleContactOptions.map((contact) => (
+                                  <CommandItem
+                                    key={contact.id}
+                                    value={contact.id}
+                                    onSelect={() => {
+                                      setSelectedContactId(contact.id);
+                                      setManualWhatsAppNumber('');
+                                      setContactSearch('');
+                                      setContactComboboxOpen(false);
+                                    }}
+                                  >
+                                    <MessageCircle className="mr-2 h-4 w-4 text-blue-500" />
+                                    <span className="proofAssetContactOption">
+                                      <strong>{contact.name}</strong>
+                                      <span>{formatWhatsAppPhone(contact.phone)} - {contact.source}</span>
+                                    </span>
+                                    <Check className={cn(
+                                      'ml-auto h-4 w-4',
+                                      selectedContactId === contact.id ? 'opacity-100' : 'opacity-0',
+                                    )} />
+                                  </CommandItem>
+                                ))}
+                                {!contactsLoading && contactOptions.length > visibleContactOptions.length && (
+                                  <div className="px-3 py-2 text-xs font-semibold text-slate-500">
+                                    Ketik nama atau nomor untuk mencari kontak lain.
+                                  </div>
+                                )}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </MasterDataFormField>
+
+                    <MasterDataFormField span="full">
+                      <Label htmlFor="proof-forward-number">Nomor WhatsApp Manual</Label>
+                      <Input
+                        id="proof-forward-number"
+                        value={manualWhatsAppNumber}
+                        onChange={(event) => {
+                          setManualWhatsAppNumber(event.target.value);
+                          setSelectedContactId('');
+                        }}
+                        inputMode="tel"
+                        placeholder="Contoh: 08123456789"
+                      />
+                    </MasterDataFormField>
+
+                    <MasterDataFormField span="full">
+                      <Label htmlFor="proof-forward-caption">Caption</Label>
+                      <Textarea
+                        id="proof-forward-caption"
+                        value={forwardCaption}
+                        onChange={(event) => setForwardCaption(event.target.value)}
+                        rows={4}
+                        placeholder="Tulis caption WhatsApp..."
+                      />
+                    </MasterDataFormField>
+                  </MasterDataFormGrid>
+                  <div className="proofAssetForwardTarget">
+                    Tujuan: <strong>{targetPhone ? formatWhatsAppPhone(targetPhone) : 'belum dipilih'}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="proofAssetForwardActions">
+                <Button type="button" variant="outline" onClick={() => closeForwardDialog()} disabled={forwardSending}>
+                  Batal
+                </Button>
+                <Button type="button" onClick={handleSendForwardAsset} disabled={forwardSending || !targetPhone}>
+                  {forwardSending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Kirim WhatsApp
+                </Button>
+              </div>
+            </MasterDataFormDialogContent>
           );
         })()}
       </Dialog>
@@ -586,29 +999,24 @@ export function ProofAssetLibraryPage() {
         setFormOpen(open);
         if (!open) resetForm();
       }}>
-        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingAsset ? 'Edit Aset' : 'Tambah Aset'}</DialogTitle>
-            <DialogDescription>
-              {editingAsset ? editingAsset.id : 'Upload gambar final dan metadata aset.'}
-            </DialogDescription>
-          </DialogHeader>
+        <MasterDataFormDialogContent size="wide" className="proofAssetFormDialog">
+          <MasterDataFormHeader
+            icon={Images}
+            title={editingAsset ? 'Edit Aset Galeri Bukti' : 'Tambah Aset Galeri Bukti'}
+            description={editingAsset ? editingAsset.id : 'Upload gambar final dan metadata aset.'}
+          />
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-              <div className="space-y-3">
+          <form className="masterDataForm proofAssetManagedForm" onSubmit={handleSubmit}>
+            <div className="proofAssetFormBody">
+              <section className="proofAssetUploadPanel">
                 <Label>
                   <RequiredLabel>Gambar</RequiredLabel>
                 </Label>
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                <div className="proofAssetUploadPreview">
                   {previewUrl ? (
-                    <img
-                      src={previewUrl}
-                      alt="Preview aset"
-                      className="aspect-[4/3] w-full object-cover"
-                    />
+                    <img src={previewUrl} alt="Preview aset" />
                   ) : (
-                    <div className="flex aspect-[4/3] items-center justify-center text-slate-400">
+                    <div className="proofAssetUploadEmpty">
                       <Images className="h-8 w-8" />
                     </div>
                   )}
@@ -623,19 +1031,19 @@ export function ProofAssetLibraryPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full"
+                  className="proofAssetUploadButton"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="mr-2 h-4 w-4" />
                   Pilih Gambar
                 </Button>
-                <p className="text-xs leading-5 text-slate-500">
+                <p>
                   Gambar otomatis dikompres untuk tampilan app.
                 </p>
-              </div>
+              </section>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
+              <MasterDataFormGrid className="proofAssetFormGrid">
+                <MasterDataFormField span="full">
                   <Label htmlFor="proof-title">
                     <RequiredLabel>Nama Aset</RequiredLabel>
                   </Label>
@@ -645,9 +1053,9 @@ export function ProofAssetLibraryPage() {
                     onChange={(event) => setFormState((current) => ({ ...current, title: event.target.value }))}
                     placeholder="Contoh: Innova lampu kuning"
                   />
-                </div>
+                </MasterDataFormField>
 
-                <div className="space-y-2">
+                <MasterDataFormField span="half">
                   <Label>
                     <RequiredLabel>Tipe Mobil</RequiredLabel>
                   </Label>
@@ -657,7 +1065,7 @@ export function ProofAssetLibraryPage() {
                       role="combobox"
                       aria-expanded={vehicleComboboxOpen}
                       className={cn(
-                        'flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm font-normal shadow-sm outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900',
+                        'uiSelectTrigger proofAssetComboboxTrigger',
                         !formState.vehicleTypeId && 'text-slate-500',
                       )}
                     >
@@ -711,9 +1119,9 @@ export function ProofAssetLibraryPage() {
                       </Command>
                     </PopoverContent>
                   </Popover>
-                </div>
+                </MasterDataFormField>
 
-                <div className="space-y-2">
+                <MasterDataFormField span="half">
                   <Label htmlFor="proof-year">Tahun</Label>
                   <Select
                     value={formState.year || NONE_YEAR_VALUE}
@@ -734,9 +1142,9 @@ export function ProofAssetLibraryPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </MasterDataFormField>
 
-                <div className="space-y-2">
+                <MasterDataFormField span="full">
                   <Label htmlFor="proof-tags">Tags</Label>
                   <Input
                     id="proof-tags"
@@ -744,9 +1152,9 @@ export function ProofAssetLibraryPage() {
                     onChange={(event) => setFormState((current) => ({ ...current, tags: event.target.value }))}
                     placeholder="kuning, buram, home service"
                   />
-                </div>
+                </MasterDataFormField>
 
-                <div className="space-y-2">
+                <MasterDataFormField span="full">
                   <Label htmlFor="proof-caption">Caption</Label>
                   <Textarea
                     id="proof-caption"
@@ -755,40 +1163,34 @@ export function ProofAssetLibraryPage() {
                     placeholder="Deskripsi singkat tentang mobil atau gambar"
                     rows={3}
                   />
-                </div>
+                </MasterDataFormField>
 
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
-                  <Label htmlFor="proof-active" className="text-sm">
-                    Status Aktif
-                  </Label>
-                  <Switch
-                    id="proof-active"
-                    checked={formState.isActive}
-                    onCheckedChange={(checked) => setFormState((current) => ({ ...current, isActive: checked }))}
-                  />
-                </div>
-              </div>
+                <MasterDataFormField span="full">
+                  <div className="proofAssetStatusSwitch">
+                    <Label htmlFor="proof-active" className="text-sm">
+                      Status Aktif
+                    </Label>
+                    <Switch
+                      id="proof-active"
+                      checked={formState.isActive}
+                      onCheckedChange={(checked) => setFormState((current) => ({ ...current, isActive: checked }))}
+                    />
+                  </div>
+                </MasterDataFormField>
+              </MasterDataFormGrid>
             </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setFormOpen(false);
-                  resetForm();
-                }}
-                disabled={saving}
-              >
-                Batal
-              </Button>
-              <Button type="submit" disabled={saving || (!canCreate && !editingAsset) || (!canEdit && Boolean(editingAsset))}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Simpan
-              </Button>
-            </DialogFooter>
+            <MasterDataFormActions
+              onCancel={() => {
+                setFormOpen(false);
+                resetForm();
+              }}
+              isSubmitting={saving}
+              submitDisabled={!canSubmitForm}
+              saveLabel={editingAsset ? 'Simpan Aset' : 'Tambah Aset'}
+            />
           </form>
-        </DialogContent>
+        </MasterDataFormDialogContent>
       </Dialog>
 
       <AlertDialog open={Boolean(deletingAsset)} onOpenChange={(open) => !open && setDeletingAsset(null)}>

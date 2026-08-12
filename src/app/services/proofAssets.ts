@@ -262,6 +262,27 @@ export async function updateProofAsset(id: string, input: Omit<ProofAssetInput, 
   return mapProofAssetFromRecord(savedRecord);
 }
 
+export async function incrementProofAssetUsage(id: string) {
+  const existing = (await listProofAssets()).find((asset) => asset.id === id) || null;
+  if (!existing) throw new Error('Aset tidak ditemukan.');
+
+  const record = mapProofAssetToRecord({
+    id,
+    title: existing.title,
+    vehicleTypeId: existing.vehicleTypeId,
+    year: existing.year,
+    imagePath: existing.imagePath,
+    tags: existing.tags,
+    caption: existing.caption,
+    isActive: existing.isActive,
+    createdBy: existing.createdBy,
+  }, existing);
+
+  record.usageCount = existing.usageCount + 1;
+  const savedRecord = await saveProofAssetRecord(record);
+  return mapProofAssetFromRecord(savedRecord);
+}
+
 export async function deleteProofAsset(id: string) {
   const response = await fetch(`${PROOF_ASSET_MASTER_URL}/${encodeURIComponent(id)}`, {
     method: 'DELETE',

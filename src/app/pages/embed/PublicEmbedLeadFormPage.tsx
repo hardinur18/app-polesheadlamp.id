@@ -1,10 +1,10 @@
 import React from 'react';
 import { useParams } from 'react-router';
-import { Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FormInput, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
-import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
+import { MasterDataFieldLabel } from '@/app/components/ui/master-data-ui';
 import {
   fetchEmbedLeadFormBundle,
   fireEmbedLeadTracking,
@@ -55,7 +55,7 @@ const FieldControl = ({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={field.placeholder || undefined}
-        className="min-h-28 resize-y rounded-lg border-slate-200 bg-white text-slate-900 shadow-sm focus-visible:ring-slate-300"
+        className="publicEmbedInput publicEmbedTextarea"
       />
     );
   }
@@ -65,7 +65,7 @@ const FieldControl = ({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+        className="publicEmbedInput publicEmbedSelect"
       >
         <option value="">{field.placeholder || `Pilih ${field.label}`}</option>
         {field.options.map((option) => (
@@ -84,7 +84,7 @@ const FieldControl = ({
       onChange={(event) => onChange(event.target.value)}
       placeholder={field.placeholder || undefined}
       autoComplete={getInputAutoComplete(field.fieldKey)}
-      className="rounded-lg border-slate-200 bg-white text-slate-900 shadow-sm focus-visible:ring-slate-300"
+      className="publicEmbedInput"
     />
   );
 };
@@ -190,7 +190,7 @@ export function PublicEmbedLeadFormPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white p-6">
+      <div className="publicEmbedPage publicEmbedCenter">
         <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
       </div>
     );
@@ -198,8 +198,9 @@ export function PublicEmbedLeadFormPage() {
 
   if (error && !bundle) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white p-6">
-        <div className="max-w-sm text-center">
+      <div className="publicEmbedPage publicEmbedCenter">
+        <div className="publicEmbedNotice isError">
+          <AlertCircle className="h-6 w-6" />
           <h1 className="text-lg font-semibold text-slate-900">Form tidak tersedia</h1>
           <p className="mt-2 text-sm leading-6 text-slate-500">{error}</p>
         </div>
@@ -211,8 +212,9 @@ export function PublicEmbedLeadFormPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-white p-5">
-        <div className="mx-auto max-w-xl rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+      <div className="publicEmbedPage publicEmbedCenter">
+        <div className="publicEmbedNotice isSuccess">
+          <CheckCircle2 className="h-7 w-7" />
           <h1 className="text-lg font-semibold text-emerald-900">Data berhasil dikirim</h1>
           <p className="mt-2 text-sm leading-6 text-emerald-700">
             {bundle.form.thankYouMessage || 'Tim kami akan segera menghubungi Anda melalui WhatsApp.'}
@@ -225,21 +227,21 @@ export function PublicEmbedLeadFormPage() {
   const visibleFields = bundle.fields.filter((field) => field.isVisible);
 
   return (
-    <main className="min-h-screen bg-white p-4 font-sans text-slate-900">
-      <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-normal text-slate-950">{bundle.form.name}</h1>
+    <main className="publicEmbedPage">
+      <form onSubmit={handleSubmit} className="publicEmbedCard">
+        <div className="publicEmbedHeader">
+          <span className="publicEmbedIcon"><FormInput className="h-5 w-5" /></span>
+          <h1>{bundle.form.name}</h1>
           {bundle.form.description && (
-            <p className="mt-1 text-sm leading-6 text-slate-500">{bundle.form.description}</p>
+            <p>{bundle.form.description}</p>
           )}
         </div>
 
         {visibleFields.map((field) => (
-          <div key={field.fieldKey} className="space-y-1.5">
-            <Label className="text-sm font-medium text-slate-700">
+          <div key={field.fieldKey} className="publicEmbedField">
+            <MasterDataFieldLabel required={field.isRequired} optional={!field.isRequired}>
               {field.label}
-              {field.isRequired && <span className="ml-1 text-red-500">*</span>}
-            </Label>
+            </MasterDataFieldLabel>
             <FieldControl
               field={field}
               value={answers[field.fieldKey] || ''}
@@ -250,7 +252,8 @@ export function PublicEmbedLeadFormPage() {
         ))}
 
         {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm leading-5 text-red-700">
+          <div className="publicEmbedInlineError">
+            <AlertCircle className="h-4 w-4" />
             {error}
           </div>
         )}
@@ -258,7 +261,7 @@ export function PublicEmbedLeadFormPage() {
         <Button
           type="submit"
           disabled={submitting}
-          className="h-11 w-full rounded-lg bg-slate-950 text-white hover:bg-slate-800"
+          className="uiButton primaryButton publicEmbedSubmit"
         >
           {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {submitting ? 'Mengirim...' : bundle.form.submitButtonLabel}

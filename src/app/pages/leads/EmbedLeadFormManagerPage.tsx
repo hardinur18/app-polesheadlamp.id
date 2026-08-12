@@ -1,11 +1,31 @@
 import React from 'react';
-import { Check, Clipboard, Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import {
+  Check,
+  Clipboard,
+  ClipboardList,
+  Code2,
+  FileCode2,
+  FormInput,
+  Loader2,
+  Plus,
+  Route,
+  Save,
+  Settings2,
+  SlidersHorizontal,
+  Trash2,
+  UsersRound,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
-import { Label } from '@/app/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -14,6 +34,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Textarea } from '@/app/components/ui/textarea';
+import { MasterDataFieldLabel } from '@/app/components/ui/master-data-ui';
 import { cn } from '@/app/components/ui/utils';
 import { isAdvertiserRole, isCsRole } from '@/app/data/roleHelpers';
 import { useMasterData } from '@/app/pages/master-data/context';
@@ -96,6 +117,29 @@ const REQUIRED_KEYS: EmbedLeadFieldKey[] = ['name', 'phone'];
 const normalizeSelectValue = (value?: string | null) => value || 'none';
 const denormalizeSelectValue = (value: string) => (value === 'none' ? '' : value);
 
+const STATUS_LABEL: Record<EmbedLeadStatus, string> = {
+  draft: 'Draft',
+  active: 'Aktif',
+  paused: 'Pause',
+  archived: 'Arsip',
+};
+
+const STATUS_CLASS: Record<EmbedLeadStatus, string> = {
+  draft: 'isDraft',
+  active: 'isActive',
+  paused: 'isPaused',
+  archived: 'isArchived',
+};
+
+const ROUTING_LABEL: Record<EmbedLeadRoutingMode, string> = {
+  single_cs: 'Pilih CS',
+  broadcast: 'Broadcast',
+  random: 'Random',
+  round_robin: 'Round Robin',
+};
+
+const isActiveUser = (status?: string | null) => String(status || '').toLowerCase() === 'active';
+
 export function EmbedLeadFormManagerPage() {
   const {
     services,
@@ -116,8 +160,12 @@ export function EmbedLeadFormManagerPage() {
   const [selectedCsIds, setSelectedCsIds] = React.useState<Set<string>>(new Set());
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [editorOpen, setEditorOpen] = React.useState(false);
 
-  const csUsers = React.useMemo(() => users.filter((user) => isCsRole(user.role)), [users]);
+  const csUsers = React.useMemo(
+    () => users.filter((user) => isCsRole(user.role) && isActiveUser(user.status)),
+    [users],
+  );
   const advertiserUsers = React.useMemo(() => users.filter((user) => isAdvertiserRole(user.role)), [users]);
 
   const activePlatforms = React.useMemo(
@@ -179,6 +227,11 @@ export function EmbedLeadFormManagerPage() {
     setSelectedCsIds(new Set());
   };
 
+  const openNewForm = () => {
+    resetDraft();
+    setEditorOpen(true);
+  };
+
   const editForm = async (form: EmbedLeadForm) => {
     setSaving(true);
     try {
@@ -215,6 +268,7 @@ export function EmbedLeadFormManagerPage() {
       });
       setSelectedFieldKeys(new Set(bundle.fields.filter((field) => field.isVisible).map((field) => field.fieldKey)));
       setSelectedCsIds(new Set(bundle.routes.filter((route) => route.status === 'active').map((route) => route.csId)));
+      setEditorOpen(true);
     } catch (error: any) {
       toast.error(`Gagal membuka form: ${error.message}`);
     } finally {
@@ -345,6 +399,7 @@ export function EmbedLeadFormManagerPage() {
       setActiveBundle(saved);
       setDraft((prev) => ({ ...prev, id: saved.form.id, slug: saved.form.slug, fallbackCsId: saved.form.fallbackCsId || '' }));
       await loadForms();
+      setEditorOpen(false);
       toast.success('Form embed tersimpan');
     } catch (error: any) {
       toast.error(`Gagal menyimpan form: ${error.message}`);
@@ -358,7 +413,10 @@ export function EmbedLeadFormManagerPage() {
     setSaving(true);
     try {
       await deleteEmbedLeadForm(form.id);
-      if (draft.id === form.id) resetDraft();
+      if (draft.id === form.id) {
+        resetDraft();
+        setEditorOpen(false);
+      }
       await loadForms();
       toast.success('Form embed dihapus');
     } catch (error: any) {
@@ -376,322 +434,419 @@ export function EmbedLeadFormManagerPage() {
   const selectedFormForCode = activeBundle?.form || forms.find((form) => form.id === draft.id);
   const iframeCode = selectedFormForCode ? getIframeEmbedCode(selectedFormForCode) : '';
   const scriptCode = selectedFormForCode ? getScriptEmbedCode(selectedFormForCode) : '';
+  const activeFormCount = forms.filter((form) => form.status === 'active').length;
+  const selectedFieldCount = selectedFieldKeys.size;
+  const selectedCsCount = selectedCsIds.size;
 
   return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-5 p-4 md:p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-normal text-slate-950 dark:text-slate-100">Embed Lead Form</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Form publik untuk LP advertiser.</p>
+    <div className="opsPageShell embedFormPage">
+      <div className="topbar">
+        <div className="topbarTitle">
+          <div className="opsEyebrow">
+            <FormInput className="h-4 w-4" />
+            PROSPEK & CHANNEL
+          </div>
+          <h1 className="opsPageTitle">Form Embed</h1>
+          <p className="opsPageSubtitle">
+            Kelola form publik dari landing page, field prospek, routing CS, dan kode embed.
+          </p>
         </div>
-        <Button type="button" variant="outline" onClick={resetDraft} className="w-full md:w-auto">
-          <Plus className="mr-2 h-4 w-4" />
-          Form Baru
-        </Button>
+        <div className="topbarActions">
+          <Button type="button" className="uiButton primaryButton" onClick={openNewForm}>
+            <Plus className="h-4 w-4" />
+            Form Baru
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(320px,420px)_1fr]">
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Daftar Form</h2>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+      <div className="embedFormMetricGrid">
+        <div className="opsMetricCard">
+          <span className="metricIcon softBlue"><ClipboardList className="h-5 w-5" /></span>
+          <div>
+            <span>Total Form</span>
+            <strong>{forms.length}</strong>
           </div>
-          <div className="space-y-2">
-            {forms.map((form) => (
-              <div
-                key={form.id}
-                className={cn(
-                  'rounded-lg border p-3 transition',
-                  draft.id === form.id
-                    ? 'border-blue-300 bg-blue-50/70 dark:border-blue-900 dark:bg-blue-950/20'
-                    : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/60',
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <button type="button" className="min-w-0 text-left" onClick={() => void editForm(form)}>
-                    <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{form.name}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500">/{form.slug}</div>
-                  </button>
-                  <Badge variant="outline" className="rounded-md text-[11px] capitalize">{form.status}</Badge>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => void editForm(form)}>
-                    Edit
+        </div>
+        <div className="opsMetricCard">
+          <span className="metricIcon softGreen"><Check className="h-5 w-5" /></span>
+          <div>
+            <span>Form Aktif</span>
+            <strong>{activeFormCount}</strong>
+          </div>
+        </div>
+        <div className="opsMetricCard">
+          <span className="metricIcon softPurple"><SlidersHorizontal className="h-5 w-5" /></span>
+          <div>
+            <span>Field Terpilih</span>
+            <strong>{selectedFieldCount}</strong>
+          </div>
+        </div>
+        <div className="opsMetricCard">
+          <span className="metricIcon softAmber"><Route className="h-5 w-5" /></span>
+          <div>
+            <span>Routing CS</span>
+            <strong>{selectedCsCount || '-'}</strong>
+          </div>
+        </div>
+      </div>
+
+      <section className="embedFormPanel">
+        <div className="embedFormPanelHeader">
+          <div className="moduleTitleBlock">
+            <span className="moduleTitleIcon"><ClipboardList className="h-5 w-5" /></span>
+            <div>
+              <h2>Daftar Form Embed</h2>
+              <p>{loading ? 'Memuat form...' : `${forms.length} form terdaftar, ${activeFormCount} aktif.`}</p>
+            </div>
+          </div>
+          {loading && <Loader2 className="h-5 w-5 animate-spin text-slate-400" />}
+        </div>
+
+        <div className="embedFormList">
+          {forms.map((form) => (
+            <article
+              key={form.id}
+              className={cn('embedFormListCard', draft.id === form.id && 'isSelected')}
+            >
+              <button type="button" className="embedFormListMain" onClick={() => void editForm(form)}>
+                <span className="embedFormListIcon"><FileCode2 className="h-4 w-4" /></span>
+                <span className="embedFormListText">
+                  <strong>{form.name}</strong>
+                  <span>/{form.slug}</span>
+                </span>
+              </button>
+              <div className="embedFormListMeta">
+                <Badge variant="outline" className={cn('embedFormStatusBadge', STATUS_CLASS[form.status])}>
+                  {STATUS_LABEL[form.status]}
+                </Badge>
+                <Button type="button" size="icon" variant="ghost" className="iconButton danger" onClick={() => void handleDelete(form)} aria-label={`Hapus ${form.name}`}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </article>
+          ))}
+          {!loading && forms.length === 0 && (
+            <div className="embedFormEmpty">
+              <ClipboardList className="h-6 w-6" />
+              <strong>Belum ada form embed</strong>
+              <span>Buat form pertama untuk landing page advertiser.</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+        <DialogContent className="masterDataFormDialogContent embedFormDialogContent">
+          <DialogTitle className="sr-only">{draft.id ? 'Edit Form Embed' : 'Tambah Form Embed'}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Isi konfigurasi form embed prospek, routing CS, dan kode embed.
+          </DialogDescription>
+      <section className="embedFormEditor embedFormEditorDialog">
+        <div className="embedFormEditorHeader">
+          <div className="moduleTitleBlock">
+            <span className="moduleTitleIcon"><Settings2 className="h-5 w-5" /></span>
+            <div>
+              <h2>{draft.id ? 'Edit Form Embed' : 'Tambah Form Embed'}</h2>
+              <p>Isi konfigurasi form, source default, routing CS, dan tracking pixel.</p>
+            </div>
+          </div>
+          <Badge variant="outline" className={cn('embedFormStatusBadge', STATUS_CLASS[draft.status])}>
+            {STATUS_LABEL[draft.status]}
+          </Badge>
+        </div>
+
+        <div className="embedFormEditorBody">
+        <div className="embedFormSection">
+          <div className="embedFormSectionTitle">
+            <span>1</span>
+            <h3>Informasi Form</h3>
+          </div>
+          <div className="masterDataFormGrid masterDataFormFieldGrid">
+            <div className="masterDataFormField span-half">
+              <MasterDataFieldLabel required>Nama Form</MasterDataFieldLabel>
+              <Input
+                className="uiInput"
+                value={draft.name}
+                onChange={(event) => patchDraft({
+                  name: event.target.value,
+                  slug: draft.slug ? draft.slug : createEmbedLeadSlug(event.target.value),
+                })}
+                placeholder="Contoh: LP Nano Ceramic Jakarta"
+              />
+            </div>
+            <div className="masterDataFormField span-half">
+              <MasterDataFieldLabel required>Slug Embed</MasterDataFieldLabel>
+              <Input
+                className="uiInput"
+                value={draft.slug}
+                onChange={(event) => patchDraft({ slug: createEmbedLeadSlug(event.target.value) })}
+                placeholder="lp-nano-ceramic-jakarta"
+              />
+            </div>
+            <div className="masterDataFormField span-quarter">
+              <MasterDataFieldLabel>Status</MasterDataFieldLabel>
+              <Select value={draft.status} onValueChange={(value) => patchDraft({ status: value as EmbedLeadStatus })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="active">Aktif</SelectItem>
+                  <SelectItem value="paused">Pause</SelectItem>
+                  <SelectItem value="archived">Arsip</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-quarter">
+              <MasterDataFieldLabel>Mode Embed</MasterDataFieldLabel>
+              <Select value={draft.embedMode} onValueChange={(value) => patchDraft({ embedMode: value as EmbedLeadMode })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both">Iframe + Script</SelectItem>
+                  <SelectItem value="iframe">Iframe</SelectItem>
+                  <SelectItem value="script">Script</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-half">
+              <MasterDataFieldLabel>Button Label</MasterDataFieldLabel>
+              <Input
+                className="uiInput"
+                value={draft.submitButtonLabel}
+                onChange={(event) => patchDraft({ submitButtonLabel: event.target.value })}
+                placeholder="Kirim"
+              />
+            </div>
+            <div className="masterDataFormField span-full">
+              <MasterDataFieldLabel optional>Deskripsi</MasterDataFieldLabel>
+              <Textarea
+                value={draft.description}
+                onChange={(event) => patchDraft({ description: event.target.value })}
+                placeholder="Keterangan singkat yang muncul di form publik"
+                className="uiInput min-h-24 resize-y py-3"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="embedFormSection">
+          <div className="embedFormSectionTitle">
+            <span>2</span>
+            <h3>Source Default</h3>
+          </div>
+          <div className="masterDataFormGrid masterDataFormFieldGrid">
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel>Produk / Layanan</MasterDataFieldLabel>
+              <Select value={normalizeSelectValue(draft.defaultServiceId)} onValueChange={(value) => patchDraft({ defaultServiceId: denormalizeSelectValue(value) })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih layanan" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak dikunci</SelectItem>
+                  {activeServices.map((service) => (
+                    <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel>Platform</MasterDataFieldLabel>
+              <Select value={normalizeSelectValue(draft.platformId)} onValueChange={(value) => patchDraft({ platformId: denormalizeSelectValue(value), subChannelId: '', adAccountId: '' })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih platform" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak dikunci</SelectItem>
+                  {activePlatforms.map((platform) => (
+                    <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel>Sub Channel</MasterDataFieldLabel>
+              <Select value={normalizeSelectValue(draft.subChannelId)} onValueChange={(value) => patchDraft({ subChannelId: denormalizeSelectValue(value) })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih sub channel" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak dikunci</SelectItem>
+                  {activeSubChannels.map((subChannel) => (
+                    <SelectItem key={subChannel.id} value={subChannel.id}>{subChannel.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel>Advertiser</MasterDataFieldLabel>
+              <Select value={normalizeSelectValue(draft.advertiserId)} onValueChange={(value) => patchDraft({ advertiserId: denormalizeSelectValue(value), adAccountId: '' })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih advertiser" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak dikunci</SelectItem>
+                  {advertiserUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel>Akun Iklan</MasterDataFieldLabel>
+              <Select value={normalizeSelectValue(draft.adAccountId)} onValueChange={(value) => patchDraft({ adAccountId: denormalizeSelectValue(value) })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue placeholder="Pilih akun iklan" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Tidak dikunci</SelectItem>
+                  {filteredAdAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>{account.accountName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel>Status Prospek Baru</MasterDataFieldLabel>
+              <Select value={draft.defaultStatus} onValueChange={(value) => patchDraft({ defaultStatus: value as Draft['defaultStatus'] })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Follow Up">Follow Up</SelectItem>
+                  <SelectItem value="Booking">Booking</SelectItem>
+                  <SelectItem value="Closing">Closing</SelectItem>
+                  <SelectItem value="Cancel">Cancel</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <div className="embedFormSection">
+          <div className="embedFormSectionTitle">
+            <span>3</span>
+            <h3>Routing CS</h3>
+            <small>{ROUTING_LABEL[draft.routingMode]}</small>
+          </div>
+          <div className="embedRoutingGrid">
+            <div className="masterDataFormField">
+              <MasterDataFieldLabel>Mode Routing</MasterDataFieldLabel>
+              <Select value={draft.routingMode} onValueChange={(value) => patchDraft({ routingMode: value as EmbedLeadRoutingMode })}>
+                <SelectTrigger className="uiSelectTrigger"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single_cs">Pilih CS</SelectItem>
+                  <SelectItem value="broadcast">Broadcast</SelectItem>
+                  <SelectItem value="random">Random</SelectItem>
+                  <SelectItem value="round_robin">Round Robin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="embedChoiceGrid">
+              {csUsers.map((user) => (
+                <label key={user.id} className={cn('embedChoiceCard', selectedCsIds.has(user.id) && 'isChecked')}>
+                  <Checkbox className="dataTableSoftCheckbox" checked={selectedCsIds.has(user.id)} onCheckedChange={(checked) => toggleCs(user.id, checked === true)} />
+                  <UsersRound className="h-4 w-4" />
+                  <span>{user.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="embedFormSection">
+          <div className="embedFormSectionTitle">
+            <span>4</span>
+            <h3>Field Prospek</h3>
+            <small>{selectedFieldCount} field aktif</small>
+          </div>
+          <div className="embedChoiceGrid fields">
+            {EMBED_LEAD_FIELD_DEFINITIONS.map((field) => {
+              const locked = REQUIRED_KEYS.includes(field.key);
+              return (
+                <label key={field.key} className={cn('embedChoiceCard', selectedFieldKeys.has(field.key) && 'isChecked', locked && 'isLocked')}>
+                  <Checkbox
+                    className="dataTableSoftCheckbox"
+                    checked={selectedFieldKeys.has(field.key)}
+                    disabled={locked}
+                    onCheckedChange={(checked) => toggleField(field.key, checked === true)}
+                  />
+                  <span>{field.label}</span>
+                  {locked && <Badge variant="outline" className="embedRequiredBadge">Wajib</Badge>}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="embedFormSection">
+          <div className="embedFormSectionTitle">
+            <span>5</span>
+            <h3>Tracking & Redirect</h3>
+          </div>
+          <div className="masterDataFormGrid masterDataFormFieldGrid">
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel optional>Meta Pixel ID</MasterDataFieldLabel>
+              <Input className="uiInput" value={draft.metaPixelId} onChange={(event) => patchDraft({ metaPixelId: event.target.value })} placeholder="1234567890" />
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel optional>TikTok Pixel ID</MasterDataFieldLabel>
+              <Input className="uiInput" value={draft.tiktokPixelId} onChange={(event) => patchDraft({ tiktokPixelId: event.target.value })} placeholder="C..." />
+            </div>
+            <div className="masterDataFormField span-third">
+              <MasterDataFieldLabel optional>Google Tag ID</MasterDataFieldLabel>
+              <Input className="uiInput" value={draft.googleTagId} onChange={(event) => patchDraft({ googleTagId: event.target.value })} placeholder="G-... / AW-..." />
+            </div>
+            <div className="masterDataFormField span-half">
+              <MasterDataFieldLabel optional>Google Conversion ID</MasterDataFieldLabel>
+              <Input className="uiInput" value={draft.googleAdsConversionId} onChange={(event) => patchDraft({ googleAdsConversionId: event.target.value })} placeholder="AW-123456789" />
+            </div>
+            <div className="masterDataFormField span-half">
+              <MasterDataFieldLabel optional>Google Conversion Label</MasterDataFieldLabel>
+              <Input className="uiInput" value={draft.googleAdsConversionLabel} onChange={(event) => patchDraft({ googleAdsConversionLabel: event.target.value })} placeholder="AbCdEf..." />
+            </div>
+            <div className="masterDataFormField span-full">
+              <MasterDataFieldLabel required>Pesan Terima Kasih</MasterDataFieldLabel>
+              <Textarea value={draft.thankYouMessage} onChange={(event) => patchDraft({ thankYouMessage: event.target.value })} className="uiInput min-h-24 resize-y py-3" />
+            </div>
+            <div className="masterDataFormField span-full">
+              <MasterDataFieldLabel optional>Redirect URL</MasterDataFieldLabel>
+              <Input className="uiInput" value={draft.redirectUrl} onChange={(event) => patchDraft({ redirectUrl: event.target.value })} placeholder="https://landing-page.com/thank-you" />
+            </div>
+          </div>
+        </div>
+
+        {selectedFormForCode && (
+          <div className="embedFormSection embedCodeSection">
+            <div className="embedFormSectionTitle">
+              <span><Code2 className="h-4 w-4" /></span>
+              <h3>Embed Code</h3>
+            </div>
+            <div className="embedCodeGrid">
+              <div className="embedCodeBox">
+                <div>
+                  <MasterDataFieldLabel>Iframe</MasterDataFieldLabel>
+                  <Button type="button" size="sm" variant="outline" className="uiButton ghostButton buttonSm" onClick={() => void copyText(iframeCode)}>
+                    <Clipboard className="h-3.5 w-3.5" />
+                    Copy
                   </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => void handleDelete(form)} className="text-red-600 hover:text-red-700">
-                    <Trash2 className="mr-1 h-3.5 w-3.5" />
-                    Hapus
+                </div>
+                <Textarea readOnly value={iframeCode} className="uiInput min-h-32 font-mono text-xs" />
+              </div>
+              <div className="embedCodeBox">
+                <div>
+                  <MasterDataFieldLabel>Script</MasterDataFieldLabel>
+                  <Button type="button" size="sm" variant="outline" className="uiButton ghostButton buttonSm" onClick={() => void copyText(scriptCode)}>
+                    <Clipboard className="h-3.5 w-3.5" />
+                    Copy
                   </Button>
                 </div>
-              </div>
-            ))}
-            {!loading && forms.length === 0 && (
-              <div className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-800">
-                Belum ada form embed.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-5">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Nama Form</Label>
-                <Input
-                  value={draft.name}
-                  onChange={(event) => patchDraft({
-                    name: event.target.value,
-                    slug: draft.slug ? draft.slug : createEmbedLeadSlug(event.target.value),
-                  })}
-                  placeholder="LP Nano Ceramic Jakarta"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Slug Embed</Label>
-                <Input
-                  value={draft.slug}
-                  onChange={(event) => patchDraft({ slug: createEmbedLeadSlug(event.target.value) })}
-                  placeholder="lp-nano-ceramic-jakarta"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={draft.status} onValueChange={(value) => patchDraft({ status: value as EmbedLeadStatus })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="paused">Paused</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Mode Embed</Label>
-                <Select value={draft.embedMode} onValueChange={(value) => patchDraft({ embedMode: value as EmbedLeadMode })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="both">Iframe + Script</SelectItem>
-                    <SelectItem value="iframe">Iframe</SelectItem>
-                    <SelectItem value="script">Script</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2 lg:col-span-2">
-                <Label>Deskripsi</Label>
-                <Textarea
-                  value={draft.description}
-                  onChange={(event) => patchDraft({ description: event.target.value })}
-                  placeholder="Judul/keterangan singkat yang muncul di form"
-                  className="min-h-20"
-                />
+                <Textarea readOnly value={scriptCode} className="uiInput min-h-32 font-mono text-xs" />
               </div>
             </div>
           </div>
+        )}
+        </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">Produk, Source, dan Routing</h2>
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Produk/Layanan Default</Label>
-                <Select value={normalizeSelectValue(draft.defaultServiceId)} onValueChange={(value) => patchDraft({ defaultServiceId: denormalizeSelectValue(value) })}>
-                  <SelectTrigger><SelectValue placeholder="Pilih layanan" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Tidak dikunci</SelectItem>
-                    {activeServices.map((service) => (
-                      <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Platform Default</Label>
-                <Select value={normalizeSelectValue(draft.platformId)} onValueChange={(value) => patchDraft({ platformId: denormalizeSelectValue(value), subChannelId: '', adAccountId: '' })}>
-                  <SelectTrigger><SelectValue placeholder="Pilih platform" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Tidak dikunci</SelectItem>
-                    {activePlatforms.map((platform) => (
-                      <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Sub Channel Default</Label>
-                <Select value={normalizeSelectValue(draft.subChannelId)} onValueChange={(value) => patchDraft({ subChannelId: denormalizeSelectValue(value) })}>
-                  <SelectTrigger><SelectValue placeholder="Pilih sub channel" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Tidak dikunci</SelectItem>
-                    {activeSubChannels.map((subChannel) => (
-                      <SelectItem key={subChannel.id} value={subChannel.id}>{subChannel.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Advertiser</Label>
-                <Select value={normalizeSelectValue(draft.advertiserId)} onValueChange={(value) => patchDraft({ advertiserId: denormalizeSelectValue(value), adAccountId: '' })}>
-                  <SelectTrigger><SelectValue placeholder="Pilih advertiser" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Tidak dikunci</SelectItem>
-                    {advertiserUsers.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Akun Iklan</Label>
-                <Select value={normalizeSelectValue(draft.adAccountId)} onValueChange={(value) => patchDraft({ adAccountId: denormalizeSelectValue(value) })}>
-                  <SelectTrigger><SelectValue placeholder="Pilih akun iklan" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Tidak dikunci</SelectItem>
-                    {filteredAdAccounts.map((account) => (
-                      <SelectItem key={account.id} value={account.id}>{account.accountName}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Status Prospek Baru</Label>
-                <Select value={draft.defaultStatus} onValueChange={(value) => patchDraft({ defaultStatus: value as Draft['defaultStatus'] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Follow Up">Follow Up</SelectItem>
-                    <SelectItem value="Booking">Booking</SelectItem>
-                    <SelectItem value="Closing">Closing</SelectItem>
-                    <SelectItem value="Cancel">Cancel</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 lg:grid-cols-[240px_1fr]">
-              <div className="space-y-2">
-                <Label>Routing CS</Label>
-                <Select value={draft.routingMode} onValueChange={(value) => patchDraft({ routingMode: value as EmbedLeadRoutingMode })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single_cs">Pilih CS</SelectItem>
-                    <SelectItem value="broadcast">Broadcast</SelectItem>
-                    <SelectItem value="random">Random</SelectItem>
-                    <SelectItem value="round_robin">Round Robin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {csUsers.map((user) => (
-                  <label key={user.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
-                    <Checkbox checked={selectedCsIds.has(user.id)} onCheckedChange={(checked) => toggleCs(user.id, checked === true)} />
-                    <span className="truncate">{user.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">Field Prospek</h2>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {EMBED_LEAD_FIELD_DEFINITIONS.map((field) => {
-                const locked = REQUIRED_KEYS.includes(field.key);
-                return (
-                  <label key={field.key} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-800">
-                    <Checkbox
-                      checked={selectedFieldKeys.has(field.key)}
-                      disabled={locked}
-                      onCheckedChange={(checked) => toggleField(field.key, checked === true)}
-                    />
-                    <span className="truncate">{field.label}</span>
-                    {locked && <Badge variant="outline" className="ml-auto rounded-md text-[10px]">Wajib</Badge>}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-slate-100">Tracking</h2>
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Meta Pixel ID</Label>
-                <Input value={draft.metaPixelId} onChange={(event) => patchDraft({ metaPixelId: event.target.value })} placeholder="1234567890" />
-              </div>
-              <div className="space-y-2">
-                <Label>TikTok Pixel ID</Label>
-                <Input value={draft.tiktokPixelId} onChange={(event) => patchDraft({ tiktokPixelId: event.target.value })} placeholder="C..." />
-              </div>
-              <div className="space-y-2">
-                <Label>Google Tag ID</Label>
-                <Input value={draft.googleTagId} onChange={(event) => patchDraft({ googleTagId: event.target.value })} placeholder="G-... / AW-..." />
-              </div>
-              <div className="space-y-2">
-                <Label>Google Conversion ID</Label>
-                <Input value={draft.googleAdsConversionId} onChange={(event) => patchDraft({ googleAdsConversionId: event.target.value })} placeholder="AW-123456789" />
-              </div>
-              <div className="space-y-2">
-                <Label>Google Conversion Label</Label>
-                <Input value={draft.googleAdsConversionLabel} onChange={(event) => patchDraft({ googleAdsConversionLabel: event.target.value })} placeholder="AbCdEf..." />
-              </div>
-              <div className="space-y-2">
-                <Label>Button Label</Label>
-                <Input value={draft.submitButtonLabel} onChange={(event) => patchDraft({ submitButtonLabel: event.target.value })} placeholder="Kirim" />
-              </div>
-              <div className="space-y-2 lg:col-span-3">
-                <Label>Thank You Message</Label>
-                <Textarea value={draft.thankYouMessage} onChange={(event) => patchDraft({ thankYouMessage: event.target.value })} className="min-h-20" />
-              </div>
-              <div className="space-y-2 lg:col-span-3">
-                <Label>Redirect URL</Label>
-                <Input value={draft.redirectUrl} onChange={(event) => patchDraft({ redirectUrl: event.target.value })} placeholder="https://landing-page.com/thank-you" />
-              </div>
-            </div>
-          </div>
-
-          <div className="sticky bottom-0 z-10 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-slate-500">
-              {draft.id ? 'Mengedit form aktif.' : 'Form baru belum tersimpan.'}
-            </div>
-            <Button type="button" onClick={() => void handleSave()} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+        <div className="masterDataFormActions embedFormActions">
+          <span>{draft.id ? 'Perubahan akan diterapkan ke form embed ini.' : 'Form baru belum tersimpan.'}</span>
+          <div>
+            <Button type="button" variant="outline" className="uiButton ghostButton" onClick={() => setEditorOpen(false)}>Batal</Button>
+            <Button type="button" className="uiButton primaryButton" onClick={() => void handleSave()} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Simpan Form
             </Button>
           </div>
-
-          {selectedFormForCode && (
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="mb-4 flex items-center gap-2">
-                <Check className="h-4 w-4 text-emerald-600" />
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Embed Code</h2>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label>Iframe</Label>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void copyText(iframeCode)}>
-                      <Clipboard className="mr-2 h-3.5 w-3.5" />
-                      Copy
-                    </Button>
-                  </div>
-                  <Textarea readOnly value={iframeCode} className="min-h-32 font-mono text-xs" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label>Script</Label>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void copyText(scriptCode)}>
-                      <Clipboard className="mr-2 h-3.5 w-3.5" />
-                      Copy
-                    </Button>
-                  </div>
-                  <Textarea readOnly value={scriptCode} className="min-h-32 font-mono text-xs" />
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
+        </div>
+      </section>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
