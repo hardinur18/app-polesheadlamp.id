@@ -82,7 +82,7 @@ export function WhatsAppModuleFrame({
 
   return (
     <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-0">
-      <Card className="border-emerald-100 bg-white shadow-sm dark:border-emerald-950/60 dark:bg-slate-900">
+      <Card className="border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-5 p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-3">
@@ -91,7 +91,7 @@ export function WhatsAppModuleFrame({
                   <Badge
                     key={badge}
                     variant="outline"
-                    className="border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+                    className="border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
                   >
                     {badge}
                   </Badge>
@@ -118,7 +118,7 @@ export function WhatsAppModuleFrame({
                 <div
                   key={stat.label}
                   className={cn(
-                    'border border-emerald-100 bg-slate-50/70 p-4 dark:border-emerald-950/60 dark:bg-slate-950/40',
+                    'border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/40',
                     ui.r.field,
                   )}
                 >
@@ -139,8 +139,8 @@ export function WhatsAppModuleFrame({
       </Card>
 
       {/* In-module section navigation (the WhatsApp module's own menu) */}
-      <Card className="border-emerald-100 bg-white shadow-sm dark:border-emerald-950/60 dark:bg-slate-900">
-        <nav className="flex flex-wrap gap-2 p-3" aria-label="Navigasi modul WhatsApp">
+      <Card className="border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900">
+        <nav className="flex flex-wrap gap-3 p-3" aria-label="Navigasi modul WhatsApp">
           {visibleWorkspaces.map((item) => {
             const Icon = getWorkspaceIcon(item.iconKey);
             const isActive = item.id === activeId;
@@ -154,9 +154,9 @@ export function WhatsAppModuleFrame({
                 onClick={(event) => handleNavigate(item.id, href, event)}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                  'inline-flex min-h-11 items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-medium transition-colors',
                   isActive
-                    ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                    ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
                     : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-950/40',
                 )}
               >

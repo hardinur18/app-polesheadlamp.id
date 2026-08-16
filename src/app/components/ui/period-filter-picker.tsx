@@ -41,10 +41,13 @@ const MONTH_NAMES_ID = [
 ];
 
 const RELATIVE_PRESETS = [
-  { key: "today", label: "Real-time" },
+  { key: "today", label: "Hari Ini" },
   { key: "yesterday", label: "Kemarin" },
-  { key: "last_7_days", label: "7 hari sebelumnya." },
-  { key: "last_30_days", label: "30 hari sebelumnya." },
+  { key: "current_week", label: "Minggu Ini" },
+  { key: "last_7_days", label: "1 Minggu Terakhir" },
+  { key: "current_month", label: "Bulan Ini" },
+  { key: "last_30_days", label: "1 Bulan Terakhir" },
+  { key: "last_90_days", label: "3 Bulan Terakhir" },
 ] as const;
 
 type RelativePresetKey = (typeof RELATIVE_PRESETS)[number]["key"];
@@ -112,8 +115,8 @@ function PeriodCaption({ displayMonth }: CaptionProps) {
 }
 
 const dayPickerClassNames = {
-  months: "flex gap-4",
-  month: "flex flex-col gap-2",
+  months: "flex gap-6",
+  month: "flex flex-col gap-3",
   caption: "flex justify-center relative items-center w-full",
   caption_label: "text-sm font-medium",
   nav: "hidden",
@@ -122,17 +125,17 @@ const dayPickerClassNames = {
   nav_button_next: "hidden",
   table: "w-full border-collapse",
   head_row: "flex",
-  head_cell: "text-slate-400 rounded-[var(--radius-control)] w-9 font-medium text-[11px] text-center",
-  row: "flex w-full mt-1",
-  cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-blue-50 [&:has([aria-selected].day-range-end)]:rounded-r-[var(--radius-control)] [&:has(>.day-range-end)]:rounded-r-[var(--radius-control)] [&:has(>.day-range-start)]:rounded-l-[var(--radius-control)] first:[&:has([aria-selected])]:rounded-l-[var(--radius-control)] last:[&:has([aria-selected])]:rounded-r-[var(--radius-control)]",
-  day: "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-[var(--radius-control)] p-0 text-[13px] font-normal transition-colors hover:bg-[color:var(--surface-soft)] aria-selected:opacity-100",
-  day_range_start: "day-range-start aria-selected:rounded-l-[var(--radius-control)] aria-selected:bg-blue-500 aria-selected:text-white aria-selected:hover:bg-blue-500",
-  day_range_end: "day-range-end aria-selected:rounded-r-[var(--radius-control)] aria-selected:bg-blue-500 aria-selected:text-white aria-selected:hover:bg-blue-500",
+  head_cell: "text-slate-500 w-10 font-medium text-[13px] text-center",
+  row: "flex w-full mt-1.5",
+  cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
+  day: "inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md p-0 text-[15px] font-semibold transition-colors hover:bg-slate-100 aria-selected:opacity-100",
+  day_range_start: "day-range-start aria-selected:bg-blue-600 aria-selected:text-white aria-selected:hover:bg-blue-600",
+  day_range_end: "day-range-end aria-selected:bg-blue-600 aria-selected:text-white aria-selected:hover:bg-blue-600",
   day_selected: "bg-blue-500 text-white hover:bg-blue-500 hover:text-white focus:bg-blue-500 focus:text-white",
   day_today: "bg-slate-100 font-semibold",
   day_outside: "day-outside text-slate-300 aria-selected:text-slate-400",
   day_disabled: "text-slate-300",
-  day_range_middle: "aria-selected:bg-blue-50 aria-selected:text-blue-700",
+  day_range_middle: "aria-selected:bg-slate-100 aria-selected:text-slate-950",
   day_hidden: "invisible",
 };
 
@@ -162,12 +165,18 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
     const now = new Date();
     const today = toDateKey(now);
     const yesterday = toDateKey(subDays(now, 1));
+    const currentWeek = toDateKey(startOfWeek(now, { weekStartsOn: 1 }));
     const last7 = toDateKey(subDays(now, 6));
+    const currentMonth = toDateKey(startOfMonth(now));
     const last30 = toDateKey(subDays(now, 29));
+    const last90 = toDateKey(subMonths(now, 3));
     if (dateFrom === today && dateTo === today) return RELATIVE_PRESETS[0];
     if (dateFrom === yesterday && dateTo === yesterday) return RELATIVE_PRESETS[1];
-    if (dateFrom === last7 && dateTo === today) return RELATIVE_PRESETS[2];
-    if (dateFrom === last30 && dateTo === today) return RELATIVE_PRESETS[3];
+    if (dateFrom === currentWeek && dateTo === today) return RELATIVE_PRESETS[2];
+    if (dateFrom === last7 && dateTo === today) return RELATIVE_PRESETS[3];
+    if (dateFrom === currentMonth && dateTo === today) return RELATIVE_PRESETS[4];
+    if (dateFrom === last30 && dateTo === today) return RELATIVE_PRESETS[5];
+    if (dateFrom === last90 && dateTo === today) return RELATIVE_PRESETS[6];
     return null;
   }, [dateFrom, dateTo]);
 
@@ -213,8 +222,11 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
       const yesterday = subDays(now, 1);
       return applyRange(yesterday, yesterday);
     }
+    if (preset === "current_week") return applyRange(startOfWeek(now, { weekStartsOn: 1 }), now);
     if (preset === "last_7_days") return applyRange(subDays(now, 6), now);
-    return applyRange(subDays(now, 29), now);
+    if (preset === "current_month") return applyRange(startOfMonth(now), now);
+    if (preset === "last_30_days") return applyRange(subDays(now, 29), now);
+    return applyRange(subMonths(now, 3), now);
   };
 
   const applyYearOnly = (year: number) => {
@@ -232,7 +244,7 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
           const base = selectedFromDate || new Date();
           setPickerMonth(base);
           setPickerYear(base.getFullYear());
-          setPanelMode(isCurrentMonthRange ? "month" : activeRelativePreset ? "relative" : "month");
+          setPanelMode("relative");
         }
       }}
     >
@@ -246,7 +258,14 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
         <div className="periodPickerShell">
           <aside className="periodPickerSidebar">
             <div className="periodPickerPresetGroup">
-              {RELATIVE_PRESETS.map((preset) => (
+              <button
+                type="button"
+                onClick={() => applyPeriodPreset("all")}
+                className={cn("periodPickerPreset", !dateFrom && !dateTo && "is-active")}
+              >
+                Semua Waktu
+              </button>
+              {RELATIVE_PRESETS.slice(0, 2).map((preset) => (
                 <button
                   type="button"
                   key={preset.key}
@@ -259,24 +278,29 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
             </div>
             <div className="periodPickerDivider" />
             <div className="periodPickerPresetGroup">
-              {[
-                ["day", "Per Hari"],
-                ["week", "Per Minggu"],
-                ["month", "Per Bulan"],
-                ["year", "Berdasarkan Tahun"],
-              ].map(([mode, label]) => (
+              {RELATIVE_PRESETS.slice(2, 4).map((preset) => (
                 <button
                   type="button"
-                  key={mode}
-                  onClick={() => setPanelMode(mode as PeriodPanelMode)}
-                  className={cn("periodPickerPreset", panelMode === mode && "is-active")}
+                  key={preset.key}
+                  onClick={() => applyPeriodPreset(preset.key)}
+                  className={cn("periodPickerPreset", activeRelativePreset?.key === preset.key && "is-active")}
                 >
-                  {label}
+                  {preset.label}
                 </button>
               ))}
-              <button type="button" onClick={() => applyPeriodPreset("all")} className="periodPickerPreset">
-                Semua Waktu
-              </button>
+            </div>
+            <div className="periodPickerDivider" />
+            <div className="periodPickerPresetGroup">
+              {RELATIVE_PRESETS.slice(4).map((preset) => (
+                <button
+                  type="button"
+                  key={preset.key}
+                  onClick={() => applyPeriodPreset(preset.key)}
+                  className={cn("periodPickerPreset", activeRelativePreset?.key === preset.key && "is-active")}
+                >
+                  {preset.label}
+                </button>
+              ))}
             </div>
           </aside>
 

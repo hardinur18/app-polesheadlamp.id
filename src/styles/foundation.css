@@ -140,34 +140,34 @@
 }
 
 .leadPeriodPopover.periodPickerContent {
-  width: min(680px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
   border: 1px solid #dbe6f3 !important;
   border-radius: 20px;
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.14);
 }
 
 .leadPeriodPopover .periodPickerShell {
-  grid-template-columns: 178px minmax(0, 1fr);
-  min-height: 350px;
+  grid-template-columns: 210px minmax(0, 1fr);
+  min-height: 420px;
 }
 
 .leadPeriodPopover .periodPickerSidebar {
-  background: #fbfdff;
-  padding: 16px 14px;
+  background: #f8fafc;
+  padding: 22px 24px;
 }
 
 .leadPeriodPopover .periodPickerPresetGroup {
-  gap: 8px;
+  gap: 18px;
 }
 
 .leadPeriodPopover .periodPickerPreset {
-  min-height: 34px;
+  min-height: 26px;
   border-radius: 0;
   box-shadow: none;
   color: #46566f;
-  font-size: 15px;
-  font-weight: 620;
-  padding: 4px 0;
+  font-size: 1rem;
+  font-weight: 720;
+  padding: 0;
 }
 
 .leadPeriodPopover .periodPickerPreset:hover,
@@ -182,7 +182,7 @@
 }
 
 .leadPeriodPopover .periodPickerMain {
-  padding: 16px 20px 14px;
+  padding: 22px 28px 20px;
 }
 
 .leadPeriodPopover .periodPickerCaption,
@@ -191,9 +191,9 @@
 }
 
 .leadPeriodPopover .periodPickerNavButton {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
+  width: 24px;
+  height: 24px;
+  border-radius: 0;
   color: #64748b;
 }
 
@@ -204,8 +204,8 @@
 
 .leadPeriodPopover .periodPickerCaptionLabel,
 .leadPeriodPopover .periodPickerYearHeader span {
-  font-size: 17px;
-  font-weight: 760;
+  font-size: 1.15rem;
+  font-weight: 780;
 }
 
 .leadPeriodPopover .rdp {
@@ -213,33 +213,40 @@
 }
 
 .leadPeriodPopover .rdp .rdp-head_cell {
-  color: #7b8ba1;
-  font-size: 13px;
-  font-weight: 620;
+  color: #6b7a90;
+  font-size: 0.9rem;
+  font-weight: 560;
+  height: 34px;
+  width: 46px;
 }
 
 .leadPeriodPopover .rdp .rdp-day {
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 720;
-  height: 38px;
-  width: 38px;
+  background: transparent !important;
+  border-radius: 4px;
+  box-shadow: none;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 650;
+  height: 44px;
+  width: 44px;
 }
 
 .leadPeriodPopover .rdp .rdp-cell:has([aria-selected]) {
-  background: #edf4ff;
+  background: transparent !important;
 }
 
 .leadPeriodPopover .rdp .rdp-day_range_start,
 .leadPeriodPopover .rdp .rdp-day_range_end,
 .leadPeriodPopover .rdp .rdp-day_selected {
-  background: #0b63ce !important;
+  background: #2563eb !important;
+  border-radius: 4px;
   color: #fff !important;
 }
 
 .leadPeriodPopover .rdp .rdp-day_range_middle {
-  background: #edf4ff !important;
-  color: #0b63ce !important;
+  background: #eef2f7 !important;
+  border-radius: 0;
+  color: #0f172a !important;
 }
 
 .leadPeriodPopover .periodPickerFooter {
@@ -3482,48 +3489,48 @@
 
 .periodPickerContent {
   z-index: 220;
-  width: min(620px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
   overflow: hidden;
-  border: 1px solid #d8e2ef !important;
+  border: 1px solid #dbe6f3 !important;
   background: #fff;
   padding: 0;
-  border-radius: 16px;
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.14);
+  border-radius: 20px;
+  box-shadow: 0 22px 56px rgba(15, 23, 42, 0.13);
   outline: 0;
 }
 
 .periodPickerShell {
   display: grid;
-  grid-template-columns: 158px minmax(0, 1fr);
-  min-height: 286px;
+  grid-template-columns: 210px minmax(0, 1fr);
+  min-height: 420px;
 }
 
 .periodPickerSidebar {
   border-right: 1px solid var(--ops-border);
   background: #f8fafc;
-  padding: 10px;
+  padding: 22px 24px;
 }
 
 .periodPickerPresetGroup {
   display: grid;
-  gap: 4px;
+  gap: 18px;
 }
 
 .periodPickerPreset {
-  min-height: 32px;
+  min-height: 26px;
   width: 100%;
   border: 0;
-  border-radius: 10px;
+  border-radius: 0;
   background: transparent;
-  color: var(--ops-text);
+  color: #46566f;
   cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 720;
   letter-spacing: 0;
   line-height: 1.2;
-  padding: 7px 10px;
+  padding: 0;
   text-align: left;
-  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  transition: color 160ms ease;
 }
 
 .periodPickerPreset:focus-visible,
@@ -3535,25 +3542,25 @@
 
 .periodPickerPreset:hover,
 .periodPickerPreset.is-active {
-  background: #fff;
-  color: var(--ops-blue);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+  background: transparent;
+  color: #0b63ce;
+  box-shadow: none;
 }
 
 .periodPickerPreset.is-active {
-  background: #eef6ff;
+  font-weight: 820;
 }
 
 .periodPickerDivider {
   border-top: 1px solid var(--ops-border);
-  margin: 8px 0;
+  margin: 10px 0;
 }
 
 .periodPickerMain {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
-  padding: 12px 14px;
+  padding: 22px 28px 20px;
 }
 
 .periodPickerCaption,
@@ -3561,19 +3568,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 30px;
+  min-height: 34px;
 }
 
 .periodPickerCaptionGroup {
   display: flex;
-  gap: 2px;
+  gap: 8px;
 }
 
 .periodPickerCaptionLabel,
 .periodPickerYearHeader span {
   color: var(--ops-ink);
-  font-size: 0.95rem;
-  font-weight: 760;
+  font-size: 1.15rem;
+  font-weight: 780;
   letter-spacing: 0;
   text-transform: capitalize;
 }
@@ -3582,19 +3589,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 0;
   background: transparent;
   color: var(--ops-muted);
   cursor: pointer;
-  transition: background 160ms ease, color 160ms ease;
+  box-shadow: none;
+  transition: color 160ms ease, opacity 160ms ease;
 }
 
 .periodPickerNavButton:hover {
-  background: var(--surface-soft);
-  color: var(--ops-ink);
+  background: transparent;
+  color: #0b63ce;
 }
 
 .periodPickerMonthGrid {
@@ -3629,8 +3637,8 @@
   align-items: center;
   gap: 12px;
   border-top: 1px solid var(--ops-border);
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
 }
 
 .periodPickerFooter p {
@@ -3651,6 +3659,82 @@
   border-radius: 11px;
   padding-inline: 14px;
   font-size: 0.82rem;
+}
+
+.periodPickerMain .rdp {
+  margin: 0;
+}
+
+.periodPickerMain .rdp .rdp-months {
+  justify-content: center;
+}
+
+.periodPickerMain .rdp .rdp-table {
+  width: auto;
+  margin: 0 auto;
+}
+
+.periodPickerMain .rdp .rdp-head_cell {
+  color: #6b7a90;
+  font-size: 0.9rem;
+  font-weight: 560;
+  height: 34px;
+  letter-spacing: 0;
+  width: 46px;
+}
+
+.periodPickerMain .rdp .rdp-row {
+  margin-top: 7px;
+}
+
+.periodPickerMain .rdp .rdp-cell {
+  background: transparent !important;
+  padding: 0;
+}
+
+.periodPickerMain .rdp .rdp-cell:has([aria-selected]) {
+  background: transparent !important;
+}
+
+.periodPickerMain .rdp .rdp-day {
+  background: transparent !important;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 650;
+  height: 44px;
+  width: 44px;
+}
+
+.periodPickerMain .rdp .rdp-day:hover {
+  background: #eff6ff !important;
+  color: #0b63ce;
+}
+
+.periodPickerMain .rdp .rdp-day_range_start,
+.periodPickerMain .rdp .rdp-day_range_end,
+.periodPickerMain .rdp .rdp-day_selected {
+  background: #2563eb !important;
+  border-radius: 4px;
+  color: #fff !important;
+}
+
+.periodPickerMain .rdp .rdp-day_range_middle {
+  background: #eef2f7 !important;
+  border-radius: 0;
+  color: #0f172a !important;
+}
+
+.periodPickerMain .rdp .rdp-day_outside {
+  color: #cbd5e1;
+}
+
+.periodPickerMain .rdp .rdp-day_today:not([aria-selected="true"]) {
+  background: #f1f5f9 !important;
+  border-radius: 999px;
+  color: #0f172a;
 }
 
 @media (max-width: 1640px) {

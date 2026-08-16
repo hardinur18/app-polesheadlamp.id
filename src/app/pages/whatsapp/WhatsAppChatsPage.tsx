@@ -35,6 +35,11 @@ import { toast } from 'sonner';
 
 import { SmartFilterDate } from '@/app/components/SmartFilterDate';
 import { Button } from '@/app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/app/components/ui/collapsible';
 import { Input } from '@/app/components/ui/input';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
@@ -92,11 +97,11 @@ type InboxSlaFilter = 'all' | 'at_risk' | 'breached';
 type SidebarSectionId = 'status' | 'provider' | 'sla' | 'labels';
 
 const STATUS_FILTERS: Array<{ id: InboxStatusFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'unread', label: 'Unread' },
-  { id: 'open', label: 'Open' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'resolved', label: 'Resolved' },
+  { id: 'all', label: 'Semua' },
+  { id: 'unread', label: 'Belum dibaca' },
+  { id: 'open', label: 'Aktif' },
+  { id: 'pending', label: 'Menunggu' },
+  { id: 'resolved', label: 'Selesai' },
 ];
 
 const DEFAULT_COLLAPSED_SIDEBAR_SECTIONS: Record<SidebarSectionId, boolean> = {
@@ -105,6 +110,49 @@ const DEFAULT_COLLAPSED_SIDEBAR_SECTIONS: Record<SidebarSectionId, boolean> = {
   sla: false,
   labels: false,
 };
+
+function SidebarFilterSection({
+  id,
+  title,
+  collapsed,
+  onOpenChange,
+  children,
+}: {
+  id: string;
+  title: string;
+  collapsed: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const open = !collapsed;
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={onOpenChange}
+      className={cn(cls.sidebarSection, cls.sidebarSurface)}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className={cls.sectionToggle}
+          aria-expanded={open}
+          aria-controls={id}
+        >
+          <span>{title}</span>
+          <ChevronDown className={cn(cls.sectionChevron, !open && '-rotate-90')} />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        id={id}
+        forceMount
+        className={cls.sidebarCollapseContent}
+      >
+        <div className={cls.sidebarCollapseInner}>{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 const OVERVIEW_REFRESH_INTERVAL_MS = 5_000;
 const MESSAGE_REFRESH_INTERVAL_MS = 30_000;
@@ -346,12 +394,12 @@ function getStatusFilterCount(filter: InboxStatusFilter, conversations: WhatsApp
 function getInboxStatusLabel(status: ReturnType<typeof getConversationInboxStatus>) {
   switch (status) {
     case 'pending':
-      return 'Pending';
+      return 'Menunggu';
     case 'resolved':
-      return 'Resolved';
+      return 'Selesai';
     case 'open':
     default:
-      return 'Open';
+      return 'Aktif';
   }
 }
 
@@ -419,7 +467,7 @@ function AccountSelectRow({
       <span className={cls.accountIcon}>
         <Smartphone className="h-4 w-4" />
       </span>
-      <span className="min-w-0 flex-1 overflow-hidden">
+      <span className="min-w-0 flex-1 overflow-hidden text-left">
         <span className="block truncate text-sm font-semibold leading-5 text-slate-800 dark:text-slate-100">
           {title}
         </span>
@@ -427,7 +475,9 @@ function AccountSelectRow({
           {subtitle}
         </span>
       </span>
-      <CountBadge tone="accent" className="ml-1">{formatNumber(count)}</CountBadge>
+      <CountBadge tone="accent" className="ml-auto max-w-[4.75rem]">
+        {formatNumber(count)}
+      </CountBadge>
     </span>
   );
 }
@@ -455,7 +505,7 @@ function getServiceWindowState(timestamp: string | null | undefined) {
       isAtRisk: false,
       remainingMs: 0,
       remainingLabel: '-',
-      label: 'Window unknown',
+      label: 'Jendela tidak diketahui',
     };
   }
 
@@ -466,8 +516,8 @@ function getServiceWindowState(timestamp: string | null | undefined) {
     isOpen,
     isAtRisk: isOpen && remainingMs <= SLA_AT_RISK_MS,
     remainingMs: Math.max(0, remainingMs),
-    remainingLabel: isOpen ? formatDurationShort(remainingMs) : 'Expired',
-    label: isOpen ? 'Window open' : 'Window closed',
+    remainingLabel: isOpen ? formatDurationShort(remainingMs) : 'Berakhir',
+    label: isOpen ? 'Masih terbuka' : 'Sudah tertutup',
   };
 }
 
@@ -945,6 +995,40 @@ function getConversationAvatarUrl(conversation: WhatsAppConversation | null | un
   );
 }
 
+type ConversationIdentity = Pick<WhatsAppConversation, 'contactId' | 'contactName' | 'contactPhone'>;
+
+function hasUsefulContactName(value: string | null | undefined) {
+  const name = (value || '').trim();
+  if (!name) return false;
+  const signal = name.replace(/[^A-Za-z0-9]/g, '');
+  return signal.length >= 2;
+}
+
+function normalizeConversationPhone(value: string | null | undefined) {
+  const raw = (value || '').trim();
+  if (!raw) return null;
+  const withoutProviderPrefix = raw.replace(/^whatsapp:/i, '');
+  const digits = withoutProviderPrefix.replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  return withoutProviderPrefix.startsWith('+') ? `+${digits}` : digits;
+}
+
+function getConversationDisplayName(conversation: ConversationIdentity | null | undefined) {
+  if (!conversation) return 'Kontak WhatsApp';
+  const name = conversation.contactName?.trim();
+  if (hasUsefulContactName(name)) return name;
+  const phone = normalizeConversationPhone(conversation.contactPhone) || normalizeConversationPhone(conversation.contactId);
+  if (phone) return formatPhoneNumber(phone);
+  return 'Kontak WhatsApp';
+}
+
+function getConversationSubtitle(conversation: ConversationIdentity | null | undefined) {
+  if (!conversation) return 'Pilih thread di kiri untuk membaca isi pesan.';
+  const phone = normalizeConversationPhone(conversation.contactPhone) || normalizeConversationPhone(conversation.contactId);
+  if (phone) return formatPhoneNumber(phone);
+  return 'Nomor WhatsApp belum tersedia';
+}
+
 const ConversationListRow = React.memo(function ConversationListRow({
   conversation,
   isActive,
@@ -957,39 +1041,41 @@ const ConversationListRow = React.memo(function ConversationListRow({
   onSelect: (conversationId: string) => void;
 }) {
   const serviceWindow = getServiceWindowState(conversation.lastMessageAt);
+  const displayName = getConversationDisplayName(conversation);
+  const subtitle = getConversationSubtitle(conversation);
   return (
     <button
       onFocus={() => onPrefetch?.(conversation)}
       onMouseEnter={() => onPrefetch?.(conversation)}
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        'grid min-h-[var(--wa-row-h)] w-full grid-cols-[var(--wa-avatar-row)_minmax(0,1fr)_var(--wa-row-meta-w)] items-start gap-3 px-4 py-3 text-left transition-colors',
+        'grid min-h-[var(--wa-row-h)] w-full grid-cols-[var(--wa-avatar-row)_minmax(0,1fr)_var(--wa-row-meta-w)] items-start gap-3 border-l-2 border-transparent px-4 py-3 text-left transition-colors',
         isActive
-          ? 'bg-emerald-50 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100'
+          ? 'border-blue-500 bg-blue-50/70 text-slate-950 dark:bg-blue-950/30 dark:text-blue-100'
           : 'hover:bg-slate-50 dark:hover:bg-slate-900/70',
       )}
     >
       <WhatsAppContactAvatar
         src={getConversationAvatarUrl(conversation)}
-        name={conversation.contactName}
+        name={displayName}
         phone={conversation.contactPhone}
         className={cls.avatarRow}
       />
       <div className="min-w-0 overflow-hidden">
         <div
           className="truncate text-sm font-semibold leading-5 text-slate-950 dark:text-slate-100"
-          title={conversation.contactName || formatPhoneNumber(conversation.contactPhone)}
+          title={displayName}
         >
-          {conversation.contactName || formatPhoneNumber(conversation.contactPhone)}
+          {displayName}
         </div>
-        <div className="truncate text-xs leading-4 text-slate-500" title={formatPhoneNumber(conversation.contactPhone)}>
-          {formatPhoneNumber(conversation.contactPhone)}
+        <div className="truncate text-xs leading-4 text-slate-500" title={subtitle}>
+          {subtitle}
         </div>
         <div
           className="mt-1 truncate text-sm leading-5 text-slate-700 dark:text-slate-300"
-          title={conversation.lastMessageText || 'No messages yet'}
+          title={conversation.lastMessageText || 'Belum ada pesan'}
         >
-          {conversation.lastMessageText || 'No messages yet'}
+          {conversation.lastMessageText || 'Belum ada pesan'}
         </div>
         <div className="mt-1 flex min-w-0 items-center gap-1.5">
           {conversation.provider === 'meta' ? (
@@ -997,7 +1083,7 @@ const ConversationListRow = React.memo(function ConversationListRow({
               Meta Ads
             </span>
           ) : null}
-          <span className="inline-flex min-w-0 items-center gap-1 truncate text-xs text-emerald-700">
+          <span className="inline-flex min-w-0 items-center gap-1 truncate text-xs text-slate-500">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600" />
             <span className="truncate">
               {getInboxStatusLabel(getConversationInboxStatus(conversation))}
@@ -1006,7 +1092,7 @@ const ConversationListRow = React.memo(function ConversationListRow({
         </div>
       </div>
       <div className="flex min-w-0 shrink-0 flex-col items-end gap-1.5 overflow-hidden">
-        <div className="max-w-full truncate text-xs font-medium text-emerald-700" title={formatRelativeTime(conversation.lastMessageAt)}>
+        <div className="max-w-full truncate text-xs font-medium text-blue-700" title={formatRelativeTime(conversation.lastMessageAt)}>
           {formatRelativeTime(conversation.lastMessageAt)}
         </div>
         {conversation.unreadCount > 0 ? (
@@ -1198,10 +1284,10 @@ export function WhatsAppChatsPage() {
   >(null);
   const kirimdevInboxSyncInFlightRef = React.useRef(false);
   const lastKirimdevInboxSyncAtRef = React.useRef(0);
-  const toggleSidebarSection = React.useCallback((section: SidebarSectionId) => {
+  const setSidebarSectionOpen = React.useCallback((section: SidebarSectionId, open: boolean) => {
     setCollapsedSidebarSections((current) => ({
       ...current,
-      [section]: !current[section],
+      [section]: !open,
     }));
   }, []);
 
@@ -2262,6 +2348,8 @@ export function WhatsAppChatsPage() {
     : 'open';
   const selectedConversationStatusLabel = getInboxStatusLabel(selectedConversationStatus);
   const selectedMessageCount = selectedConversation?.messageCount || messages.length || 0;
+  const selectedConversationDisplayName = getConversationDisplayName(selectedConversation);
+  const selectedConversationSubtitle = getConversationSubtitle(selectedConversation);
   const selectedLastInboundAt =
     latestInboundMessage?.timestamp ||
     (selectedConversation?.lastDirection === 'inbound' ? selectedConversation.lastMessageAt : null);
@@ -2278,10 +2366,10 @@ export function WhatsAppChatsPage() {
     <div
       style={whatsAppInboxStyle}
       className={cn(
-        'flex flex-col bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-100',
+        isFullscreen ? 'flex flex-col bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-100' : cls.moduleShell,
         isFullscreen
           ? 'fixed inset-0 z-[60] h-[100dvh]'
-          : 'h-[calc(100dvh-4rem)] min-h-[620px]',
+          : 'h-full min-h-0',
       )}
     >
       {error ? (
@@ -2299,14 +2387,12 @@ export function WhatsAppChatsPage() {
           showCustomerPanel ? cls.layoutGridWithCustomer : cls.layoutGrid,
         )}
       >
-        <aside className="hidden min-h-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 xl:flex">
+        <aside className={cls.sidebarPanel}>
           <ScrollArea className="min-h-0 flex-1">
             <div className={cls.sidebarBody}>
 
-              <div className={cls.sidebarSection}>
-                <div className={cls.sectionLabel}>
-                  Select Account
-                </div>
+              <div className={cn(cls.sidebarSection, cls.sidebarSurface)}>
+                <div className={cn(cls.sectionLabel, 'mb-0.5')}>Akun WhatsApp</div>
                 <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                   <SelectTrigger className={cls.accountSelectTrigger}>
                     {selectedAccount ? (
@@ -2326,11 +2412,11 @@ export function WhatsAppChatsPage() {
                   <SelectContent
                     align="start"
                     sideOffset={6}
-                    className="w-[var(--wa-sidebar-menu-w)] border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900"
+                    className={cls.accountSelectContent}
                   >
                     <SelectItem
                       value={ALL_ACCOUNTS_VALUE}
-                      className="py-2.5 pl-2 pr-8 data-[state=checked]:bg-emerald-50 data-[state=checked]:text-slate-900 dark:data-[state=checked]:bg-emerald-950/30 dark:data-[state=checked]:text-slate-100"
+                      className={cls.accountSelectItem}
                     >
                       <AccountSelectRow
                         title="Semua akun"
@@ -2345,7 +2431,7 @@ export function WhatsAppChatsPage() {
                         <SelectItem
                           key={channelId}
                           value={channelId}
-                          className="py-2.5 pl-2 pr-8 data-[state=checked]:bg-emerald-50 data-[state=checked]:text-slate-900 dark:data-[state=checked]:bg-emerald-950/30 dark:data-[state=checked]:text-slate-100"
+                          className={cls.accountSelectItem}
                         >
                           <AccountSelectRow
                             title={getAccountDisplayName(account)}
@@ -2359,181 +2445,142 @@ export function WhatsAppChatsPage() {
                 </Select>
               </div>
 
-              <div className={cls.sidebarSection}>
-                <button
-                  type="button"
-                  className={cls.sectionToggle}
-                  aria-expanded={!collapsedSidebarSections.status}
-                  aria-controls="whatsapp-sidebar-status"
-                  onClick={() => toggleSidebarSection('status')}
-                >
-                  <span>Status</span>
-                  <ChevronDown
-                    className={cn(cls.sectionChevron, collapsedSidebarSections.status && '-rotate-90')}
-                  />
-                </button>
-                {!collapsedSidebarSections.status ? (
-                  <div id="whatsapp-sidebar-status" className="space-y-1">
-                    {STATUS_FILTERS.map((filter) => {
-                      const Icon =
-                        filter.id === 'all'
-                          ? Inbox
-                          : filter.id === 'unread'
-                          ? Mail
-                          : filter.id === 'open'
-                          ? Circle
-                          : filter.id === 'pending'
-                          ? Clock3
-                          : CheckCircle2;
-                      const isActive = statusFilter === filter.id;
-                      return (
-                        <FilterRow
-                          key={filter.id}
-                          active={isActive}
-                          count={formatNumber(getSidebarStatusCount(filter.id))}
-                          icon={
-                            <Icon
-                              className={cn(
-                                'h-4 w-4',
-                                filter.id === 'pending' && 'text-amber-500',
-                                filter.id === 'open' && 'text-emerald-600',
-                              )}
-                            />
-                          }
-                          label={filter.label}
-                          onClick={() => setStatusFilter(filter.id)}
-                          tone={filter.id === 'all' || filter.id === 'open' ? 'accent' : 'neutral'}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
+              <SidebarFilterSection
+                id="whatsapp-sidebar-status"
+                title="Status"
+                collapsed={collapsedSidebarSections.status}
+                onOpenChange={(open) => setSidebarSectionOpen('status', open)}
+              >
+                <div className="space-y-1">
+                  {STATUS_FILTERS.map((filter) => {
+                    const Icon =
+                      filter.id === 'all'
+                        ? Inbox
+                        : filter.id === 'unread'
+                        ? Mail
+                        : filter.id === 'open'
+                        ? Circle
+                        : filter.id === 'pending'
+                        ? Clock3
+                        : CheckCircle2;
+                    const isActive = statusFilter === filter.id;
+                    return (
+                      <FilterRow
+                        key={filter.id}
+                        active={isActive}
+                        count={formatNumber(getSidebarStatusCount(filter.id))}
+                        icon={
+                          <Icon
+                            className={cn(
+                              'h-4 w-4',
+                              filter.id === 'pending' && 'text-amber-500',
+                              filter.id === 'open' && 'text-emerald-600',
+                            )}
+                          />
+                        }
+                        label={filter.label}
+                        onClick={() => setStatusFilter(filter.id)}
+                        tone={filter.id === 'all' || filter.id === 'open' ? 'accent' : 'neutral'}
+                      />
+                    );
+                  })}
+                </div>
+              </SidebarFilterSection>
 
-              <div className={cls.sidebarSection}>
-                <button
-                  type="button"
-                  className={cls.sectionToggle}
-                  aria-expanded={!collapsedSidebarSections.provider}
-                  aria-controls="whatsapp-sidebar-provider"
-                  onClick={() => toggleSidebarSection('provider')}
-                >
-                  <span>Provider</span>
-                  <ChevronDown
-                    className={cn(cls.sectionChevron, collapsedSidebarSections.provider && '-rotate-90')}
-                  />
-                </button>
-                {!collapsedSidebarSections.provider ? (
-                  <div id="whatsapp-sidebar-provider" className="space-y-1">
-                    {PROVIDER_FILTERS.map((filter) => {
-                      const isActive = providerFilter === filter.id;
-                      return (
-                        <FilterRow
-                          key={filter.id}
-                          active={isActive}
-                          icon={<Wifi className="h-4 w-4 text-emerald-600" />}
-                          label={filter.label}
-                          onClick={() => setProviderFilter(filter.id)}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
+              <SidebarFilterSection
+                id="whatsapp-sidebar-provider"
+                title="Provider"
+                collapsed={collapsedSidebarSections.provider}
+                onOpenChange={(open) => setSidebarSectionOpen('provider', open)}
+              >
+                <div className="space-y-1">
+                  {PROVIDER_FILTERS.map((filter) => {
+                    const isActive = providerFilter === filter.id;
+                    return (
+                      <FilterRow
+                        key={filter.id}
+                        active={isActive}
+                        icon={<Wifi className="h-4 w-4 text-emerald-600" />}
+                        label={filter.label}
+                        onClick={() => setProviderFilter(filter.id)}
+                      />
+                    );
+                  })}
+                </div>
+              </SidebarFilterSection>
 
-              <div className={cls.sidebarSection}>
-                <button
-                  type="button"
-                  className={cls.sectionToggle}
-                  aria-expanded={!collapsedSidebarSections.sla}
-                  aria-controls="whatsapp-sidebar-sla"
-                  onClick={() => toggleSidebarSection('sla')}
-                >
-                  <span>SLA</span>
-                  <ChevronDown
-                    className={cn(cls.sectionChevron, collapsedSidebarSections.sla && '-rotate-90')}
-                  />
-                </button>
-                {!collapsedSidebarSections.sla ? (
-                  <div id="whatsapp-sidebar-sla" className="space-y-1">
-                    {[
-                      { id: 'all' as const, label: 'All', Icon: Inbox },
-                      { id: 'at_risk' as const, label: 'At risk', Icon: Clock3 },
-                      { id: 'breached' as const, label: 'Breached', Icon: AlertTriangle },
-                    ].map((filter) => {
-                      const isActive = slaFilter === filter.id;
-                      const Icon = filter.Icon;
-                      return (
-                        <FilterRow
-                          key={filter.id}
-                          active={isActive}
-                          count={formatNumber(getSidebarSlaCount(filter.id))}
-                          icon={
-                            <Icon
-                              className={cn(
-                                'h-4 w-4',
-                                filter.id === 'at_risk' && 'text-orange-500',
-                                filter.id === 'breached' && 'text-rose-500',
-                              )}
-                            />
-                          }
-                          label={filter.label}
-                          onClick={() => setSlaFilter(filter.id)}
-                          tone={filter.id === 'breached' ? 'danger' : filter.id === 'all' ? 'accent' : 'neutral'}
-                        />
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
+              <SidebarFilterSection
+                id="whatsapp-sidebar-sla"
+                title="SLA"
+                collapsed={collapsedSidebarSections.sla}
+                onOpenChange={(open) => setSidebarSectionOpen('sla', open)}
+              >
+                <div className="space-y-1">
+                  {[
+                    { id: 'all' as const, label: 'Semua', Icon: Inbox },
+                    { id: 'at_risk' as const, label: 'Hampir lewat', Icon: Clock3 },
+                    { id: 'breached' as const, label: 'Lewat SLA', Icon: AlertTriangle },
+                  ].map((filter) => {
+                    const isActive = slaFilter === filter.id;
+                    const Icon = filter.Icon;
+                    return (
+                      <FilterRow
+                        key={filter.id}
+                        active={isActive}
+                        count={formatNumber(getSidebarSlaCount(filter.id))}
+                        icon={
+                          <Icon
+                            className={cn(
+                              'h-4 w-4',
+                              filter.id === 'at_risk' && 'text-orange-500',
+                              filter.id === 'breached' && 'text-rose-500',
+                            )}
+                          />
+                        }
+                        label={filter.label}
+                        onClick={() => setSlaFilter(filter.id)}
+                        tone={filter.id === 'breached' ? 'danger' : filter.id === 'all' ? 'accent' : 'neutral'}
+                      />
+                    );
+                  })}
+                </div>
+              </SidebarFilterSection>
 
-              <div className={cls.sidebarSection}>
-                <button
-                  type="button"
-                  className={cls.sectionToggle}
-                  aria-expanded={!collapsedSidebarSections.labels}
-                  aria-controls="whatsapp-sidebar-labels"
-                  onClick={() => toggleSidebarSection('labels')}
-                >
-                  <span>Labels</span>
-                  <ChevronDown
-                    className={cn(cls.sectionChevron, collapsedSidebarSections.labels && '-rotate-90')}
-                  />
-                </button>
-                {!collapsedSidebarSections.labels ? (
-                  <div
-                    id="whatsapp-sidebar-labels"
-                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-slate-500"
-                  >
-                    <Tag className="h-4 w-4" />
-                    No labels
-                  </div>
-                ) : null}
-              </div>
+              <SidebarFilterSection
+                id="whatsapp-sidebar-labels"
+                title="Label"
+                collapsed={collapsedSidebarSections.labels}
+                onOpenChange={(open) => setSidebarSectionOpen('labels', open)}
+              >
+                <div className="flex h-10 items-center gap-2 rounded-xl px-2.5 text-sm text-slate-500 dark:text-slate-400">
+                  <Tag className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                  <span className="truncate">Belum ada label</span>
+                </div>
+              </SidebarFilterSection>
             </div>
           </ScrollArea>
         </aside>
 
         <section
           className={cn(
-            'min-h-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950',
+            cls.listPanel,
             selectedId ? 'hidden lg:flex' : 'flex',
           )}
         >
-          <div className="flex-none border-b border-slate-200 dark:border-slate-800">
+          <div className="flex-none">
             <div className={cls.statGrid}>
                 <InboxStatButton
                   onClick={() => setStatusFilter('open')}
                   active={statusFilter === 'open'}
                   icon={<Circle className="h-4 w-4 text-emerald-600" />}
-                  label="Open"
+                  label="Aktif"
                   count={formatMaybeApproximateCount(openCount)}
                 />
                 <InboxStatButton
                   onClick={() => setStatusFilter('unread')}
                   active={statusFilter === 'unread'}
                   icon={<Mail className="h-4 w-4 text-sky-600" />}
-                  label="Unread"
+                  label="Belum dibaca"
                   count={formatMaybeApproximateCount(unreadCount)}
                 />
                 <InboxStatButton
@@ -2552,26 +2599,26 @@ export function WhatsAppChatsPage() {
                   <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search conversations, contact, or phone"
+                    placeholder="Cari chat, kontak, atau nomor..."
                     className={cls.searchField}
                   />
                 </div>
                 <SmartFilterDate
                   date={dateRange}
                   setDate={setDateRange}
-                  className="w-full [&_button]:h-10 [&_button]:justify-start [&_button]:rounded-lg [&_button]:border-slate-200/90 [&_button]:shadow-none [&_button]:focus-visible:border-emerald-500 [&_button]:focus-visible:ring-2 [&_button]:focus-visible:ring-emerald-100"
+                  className="w-full [&_button]:h-11 [&_button]:justify-start [&_button]:rounded-xl [&_button]:border-slate-200/90 [&_button]:shadow-none [&_button]:focus-visible:border-blue-500 [&_button]:focus-visible:ring-2 [&_button]:focus-visible:ring-blue-100"
                 />
               </div>
               <div className={cls.listToolbar}>
                 <span className="min-w-0 truncate">
-                  Showing {formatNumber(filteredConversations.length)} of {formatMaybeApproximateCount(totalConversationCount)} conversations
+                  Menampilkan {formatNumber(filteredConversations.length)} dari {formatMaybeApproximateCount(totalConversationCount)} percakapan
                 </span>
-                <div className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                <div className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-blue-700 dark:text-blue-300">
                   <span className={cn(
                     'h-2 w-2 rounded-full bg-emerald-500',
                     refreshing && 'animate-pulse',
                   )} />
-                  Live
+                  Realtime
                 </div>
               </div>
             </div>
@@ -2634,22 +2681,17 @@ export function WhatsAppChatsPage() {
               ) : null}
               <WhatsAppContactAvatar
                 src={getConversationAvatarUrl(selectedConversation)}
-                name={selectedConversation?.contactName}
+                name={selectedConversationDisplayName}
                 phone={selectedConversation?.contactPhone}
                 className={cls.avatarHeader}
                 fallback="WA"
               />
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
-                  {selectedConversation
-                    ? selectedConversation.contactName ||
-                      formatPhoneNumber(selectedConversation.contactPhone)
-                    : 'Pilih percakapan'}
+                  {selectedConversation ? selectedConversationDisplayName : 'Pilih percakapan'}
                 </h2>
                 <div className="mt-1 min-w-0 truncate text-xs text-slate-500">
-                  {selectedConversation
-                    ? formatPhoneNumber(selectedConversation.contactPhone)
-                    : 'Pilih thread di kiri untuk membaca isi pesan.'}
+                  {selectedConversation ? selectedConversationSubtitle : 'Pilih thread di kiri untuk membaca isi pesan.'}
                 </div>
               </div>
             </div>
@@ -2700,7 +2742,7 @@ export function WhatsAppChatsPage() {
                   active={showCustomerPanel}
                   className="hidden min-[1900px]:flex"
                   size="sm"
-                  title={showCustomerPanel ? 'Tutup detail customer' : 'Tampilkan detail customer'}
+                  title={showCustomerPanel ? 'Tutup detail kontak' : 'Tampilkan detail kontak'}
                 >
                   <Info className="h-4 w-4" />
                 </IconButton>
@@ -2725,7 +2767,7 @@ export function WhatsAppChatsPage() {
               ) : messagesLoading ? (
                 <div className="flex h-full items-center justify-center text-center">
                   <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                    <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                     Memuat pesan
                   </div>
                 </div>
@@ -2779,7 +2821,8 @@ export function WhatsAppChatsPage() {
 
             <div className={cls.composerDock}>
               {!canSendWhatsAppReply && sendDisabledReason ? (
-                <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                <div className="mb-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   {sendDisabledReason}
                 </div>
               ) : null}
@@ -2896,7 +2939,7 @@ export function WhatsAppChatsPage() {
                       ? 'Audio siap dikirim'
                       : selectedAttachment
                       ? 'Caption opsional...'
-                      : 'Type a message or /shortcut...'
+                      : 'Tulis pesan atau pakai /shortcut...'
                   }
                   className="min-h-10 min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
                   disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy || selectedAttachment?.type === 'audio'}
@@ -2904,7 +2947,7 @@ export function WhatsAppChatsPage() {
                 <Button
                   variant="success"
                   size="icon"
-                  className="h-9 w-9 shrink-0 rounded-md bg-emerald-500 hover:bg-emerald-600"
+                  className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 shadow-[0_12px_28px_rgba(37,99,235,0.28)] hover:from-sky-500 hover:to-blue-800"
                   onClick={() => void handleSendMessage()}
                   disabled={!hasComposerPayload || !canSendWhatsAppReply || composerBusy}
                 >
@@ -2922,12 +2965,12 @@ export function WhatsAppChatsPage() {
         {showCustomerPanel ? (
           <aside className="hidden min-h-0 overflow-hidden border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 min-[1900px]:flex min-[1900px]:flex-col">
             <div className={cls.headerBand}>
-              <h2 className="text-sm font-semibold text-slate-950 dark:text-slate-100">Customer</h2>
+              <h2 className="text-sm font-semibold text-slate-950 dark:text-slate-100">Detail Kontak</h2>
               <IconButton
                 onClick={() => setShowCustomerPanel(false)}
                 className="text-slate-500"
                 size="sm"
-                title="Tutup detail customer"
+                title="Tutup detail kontak"
               >
                 <X className="h-4 w-4" />
               </IconButton>
@@ -2938,28 +2981,28 @@ export function WhatsAppChatsPage() {
                 <div className="border-b border-slate-200 px-4 py-5 text-center dark:border-slate-800">
                   <WhatsAppContactAvatar
                     src={getConversationAvatarUrl(selectedConversation)}
-                    name={selectedConversation.contactName}
+                    name={selectedConversationDisplayName}
                     phone={selectedConversation.contactPhone}
                     className="mx-auto flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-base font-semibold text-slate-900 dark:bg-slate-800 dark:text-slate-100"
                   />
                   <div
                     className="mt-3 truncate font-semibold text-slate-950 dark:text-slate-100"
-                    title={selectedConversation.contactName || formatPhoneNumber(selectedConversation.contactPhone)}
+                    title={selectedConversationDisplayName}
                   >
-                    {selectedConversation.contactName || 'Kontak tanpa nama'}
+                    {selectedConversationDisplayName}
                   </div>
                   <div
                     className="mt-2 flex min-w-0 items-center justify-center gap-1 text-xs text-slate-500"
-                    title={formatPhoneNumber(selectedConversation.contactPhone)}
+                    title={selectedConversationSubtitle}
                   >
                     <Smartphone className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{formatPhoneNumber(selectedConversation.contactPhone)}</span>
+                    <span className="truncate">{selectedConversationSubtitle}</span>
                   </div>
                 </div>
 
                 <div className="border-b border-slate-200 px-3 py-3 dark:border-slate-800">
                   <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-100 p-1 text-xs dark:bg-slate-900">
-                    {['Details', 'Activity', 'Notes', 'Deals'].map((tab, index) => (
+                    {['Detail', 'Aktivitas', 'Catatan', 'Deal'].map((tab, index) => (
                       <button
                         key={tab}
                         disabled={index !== 0}
@@ -2987,21 +3030,21 @@ export function WhatsAppChatsPage() {
                       {selectedConversationStatusLabel}
                     </StatusChip>
                     <div className="flex items-center justify-between gap-3 pt-2">
-                      <span className="text-slate-500">Assigned to</span>
-                      <span className="truncate font-medium text-slate-700 dark:text-slate-200">Unassigned</span>
+                      <span className="text-slate-500">Ditugaskan ke</span>
+                      <span className="truncate font-medium text-slate-700 dark:text-slate-200">Belum ditugaskan</span>
                     </div>
                   </div>
 
                   <div className="space-y-2 px-4 py-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      Name
+                      Nama
                     </div>
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
                       <span
                         className="min-w-0 truncate font-medium text-slate-950 dark:text-slate-100"
-                        title={selectedConversation.contactName || 'Kontak tanpa nama'}
+                        title={selectedConversationDisplayName}
                       >
-                        {selectedConversation.contactName || 'Kontak tanpa nama'}
+                        {selectedConversationDisplayName}
                       </span>
                       <button
                         className="cursor-not-allowed text-xs font-medium text-slate-400"
@@ -3018,20 +3061,20 @@ export function WhatsAppChatsPage() {
                       Email
                     </div>
                     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-                      <span className="min-w-0 truncate text-slate-500">No email</span>
+                      <span className="min-w-0 truncate text-slate-500">Email belum ada</span>
                       <button
                         className="cursor-not-allowed text-xs font-medium text-slate-400"
                         disabled
                         title="Email kontak belum tersedia di data conversation."
                       >
-                        Add
+                        Tambah
                       </button>
                     </div>
                   </div>
 
                   <div className="space-y-2 px-4 py-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      Labels
+                      Label
                     </div>
                     <button
                       className="flex cursor-not-allowed items-center gap-1 text-slate-400"
@@ -3039,13 +3082,13 @@ export function WhatsAppChatsPage() {
                       title="Label conversation belum tersedia di backend."
                     >
                       <Tag className="h-4 w-4" />
-                      Add label
+                      Tambah label
                     </button>
                   </div>
 
                   <div className="space-y-2 px-4 py-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      Conversation
+                      Percakapan
                     </div>
                     <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3">
                       <span className="text-slate-500">Provider</span>
@@ -3054,7 +3097,7 @@ export function WhatsAppChatsPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-slate-500">Account</span>
+                      <span className="text-slate-500">Akun</span>
                       <span
                         className="min-w-0 truncate text-right font-medium text-slate-950 dark:text-slate-100"
                         title={selectedConversationAccountLabel}
@@ -3063,25 +3106,25 @@ export function WhatsAppChatsPage() {
                       </span>
                     </div>
                     <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-slate-500">Created</span>
+                      <span className="text-slate-500">Dibuat</span>
                       <span className="min-w-0 truncate text-right font-medium text-slate-950 dark:text-slate-100">
                         {formatRelativeTime(selectedConversation.updatedAt)}
                       </span>
                     </div>
                     <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-slate-500">Last message</span>
+                      <span className="text-slate-500">Pesan terakhir</span>
                       <span className="min-w-0 truncate text-right font-medium text-slate-950 dark:text-slate-100">
                         {formatRelativeTime(selectedConversation.lastMessageAt)}
                       </span>
                     </div>
                     <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-slate-500">Last inbound</span>
+                      <span className="text-slate-500">Inbound terakhir</span>
                       <span className="min-w-0 truncate text-right font-medium text-slate-950 dark:text-slate-100">
                         {selectedLastInboundAt ? formatRelativeTime(selectedLastInboundAt) : 'Belum ada inbound'}
                       </span>
                     </div>
                     <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-3">
-                      <span className="text-slate-500">Messages</span>
+                      <span className="text-slate-500">Jumlah pesan</span>
                       <span className="min-w-0 truncate text-right font-medium text-slate-950 dark:text-slate-100">
                         {formatNumber(selectedMessageCount)}
                         {selectedConversation.mergedConversationCount && selectedConversation.mergedConversationCount > 1
@@ -3093,7 +3136,7 @@ export function WhatsAppChatsPage() {
 
                   <div className="space-y-2 px-4 py-4">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      24h Service Window
+                      Jendela Layanan 24 Jam
                     </div>
                     <div
                       className={cn(
@@ -3111,7 +3154,7 @@ export function WhatsAppChatsPage() {
                       </div>
                       <div className="mt-1 text-xs">
                         {selectedServiceWindow.isOpen
-                          ? `${selectedServiceWindow.remainingLabel} remaining`
+                          ? `${selectedServiceWindow.remainingLabel} tersisa`
                           : selectedServiceWindow.remainingLabel}
                       </div>
                     </div>

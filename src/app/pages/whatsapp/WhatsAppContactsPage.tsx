@@ -7,15 +7,14 @@ import {
   RefreshCcw,
   Search,
   Smartphone,
-  UserRound,
   Users,
 } from 'lucide-react';
 
 import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
+import { createDataTableColumns, DataTable } from '@/app/components/ui/data-table';
 import { Input } from '@/app/components/ui/input';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -24,6 +23,7 @@ import {
   SelectValue,
 } from '@/app/components/ui/select';
 import { Skeleton } from '@/app/components/ui/skeleton';
+import { MasterDataTableTitle } from '@/app/components/ui/master-data-table-title';
 import {
   Table,
   TableBody,
@@ -48,6 +48,7 @@ import {
   getProviderLabel,
   WhatsAppContactAvatar,
 } from './components/whatsappModuleShared';
+import { WhatsAppModuleFrame } from './components/WhatsAppModuleFrame';
 import { useWhatsAppOverview } from './useWhatsAppOverview';
 
 const ALL_CS_FILTER = 'all';
@@ -100,15 +101,18 @@ function isNewerContact(left: WhatsAppContact, right: WhatsAppContact) {
 }
 
 function getContactName(contact: WhatsAppContact) {
-  return contact.name?.trim() || 'Kontak tanpa nama';
+  const name = contact.name?.trim();
+  if (name && name !== '.' && name !== '-' && !/^\d+$/.test(name)) return name;
+  return formatPhoneNumber(contact.phoneNumber) || 'Kontak WhatsApp';
 }
 
 function hasContactName(contact: WhatsAppContact) {
-  return Boolean(contact.name?.trim());
+  const name = contact.name?.trim();
+  return Boolean(name && name !== '.' && name !== '-' && !/^\d+$/.test(name));
 }
 
 function getContactCsLabel(contact: WhatsAppContact) {
-  return contact.csDisplayName?.trim() || 'Unassigned';
+  return contact.csDisplayName?.trim() || 'Belum ada CS';
 }
 
 function getContactAccountLabel(contact: WhatsAppContact) {
@@ -316,13 +320,12 @@ function CsOwnerBadge({ contact }: { contact: WhatsAppContact }) {
   return (
     <span
       className={cn(
-        'inline-flex h-8 max-w-[180px] items-center gap-2 rounded-md border px-3 text-xs font-medium shadow-sm',
+        'inline-flex h-7 max-w-[180px] items-center rounded-full border px-3 text-xs font-semibold',
         mapped
-          ? 'border-emerald-200 bg-white text-slate-700 dark:border-emerald-900/60 dark:bg-slate-950 dark:text-slate-200'
-          : 'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400',
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+          : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400',
       )}
     >
-      <UserRound className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate">{getContactCsLabel(contact)}</span>
     </span>
   );
@@ -479,34 +482,107 @@ export function WhatsAppContactsPage() {
   };
 
   const contactTabs: Array<{ id: ContactTab; label: string; count: number }> = [
-    { id: 'all', label: 'All', count: visibleContactRows.length },
-    { id: 'named', label: 'Named', count: namedCount },
-    { id: 'unnamed', label: 'Unnamed', count: visibleContactRows.length - namedCount },
-    { id: 'mapped', label: 'CS mapped', count: mappedCount },
-    { id: 'unmapped', label: 'Unassigned', count: unmappedCount },
+    { id: 'all', label: 'Semua', count: visibleContactRows.length },
+    { id: 'named', label: 'Bernama', count: namedCount },
+    { id: 'unnamed', label: 'Tanpa Nama', count: visibleContactRows.length - namedCount },
+    { id: 'mapped', label: 'Terhubung CS', count: mappedCount },
+    { id: 'unmapped', label: 'Belum CS', count: unmappedCount },
   ];
   const csSelectValue = isCsScopedUser ? currentUser?.id || ALL_CS_FILTER : csFilter;
   const currentCsLabel = currentUser ? getUserDisplayName(currentUser) : 'CS';
 
   return (
-    <div className="w-full px-4 py-5 sm:px-6 lg:px-8">
-      <div className="w-full max-w-[1600px] space-y-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <WhatsAppModuleFrame
+      activeId="whatsapp-contacts"
+      badges={['WhatsApp', 'Kontak']}
+      stats={[
+        {
+          label: 'Total Kontak',
+          value: formatNumber(visibleContactRows.length),
+          hint: 'Nomor unik dari semua akun aktif.',
+        },
+        {
+          label: 'Kontak Bernama',
+          value: formatNumber(namedCount),
+          hint: 'Kontak dengan nama yang valid.',
+        },
+        {
+          label: 'Terhubung CS',
+          value: formatNumber(mappedCount),
+          hint: 'Kontak yang sudah punya owner.',
+        },
+        {
+          label: 'Belum CS',
+          value: formatNumber(unmappedCount),
+          hint: 'Perlu dipetakan ke akun CS.',
+        },
+      ]}
+      actions={
+        <Button
+          type="button"
+          className="h-12 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-700 px-5 text-white shadow-[0_16px_34px_rgba(2,132,199,0.24)] hover:from-sky-500 hover:to-blue-800"
+          onClick={() => void refreshAll()}
+          disabled={loading || isRefreshing}
+        >
+          {isRefreshing ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCcw className="mr-2 h-4 w-4" />
+          )}
+          Refresh
+        </Button>
+      }
+    >
+      {error ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
-              Contacts
-            </h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Manage WhatsApp contacts collected from Kirimdev and Meta webhooks.
-            </p>
+            <div className="font-semibold">Daftar kontak belum berhasil dimuat.</div>
+            <div className="mt-1">{error}</div>
+          </div>
+        </div>
+      ) : null}
+
+      <Card className="rounded-[28px] border-slate-200 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-4">
+          <div className="flex w-full flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+            {contactTabs.map((tab) => {
+              const active = tabFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTabFilter(tab.id)}
+                  className={cn(
+                    'inline-flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all',
+                    active
+                      ? 'border border-blue-200 bg-white text-blue-700 shadow-sm'
+                      : 'text-slate-500 hover:bg-white/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100',
+                  )}
+                >
+                  {tab.label}
+                  <FilterCount value={tab.count} />
+                </button>
+              );
+            })}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid gap-3 xl:grid-cols-[minmax(280px,1fr)_220px_260px_128px]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Cari nama, nomor, email, akun, atau CS..."
+                className="h-14 rounded-2xl border-slate-200 bg-white pl-14 text-base shadow-sm dark:border-slate-800 dark:bg-slate-950"
+              />
+            </div>
+
             <Select
               value={providerFilter}
               onValueChange={(value) => setProviderFilter(value as 'all' | WhatsAppProvider)}
             >
-              <SelectTrigger className="h-10 w-[180px] border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-white px-5 text-base font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <SelectValue placeholder="Provider" />
               </SelectTrigger>
               <SelectContent>
@@ -518,12 +594,8 @@ export function WhatsAppContactsPage() {
               </SelectContent>
             </Select>
 
-            <Select
-              value={csSelectValue}
-              onValueChange={setCsFilter}
-              disabled={isCsScopedUser}
-            >
-              <SelectTrigger className="h-10 w-[220px] border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <Select value={csSelectValue} onValueChange={setCsFilter} disabled={isCsScopedUser}>
+              <SelectTrigger className="h-14 rounded-2xl border-slate-200 bg-white px-5 text-base font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <SelectValue placeholder="Filter CS" />
               </SelectTrigger>
               <SelectContent>
@@ -540,7 +612,7 @@ export function WhatsAppContactsPage() {
                       </SelectItem>
                     ))}
                     <SelectItem value={UNASSIGNED_CS_FILTER}>
-                      Unassigned ({formatNumber(unmappedCount)})
+                      Belum CS ({formatNumber(unmappedCount)})
                     </SelectItem>
                   </>
                 )}
@@ -550,241 +622,166 @@ export function WhatsAppContactsPage() {
             <Button
               type="button"
               variant="outline"
-              className="h-10 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              className="h-14 rounded-2xl border-slate-200 bg-white px-5 text-base font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950"
               disabled={!hasActiveFilters}
               onClick={resetFilters}
             >
               Reset
             </Button>
-
-            <Button
-              type="button"
-              className="h-10 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-              onClick={() => void refreshAll()}
-              disabled={loading || isRefreshing}
-            >
-              {isRefreshing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCcw className="mr-2 h-4 w-4" />
-              )}
-              Refresh
-            </Button>
           </div>
         </div>
+      </Card>
 
-        {error ? (
-          <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <div className="font-semibold">Daftar kontak belum berhasil dimuat.</div>
-              <div className="mt-1">{error}</div>
-            </div>
-          </div>
-        ) : null}
+      <Card className="overflow-hidden rounded-[28px] border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-2 px-6 py-5">
+          <MasterDataTableTitle
+            title="Data Kontak WhatsApp"
+            count={formatNumber(filteredContacts.length)}
+            icon={Users}
+            variant="active"
+          />
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Menampilkan kontak dari akun WhatsApp yang aktif dan sudah disatukan dari duplikasi nomor.
+            {duplicateCount > 0 ? ` ${formatNumber(duplicateCount)} data duplikat digabung.` : ''}
+          </p>
+        </div>
 
-        <Card className="overflow-hidden rounded-xl border-emerald-100 bg-white shadow-sm dark:border-emerald-950/60 dark:bg-slate-900">
-          <div className="flex flex-col gap-4 border-b border-emerald-100 p-5 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">
-                  All contacts
-                </h2>
-                <Badge className="rounded-full bg-emerald-100 px-2 text-emerald-800 hover:bg-emerald-100">
-                  {formatNumber(filteredContacts.length)} / {formatNumber(visibleContactRows.length)}
-                </Badge>
-                {duplicateCount > 0 ? (
-                  <Badge variant="outline" className="rounded-full border-slate-200 text-slate-500">
-                    {formatNumber(duplicateCount)} merged
-                  </Badge>
-                ) : null}
-              </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                People reachable from this WhatsApp workspace.
-              </p>
-            </div>
-
-            <div className="relative w-full lg:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search contacts..."
-                className="h-11 border-slate-200 bg-white pl-9 shadow-sm dark:border-slate-800 dark:bg-slate-950"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6 border-b border-emerald-100 px-5 dark:border-slate-800">
-            {contactTabs.map((tab) => {
-              const active = tabFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setTabFilter(tab.id)}
-                  className={cn(
-                    'relative flex h-12 items-center text-sm font-medium text-slate-600 transition-colors hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-100',
-                    active && 'text-emerald-700 dark:text-emerald-300',
-                  )}
-                >
-                  {tab.label}
-                  <FilterCount value={tab.count} />
-                  {active ? (
-                    <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-emerald-600" />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-
-          <ScrollArea className="h-[calc(100dvh-330px)] min-h-[520px]">
-            <Table className="min-w-[1080px]">
-              <TableHeader className="sticky top-0 z-10 bg-emerald-50/80 dark:bg-slate-950">
-                <TableRow className="border-emerald-100 hover:bg-transparent dark:border-slate-800">
-                  <TableHead className="h-11 pl-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Contact
-                  </TableHead>
-                  <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Email
-                  </TableHead>
-                  <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Labels
-                  </TableHead>
-                  <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Owner
-                  </TableHead>
-                  <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Source
-                  </TableHead>
-                  <TableHead className="h-11 pr-5 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Created
-                  </TableHead>
+        <DataTable
+          columns={createDataTableColumns(['number', 'name', 'text', 'status', 'status', 'text', 'date'])}
+          primaryLines={2}
+          secondaryLines={2}
+          rowMinHeight={88}
+        >
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>No</TableHead>
+                <TableHead>Kontak</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Label</TableHead>
+                <TableHead>CS</TableHead>
+                <TableHead>Sumber</TableHead>
+                <TableHead>Dibuat</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 7 }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell><Skeleton className="mx-auto h-4 w-4" /></TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-36" />
+                          <Skeleton className="h-3 w-28" />
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="mx-auto h-7 w-24 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="mx-auto h-7 w-28 rounded-full" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  </TableRow>
+                ))
+              ) : filteredContacts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-72 text-center">
+                    <div className="mx-auto flex max-w-sm flex-col items-center justify-center gap-3 text-slate-500">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">
+                        Belum ada kontak yang sesuai.
+                      </div>
+                      <p className="text-sm leading-6">
+                        Kontak akan muncul setelah event inbound masuk, lalu bisa difilter berdasarkan provider dan CS.
+                      </p>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 7 }).map((_, index) => (
-                    <TableRow key={index} className="h-[70px] border-emerald-100/70 dark:border-slate-800">
-                      <TableCell className="pl-5">
-                        <div className="flex items-center gap-3">
-                          <Skeleton className="h-9 w-9 rounded-full" />
-                          <div className="space-y-2">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-3 w-24" />
+              ) : (
+                filteredContacts.map((contact, index) => {
+                  const createdAt = contact.createdAt || contact.updatedAt;
+                  return (
+                    <TableRow key={getContactGroupKey(contact)}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <WhatsAppContactAvatar
+                            src={getContactAvatarUrl(contact)}
+                            name={getContactName(contact)}
+                            phone={contact.phoneNumber}
+                            className={cn(
+                              'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold',
+                              getAvatarClassName(contact),
+                            )}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm font-semibold text-slate-950 dark:text-slate-100">
+                                {getContactName(contact)}
+                              </span>
+                              {contact.duplicateCount > 1 ? (
+                                <Badge variant="outline" className="h-5 shrink-0 rounded-full px-1.5 text-[10px]">
+                                  x{formatNumber(contact.duplicateCount)}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-medium text-slate-500">
+                              <Phone className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{formatPhoneNumber(contact.phoneNumber)}</span>
+                            </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-24 rounded-full" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-32 rounded-md" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
-                      <TableCell className="pr-5"><Skeleton className="h-4 w-24" /></TableCell>
-                    </TableRow>
-                  ))
-                ) : filteredContacts.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-72 text-center">
-                      <div className="mx-auto flex max-w-sm flex-col items-center justify-center gap-3 text-slate-500">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                          <Users className="h-5 w-5" />
-                        </div>
-                        <div className="font-semibold text-slate-900 dark:text-slate-100">
-                          Belum ada kontak yang sesuai.
-                        </div>
-                        <p className="text-sm leading-6">
-                          Kontak akan muncul setelah event inbound masuk, lalu bisa difilter berdasarkan provider dan CS.
-                        </p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredContacts.map((contact) => {
-                    const createdAt = contact.createdAt || contact.updatedAt;
-                    return (
-                      <TableRow
-                        key={getContactGroupKey(contact)}
-                        className="h-[70px] border-emerald-100/70 hover:bg-emerald-50/30 dark:border-slate-800 dark:hover:bg-slate-950/50"
-                      >
-                        <TableCell className="pl-5">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <WhatsAppContactAvatar
-                              src={getContactAvatarUrl(contact)}
-                              name={contact.name}
-                              phone={contact.phoneNumber}
-                              className={cn(
-                                'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-semibold',
-                                getAvatarClassName(contact),
-                              )}
-                            />
-                            <div className="min-w-0">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="truncate font-semibold text-slate-950 dark:text-slate-100">
-                                  {getContactName(contact)}
-                                </span>
-                                {contact.duplicateCount > 1 ? (
-                                  <Badge variant="outline" className="h-5 shrink-0 rounded-full px-1.5 text-[10px]">
-                                    x{formatNumber(contact.duplicateCount)}
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
-                                <Phone className="h-3.5 w-3.5 shrink-0" />
-                                <span className="truncate">{formatPhoneNumber(contact.phoneNumber)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-
-                        <TableCell className="text-sm text-slate-500">
+                      <TableCell>
+                        <span className="block truncate text-sm font-medium text-slate-600 dark:text-slate-300">
                           {contact.email?.trim() || '-'}
-                        </TableCell>
-
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <ProviderBadge provider={contact.provider} />
-                            {contact.csProfileId ? (
-                              <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700">
-                                <Check className="mr-1 h-3 w-3" />
-                                CS
-                              </Badge>
-                            ) : null}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <ProviderBadge provider={contact.provider} />
+                          {contact.csProfileId ? (
+                            <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700">
+                              <Check className="mr-1 h-3 w-3" />
+                              CS
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <CsOwnerBadge contact={contact} />
+                      </TableCell>
+                      <TableCell>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {getProviderLabel(contact.provider)}
                           </div>
-                        </TableCell>
-
-                        <TableCell>
-                          <CsOwnerBadge contact={contact} />
-                        </TableCell>
-
-                        <TableCell>
-                          <div className="min-w-0">
-                            <div className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                              {getProviderLabel(contact.provider)}
-                            </div>
-                            <div className="mt-1 flex max-w-[260px] items-center gap-1.5 text-xs text-slate-500">
-                              <Smartphone className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate">{getContactAccountLabel(contact)}</span>
-                            </div>
+                          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-medium text-slate-500">
+                            <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{getContactAccountLabel(contact)}</span>
                           </div>
-                        </TableCell>
-
-                        <TableCell className="pr-5">
-                          <div className="text-sm font-medium text-slate-950 dark:text-slate-100">
-                            {formatRelativeDate(createdAt)}
-                          </div>
-                          <div className="mt-0.5 text-xs text-slate-500" title={formatDateTime(createdAt)}>
-                            {formatDateOnly(createdAt)}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </Card>
-      </div>
-    </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {formatRelativeDate(createdAt)}
+                        </div>
+                        <div className="mt-1 text-xs font-medium text-slate-500" title={formatDateTime(createdAt)}>
+                          {formatDateOnly(createdAt)}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </DataTable>
+      </Card>
+    </WhatsAppModuleFrame>
   );
 }
