@@ -88,6 +88,7 @@ import {
   MasterDataFieldLabel,
 } from '../components/ui/master-data-ui';
 import { Switch } from '../components/ui/switch';
+import { upsertCrmContactSnapshot } from '@/app/services/crmContactsService';
 import {
   formatLeadSocialHandle,
   getLeadSocialPlatformLabel,
@@ -806,6 +807,49 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     );
   }
 
+  const syncLeadContactSnapshot = (lead: Lead) => {
+    const leadRecord = lead as Lead & Record<string, unknown>;
+    const displayName = typeof leadRecord.name === 'string' ? leadRecord.name.trim() : '';
+    const phoneRaw = typeof leadRecord.phone === 'string' ? leadRecord.phone.trim() : '';
+    const email = typeof leadRecord.email === 'string' ? leadRecord.email.trim() : '';
+    const snapshotName = displayName || phoneRaw || email;
+
+    if (!snapshotName) return;
+
+    void upsertCrmContactSnapshot({
+      displayName: snapshotName,
+      phoneRaw,
+      email,
+      contactType: 'prospect',
+      status: 'active',
+      sourceModule: 'prospek',
+      sourceLabel: 'Prospek',
+      sourceRefId: leadRecord.id ? String(leadRecord.id) : null,
+      lastInteractionAt: typeof leadRecord.timestamp === 'string' ? leadRecord.timestamp : new Date().toISOString(),
+      notes: typeof leadRecord.notes === 'string' ? leadRecord.notes : null,
+      metadata: {
+        status: leadRecord.status ?? null,
+        lastContact: leadRecord.lastContact ?? null,
+        platformId: leadRecord.platformId ?? null,
+        sourceId: leadRecord.sourceId ?? null,
+        subChannelId: leadRecord.subChannelId ?? null,
+        advertiserId: leadRecord.advertiserId ?? null,
+        affiliateId: leadRecord.affiliateId ?? null,
+        csId: leadRecord.csId ?? null,
+        vehicleId: leadRecord.vehicleId ?? null,
+        serviceId: leadRecord.serviceId ?? null,
+        origin: leadRecord.origin ?? null,
+        embedFormId: leadRecord.embedFormId ?? null,
+        embedFormSlug: leadRecord.embedFormSlug ?? null,
+        embedFormName: leadRecord.embedFormName ?? null,
+        socialPlatform: leadRecord.socialPlatform ?? null,
+        socialUsername: leadRecord.socialUsername ?? null,
+        socialProfileUrl: leadRecord.socialProfileUrl ?? null,
+        socialChatUrl: leadRecord.socialChatUrl ?? null,
+      },
+    }).catch((error) => console.warn('Gagal sinkron kontak CRM dari prospek:', error));
+  };
+
   const handleSubmit = (formData: any) => {
     // Sanitize foreign keys: convert "none_*" and empty strings to undefined
     if (formData.advertiserId === "none_advertiser" || formData.advertiserId === "") formData.advertiserId = undefined;
@@ -818,7 +862,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     Object.assign(formData, normalizedSocialFields);
 
     if (editingItem) {
-      updateLead({ ...editingItem, ...formData });
+      const updatedLead = { ...editingItem, ...formData };
+      updateLead(updatedLead);
+      syncLeadContactSnapshot(updatedLead);
       toast.success("Prospek berhasil diperbarui");
       if (currentUser) {
         logActivity(
@@ -850,6 +896,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       console.log("Submitting new lead:", newItem); // Debug log
       try {
           addLead(newItem);
+          syncLeadContactSnapshot(newItem);
           toast.success("Prospek berhasil ditambahkan");
           if (currentUser) {
             logActivity(

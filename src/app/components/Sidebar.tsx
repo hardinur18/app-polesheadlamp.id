@@ -85,20 +85,20 @@ const NAV_GROUPS: NavGroup[] = [
         canNavigate: false,
         children: [
           { icon: UserPlus, label: 'Prospek', id: 'leads', permission: 'leads.view' },
+          { icon: Users, label: 'Kontak', id: 'whatsapp-contacts', permission: 'whatsapp.view' },
           { icon: ClipboardList, label: 'Form Embed', id: 'embed-forms', permission: 'leads.view' },
           { icon: Images, label: 'Galeri Bukti', id: 'proof-assets', permission: 'proof_assets.view' },
         ],
       },
       {
         icon: MessageSquare,
-        label: 'WhatsApp',
+        label: 'Live Chat',
         id: 'whatsapp',
         permission: 'whatsapp.view',
         children: [
-          { icon: MessageSquare, label: 'Chats', id: 'whatsapp-chats', permission: 'whatsapp.view' },
-          { icon: Users, label: 'Kontak', id: 'whatsapp-contacts', permission: 'whatsapp.view' },
+          { icon: MessageSquare, label: 'Live Chat', id: 'whatsapp-chats', permission: 'whatsapp.view' },
           { icon: FileText, label: 'Template Pesan', id: 'whatsapp-templates', permission: 'whatsapp.templates.manage' },
-          { icon: Settings, label: 'Pengaturan WhatsApp', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
+          { icon: Settings, label: 'Akun WA', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
         ],
       },
       {

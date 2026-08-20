@@ -1545,6 +1545,16 @@
   }
 }
 
+.waMobileOnlyAction {
+  display: none !important;
+}
+
+@media (max-width: 639px) {
+  .waMobileOnlyAction {
+    display: inline-flex !important;
+  }
+}
+
 .appShell.sidebarCollapsed {
   grid-template-columns: 88px minmax(0, 1fr);
 }
@@ -10336,7 +10346,23 @@ body {
   font-weight: 800;
 }
 
+.waComposerTextarea {
+  display: block;
+  width: 100%;
+  min-height: 42px !important;
+  max-height: 132px;
+  text-align: left !important;
+}
+
+.waComposerTextarea::placeholder {
+  text-align: left !important;
+}
+
 @media (max-width: 767px) {
+  .waChatComposerDock {
+    padding-bottom: calc(86px + env(safe-area-inset-bottom)) !important;
+  }
+
   .waTemplateTopbar {
     padding-bottom: 0;
   }

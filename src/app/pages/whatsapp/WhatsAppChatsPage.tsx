@@ -1,10 +1,12 @@
 import React from 'react';
 import type { DateRange } from 'react-day-picker';
+import { useNavigate } from 'react-router';
 import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
+  ClipboardList,
   Circle,
   Clock3,
   ExternalLink,
@@ -27,6 +29,7 @@ import {
   Send,
   Smartphone,
   Tag,
+  UserPlus,
   Video,
   Wifi,
   X,
@@ -53,6 +56,7 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { cn } from '@/app/components/ui/utils';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { useMasterData } from '@/app/pages/master-data/context';
+import type { Lead } from '@/app/pages/master-data/data';
 import { supabase } from '@/lib/supabaseClient';
 import {
   fetchWhatsAppConversationsPage,
@@ -67,6 +71,7 @@ import {
   type WhatsAppOutboundMediaType,
   type WhatsAppProvider,
 } from '@/app/services/whatsappModuleService';
+import { snapshotCrmContacts, type CrmContactSnapshotInput } from '@/app/services/crmContactsService';
 import {
   MessageStatusBadge,
   ProviderBadge,
@@ -103,6 +108,8 @@ const STATUS_FILTERS: Array<{ id: InboxStatusFilter; label: string }> = [
   { id: 'pending', label: 'Menunggu' },
   { id: 'resolved', label: 'Selesai' },
 ];
+
+const MANUAL_WHATSAPP_LEAD_ORIGIN = 'manual_wa_chat';
 
 const DEFAULT_COLLAPSED_SIDEBAR_SECTIONS: Record<SidebarSectionId, boolean> = {
   status: false,
@@ -161,7 +168,7 @@ const KIRIMDEV_INBOX_AUTO_SYNC_MIN_INTERVAL_MS = 4_000;
 const KIRIMDEV_INBOX_SYNC_CONVERSATION_LIMIT = 50;
 const KIRIMDEV_INBOX_SYNC_MESSAGE_LIMIT = 10;
 const CONVERSATION_PAGE_SIZE = 120;
-const MESSAGE_PREFETCH_LIMIT = 16;
+const MESSAGE_PREFETCH_LIMIT = 6;
 const MESSAGE_CACHE_MAX = 80;
 const CONVERSATION_PAGE_CACHE_TTL_MS = 10 * 60 * 1000;
 const REALTIME_REFRESH_DEBOUNCE_MS = 300;
@@ -421,6 +428,16 @@ function normalizeComparablePhoneNumber(value: string | null | undefined) {
   if (normalized.startsWith('0')) return `62${normalized.slice(1)}`;
   if (normalized.startsWith('8')) return `62${normalized}`;
   return normalized;
+}
+
+function generateManualWhatsAppLeadId() {
+  const timeSeed = Date.now().toString(36).slice(-5);
+  const randomSeed = Math.random().toString(36).slice(2, 6);
+  return `WA-${timeSeed}${randomSeed}`.toUpperCase();
+}
+
+function isOpenLeadStatus(status: Lead['status']) {
+  return status !== 'Closing' && status !== 'Cancel';
 }
 
 function getAccountComparablePhoneNumber(account: WhatsAppAccount) {
@@ -1049,9 +1066,9 @@ const ConversationListRow = React.memo(function ConversationListRow({
       onMouseEnter={() => onPrefetch?.(conversation)}
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        'grid min-h-[var(--wa-row-h)] w-full grid-cols-[var(--wa-avatar-row)_minmax(0,1fr)_var(--wa-row-meta-w)] items-start gap-3 border-l-2 border-transparent px-4 py-3 text-left transition-colors',
+        'mx-2 grid min-h-[var(--wa-row-h)] w-[calc(100%-1rem)] grid-cols-[var(--wa-avatar-row)_minmax(0,1fr)_var(--wa-row-meta-w)] items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors',
         isActive
-          ? 'border-blue-500 bg-blue-50/70 text-slate-950 dark:bg-blue-950/30 dark:text-blue-100'
+          ? 'bg-blue-50/70 text-slate-950 shadow-[inset_3px_0_0_#3b82f6] ring-1 ring-blue-100 dark:bg-blue-950/30 dark:text-blue-100 dark:ring-blue-900/60'
           : 'hover:bg-slate-50 dark:hover:bg-slate-900/70',
       )}
     >
@@ -1205,6 +1222,7 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
 );
 
 export function WhatsAppChatsPage() {
+  const navigate = useNavigate();
   const {
     data,
     loading: overviewLoading,
@@ -1219,7 +1237,7 @@ export function WhatsAppChatsPage() {
     includePerformance: false,
     showAutoRefreshIndicator: false,
   });
-  const { users } = useMasterData();
+  const { users, leads, addLead, currentUser } = useMasterData();
   const { hasPermission } = usePermissions();
   const [search, setSearch] = React.useState('');
   const deferredSearch = React.useDeferredValue(search);
@@ -1241,15 +1259,30 @@ export function WhatsAppChatsPage() {
   const [conversationsLoading, setConversationsLoading] = React.useState(true);
   const [conversationsRefreshing, setConversationsRefreshing] = React.useState(false);
   const [conversationsError, setConversationsError] = React.useState<string | null>(null);
-  const [composerText, setComposerText] = React.useState('');
+  const composerTextRef = React.useRef('');
+  const composerTextareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const [hasComposerText, setHasComposerText] = React.useState(false);
   const [selectedAttachment, setSelectedAttachment] = React.useState<ComposerAttachment | null>(null);
   const [sendingMessage, setSendingMessage] = React.useState(false);
+  const [creatingProspectFromChat, setCreatingProspectFromChat] = React.useState(false);
   const [uploadingAttachment, setUploadingAttachment] = React.useState(false);
   const [showCustomerPanel, setShowCustomerPanel] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isDesktopInbox, setIsDesktopInbox] = React.useState(() =>
+    typeof window === 'undefined' ? true : window.matchMedia('(min-width: 1024px)').matches,
+  );
   const [collapsedSidebarSections, setCollapsedSidebarSections] = React.useState(
     DEFAULT_COLLAPSED_SIDEBAR_SECTIONS,
   );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const handleChange = (event: MediaQueryListEvent) => setIsDesktopInbox(event.matches);
+    setIsDesktopInbox(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   React.useEffect(() => {
     if (!isFullscreen) return;
@@ -1279,6 +1312,7 @@ export function WhatsAppChatsPage() {
   const accountBreakdownInFlightKeyRef = React.useRef<string | null>(null);
   const realtimeRefreshTimerRef = React.useRef<number | null>(null);
   const loadConversationPageRef = React.useRef<((options?: { silent?: boolean }) => Promise<void>) | null>(null);
+  const crmSnapshotKeysRef = React.useRef<Set<string>>(new Set());
   const loadMessagesRef = React.useRef<
     ((conversation: WhatsAppConversation, options?: { silent?: boolean; sync?: boolean; older?: boolean; showIndicator?: boolean }) => Promise<void>) | null
   >(null);
@@ -1324,6 +1358,48 @@ export function WhatsAppChatsPage() {
       return next;
     });
     conversationPageStateCacheKeyRef.current = cacheKey;
+  }, []);
+
+  const snapshotConversationsToCrm = React.useCallback((items: WhatsAppConversation[]) => {
+    const inputs: CrmContactSnapshotInput[] = [];
+
+    items.forEach((conversation) => {
+      const phone = conversation.contactPhone?.trim() || null;
+      const sourceRefId = conversation.contactId || conversation.id;
+      const phoneKey = (phone || '').replace(/\D/g, '');
+      const dedupeKey = phoneKey ? `phone:${phoneKey}` : `conversation:${sourceRefId}`;
+      if (crmSnapshotKeysRef.current.has(dedupeKey)) return;
+      crmSnapshotKeysRef.current.add(dedupeKey);
+
+      inputs.push({
+        displayName: conversation.contactName?.trim() || phone || 'Kontak WhatsApp',
+        whatsappName: conversation.contactName,
+        phoneRaw: phone,
+        contactType: 'prospect',
+        status: 'active',
+        sourceModule: 'live_chat',
+        sourceRefId,
+        lastInteractionAt: conversation.lastMessageAt || conversation.updatedAt,
+        metadata: {
+          channelId: conversation.channelId,
+          conversationId: conversation.id,
+          conversationStatus: conversation.conversationStatus,
+          hasAttachment: conversation.hasAttachment,
+          lastDirection: conversation.lastDirection,
+          lastMessageText: conversation.lastMessageText,
+          lastStatus: conversation.lastStatus,
+          messageCount: conversation.messageCount ?? null,
+          provider: conversation.provider,
+          source: conversation.source,
+          unreadCount: conversation.unreadCount,
+        },
+      });
+    });
+
+    if (!inputs.length) return;
+    void snapshotCrmContacts(inputs).catch((error) => {
+      console.warn('CRM contact snapshot failed', error);
+    });
   }, []);
 
   const refreshExactConversationCounts = React.useCallback(async (
@@ -1481,6 +1557,7 @@ export function WhatsAppChatsPage() {
         fallbackTimer = null;
       }
       if (conversationPageRequestRef.current !== requestId) return;
+      snapshotConversationsToCrm(payload.conversations || []);
       applyConversationPage(payload, cacheKey);
       setConversationsError(null);
 
@@ -1519,6 +1596,7 @@ export function WhatsAppChatsPage() {
     refreshExactConversationCounts,
     selectedAccountId,
     slaFilter,
+    snapshotConversationsToCrm,
     statusFilter,
   ]);
 
@@ -1642,10 +1720,17 @@ export function WhatsAppChatsPage() {
       setSelectedId(null);
       return;
     }
-    if (!selectedId || !filteredConversations.some((conversation) => conversation.id === selectedId)) {
+    const selectedConversationStillVisible =
+      selectedId && filteredConversations.some((conversation) => conversation.id === selectedId);
+
+    if (selectedConversationStillVisible) return;
+
+    if (isDesktopInbox) {
       setSelectedId(filteredConversations[0].id);
+    } else if (selectedId) {
+      setSelectedId(null);
     }
-  }, [filteredConversations, selectedId]);
+  }, [filteredConversations, isDesktopInbox, selectedId]);
 
   const selectedConversation = React.useMemo<WhatsAppConversation | null>(
     () => filteredConversations.find((conversation) => conversation.id === selectedId) || null,
@@ -1682,6 +1767,7 @@ export function WhatsAppChatsPage() {
   }, [dateRange, deferredSearch, providerFilter, selectedAccountId, slaFilter, statusFilter]);
 
   const upsertRealtimeConversation = React.useCallback((conversation: WhatsAppConversation) => {
+    snapshotConversationsToCrm([conversation]);
     setConversationPage((current) => {
       if (!current) return current;
       const matches = conversationMatchesCurrentFilters(conversation);
@@ -1738,7 +1824,7 @@ export function WhatsAppChatsPage() {
         generatedAt: new Date().toISOString(),
       };
     });
-  }, [conversationMatchesCurrentFilters]);
+  }, [conversationMatchesCurrentFilters, snapshotConversationsToCrm]);
 
   const applyRealtimeMessage = React.useCallback((message: WhatsAppMessage) => {
     const loadedAt = new Date().toISOString();
@@ -2064,11 +2150,6 @@ export function WhatsAppChatsPage() {
   }, [messages]);
 
   React.useEffect(() => {
-    setComposerText('');
-    setSelectedAttachment(null);
-  }, [selectedConversation?.id]);
-
-  React.useEffect(() => {
     return () => {
       if (selectedAttachment?.previewUrl) URL.revokeObjectURL(selectedAttachment.previewUrl);
     };
@@ -2191,6 +2272,25 @@ export function WhatsAppChatsPage() {
     setSelectedAttachment(null);
   }, []);
 
+  const resetComposerText = React.useCallback(() => {
+    composerTextRef.current = '';
+    setHasComposerText(false);
+    if (composerTextareaRef.current) {
+      composerTextareaRef.current.value = '';
+    }
+  }, []);
+
+  const updateComposerText = React.useCallback((value: string) => {
+    composerTextRef.current = value;
+    const nextHasText = Boolean(value.trim());
+    setHasComposerText((current) => (current === nextHasText ? current : nextHasText));
+  }, []);
+
+  React.useEffect(() => {
+    resetComposerText();
+    setSelectedAttachment(null);
+  }, [resetComposerText, selectedConversation?.id]);
+
   const handlePickAttachment = React.useCallback((kind: 'any' | WhatsAppOutboundMediaType) => {
     if (!selectedConversation || !canSendWhatsAppReply) {
       toast.error(sendDisabledReason || 'Percakapan belum bisa menerima balasan WhatsApp.');
@@ -2228,17 +2328,17 @@ export function WhatsAppChatsPage() {
       return;
     }
 
-    if (type === 'audio') setComposerText('');
+    if (type === 'audio') resetComposerText();
     setSelectedAttachment({
       file,
       type,
       previewUrl: type === 'image' ? URL.createObjectURL(file) : null,
     });
-  }, []);
+  }, [resetComposerText]);
 
   const handleSendMessage = React.useCallback(async () => {
     if (!selectedConversation || !canSendWhatsAppReply) return;
-    const text = composerText.trim();
+    const text = composerTextRef.current.trim();
     if (!text && !selectedAttachment) return;
     if (selectedAttachment?.type === 'audio' && text) {
       toast.error('Audio WhatsApp tidak mendukung caption. Kirim teks terpisah setelah audio.');
@@ -2273,7 +2373,7 @@ export function WhatsAppChatsPage() {
         replyToMessageId: latestInboundWamid,
       });
 
-      setComposerText('');
+      resetComposerText();
       clearSelectedAttachment();
       setMessages((current) => [...current, payload.message]);
       toast.success(uploadedMedia ? 'Lampiran WhatsApp dikirim lewat Kirimdev.' : 'Balasan WhatsApp dikirim lewat Kirimdev.');
@@ -2291,11 +2391,11 @@ export function WhatsAppChatsPage() {
   }, [
     canSendWhatsAppReply,
     clearSelectedAttachment,
-    composerText,
     latestInboundWamid,
     loadConversationPage,
     loadMessages,
     reload,
+    resetComposerText,
     selectedAttachment,
     selectedConversation,
   ]);
@@ -2350,6 +2450,28 @@ export function WhatsAppChatsPage() {
   const selectedMessageCount = selectedConversation?.messageCount || messages.length || 0;
   const selectedConversationDisplayName = getConversationDisplayName(selectedConversation);
   const selectedConversationSubtitle = getConversationSubtitle(selectedConversation);
+  const selectedConversationPhone = React.useMemo(() => {
+    if (!selectedConversation) return '';
+    return (
+      normalizeConversationPhone(selectedConversation.contactPhone) ||
+      normalizeConversationPhone(selectedConversation.contactId) ||
+      ''
+    );
+  }, [selectedConversation]);
+  const selectedConversationPhoneKey = React.useMemo(
+    () => normalizeComparablePhoneNumber(selectedConversationPhone),
+    [selectedConversationPhone],
+  );
+  const selectedConversationOpenLead = React.useMemo(() => {
+    if (!selectedConversationPhoneKey) return null;
+    return (
+      leads.find(
+        (lead) =>
+          normalizeComparablePhoneNumber(lead.phone) === selectedConversationPhoneKey &&
+          isOpenLeadStatus(lead.status),
+      ) || null
+    );
+  }, [leads, selectedConversationPhoneKey]);
   const selectedLastInboundAt =
     latestInboundMessage?.timestamp ||
     (selectedConversation?.lastDirection === 'inbound' ? selectedConversation.lastMessageAt : null);
@@ -2357,10 +2479,77 @@ export function WhatsAppChatsPage() {
     selectedLastInboundAt || selectedConversation?.lastMessageAt,
   );
   const composerBusy = sendingMessage || uploadingAttachment;
-  const hasComposerPayload = Boolean(composerText.trim() || selectedAttachment);
+  const hasComposerPayload = Boolean(hasComposerText || selectedAttachment);
   const loading = (conversationsLoading || overviewLoading) && !conversationPage;
   const refreshing = overviewRefreshing || conversationsRefreshing;
   const error = overviewError || conversationsError;
+  const canCreateProspectFromChat =
+    Boolean(selectedConversation && selectedConversationPhoneKey) &&
+    !selectedConversationOpenLead &&
+    !creatingProspectFromChat;
+
+  const handleCreateProspectFromChat = React.useCallback(async () => {
+    if (!selectedConversation) return;
+
+    if (!selectedConversationPhoneKey || !selectedConversationPhone) {
+      toast.error('Nomor WhatsApp percakapan ini belum tersedia.');
+      return;
+    }
+
+    if (selectedConversationOpenLead) {
+      toast.info('Percakapan ini sudah punya prospek aktif.');
+      return;
+    }
+
+    const rawContactName = selectedConversation.contactName?.trim() || '';
+    const displayName = selectedConversationDisplayName.trim();
+    const hasRealName = hasUsefulContactName(rawContactName);
+    const nameCandidate = hasRealName ? rawContactName : displayName;
+    const leadName =
+      nameCandidate && nameCandidate !== 'Kontak WhatsApp' && !nameCandidate.startsWith('+')
+        ? nameCandidate
+        : selectedConversationPhone;
+    const notes = [
+      'Dibuat manual dari Live Chat.',
+      selectedConversation.lastMessageText
+        ? `Pesan terakhir: ${selectedConversation.lastMessageText}`
+        : null,
+      selectedConversationAccountLabel ? `Akun WhatsApp: ${selectedConversationAccountLabel}` : null,
+      selectedConversation.channelId ? `Channel ID: ${selectedConversation.channelId}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const manualLead: Lead = {
+      id: generateManualWhatsAppLeadId(),
+      name: leadName,
+      phone: selectedConversationPhone,
+      status: 'Pending',
+      timestamp: new Date().toISOString(),
+      lastContact: 'Live Chat WhatsApp',
+      csId: currentUser?.id,
+      notes,
+      origin: MANUAL_WHATSAPP_LEAD_ORIGIN,
+    };
+
+    try {
+      setCreatingProspectFromChat(true);
+      await addLead(manualLead, { silent: true });
+      toast.success('Prospek dibuat dari Live Chat.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Gagal membuat prospek dari Live Chat.');
+    } finally {
+      setCreatingProspectFromChat(false);
+    }
+  }, [
+    addLead,
+    currentUser?.id,
+    selectedConversation,
+    selectedConversationAccountLabel,
+    selectedConversationDisplayName,
+    selectedConversationOpenLead,
+    selectedConversationPhone,
+    selectedConversationPhoneKey,
+  ]);
 
   return (
     <div
@@ -2667,23 +2856,26 @@ export function WhatsAppChatsPage() {
             selectedId ? 'flex' : 'hidden lg:flex',
           )}
         >
-          <div className={cls.headerBand}>
-            <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className={cn(cls.headerBand, 'gap-2 overflow-hidden py-2')}>
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
               {selectedConversation ? (
-                <IconButton
+                <Button
+                  type="button"
+                  variant="ghost"
                   onClick={() => setSelectedId(null)}
                   size="sm"
-                  className="lg:hidden"
-                  title="Kembali ke daftar"
+                  className="waMobileOnlyAction h-9 max-w-[7.5rem] shrink-0 gap-1.5 rounded-xl px-2 text-xs font-semibold text-slate-600 shadow-none hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900"
+                  title="Kembali ke list chat"
                 >
-                  <ChevronLeft className="h-5 w-5" />
-                </IconButton>
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="truncate">List Chat</span>
+                </Button>
               ) : null}
               <WhatsAppContactAvatar
                 src={getConversationAvatarUrl(selectedConversation)}
                 name={selectedConversationDisplayName}
                 phone={selectedConversation?.contactPhone}
-                className={cls.avatarHeader}
+                className={cn(cls.avatarHeader, 'hidden sm:flex')}
                 fallback="WA"
               />
               <div className="min-w-0 flex-1">
@@ -2695,10 +2887,11 @@ export function WhatsAppChatsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex min-w-0 shrink-0 items-center gap-1.5">
               {selectedConversation ? (
-                <div className="hidden items-center gap-1.5 md:flex">
+                <div className="hidden max-w-[42vw] items-center justify-end gap-1.5 overflow-hidden 2xl:flex">
                   <StatusChip
+                    className="max-w-[8rem]"
                     tone={
                       selectedServiceWindow.isOpen
                         ? selectedServiceWindow.isAtRisk
@@ -2708,16 +2901,39 @@ export function WhatsAppChatsPage() {
                     }
                   >
                     <Clock3 className="h-3 w-3" />
-                    {selectedServiceWindow.remainingLabel}
+                    <span className="truncate">{selectedServiceWindow.remainingLabel}</span>
                   </StatusChip>
-                  <StatusChip className="hidden lg:inline-flex">
+                  <StatusChip>
                     <Circle className="h-3 w-3 text-emerald-600" />
                     {selectedConversationStatusLabel}
                   </StatusChip>
-                  <StatusChip className="hidden xl:inline-flex">
+                  <StatusChip>
                     <MessageCircle className="h-3 w-3" />
                     {formatNumber(selectedMessageCount)} pesan
                   </StatusChip>
+                  {selectedConversationOpenLead ? (
+                    <StatusChip tone="success">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Sudah Prospek
+                    </StatusChip>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCreateProspectFromChat}
+                      disabled={!canCreateProspectFromChat}
+                      className="hidden h-8 shrink-0 gap-1.5 rounded-xl border-emerald-100 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 shadow-none hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 2xl:inline-flex"
+                      title="Jadikan prospek"
+                    >
+                      {creatingProspectFromChat ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-3.5 w-3.5" />
+                      )}
+                      Jadikan Prospek
+                    </Button>
+                  )}
                   {messagesLastLoadedAt ? (
                     <StatusChip className="hidden 2xl:inline-flex">
                       <RefreshCcw className="h-3 w-3" />
@@ -2726,10 +2942,52 @@ export function WhatsAppChatsPage() {
                   ) : null}
                 </div>
               ) : null}
+              {selectedConversationOpenLead ? (
+                <StatusChip
+                  tone="success"
+                  className="max-w-[9rem] px-2 sm:px-2.5 2xl:hidden"
+                  title="Sudah prospek"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span className="hidden truncate sm:inline">Sudah Prospek</span>
+                  <span className="sr-only sm:hidden">Sudah Prospek</span>
+                </StatusChip>
+              ) : null}
               {selectedConversation ? (
-                <span className="hidden h-5 w-px bg-slate-200 md:block dark:bg-slate-800" />
+                <span className="hidden h-5 w-px bg-slate-200 2xl:block dark:bg-slate-800" />
               ) : null}
               <div className="flex items-center gap-1.5">
+                {selectedConversation ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/orders')}
+                    className="waMobileOnlyAction h-9 w-9 shrink-0 gap-1.5 rounded-xl border-blue-100 bg-blue-50 p-0 text-xs font-semibold text-blue-700 shadow-none hover:bg-blue-100"
+                    title="Buka list pesanan"
+                  >
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Pesanan</span>
+                  </Button>
+                ) : null}
+                {selectedConversation && !selectedConversationOpenLead ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCreateProspectFromChat}
+                    disabled={!canCreateProspectFromChat}
+                    className="h-8 w-8 shrink-0 gap-1.5 rounded-xl border-emerald-100 bg-emerald-50 p-0 text-xs font-semibold text-emerald-700 shadow-none hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-2.5 2xl:hidden"
+                    title="Jadikan prospek"
+                  >
+                    {creatingProspectFromChat ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">Prospek</span>
+                  </Button>
+                ) : null}
                 <IconButton
                   onClick={() => setIsFullscreen((current) => !current)}
                   size="sm"
@@ -2889,74 +3147,92 @@ export function WhatsAppChatsPage() {
                 </div>
               ) : null}
               <div className={cls.composerShell}>
-                <IconButton
-                  type="button"
-                  onClick={() => handlePickAttachment('any')}
-                  disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
-                  className="text-slate-500"
-                  title="Tambah lampiran"
-                >
-                  <Plus className="h-4 w-4" />
-                </IconButton>
-                <IconButton
-                  type="button"
-                  onClick={() => handlePickAttachment('image')}
-                  disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
-                  className="text-slate-500"
-                  title="Pilih gambar"
-                >
-                  <ImagePlus className="h-4 w-4" />
-                </IconButton>
-                <IconButton
-                  type="button"
-                  onClick={() => handlePickAttachment('document')}
-                  disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
-                  className="text-slate-500"
-                  title="Pilih dokumen"
-                >
-                  <Paperclip className="h-4 w-4" />
-                </IconButton>
-                <IconButton
-                  type="button"
-                  onClick={() => handlePickAttachment('audio')}
-                  disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
-                  className="text-slate-500"
-                  title="Pilih audio"
-                >
-                  <Mic className="h-4 w-4" />
-                </IconButton>
-                <Textarea
-                  value={composerText}
-                  onChange={(event) => setComposerText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleSendMessage();
+                <div className="relative min-w-0 self-stretch">
+                  <Textarea
+                    ref={composerTextareaRef}
+                    defaultValue=""
+                    onChange={(event) => updateComposerText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        void handleSendMessage();
+                      }
+                    }}
+                    placeholder=""
+                    aria-label={
+                      selectedAttachment?.type === 'audio'
+                        ? 'Audio siap dikirim'
+                        : selectedAttachment
+                        ? 'Caption opsional'
+                        : 'Tulis pesan atau pakai shortcut'
                     }
-                  }}
-                  placeholder={
-                    selectedAttachment?.type === 'audio'
-                      ? 'Audio siap dikirim'
-                      : selectedAttachment
-                      ? 'Caption opsional...'
-                      : 'Tulis pesan atau pakai /shortcut...'
-                  }
-                  className="min-h-10 min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
-                  disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy || selectedAttachment?.type === 'audio'}
-                />
-                <Button
-                  variant="success"
-                  size="icon"
-                  className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 shadow-[0_12px_28px_rgba(37,99,235,0.28)] hover:from-sky-500 hover:to-blue-800"
-                  onClick={() => void handleSendMessage()}
-                  disabled={!hasComposerPayload || !canSendWhatsAppReply || composerBusy}
-                >
-                  {composerBusy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
+                    style={{ textAlign: 'left' }}
+                    className="waComposerTextarea min-w-0 resize-none border-0 bg-transparent px-2 py-2 text-left text-sm leading-5 shadow-none focus-visible:ring-0"
+                    disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy || selectedAttachment?.type === 'audio'}
+                  />
+                  {!hasComposerText ? (
+                    <span className="pointer-events-none absolute left-2 top-2 text-left text-sm leading-5 text-slate-400">
+                      {selectedAttachment?.type === 'audio'
+                        ? 'Audio siap dikirim'
+                        : selectedAttachment
+                        ? 'Caption opsional...'
+                        : 'Tulis pesan atau pakai /shortcut...'}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <IconButton
+                      type="button"
+                      onClick={() => handlePickAttachment('any')}
+                      disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
+                      className="text-slate-500"
+                      title="Tambah lampiran"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton
+                      type="button"
+                      onClick={() => handlePickAttachment('image')}
+                      disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
+                      className="text-slate-500"
+                      title="Pilih gambar"
+                    >
+                      <ImagePlus className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton
+                      type="button"
+                      onClick={() => handlePickAttachment('document')}
+                      disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
+                      className="text-slate-500"
+                      title="Pilih dokumen"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton
+                      type="button"
+                      onClick={() => handlePickAttachment('audio')}
+                      disabled={!selectedConversation || !canSendWhatsAppReply || composerBusy}
+                      className="text-slate-500"
+                      title="Pilih audio"
+                    >
+                      <Mic className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                  <Button
+                    variant="success"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 shadow-[0_12px_28px_rgba(37,99,235,0.28)] hover:from-sky-500 hover:to-blue-800"
+                    onClick={() => void handleSendMessage()}
+                    disabled={!hasComposerPayload || !canSendWhatsAppReply || composerBusy}
+                  >
+                    {composerBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

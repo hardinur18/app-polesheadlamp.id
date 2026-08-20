@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { LeadStatus } from '@/app/pages/master-data/data';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
+import { upsertCrmContactSnapshot } from '@/app/services/crmContactsService';
 
 export type EmbedLeadRoutingMode = 'single_cs' | 'broadcast' | 'random' | 'round_robin';
 export type EmbedLeadStatus = 'draft' | 'active' | 'paused' | 'archived';
@@ -1000,6 +1001,35 @@ export async function submitEmbedLeadForm(bundle: EmbedLeadFormBundle, input: Em
 
   try {
     const lead = await insertLeadWithSchemaFallback(leadPayload);
+    const leadRecord = lead as Record<string, unknown>;
+    const snapshotName = customerName || customerPhone;
+
+    if (snapshotName) {
+      void upsertCrmContactSnapshot({
+        displayName: snapshotName,
+        phoneRaw: customerPhone,
+        contactType: 'prospect',
+        status: 'active',
+        sourceModule: 'form_embed',
+        sourceLabel: 'Form Embed',
+        sourceRefId: leadRecord.id ? String(leadRecord.id) : null,
+        lastInteractionAt: new Date().toISOString(),
+        notes: normalizeAnswer(answers.notes) || null,
+        metadata: {
+          formId: form.id,
+          formSlug: form.slug,
+          formName: form.name,
+          submissionId: submission.id,
+          assignedCsId: leadRecord.cs_id ?? route.primaryCsId ?? null,
+          platformId: leadRecord.platform_id ?? null,
+          subChannelId: leadRecord.sub_channel_id ?? null,
+          advertiserId: leadRecord.advertiser_id ?? null,
+          vehicleId: leadRecord.vehicle_id ?? null,
+          serviceId: leadRecord.service_id ?? null,
+          source: 'embed_lead_form',
+        },
+      }).catch((error) => console.warn('Gagal sinkron kontak CRM dari form embed:', error));
+    }
 
     await updateSubmissionRecord(storage, submission, {
       lead_id: lead.id,

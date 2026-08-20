@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 
 import { cn } from '@/app/components/ui/utils';
 
@@ -48,7 +48,7 @@ export const ui = {
 } as const;
 
 export const whatsAppInboxStyle = {
-  '--wa-sidebar-w': '288px',
+  '--wa-sidebar-w': '304px',
   '--wa-list-w': '420px',
   '--wa-list-w-compact': '360px',
   '--wa-detail-w': '320px',
@@ -61,7 +61,7 @@ export const whatsAppInboxStyle = {
   '--wa-account-icon': '34px',
   '--wa-avatar-row': '44px',
   '--wa-avatar-header': '40px',
-  '--wa-row-meta-w': '88px',
+  '--wa-row-meta-w': '76px',
   '--wa-stat-h': '40px',
   '--wa-chat-pad-x': '16px',
   '--wa-chat-stack-gap': '16px',
@@ -69,7 +69,7 @@ export const whatsAppInboxStyle = {
   '--wa-bubble-max-w': '640px',
   '--wa-bubble-max-pct': '72%',
   '--wa-composer-pad': '12px',
-  '--wa-sidebar-menu-w': '280px',
+  '--wa-sidebar-menu-w': '268px',
 } as CSSProperties;
 
 /**
@@ -78,7 +78,7 @@ export const whatsAppInboxStyle = {
  */
 export const cls = {
   moduleShell:
-    'flex flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white text-slate-950 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
+    'flex flex-col overflow-hidden border border-slate-200 bg-white text-slate-950 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
   layoutGrid:
     'grid min-h-0 flex-1 grid-cols-1 overflow-hidden border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:grid-cols-[var(--wa-list-w-compact)_minmax(0,1fr)] xl:grid-cols-[var(--wa-sidebar-w)_var(--wa-list-w)_minmax(0,1fr)]',
   layoutGridWithCustomer:
@@ -86,14 +86,14 @@ export const cls = {
   headerBand:
     'flex min-h-[var(--wa-header-h)] flex-none items-center justify-between gap-3 border-b border-slate-200 px-4 dark:border-slate-800',
   sidebarPanel:
-    'hidden min-h-0 flex-col border-r border-slate-200 bg-slate-50/75 dark:border-slate-800 dark:bg-slate-950 xl:flex',
+    'hidden min-h-0 flex-col border-r border-slate-200 bg-slate-50/75 pr-3 dark:border-slate-800 dark:bg-slate-950 xl:flex',
   sectionLabel:
     'flex items-center justify-between px-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400',
   sectionToggle:
     'flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-900/70 dark:hover:text-slate-200',
   sectionChevron: 'h-3.5 w-3.5 transition-transform duration-150',
   // Sidebar scroll body: consistent gutter + vertical rhythm between sections.
-  sidebarBody: 'space-y-3 py-4 pl-4 pr-4',
+  sidebarBody: 'space-y-3 py-4 pl-4 pr-3',
   sidebarSection: 'space-y-2',
   sidebarSurface:
     'rounded-[22px] border border-slate-200 bg-white p-2.5 shadow-[0_12px_32px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900/70',
@@ -111,7 +111,7 @@ export const cls = {
     'flex h-[var(--wa-account-icon)] w-[var(--wa-account-icon)] shrink-0 items-center justify-center text-blue-700 dark:text-blue-200',
   // Filter item button (icon + label + count), with hover; pass active separately.
   filterItem:
-    'grid min-h-11 w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-2.5 py-2 text-sm transition-colors',
+    'grid min-h-11 w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors',
   filterItemIdle:
     'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900/70',
   filterItemActive:
@@ -139,7 +139,7 @@ export const cls = {
   statCountDanger:
     'shrink-0 text-[14px] font-semibold leading-none text-rose-600 dark:text-rose-200',
   listPanel:
-    'min-h-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950',
+    'min-h-0 flex-col border-l border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950',
   listHeaderBody:
     'space-y-3 border-b border-slate-200 bg-white px-4 pb-4 pt-4 dark:border-slate-800 dark:bg-slate-950',
   searchField:
@@ -162,9 +162,9 @@ export const cls = {
   headerTextButton:
     'flex h-9 shrink-0 items-center gap-1 rounded-xl border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-wait disabled:opacity-70 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900',
   composerDock:
-    'flex-none border-t border-slate-200 bg-slate-50/70 px-4 py-[var(--wa-composer-pad)] dark:border-slate-800 dark:bg-slate-950',
+    'waChatComposerDock flex-none border-t border-slate-200 bg-slate-50/70 px-4 py-[var(--wa-composer-pad)] dark:border-slate-800 dark:bg-slate-950',
   composerShell:
-    'flex min-w-0 items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 dark:border-slate-800 dark:bg-slate-950',
+    'flex min-w-0 flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 dark:border-slate-800 dark:bg-slate-950',
 };
 
 /** Fixed-height header band shared by every column header so baselines line up. */
@@ -260,7 +260,7 @@ export function CountBadge({
   return (
     <span
       className={cn(
-        'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold leading-none',
+        'inline-flex h-5 min-w-5 max-w-[4.75rem] shrink-0 items-center justify-center overflow-hidden rounded-full px-1.5 text-[11px] font-semibold leading-none',
         toneClass,
         className,
       )}
@@ -275,10 +275,10 @@ export function StatusChip({
   children,
   tone = 'neutral',
   className,
-}: {
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & {
   children: ReactNode;
   tone?: 'neutral' | 'success' | 'warning' | 'danger';
-  className?: string;
 }) {
   const toneClass =
     tone === 'success'
@@ -290,8 +290,9 @@ export function StatusChip({
           : 'border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300';
   return (
     <span
+      {...props}
       className={cn(
-        'inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium',
+        'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2.5 text-[11px] font-medium',
         toneClass,
         className,
       )}
@@ -324,7 +325,13 @@ export function FilterRow({
     >
       <span className="flex h-5 w-5 items-center justify-center">{icon}</span>
       <span className="min-w-0 truncate text-left">{label}</span>
-      {count == null ? <span aria-hidden="true" /> : <CountBadge tone={tone}>{count}</CountBadge>}
+      {count == null ? (
+        <span aria-hidden="true" />
+      ) : (
+        <CountBadge tone={tone} className="justify-self-end whitespace-nowrap">
+          {count}
+        </CountBadge>
+      )}
     </button>
   );
 }

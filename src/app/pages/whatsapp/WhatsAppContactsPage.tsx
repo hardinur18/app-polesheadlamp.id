@@ -39,6 +39,7 @@ import {
   type WhatsAppContact,
   type WhatsAppProvider,
 } from '@/app/services/whatsappModuleService';
+import { fetchCrmContacts, type CrmContact } from '@/app/services/crmContactsService';
 import { useMasterData } from '@/app/pages/master-data/context';
 import {
   ProviderBadge,
@@ -94,6 +95,52 @@ function normalizeComparablePhoneNumber(value: string | null | undefined) {
 function getContactGroupKey(contact: WhatsAppContact) {
   const phoneKey = normalizePhoneKey(contact.phoneNumber) || normalizePhoneKey(contact.id);
   return `${contact.channelId}:${phoneKey || contact.id}`;
+}
+
+function getContactMergeKey(phone?: string | null) {
+  return normalizeComparablePhoneNumber(phone) || normalizePhoneKey(phone);
+}
+
+function mapCrmContactToWhatsAppContact(contact: CrmContact): WhatsAppContact {
+  const phone = contact.phoneRaw || contact.phoneNormalized;
+  return {
+    id: `crm:${contact.id}`,
+    provider: 'kirimdev',
+    channelId: 'crm',
+    phoneNumberId: null,
+    phoneNumber: phone,
+    name: contact.displayName || contact.whatsappName || phone || 'Kontak CRM',
+    email: contact.email,
+    avatarUrl: null,
+    profilePictureUrl: null,
+    accountLabel: 'CRM',
+    accountPhoneNumber: null,
+    csProfileId: null,
+    csDisplayName: null,
+    csWhatsappNumber: null,
+    csAssignmentStatus: null,
+    createdAt: contact.createdAt,
+    updatedAt: contact.updatedAt,
+  };
+}
+
+function mergeWhatsAppAndCrmContacts(whatsappContacts: WhatsAppContact[], crmContacts: CrmContact[]) {
+  const rows = [...whatsappContacts];
+  const existingKeys = new Set<string>();
+
+  rows.forEach((contact) => {
+    const key = getContactMergeKey(contact.phoneNumber);
+    if (key) existingKeys.add(key);
+  });
+
+  crmContacts.forEach((contact) => {
+    const phoneKey = getContactMergeKey(contact.phoneRaw || contact.phoneNormalized);
+    if (phoneKey && existingKeys.has(phoneKey)) return;
+    rows.push(mapCrmContactToWhatsAppContact(contact));
+    if (phoneKey) existingKeys.add(phoneKey);
+  });
+
+  return rows;
 }
 
 function isNewerContact(left: WhatsAppContact, right: WhatsAppContact) {
@@ -362,8 +409,14 @@ export function WhatsAppContactsPage() {
       setLoading(true);
     }
     try {
-      const payload = await fetchWhatsAppContacts();
-      setContacts(payload.contacts);
+      const [payload, crmPayload] = await Promise.all([
+        fetchWhatsAppContacts(),
+        fetchCrmContacts({ limit: 1000 }).catch((crmError) => {
+          console.warn('CRM contacts fetch failed', crmError);
+          return { contacts: [], available: false };
+        }),
+      ]);
+      setContacts(mergeWhatsAppAndCrmContacts(payload.contacts, crmPayload.contacts));
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'Gagal memuat daftar kontak WhatsApp.');
@@ -494,7 +547,7 @@ export function WhatsAppContactsPage() {
   return (
     <WhatsAppModuleFrame
       activeId="whatsapp-contacts"
-      badges={['WhatsApp', 'Kontak']}
+      badges={['CRM', 'Kontak']}
       stats={[
         {
           label: 'Total Kontak',
@@ -635,13 +688,13 @@ export function WhatsAppContactsPage() {
       <Card className="overflow-hidden rounded-[28px] border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-2 px-6 py-5">
           <MasterDataTableTitle
-            title="Data Kontak WhatsApp"
+            title="Database Kontak"
             count={formatNumber(filteredContacts.length)}
             icon={Users}
             variant="active"
           />
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-            Menampilkan kontak dari akun WhatsApp yang aktif dan sudah disatukan dari duplikasi nomor.
+            Menampilkan kontak dari prospek, chat, dan riwayat komunikasi yang sudah disatukan dari duplikasi nomor.
             {duplicateCount > 0 ? ` ${formatNumber(duplicateCount)} data duplikat digabung.` : ''}
           </p>
         </div>

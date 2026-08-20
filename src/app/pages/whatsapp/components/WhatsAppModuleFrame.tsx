@@ -49,10 +49,14 @@ export function WhatsAppModuleFrame({
   const navigate = useNavigate();
   const { hasPermission } = usePermissions();
   const workspace = WHATSAPP_WORKSPACE_MAP[activeId];
-  const resolvedBadges = badges ?? ['Modul WhatsApp', 'Provider: Kirimdev + Meta'];
-  const visibleWorkspaces = WHATSAPP_WORKSPACES.filter((item) =>
-    hasRequiredPermission(APP_LAYOUT_TAB_PERMISSIONS[item.id], hasPermission),
-  );
+  const resolvedBadges = badges ?? ['Live Chat', 'Provider: Kirimdev + Meta'];
+  const visibleWorkspaces = WHATSAPP_WORKSPACES.filter((item) => {
+    if (activeId === 'whatsapp-contacts') {
+      return item.id === 'whatsapp-contacts';
+    }
+    if (item.id === 'whatsapp-contacts') return false;
+    return hasRequiredPermission(APP_LAYOUT_TAB_PERMISSIONS[item.id], hasPermission);
+  });
 
   const handleNavigate = (id: WhatsAppWorkspaceId, href?: string, event?: MouseEvent) => {
     if (event) {
@@ -99,7 +103,7 @@ export function WhatsAppModuleFrame({
               </div>
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                  {workspace?.title ?? 'WhatsApp'}
+                  {workspace?.title ?? 'Live Chat'}
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
                   {workspace?.description}
@@ -138,9 +142,9 @@ export function WhatsAppModuleFrame({
         </div>
       </Card>
 
-      {/* In-module section navigation (the WhatsApp module's own menu) */}
+      {/* In-module section navigation */}
       <Card className="border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900">
-        <nav className="flex flex-wrap gap-3 p-3" aria-label="Navigasi modul WhatsApp">
+        <nav className="flex flex-wrap gap-3 p-3" aria-label="Navigasi live chat">
           {visibleWorkspaces.map((item) => {
             const Icon = getWorkspaceIcon(item.iconKey);
             const isActive = item.id === activeId;

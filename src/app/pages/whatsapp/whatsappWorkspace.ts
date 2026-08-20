@@ -1,4 +1,4 @@
-export const WHATSAPP_MODULE_SIDEBAR_LABEL = 'WhatsApp';
+export const WHATSAPP_MODULE_SIDEBAR_LABEL = 'Live Chat';
 
 export type WhatsAppWorkspaceId =
   | 'whatsapp-chats'
@@ -26,37 +26,37 @@ export type WhatsAppWorkspaceDefinition = {
 export const WHATSAPP_WORKSPACES: WhatsAppWorkspaceDefinition[] = [
   {
     id: 'whatsapp-chats',
-    label: 'Chats',
-    title: 'WhatsApp • Chats',
+    label: 'Live Chat',
+    title: 'Live Chat',
     description:
-      'Baca percakapan WhatsApp dari Kirimdev maupun Meta langsung. Pilih thread untuk melihat isi pesan, arah, status pengiriman, dan lampiran.',
+      'Pantau dan balas percakapan pelanggan dari Kirimdev maupun Meta langsung.',
     iconKey: 'chats',
     status: 'live',
   },
   {
     id: 'whatsapp-contacts',
     label: 'Kontak',
-    title: 'WhatsApp • Kontak',
+    title: 'CRM • Kontak',
     description:
-      'Daftar kontak WhatsApp yang terkumpul dari webhook Kirimdev/Meta. Lihat nama, nomor, provider, dan kapan terakhir aktif.',
+      'Database kontak pelanggan dari prospek, chat, dan riwayat komunikasi yang tersimpan.',
     iconKey: 'contacts',
     status: 'live',
   },
   {
     id: 'whatsapp-templates',
     label: 'Template Pesan',
-    title: 'WhatsApp • Template Pesan',
+    title: 'Live Chat • Template Pesan',
     description:
-      'Kelola template pesan WhatsApp untuk balasan cepat dan notifikasi terstruktur.',
+      'Kelola template pesan untuk balasan cepat dan follow up pelanggan.',
     iconKey: 'templates',
     status: 'live',
   },
   {
     id: 'whatsapp-inbox-settings',
-    label: 'Pengaturan WhatsApp',
-    title: 'WhatsApp • Pengaturan WhatsApp',
+    label: 'Akun WA',
+    title: 'Live Chat • Akun WA',
     description:
-      'Konfigurasi koneksi Kirimdev, endpoint webhook, nomor terhubung, dan status kredensial server.',
+      'Konfigurasi koneksi Kirimdev, endpoint webhook, nomor terhubung, dan status kredensial server live chat.',
     iconKey: 'settings',
     status: 'live',
   },
