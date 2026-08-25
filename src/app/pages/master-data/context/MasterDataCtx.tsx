@@ -111,6 +111,7 @@ import {
   upsertLeadSocialContactRecord,
 } from './internal/leadSocialAdapter';
 import { createMasterDataFetchCatalog } from './internal/masterDataFetchCatalog';
+import { saveOrderToCrmContact } from '@/app/services/crmContactsService';
 
 export interface AdvertiserAccessConfig {
   advertiserId: string;
@@ -132,6 +133,7 @@ import { toast } from 'sonner';
 
 type MutationOptions = {
   silent?: boolean;
+  throwOnError?: boolean;
 };
 
 const shouldUseLocalProfileFallback =
@@ -210,7 +212,7 @@ interface MasterDataContextType {
 
   addOrder: (order: Order) => Promise<Order | undefined>;
   updateOrder: (order: Order) => Promise<Order | undefined>;
-  deleteOrder: (id: string) => void;
+  deleteOrder: (id: string) => Promise<void>;
 
   addWATemplate: (template: WATemplate) => void;
   updateWATemplate: (template: WATemplate) => void;
@@ -597,6 +599,9 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       console.error(`Error deleting from ${table}:`, e);
       if (!options?.silent) {
         toast.error(`Gagal menghapus data: ${e.message}`);
+      }
+      if (options?.throwOnError) {
+        throw e;
       }
     }
   };
@@ -1718,10 +1723,28 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     }
   };
 
+  const syncOrderCrmContactSnapshot = (order: Order, savedFrom: string) => {
+    if (!order.customerName && !order.customerPhone) return;
+
+    void saveOrderToCrmContact(order, {
+      savedBy: currentUser?.id,
+      savedFrom,
+    })
+      .then((result) => {
+        if (!result.available) {
+          console.warn('CRM contacts table is not available for order contact snapshot.');
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to sync order customer to CRM contact:', error);
+      });
+  };
+
   const addOrder = async (item: Order) => {
     validateOrderScheduleBeforeSave(item);
     await validateOrderScheduleFreshBeforeSave(item);
     const savedOrder = await addItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB);
+    syncOrderCrmContactSnapshot((savedOrder || item) as Order, 'pesanan_otomatis');
     try {
       await syncOrderProspectLifecycle((savedOrder || item) as Order);
     } catch (error) {
@@ -1736,6 +1759,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     validateOrderScheduleBeforeSave(item, previousOrder);
     await validateOrderScheduleFreshBeforeSave(item, previousOrder);
     const savedOrder = await updateItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB);
+    syncOrderCrmContactSnapshot((savedOrder || item) as Order, 'pesanan_update_otomatis');
     try {
       await syncOrderProspectLifecycle((savedOrder || item) as Order);
     } catch (error) {
@@ -1744,7 +1768,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     }
     return savedOrder;
   };
-  const deleteOrder = (id: string) => deleteItem('orders', id, setOrders);
+  const deleteOrder = (id: string) => deleteItem('orders', id, setOrders, { silent: true, throwOnError: true });
 
   // -- WA TEMPLATES (Direct Supabase Table)
   const addWATemplate = (item: WATemplate) => addItem('wa_templates', item, setWaTemplates, mapWATemplateToDB, mapWATemplateFromDB);

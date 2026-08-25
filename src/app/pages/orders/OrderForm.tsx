@@ -631,11 +631,46 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       'serviceDate', 'serviceTime', 'serviceId', 'serviceCategory', 
       'mapsUrl', 'platformId', 'price', 'csId'
     ];
-    const missingFields = requiredFields.filter(field => !sanitizedData[field]);
+    const requiredFieldLabels: Partial<Record<keyof Order, string>> = {
+      leadDate: 'Tanggal lead',
+      customerName: 'Nama customer',
+      customerPhone: 'Nomor telepon',
+      address: 'Alamat lengkap',
+      serviceDate: 'Tanggal service',
+      serviceTime: 'Jam',
+      serviceId: 'Layanan',
+      serviceCategory: 'Jenis layanan',
+      mapsUrl: 'Maps URL',
+      platformId: 'Platform',
+      price: 'Harga',
+      csId: 'CS',
+    };
+    const isMissingRequiredField = (field: keyof Order) => {
+      const value = sanitizedData[field];
+      if (field === 'price') {
+        return value === undefined || value === null || value === '' || !Number.isFinite(Number(value));
+      }
+      if (typeof value === 'string') {
+        return value.trim().length === 0;
+      }
+      return value === undefined || value === null;
+    };
+    const missingFields = requiredFields.filter(isMissingRequiredField);
     if (missingFields.length > 0) {
-      toast.error(`Mohon lengkapi field wajib: ${missingFields.join(', ')}`);
+      if (missingFields.includes('mapsUrl')) {
+        setMapsUrlError('Maps URL wajib diisi.');
+      }
+      const missingLabels = missingFields.map(field => requiredFieldLabels[field] || String(field));
+      toast.error(`Mohon lengkapi field wajib: ${missingLabels.join(', ')}`);
       return;
     }
+
+    const normalizedPrice = Number(sanitizedData.price);
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
+      toast.error('Harga harus berupa angka 0 atau lebih.');
+      return;
+    }
+    sanitizedData.price = normalizedPrice;
 
     // Validate cancel reason when status is cancelled or reschedule
     if ((sanitizedData.status === 'cancelled' || sanitizedData.status === 'reschedule') && !sanitizedData.cancelReason) {
@@ -1078,10 +1113,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                  <RequiredLabel>Harga</RequiredLabel>
                  <Input 
                     type="text"
-                    value={formData.price ? formData.price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : ''} 
+                    value={formData.price !== undefined && formData.price !== null && Number.isFinite(Number(formData.price)) ? Number(formData.price).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : ''}
                     onChange={(e) => {
                       const rawValue = e.target.value.replace(/\./g, '').replace(/[^0-9]/g, '');
-                      handleChange('price', rawValue ? parseInt(rawValue) : 0);
+                      handleChange('price', rawValue ? parseInt(rawValue, 10) : undefined);
                     }}
                     disabled={!canEdit('price')}
                     placeholder="Rp 0"

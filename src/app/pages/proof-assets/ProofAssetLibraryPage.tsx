@@ -89,7 +89,6 @@ import {
   fetchWhatsAppContacts,
   WhatsAppContact,
 } from '@/app/services/whatsappModuleService';
-import { upsertCrmContactSnapshot } from '@/app/services/crmContactsService';
 
 const ALL_FILTER_VALUE = 'all';
 const NONE_VEHICLE_VALUE = 'none';
@@ -510,26 +509,6 @@ export function ProofAssetLibraryPage() {
     }
 
     const caption = forwardCaption.trim() || forwardAsset.caption || forwardAsset.title;
-    const assetRecord = forwardAsset as ProofAsset & Record<string, unknown>;
-
-    void upsertCrmContactSnapshot({
-      displayName: selectedContact?.name || targetPhone,
-      phoneRaw: targetPhone,
-      contactType: 'other',
-      status: 'active',
-      sourceModule: 'proof_assets',
-      sourceLabel: 'Galeri Bukti',
-      sourceRefId: forwardAsset.id,
-      lastInteractionAt: new Date().toISOString(),
-      notes: caption,
-      metadata: {
-        action: 'forward_whatsapp',
-        proofAssetId: forwardAsset.id,
-        proofAssetTitle: forwardAsset.title,
-        vehicleTypeId: assetRecord.vehicleTypeId ?? null,
-        selectedContactId: selectedContact?.id ?? null,
-      },
-    }).catch((error) => console.warn('Gagal sinkron kontak CRM dari galeri bukti:', error));
 
     window.open(buildWhatsAppManualUrl(targetPhone, caption), '_blank', 'noopener,noreferrer');
     setForwardSending(true);

@@ -40,6 +40,21 @@ const MONTH_NAMES_ID = [
   "Desember",
 ];
 
+const SHORT_MONTH_NAMES_ID = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "Mei",
+  "Jun",
+  "Jul",
+  "Agt",
+  "Sep",
+  "Okt",
+  "Nov",
+  "Des",
+];
+
 const RELATIVE_PRESETS = [
   { key: "today", label: "Hari Ini" },
   { key: "yesterday", label: "Kemarin" },
@@ -51,14 +66,18 @@ const RELATIVE_PRESETS = [
 ] as const;
 
 type RelativePresetKey = (typeof RELATIVE_PRESETS)[number]["key"];
+type RelativePreset = (typeof RELATIVE_PRESETS)[number];
 type PeriodPanelMode = "relative" | "day" | "week" | "month" | "year";
+type PeriodFilterPickerVariant = "default" | "foundation";
 
-type PeriodFilterPickerProps = {
+export type PeriodFilterPickerProps = {
   date?: DateRange;
   setDate: (date?: DateRange) => void;
   className?: string;
   contentClassName?: string;
+  numberOfMonths?: number;
   triggerLabelMode?: "full" | "compact";
+  variant?: PeriodFilterPickerVariant;
 };
 
 const toDateKey = (date: Date) => {
@@ -66,6 +85,33 @@ const toDateKey = (date: Date) => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+const sortRangeDates = (fromDate: Date, toDate: Date): Required<DateRange> => {
+  if (toDateKey(fromDate) <= toDateKey(toDate)) {
+    return { from: fromDate, to: toDate };
+  }
+  return { from: toDate, to: fromDate };
+};
+
+const getRelativePresetForRange = (dateFrom: string, dateTo: string): RelativePreset | null => {
+  if (!dateFrom || !dateTo) return null;
+  const now = new Date();
+  const today = toDateKey(now);
+  const yesterday = toDateKey(subDays(now, 1));
+  const currentWeek = toDateKey(startOfWeek(now, { weekStartsOn: 1 }));
+  const last7 = toDateKey(subDays(now, 6));
+  const currentMonth = toDateKey(startOfMonth(now));
+  const last30 = toDateKey(subDays(now, 29));
+  const last90 = toDateKey(subMonths(now, 3));
+  if (dateFrom === today && dateTo === today) return RELATIVE_PRESETS[0];
+  if (dateFrom === yesterday && dateTo === yesterday) return RELATIVE_PRESETS[1];
+  if (dateFrom === currentWeek && dateTo === today) return RELATIVE_PRESETS[2];
+  if (dateFrom === last7 && dateTo === today) return RELATIVE_PRESETS[3];
+  if (dateFrom === currentMonth && dateTo === today) return RELATIVE_PRESETS[4];
+  if (dateFrom === last30 && dateTo === today) return RELATIVE_PRESETS[5];
+  if (dateFrom === last90 && dateTo === today) return RELATIVE_PRESETS[6];
+  return null;
 };
 
 const parseDateKey = (value: string) => {
@@ -84,7 +130,7 @@ const formatDateLabel = (value: string) => {
 const formatShortDateLabel = (value: string) => {
   const parsed = parseDateKey(value);
   if (!parsed) return "-";
-  return format(parsed, "d MMM yyyy", { locale: localeId });
+  return `${parsed.getDate()} ${SHORT_MONTH_NAMES_ID[parsed.getMonth()]} ${parsed.getFullYear()}`;
 };
 
 function PeriodCaption({ displayMonth }: CaptionProps) {
@@ -139,11 +185,24 @@ const dayPickerClassNames = {
   day_hidden: "invisible",
 };
 
-export function PeriodFilterPicker({ date, setDate, className, contentClassName, triggerLabelMode = "full" }: PeriodFilterPickerProps) {
+export function PeriodFilterPicker({
+  date,
+  setDate,
+  className,
+  contentClassName,
+  numberOfMonths,
+  triggerLabelMode,
+  variant = "default",
+}: PeriodFilterPickerProps) {
+  const isFoundationVariant = variant === "foundation";
+  const resolvedNumberOfMonths = numberOfMonths ?? (isFoundationVariant ? 2 : 1);
+  const resolvedTriggerLabelMode = triggerLabelMode ?? (isFoundationVariant ? "compact" : "full");
   const [isOpen, setIsOpen] = React.useState(false);
   const [panelMode, setPanelMode] = React.useState<PeriodPanelMode>("month");
   const [pickerMonth, setPickerMonth] = React.useState(() => new Date());
   const [pickerYear, setPickerYear] = React.useState(() => new Date().getFullYear());
+  const [draftRange, setDraftRange] = React.useState<DateRange | undefined>(undefined);
+  const [hoveredRangeDate, setHoveredRangeDate] = React.useState<Date | undefined>(undefined);
 
   const timezoneLabel = React.useMemo(() => {
     const offsetMinutes = -new Date().getTimezoneOffset();
@@ -159,37 +218,40 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
   const dateTo = date?.to ? toDateKey(date.to) : date?.from ? toDateKey(date.from) : "";
   const selectedFromDate = React.useMemo(() => parseDateKey(dateFrom), [dateFrom]);
   const selectedToDate = React.useMemo(() => parseDateKey(dateTo), [dateTo]);
+  const selectedDateRange = React.useMemo<DateRange | undefined>(() => {
+    if (!selectedFromDate) return undefined;
+    return { from: selectedFromDate, to: selectedToDate || selectedFromDate };
+  }, [selectedFromDate, selectedToDate]);
 
   const activeRelativePreset = React.useMemo(() => {
-    if (!dateFrom || !dateTo) return null;
-    const now = new Date();
-    const today = toDateKey(now);
-    const yesterday = toDateKey(subDays(now, 1));
-    const currentWeek = toDateKey(startOfWeek(now, { weekStartsOn: 1 }));
-    const last7 = toDateKey(subDays(now, 6));
-    const currentMonth = toDateKey(startOfMonth(now));
-    const last30 = toDateKey(subDays(now, 29));
-    const last90 = toDateKey(subMonths(now, 3));
-    if (dateFrom === today && dateTo === today) return RELATIVE_PRESETS[0];
-    if (dateFrom === yesterday && dateTo === yesterday) return RELATIVE_PRESETS[1];
-    if (dateFrom === currentWeek && dateTo === today) return RELATIVE_PRESETS[2];
-    if (dateFrom === last7 && dateTo === today) return RELATIVE_PRESETS[3];
-    if (dateFrom === currentMonth && dateTo === today) return RELATIVE_PRESETS[4];
-    if (dateFrom === last30 && dateTo === today) return RELATIVE_PRESETS[5];
-    if (dateFrom === last90 && dateTo === today) return RELATIVE_PRESETS[6];
-    return null;
+    return getRelativePresetForRange(dateFrom, dateTo);
   }, [dateFrom, dateTo]);
+
+  const draftFrom = draftRange?.from ? toDateKey(draftRange.from) : "";
+  const draftTo = draftRange?.to ? toDateKey(draftRange.to) : draftRange?.from ? toDateKey(draftRange.from) : "";
+  const draftRelativePreset = React.useMemo(() => {
+    return getRelativePresetForRange(draftFrom, draftTo);
+  }, [draftFrom, draftTo]);
+  const sidebarRelativePreset = draftRange?.from ? draftRelativePreset : activeRelativePreset;
+  const visibleDraftRange = React.useMemo<DateRange | undefined>(() => {
+    if (!draftRange?.from) return selectedDateRange;
+    if (draftRange.to) return draftRange;
+    if (hoveredRangeDate) return sortRangeDates(draftRange.from, hoveredRangeDate);
+    return draftRange;
+  }, [draftRange, hoveredRangeDate, selectedDateRange]);
 
   const isCurrentMonthRange = React.useMemo(() => {
     if (!dateFrom || !dateTo) return false;
     const now = new Date();
     return dateFrom === toDateKey(startOfMonth(now)) && dateTo === toDateKey(now);
   }, [dateFrom, dateTo]);
+  const isCustomRangeActive = Boolean(dateFrom && dateTo && !activeRelativePreset)
+    || Boolean(draftRange?.from && !draftRelativePreset);
 
   const summaryLabel = React.useMemo(() => {
     if (!dateFrom && !dateTo) return `Semua Waktu (${timezoneLabel})`;
     if (isCurrentMonthRange) return `Bulan Ini (${timezoneLabel})`;
-    if (triggerLabelMode === "compact") {
+    if (resolvedTriggerLabelMode === "compact") {
       if (activeRelativePreset) return `${activeRelativePreset.label} (${timezoneLabel})`;
       if (dateFrom && dateTo) {
         if (dateFrom === dateTo) return `${formatShortDateLabel(dateFrom)} (${timezoneLabel})`;
@@ -202,16 +264,51 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
     }
     if (dateFrom && dateTo) return `${formatDateLabel(dateFrom)} - ${formatDateLabel(dateTo)} (${timezoneLabel})`;
     return `${formatDateLabel(dateFrom || dateTo)} (${timezoneLabel})`;
-  }, [activeRelativePreset, dateFrom, dateTo, isCurrentMonthRange, timezoneLabel, triggerLabelMode]);
+  }, [activeRelativePreset, dateFrom, dateTo, isCurrentMonthRange, timezoneLabel, resolvedTriggerLabelMode]);
+
+  const draftSummaryLabel = React.useMemo(() => {
+    if (!draftRange?.from) return summaryLabel;
+    const displayRange = visibleDraftRange || draftRange;
+    const from = displayRange.from ? toDateKey(displayRange.from) : "";
+    const to = displayRange.to ? toDateKey(displayRange.to) : "";
+    if (!to) return `${formatShortDateLabel(from)} - pilih tanggal akhir`;
+    const preset = getRelativePresetForRange(from, to);
+    if (preset) return `${preset.label} (${timezoneLabel})`;
+    if (from === to) return `${formatShortDateLabel(from)} (${timezoneLabel})`;
+    return `${formatShortDateLabel(from)} - ${formatShortDateLabel(to)}`;
+  }, [draftRange, summaryLabel, timezoneLabel, visibleDraftRange]);
 
   const applyRange = React.useCallback((fromDate: Date, toDate: Date) => {
+    setDraftRange({ from: fromDate, to: toDate });
+    setHoveredRangeDate(undefined);
     setDate({ from: fromDate, to: toDate });
     setIsOpen(false);
   }, [setDate]);
 
+  const handleRangeDayClick = React.useCallback((day: Date) => {
+    setPanelMode("relative");
+    setHoveredRangeDate(undefined);
+
+    if (!draftRange?.from || draftRange.to) {
+      setDraftRange({ from: day });
+      return;
+    }
+
+    const completedRange = sortRangeDates(draftRange.from, day);
+    applyRange(completedRange.from, completedRange.to);
+  }, [applyRange, draftRange]);
+
+  const handleRangeDayMouseEnter = React.useCallback((day: Date) => {
+    if (draftRange?.from && !draftRange.to) {
+      setHoveredRangeDate(day);
+    }
+  }, [draftRange]);
+
   const applyPeriodPreset = (preset: "all" | RelativePresetKey) => {
     const now = new Date();
     if (preset === "all") {
+      setDraftRange(undefined);
+      setHoveredRangeDate(undefined);
       setDate(undefined);
       setPanelMode("relative");
       setIsOpen(false);
@@ -245,16 +342,21 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
           setPickerMonth(base);
           setPickerYear(base.getFullYear());
           setPanelMode("relative");
+          setDraftRange(selectedDateRange);
+          setHoveredRangeDate(undefined);
+        } else {
+          setDraftRange(undefined);
+          setHoveredRangeDate(undefined);
         }
       }}
     >
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" className={cn("uiPeriodPicker", className)}>
+        <Button type="button" variant="outline" className={cn("uiPeriodPicker", isFoundationVariant && "uiPeriodPicker--foundation", className)}>
           <CalendarIcon className="h-4 w-4 shrink-0 text-slate-500" />
           <span className="min-w-0 truncate">{summaryLabel}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className={cn("periodPickerContent", contentClassName)}>
+      <PopoverContent align="start" className={cn("periodPickerContent", isFoundationVariant && "periodPickerContent--foundation", contentClassName)}>
         <div className="periodPickerShell">
           <aside className="periodPickerSidebar">
             <div className="periodPickerPresetGroup">
@@ -270,7 +372,7 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
                   type="button"
                   key={preset.key}
                   onClick={() => applyPeriodPreset(preset.key)}
-                  className={cn("periodPickerPreset", activeRelativePreset?.key === preset.key && "is-active")}
+                  className={cn("periodPickerPreset", sidebarRelativePreset?.key === preset.key && "is-active")}
                 >
                   {preset.label}
                 </button>
@@ -283,7 +385,7 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
                   type="button"
                   key={preset.key}
                   onClick={() => applyPeriodPreset(preset.key)}
-                  className={cn("periodPickerPreset", activeRelativePreset?.key === preset.key && "is-active")}
+                  className={cn("periodPickerPreset", sidebarRelativePreset?.key === preset.key && "is-active")}
                 >
                   {preset.label}
                 </button>
@@ -296,11 +398,21 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
                   type="button"
                   key={preset.key}
                   onClick={() => applyPeriodPreset(preset.key)}
-                  className={cn("periodPickerPreset", activeRelativePreset?.key === preset.key && "is-active")}
+                  className={cn("periodPickerPreset", sidebarRelativePreset?.key === preset.key && "is-active")}
                 >
                   {preset.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setPanelMode("relative");
+                  setDraftRange(selectedDateRange);
+                }}
+                className={cn("periodPickerPreset", isCustomRangeActive && "is-active")}
+              >
+                Custom
+              </button>
             </div>
           </aside>
 
@@ -311,6 +423,7 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
                 locale={localeId}
                 showOutsideDays
                 month={pickerMonth}
+                numberOfMonths={resolvedNumberOfMonths}
                 onMonthChange={setPickerMonth}
                 selected={selectedFromDate}
                 onSelect={(day) => {
@@ -327,11 +440,11 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
                 locale={localeId}
                 showOutsideDays
                 month={pickerMonth}
+                numberOfMonths={resolvedNumberOfMonths}
                 onMonthChange={setPickerMonth}
-                selected={selectedFromDate && selectedToDate ? { from: selectedFromDate, to: selectedToDate } : undefined}
-                onSelect={(range) => {
-                  if (range?.from && range.to) applyRange(range.from, range.to);
-                }}
+                selected={visibleDraftRange}
+                onDayClick={handleRangeDayClick}
+                onDayMouseEnter={handleRangeDayMouseEnter}
                 components={{ Caption: PeriodCaption }}
                 classNames={dayPickerClassNames}
               />
@@ -343,6 +456,7 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
                 locale={localeId}
                 showOutsideDays
                 month={pickerMonth}
+                numberOfMonths={resolvedNumberOfMonths}
                 onMonthChange={setPickerMonth}
                 selected={selectedFromDate && selectedToDate ? { from: selectedFromDate, to: selectedToDate } : undefined}
                 onDayClick={(day) => {
@@ -401,7 +515,7 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
             )}
 
             <footer className="periodPickerFooter">
-              <p>{summaryLabel}</p>
+              <p>{draftSummaryLabel}</p>
               <Button type="button" variant="outline" size="sm" onClick={() => setIsOpen(false)}>
                 Tutup
               </Button>
@@ -411,4 +525,8 @@ export function PeriodFilterPicker({ date, setDate, className, contentClassName,
       </PopoverContent>
     </Popover>
   );
+}
+
+export function FoundationDateRangePicker(props: Omit<PeriodFilterPickerProps, "variant">) {
+  return <PeriodFilterPicker {...props} variant="foundation" />;
 }

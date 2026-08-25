@@ -15,6 +15,9 @@ import {
   PopoverTrigger,
 } from "./popover"
 
+export { FoundationDateRangePicker, PeriodFilterPicker } from "./period-filter-picker"
+export type { PeriodFilterPickerProps } from "./period-filter-picker"
+
 export function DatePickerWithRange({
   className,
   popoverClassName,

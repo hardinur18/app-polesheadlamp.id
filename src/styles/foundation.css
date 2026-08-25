@@ -57,14 +57,15 @@
 
 .leadFilterPanel {
   overflow: visible;
-  padding: 24px;
+  padding: 22px;
 }
 
 .leadFilterGrid {
   align-items: center;
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  column-gap: 14px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  row-gap: 12px;
   max-width: 100%;
 }
 
@@ -77,16 +78,25 @@
   min-width: 0;
 }
 
+.leadFilterDate {
+  justify-self: stretch;
+  width: 100%;
+}
+
+.leadFilterDate > * {
+  width: 100%;
+}
+
 .leadFilterControl,
 .leadSearchInput {
   background: #fff;
   border-color: #dbe4ef;
   border-radius: 16px;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
-  font-size: 15px;
-  font-weight: 760;
-  height: 56px !important;
-  min-height: 56px !important;
+  font-size: 14px;
+  font-weight: 650;
+  height: 52px !important;
+  min-height: 52px !important;
   line-height: 1.2;
 }
 
@@ -109,154 +119,194 @@
   white-space: nowrap;
 }
 
-.leadPeriodPicker.uiPeriodPicker {
+.uiPeriodPicker.uiPeriodPicker--foundation {
   border-color: #dbe4ef;
   border-radius: 16px;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
   display: inline-flex;
-  font-size: 15px;
-  height: 56px !important;
+  font-size: 14px;
+  height: 52px !important;
   justify-content: flex-start;
   max-width: 100%;
-  min-height: 56px !important;
+  min-height: 52px !important;
   min-width: 0;
   overflow: hidden;
   padding-inline: 18px;
   width: 100%;
 }
 
-.leadPeriodPicker.uiPeriodPicker > span {
+.uiPeriodPicker.uiPeriodPicker--foundation > span {
   color: #0f172a;
   display: block;
-  font-weight: 780;
+  font-weight: 650;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.leadPeriodPicker.uiPeriodPicker svg {
+.uiPeriodPicker.uiPeriodPicker--foundation svg {
   flex: 0 0 auto;
 }
 
-.leadPeriodPopover.periodPickerContent {
-  width: min(760px, calc(100vw - 32px));
+.periodPickerContent.periodPickerContent--foundation {
+  width: max-content;
+  max-width: calc(100vw - 32px);
   border: 1px solid #dbe6f3 !important;
   border-radius: 20px;
   box-shadow: 0 22px 60px rgba(15, 23, 42, 0.14);
 }
 
-.leadPeriodPopover .periodPickerShell {
-  grid-template-columns: 210px minmax(0, 1fr);
-  min-height: 420px;
+.periodPickerContent--foundation .periodPickerShell {
+  align-items: stretch;
+  grid-template-columns: 210px max-content;
+  min-height: 0;
 }
 
-.leadPeriodPopover .periodPickerSidebar {
+.periodPickerContent--foundation .periodPickerMain .rdp .rdp-months {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: max-content;
+}
+
+.periodPickerContent--foundation .periodPickerMain .rdp .rdp-month {
+  min-width: 0;
+}
+
+.periodPickerContent--foundation .periodPickerMain .rdp .rdp-table {
+  width: 100%;
+}
+
+.periodPickerContent--foundation .periodPickerSidebar {
   background: #f8fafc;
   padding: 22px 24px;
 }
 
-.leadPeriodPopover .periodPickerPresetGroup {
-  gap: 18px;
+.periodPickerContent--foundation .periodPickerPresetGroup {
+  gap: 12px;
 }
 
-.leadPeriodPopover .periodPickerPreset {
-  min-height: 26px;
+.periodPickerContent--foundation .periodPickerPreset {
+  min-height: 24px;
   border-radius: 0;
   box-shadow: none;
   color: #46566f;
-  font-size: 1rem;
-  font-weight: 720;
+  font-size: 0.94rem;
+  font-weight: 500;
   padding: 0;
 }
 
-.leadPeriodPopover .periodPickerPreset:hover,
-.leadPeriodPopover .periodPickerPreset.is-active {
+.periodPickerContent--foundation .periodPickerPreset:focus-visible {
+  box-shadow: none;
+  color: #0b63ce;
+}
+
+.periodPickerContent--foundation .periodPickerPreset:hover,
+.periodPickerContent--foundation .periodPickerPreset.is-active {
   background: transparent;
   box-shadow: none;
   color: #0b63ce;
 }
 
-.leadPeriodPopover .periodPickerPreset.is-active {
-  font-weight: 820;
+.periodPickerContent--foundation .periodPickerPreset.is-active {
+  font-weight: 540;
 }
 
-.leadPeriodPopover .periodPickerMain {
-  padding: 22px 28px 20px;
+.periodPickerContent--foundation .periodPickerMain {
+  display: block;
+  padding: 20px 28px 16px;
+  width: max-content;
 }
 
-.leadPeriodPopover .periodPickerCaption,
-.leadPeriodPopover .periodPickerYearHeader {
-  min-height: 34px;
+.periodPickerContent--foundation .periodPickerCaption,
+.periodPickerContent--foundation .periodPickerYearHeader {
+  min-height: 30px;
 }
 
-.leadPeriodPopover .periodPickerNavButton {
-  width: 24px;
-  height: 24px;
+.periodPickerContent--foundation .periodPickerNavButton {
+  width: 22px;
+  height: 22px;
   border-radius: 0;
   color: #64748b;
 }
 
-.leadPeriodPopover .periodPickerNavButton:hover {
+.periodPickerContent--foundation .periodPickerNavButton:hover {
   background: transparent;
   color: #0b63ce;
 }
 
-.leadPeriodPopover .periodPickerCaptionLabel,
-.leadPeriodPopover .periodPickerYearHeader span {
-  font-size: 1.15rem;
-  font-weight: 780;
+.periodPickerContent--foundation .periodPickerCaptionLabel,
+.periodPickerContent--foundation .periodPickerYearHeader span {
+  font-size: 1.08rem;
+  font-weight: 740;
 }
 
-.leadPeriodPopover .rdp {
+.periodPickerContent--foundation .rdp {
   margin: 0;
 }
 
-.leadPeriodPopover .rdp .rdp-head_cell {
+.periodPickerContent--foundation .rdp .rdp-head_cell {
   color: #6b7a90;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 560;
-  height: 34px;
-  width: 46px;
+  height: 28px;
+  width: 40px;
 }
 
-.leadPeriodPopover .rdp .rdp-day {
+.periodPickerContent--foundation .rdp .rdp-day {
   background: transparent !important;
   border-radius: 4px;
   box-shadow: none;
   color: #0f172a;
-  font-size: 1rem;
-  font-weight: 650;
-  height: 44px;
-  width: 44px;
+  font-size: 0.94rem;
+  font-weight: 560;
+  height: 36px;
+  width: 36px;
 }
 
-.leadPeriodPopover .rdp .rdp-cell:has([aria-selected]) {
+.periodPickerContent--foundation .periodPickerMain .rdp .rdp-month {
+  gap: 8px;
+}
+
+.periodPickerContent--foundation .periodPickerMain .rdp .rdp-row {
+  margin-top: 4px;
+}
+
+.periodPickerContent--foundation .rdp .rdp-cell:has([aria-selected]) {
   background: transparent !important;
 }
 
-.leadPeriodPopover .rdp .rdp-day_range_start,
-.leadPeriodPopover .rdp .rdp-day_range_end,
-.leadPeriodPopover .rdp .rdp-day_selected {
+.periodPickerContent--foundation .rdp .rdp-day_range_start,
+.periodPickerContent--foundation .rdp .rdp-day_range_end,
+.periodPickerContent--foundation .rdp .rdp-day_selected {
   background: #2563eb !important;
   border-radius: 4px;
   color: #fff !important;
 }
 
-.leadPeriodPopover .rdp .rdp-day_range_middle {
+.periodPickerContent--foundation .rdp .rdp-day_range_middle {
   background: #eef2f7 !important;
   border-radius: 0;
   color: #0f172a !important;
 }
 
-.leadPeriodPopover .periodPickerFooter {
-  margin-top: 14px;
-  padding-top: 12px;
+.periodPickerContent--foundation .periodPickerFooter {
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.periodPickerContent--foundation .periodPickerFooter p {
+  font-weight: 560;
+}
+
+.periodPickerContent--foundation .periodPickerFooter .uiButton {
+  font-weight: 640;
 }
 
 .leadSearchBox {
-  grid-column: span 2;
-  height: 56px;
+  grid-column: 1 / span 5;
+  height: 52px;
   min-width: 0;
   position: relative;
 }
@@ -288,10 +338,12 @@
 
 .leadResetButton {
   border-radius: 16px;
-  font-weight: 820;
+  font-weight: 700;
   gap: 10px;
-  height: 56px !important;
-  min-height: 56px !important;
+  height: 52px !important;
+  justify-self: stretch;
+  min-height: 52px !important;
+  min-width: 0;
   padding-inline: 18px;
   width: 100%;
 }
@@ -354,7 +406,7 @@
   color: #64748b;
   display: flex;
   flex-direction: column;
-  font-weight: 700;
+  font-weight: 560;
   gap: 3px;
 }
 
@@ -373,12 +425,24 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  user-select: none;
+  -webkit-user-select: none;
   --table-cell-x: 18px;
+}
+
+.leadDataTable.uiDataTableScroller[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.leadDataTable.uiDataTableScroller[data-dragging="true"] * {
+  cursor: grabbing !important;
 }
 
 .leadDataTable table {
   table-layout: fixed;
-  width: 100%;
+  width: 100% !important;
 }
 
 .leadDataTable th {
@@ -528,7 +592,7 @@
 .leadFollowUpEmpty {
   color: #94a3b8;
   font-size: 0.9rem;
-  font-weight: 720;
+  font-weight: 560;
 }
 
 .leadFollowUpTooltip {
@@ -563,7 +627,7 @@
   color: #64748b;
   display: flex;
   font-size: 11px;
-  font-weight: 720;
+  font-weight: 560;
   gap: 6px;
   min-width: 0;
 }
@@ -588,7 +652,7 @@
   color: #7c3aed;
   display: block;
   font-size: 11px;
-  font-weight: 720;
+  font-weight: 600;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -893,7 +957,7 @@
   border-top: 1px solid #e8eef6;
   color: #64748b;
   display: flex;
-  font-weight: 720;
+  font-weight: 560;
   gap: 16px;
   justify-content: space-between;
   padding: 18px 32px;
@@ -906,16 +970,81 @@
   gap: 12px;
 }
 
+.leadPerPageControl {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.leadPerPageControl > span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+.leadPerPageSelect.uiSelectTrigger {
+  background: #fff;
+  border-color: #dbe4ef;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.045);
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  height: 40px;
+  min-height: 40px;
+  width: 142px;
+}
+
 .leadFormDialog.masterDataFormDialogContent,
 .leadBulkDialog.masterDataFormDialogContent,
 .leadDetailDialog.masterDataFormDialogContent {
   border-radius: 26px;
 }
 
+.leadManagedForm {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.leadManagedForm > .masterDataDialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.leadManagedForm > .masterDataFormActions {
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 14px 48px 18px;
+  position: relative;
+}
+
+.leadDetailDialog.masterDataFormDialogContent {
+  max-height: min(86vh, calc(100dvh - 32px));
+}
+
 .leadFormDialog .masterDataFormHeader,
 .leadBulkDialog .masterDataFormHeader,
 .leadDetailDialog .masterDataFormHeader {
   padding: 30px 48px 24px;
+}
+
+.leadDetailDialog .masterDataFormHeader {
+  padding: 26px 32px 20px;
+}
+
+.leadDetailDialog .masterDataFormActions {
+  bottom: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 14px 32px 18px;
+  position: relative;
 }
 
 .leadManagedForm .masterDataDialogBody,
@@ -927,7 +1056,112 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding-bottom: 132px;
+  padding-bottom: 24px;
+}
+
+.leadDetailBody.masterDataDialogBody {
+  padding: 16px 32px 20px;
+}
+
+.leadProspectDetail {
+  gap: 12px;
+}
+
+.leadProspectDetail .foundationDetailHero {
+  border-radius: 18px;
+  box-shadow: none;
+  padding: 16px 18px;
+}
+
+.leadProspectDetail .foundationDetailMetricGrid {
+  gap: 10px;
+}
+
+.leadProspectDetail .foundationDetailMetric {
+  border-radius: 14px;
+  box-shadow: none;
+  padding: 12px 14px;
+}
+
+.leadProspectDetail .foundationDetailSection {
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.leadProspectDetail .foundationDetailSectionHeader {
+  padding: 13px 16px;
+}
+
+.leadProspectDetail .foundationDetailField {
+  padding: 12px 16px;
+}
+
+.leadProspectDetail .foundationDetailSectionActions {
+  justify-content: flex-end;
+}
+
+.leadDetailEmptyPanel {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  font-size: 0.9rem;
+  font-weight: 520;
+  gap: 8px;
+  justify-content: center;
+  min-height: 86px;
+  padding: 18px;
+}
+
+.leadDetailEmptyPanel svg {
+  color: #8aa0bb;
+}
+
+.leadDetailTimeline {
+  display: grid;
+}
+
+.leadDetailTimelineItem {
+  align-items: flex-start;
+  border-top: 1px solid #edf2f8;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 14px 16px;
+}
+
+.leadDetailTimelineItem:first-child {
+  border-top: 0;
+}
+
+.leadDetailTimelineIcon {
+  align-items: center;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  color: #059669;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  margin-top: 1px;
+  width: 32px;
+}
+
+.leadDetailTimelineItem strong {
+  color: #0f172a;
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 680;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.leadDetailTimelineItem span:not(.leadDetailTimelineIcon) {
+  color: #64748b;
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 520;
+  line-height: 1.4;
+  margin-top: 3px;
 }
 
 .leadFormGrid {
@@ -938,6 +1172,31 @@
 
 .leadFormGrid.single {
   grid-template-columns: 1fr;
+}
+
+.leadFormSection {
+  border: 1px solid #e2ebf6;
+  border-radius: 18px;
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.leadFormSectionHeader {
+  align-items: center;
+  border-bottom: 1px solid #edf2f8;
+  display: flex;
+  justify-content: space-between;
+  margin: -2px -2px 0;
+  padding: 0 0 14px;
+}
+
+.leadFormSectionHeader h3 {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 760;
+  line-height: 1.2;
+  margin: 0;
 }
 
 .leadManagedFormBody [data-slot='form-item'],
@@ -1214,26 +1473,128 @@
 
 .leadDetailHero {
   align-items: flex-start;
-  background: #f8fbff;
-  border: 1px solid #e6edf6;
-  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  border: 1px solid #e2eaf5;
+  border-radius: 20px;
+  box-shadow: 0 18px 38px rgba(15, 23, 42, 0.055);
   display: flex;
   gap: 18px;
   justify-content: space-between;
-  padding: 22px;
+  padding: 22px 24px;
+}
+
+.leadDetailIdentity {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+.leadDetailAvatar {
+  align-items: center;
+  background: #dbeafe;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #0f6bdc;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.92rem;
+  font-weight: 900;
+  height: 54px;
+  justify-content: center;
+  width: 54px;
+}
+
+.leadDetailEyebrow {
+  color: #7b8ba1;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 740;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
 }
 
 .leadDetailHero h3 {
   color: #0f172a;
-  font-size: 26px;
-  font-weight: 900;
+  font-size: 24px;
+  font-weight: 860;
+  line-height: 1.1;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .leadDetailHero p {
   color: #64748b;
-  font-weight: 720;
+  font-weight: 560;
   margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.leadDetailHeroBadges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.leadDetailHeroActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.leadDetailHeroActions .uiButton,
+.leadDetailBookingActions .uiButton {
+  border-radius: 14px;
+  gap: 8px;
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.leadDetailSummaryGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.leadDetailMetric {
+  background: #fff;
+  border: 1px solid #e6edf6;
+  border-radius: 16px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.035);
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+}
+
+.leadDetailMetric span {
+  color: #7b8ba1;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.leadDetailMetric strong {
+  color: #0f172a;
+  font-size: 1.14rem;
+  font-weight: 840;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leadDetailMetric small {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 560;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .leadDetailGrid {
@@ -1247,6 +1608,7 @@
   background: #fff;
   border: 1px solid #e6edf6;
   border-radius: 16px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.028);
   padding: 16px;
 }
 
@@ -1266,10 +1628,54 @@
 .leadDetailItem strong {
   color: #0f172a;
   display: block;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 820;
   margin-top: 6px;
   overflow-wrap: anywhere;
+}
+
+.leadDetailBookingCard {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #dbe8f7;
+  border-radius: 18px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.leadDetailBookingCard span {
+  color: #7b8ba1;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.leadDetailBookingCard strong {
+  color: #0f172a;
+  display: block;
+  font-size: 1rem;
+  font-weight: 820;
+  margin-top: 4px;
+}
+
+.leadDetailBookingCard p {
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 560;
+  margin: 4px 0 0;
+}
+
+.leadDetailBookingActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .leadFollowUpHistory {
@@ -1293,7 +1699,7 @@
   color: #7b8ba1;
   display: block;
   font-size: 12px;
-  font-weight: 820;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1302,7 +1708,7 @@
   color: #0f172a;
   display: block;
   font-size: 17px;
-  font-weight: 860;
+  font-weight: 780;
   margin-top: 3px;
 }
 
@@ -1311,7 +1717,7 @@
   border-color: #cfe0ff !important;
   color: #0b63ce !important;
   font-size: 0.72rem;
-  font-weight: 820;
+  font-weight: 700;
 }
 
 .leadFollowUpHistoryList {
@@ -1352,7 +1758,7 @@
 .leadFollowUpHistoryItem strong {
   color: #0f172a;
   font-size: 0.9rem;
-  font-weight: 840;
+  font-weight: 760;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1361,7 +1767,7 @@
 .leadFollowUpHistoryItem span:not(.leadFollowUpHistoryIcon) {
   color: #64748b;
   font-size: 0.78rem;
-  font-weight: 620;
+  font-weight: 540;
 }
 
 .leadFollowUpHistoryEmpty {
@@ -1371,7 +1777,7 @@
   color: #7b8ba1;
   display: flex;
   font-size: 0.84rem;
-  font-weight: 720;
+  font-weight: 560;
   gap: 8px;
   justify-content: center;
   min-height: 76px;
@@ -1379,7 +1785,16 @@
 
 @media (max-width: 1320px) {
   .leadFilterGrid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .leadSearchBox {
+    grid-column: 1 / span 2;
+  }
+
+  .leadResetButton {
+    justify-self: stretch;
+    width: 100%;
   }
 }
 
@@ -1390,6 +1805,11 @@
 
   .leadSearchBox {
     grid-column: 1 / -1;
+  }
+
+  .leadResetButton {
+    justify-self: stretch;
+    width: 100%;
   }
 }
 
@@ -1427,6 +1847,11 @@
     grid-column: auto;
   }
 
+  .leadResetButton {
+    justify-content: center;
+    width: 100%;
+  }
+
   .leadKanbanBoard {
     gap: 12px;
     padding: 2px 2px 16px;
@@ -1451,23 +1876,32 @@
     justify-content: flex-start;
   }
 
-  .leadPeriodPopover.periodPickerContent {
+  .periodPickerContent.periodPickerContent--foundation {
     width: calc(100vw - 24px);
     max-height: min(78vh, 680px);
     overflow-y: auto;
   }
 
-  .leadPeriodPopover .periodPickerShell {
+  .periodPickerContent--foundation .periodPickerShell {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
   }
 
-  .leadPeriodPopover .periodPickerSidebar {
+  .periodPickerContent--foundation .periodPickerMain .rdp .rdp-months {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .periodPickerContent--foundation .periodPickerMain {
+    width: auto;
+  }
+
+  .periodPickerContent--foundation .periodPickerSidebar {
     border-right: 0;
     border-bottom: 1px solid var(--ops-border);
   }
 
-  .leadPeriodPopover .periodPickerPresetGroup {
+  .periodPickerContent--foundation .periodPickerPresetGroup {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1484,7 +1918,15 @@
 
   .leadManagedFormBody {
     gap: 18px;
-    padding-bottom: 120px;
+    padding-bottom: 22px;
+  }
+
+  .leadFormSection {
+    padding: 16px;
+  }
+
+  .leadDetailBody.masterDataDialogBody {
+    padding: 16px 18px 22px;
   }
 
   .leadFormGrid {
@@ -1510,12 +1952,26 @@
     width: 100%;
   }
 
+  .leadPerPageControl {
+    width: 100%;
+  }
+
+  .leadPerPageSelect.uiSelectTrigger {
+    flex: 1;
+    width: auto;
+  }
+
   .leadSelectionToolbarActions {
     flex-wrap: wrap;
   }
 
   .leadPaginationActions {
+    flex-wrap: wrap;
     justify-content: space-between;
+  }
+
+  .leadDetailSummaryGrid {
+    grid-template-columns: 1fr;
   }
 
   .leadDetailGrid {
@@ -1523,6 +1979,17 @@
   }
 
   .leadDetailHero {
+    flex-direction: column;
+  }
+
+  .leadDetailHeroActions,
+  .leadDetailBookingActions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .leadDetailBookingCard {
+    align-items: flex-start;
     flex-direction: column;
   }
 
@@ -9912,6 +10379,249 @@ body {
   min-width: 118px;
 }
 
+.foundationDetailShell {
+  display: grid;
+  gap: 14px;
+}
+
+.foundationDetailHero {
+  align-items: center;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  border: 1px solid #dfe9f6;
+  border-radius: 20px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.045);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 20px 22px;
+}
+
+.foundationDetailHeroIdentity {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+.foundationDetailAvatar {
+  align-items: center;
+  background: #dbeafe;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #0f6bdc;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  font-weight: 820;
+  height: 54px;
+  justify-content: center;
+  width: 54px;
+}
+
+.foundationDetailHeroText {
+  min-width: 0;
+}
+
+.foundationDetailEyebrow {
+  color: #7b8ba1;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.foundationDetailHero h3 {
+  color: #0f172a;
+  font-size: 1.32rem;
+  font-weight: 820;
+  line-height: 1.12;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.foundationDetailHero p {
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 520;
+  line-height: 1.45;
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.foundationDetailBadges,
+.foundationDetailHeroActions,
+.foundationDetailSectionActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.foundationDetailBadges {
+  margin-top: 10px;
+}
+
+.foundationDetailHeroActions {
+  justify-content: flex-end;
+}
+
+.foundationDetailHeroActions .uiButton,
+.foundationDetailSectionActions .uiButton {
+  border-radius: 13px;
+  gap: 8px;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.foundationDetailMetricGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.foundationDetailMetric {
+  align-items: start;
+  background: #fff;
+  border: 1px solid #e4edf7;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.035);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 15px 16px;
+}
+
+.foundationDetailMetric span,
+.foundationDetailField > span,
+.foundationDetailSectionHeader p {
+  color: #7b8ba1;
+  font-size: 0.74rem;
+  font-weight: 620;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.foundationDetailMetric strong {
+  color: #0f172a;
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 820;
+  line-height: 1.22;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.foundationDetailMetric small {
+  color: #64748b;
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 520;
+  line-height: 1.35;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.foundationDetailMetricIcon {
+  align-items: center;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  color: #0b63ce;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.foundationDetailSection {
+  background: #fff;
+  border: 1px solid #e2eaf5;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.028);
+  overflow: hidden;
+}
+
+.foundationDetailSectionHeader {
+  align-items: center;
+  border-bottom: 1px solid #edf2f8;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 15px 16px;
+}
+
+.foundationDetailSectionHeader h4 {
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 780;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.foundationDetailSectionHeader p {
+  font-weight: 520;
+  letter-spacing: 0;
+  line-height: 1.35;
+  margin: 3px 0 0;
+  text-transform: none;
+}
+
+.foundationDetailSectionBody {
+  min-width: 0;
+}
+
+.foundationDetailFieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.foundationDetailField {
+  border-top: 1px solid #edf2f8;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.foundationDetailSectionHeader + .foundationDetailSectionBody .foundationDetailField:nth-child(-n + 2) {
+  border-top: 0;
+}
+
+.foundationDetailField:nth-child(odd) {
+  border-right: 1px solid #edf2f8;
+}
+
+.foundationDetailField.span-full {
+  border-right: 0;
+  grid-column: 1 / -1;
+}
+
+.foundationDetailField > strong {
+  color: #0f172a;
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 640;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.foundationDetailMuted {
+  color: #64748b;
+  font-weight: 520;
+}
+
+.foundationDetailTextBlock {
+  color: #334155;
+  font-weight: 520;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .masterDataConfirmDialog {
   max-width: 420px;
   border-radius: 24px;
@@ -11013,6 +11723,47 @@ body {
 
   .masterDataDialogBody {
     padding: 14px 18px 18px;
+  }
+
+  .leadManagedForm > .masterDataFormActions {
+    padding: 12px 18px 16px;
+  }
+
+  .foundationDetailHero {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px;
+  }
+
+  .foundationDetailHeroIdentity {
+    align-items: flex-start;
+  }
+
+  .foundationDetailHeroActions {
+    justify-content: flex-start;
+  }
+
+  .foundationDetailMetricGrid,
+  .foundationDetailFieldGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .foundationDetailField,
+  .foundationDetailSectionHeader + .foundationDetailSectionBody .foundationDetailField:nth-child(-n + 2) {
+    border-top: 1px solid #edf2f8;
+  }
+
+  .foundationDetailField:first-child {
+    border-top: 0;
+  }
+
+  .foundationDetailField:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .foundationDetailSectionHeader {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .masterDataFormDialogContent,

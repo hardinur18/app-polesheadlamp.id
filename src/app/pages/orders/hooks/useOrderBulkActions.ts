@@ -11,7 +11,7 @@ interface UseOrderBulkActionsParams {
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
   updateOrder: (order: any) => any;
-  deleteOrder: (id: string) => any;
+  deleteOrder: (id: string) => Promise<void>;
   currentUser: any;
   buildStatusUpdatePayload: (order: Order, nextStatus: Order['status'], reason?: string, reasonNote?: string) => Order;
 }
@@ -80,6 +80,7 @@ export function useOrderBulkActions({
         }
 
         const updates: any = {};
+        let paymentProofPathsToRemove: string[] = [];
         if (bulkField === 'technicianId') updates.technicianId = bulkValue;
         else if (bulkField === 'csId') updates.csId = bulkValue;
         else if (bulkField === 'advertiserId') updates.advertiserId = bulkValue;
@@ -95,20 +96,22 @@ export function useOrderBulkActions({
           const paymentPhotos = (currentPhotos as any).payment || [];
 
           if (paymentPhotos.length > 0) {
-            const pathsToRemove = paymentPhotos.map((url: string) => {
+            paymentProofPathsToRemove = paymentPhotos.map((url: string) => {
               const parts = url.split('/public/orders/');
               return parts.length > 1 ? parts[1] : null;
             }).filter(Boolean);
-
-            if (pathsToRemove.length > 0) {
-              await supabase.storage.from('orders').remove(pathsToRemove);
-            }
           }
           updates.photos = { ...currentPhotos, payment: [], paymentDeleted: true, paymentDeletedAt: new Date().toISOString() };
         }
 
         // @ts-ignore
         await updateOrder({ ...order, ...updates });
+        if (paymentProofPathsToRemove.length > 0) {
+          const { error: storageError } = await supabase.storage.from('orders').remove(paymentProofPathsToRemove);
+          if (storageError) {
+            console.warn('Failed to remove detached payment proof files:', storageError);
+          }
+        }
         successCount++;
       } catch (error: any) {
         console.error(error);
@@ -148,23 +151,54 @@ export function useOrderBulkActions({
     setIsMassDeleteOpen(true);
   }, []);
 
-  const confirmMassDelete = useCallback(() => {
-    const count = selectedIds.size;
-    selectedIds.forEach(id => deleteOrder(id));
-    setSelectedIds(new Set());
-    toast.success(`${count} pesanan berhasil dihapus`);
-    if (currentUser) {
+  const confirmMassDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    const count = ids.length;
+    if (count === 0) return;
+
+    let successCount = 0;
+    const failedIds = new Set<string>();
+    const failureDetails: string[] = [];
+    const toastId = toast.loading(`Menghapus ${count} pesanan...`);
+
+    for (const id of ids) {
+      const order = orders.find(o => o.id === id);
+      try {
+        await deleteOrder(id);
+        successCount++;
+      } catch (error: any) {
+        console.error(error);
+        failedIds.add(id);
+        failureDetails.push(`${order?.customerName || id}: ${error?.message || 'Gagal dihapus'}`);
+      }
+    }
+
+    toast.dismiss(toastId);
+    if (successCount > 0) {
+      toast.success(`${successCount} pesanan berhasil dihapus`, {
+        description: failureDetails.length > 0 ? `${failureDetails.length} pesanan gagal dihapus.` : undefined,
+      });
+    }
+    if (failureDetails.length > 0) {
+      toast.error(`${failureDetails.length} pesanan gagal dihapus`, {
+        description: failureDetails.slice(0, 2).join(' | '),
+      });
+      setSelectedIds(failedIds);
+    } else {
+      setSelectedIds(new Set());
+    }
+    if (currentUser && successCount > 0) {
       logActivity(
         { id: currentUser.id, name: currentUser.name, role: currentUser.role },
         'DELETE',
         'Pesanan',
-        `Menghapus ${count} pesanan secara massal`,
+        `Menghapus ${successCount} pesanan secara massal`,
         '',
-        { count }
+        { count: successCount }
       );
     }
     setIsMassDeleteOpen(false);
-  }, [selectedIds, deleteOrder, currentUser, setSelectedIds]);
+  }, [selectedIds, orders, deleteOrder, currentUser, setSelectedIds]);
 
   return {
     isBulkEditOpen, setIsBulkEditOpen,

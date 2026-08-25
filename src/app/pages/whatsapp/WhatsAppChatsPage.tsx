@@ -71,7 +71,6 @@ import {
   type WhatsAppOutboundMediaType,
   type WhatsAppProvider,
 } from '@/app/services/whatsappModuleService';
-import { snapshotCrmContacts, type CrmContactSnapshotInput } from '@/app/services/crmContactsService';
 import {
   MessageStatusBadge,
   ProviderBadge,
@@ -1312,7 +1311,6 @@ export function WhatsAppChatsPage() {
   const accountBreakdownInFlightKeyRef = React.useRef<string | null>(null);
   const realtimeRefreshTimerRef = React.useRef<number | null>(null);
   const loadConversationPageRef = React.useRef<((options?: { silent?: boolean }) => Promise<void>) | null>(null);
-  const crmSnapshotKeysRef = React.useRef<Set<string>>(new Set());
   const loadMessagesRef = React.useRef<
     ((conversation: WhatsAppConversation, options?: { silent?: boolean; sync?: boolean; older?: boolean; showIndicator?: boolean }) => Promise<void>) | null
   >(null);
@@ -1358,48 +1356,6 @@ export function WhatsAppChatsPage() {
       return next;
     });
     conversationPageStateCacheKeyRef.current = cacheKey;
-  }, []);
-
-  const snapshotConversationsToCrm = React.useCallback((items: WhatsAppConversation[]) => {
-    const inputs: CrmContactSnapshotInput[] = [];
-
-    items.forEach((conversation) => {
-      const phone = conversation.contactPhone?.trim() || null;
-      const sourceRefId = conversation.contactId || conversation.id;
-      const phoneKey = (phone || '').replace(/\D/g, '');
-      const dedupeKey = phoneKey ? `phone:${phoneKey}` : `conversation:${sourceRefId}`;
-      if (crmSnapshotKeysRef.current.has(dedupeKey)) return;
-      crmSnapshotKeysRef.current.add(dedupeKey);
-
-      inputs.push({
-        displayName: conversation.contactName?.trim() || phone || 'Kontak WhatsApp',
-        whatsappName: conversation.contactName,
-        phoneRaw: phone,
-        contactType: 'prospect',
-        status: 'active',
-        sourceModule: 'live_chat',
-        sourceRefId,
-        lastInteractionAt: conversation.lastMessageAt || conversation.updatedAt,
-        metadata: {
-          channelId: conversation.channelId,
-          conversationId: conversation.id,
-          conversationStatus: conversation.conversationStatus,
-          hasAttachment: conversation.hasAttachment,
-          lastDirection: conversation.lastDirection,
-          lastMessageText: conversation.lastMessageText,
-          lastStatus: conversation.lastStatus,
-          messageCount: conversation.messageCount ?? null,
-          provider: conversation.provider,
-          source: conversation.source,
-          unreadCount: conversation.unreadCount,
-        },
-      });
-    });
-
-    if (!inputs.length) return;
-    void snapshotCrmContacts(inputs).catch((error) => {
-      console.warn('CRM contact snapshot failed', error);
-    });
   }, []);
 
   const refreshExactConversationCounts = React.useCallback(async (
@@ -1557,7 +1513,6 @@ export function WhatsAppChatsPage() {
         fallbackTimer = null;
       }
       if (conversationPageRequestRef.current !== requestId) return;
-      snapshotConversationsToCrm(payload.conversations || []);
       applyConversationPage(payload, cacheKey);
       setConversationsError(null);
 
@@ -1596,7 +1551,6 @@ export function WhatsAppChatsPage() {
     refreshExactConversationCounts,
     selectedAccountId,
     slaFilter,
-    snapshotConversationsToCrm,
     statusFilter,
   ]);
 
@@ -1767,7 +1721,6 @@ export function WhatsAppChatsPage() {
   }, [dateRange, deferredSearch, providerFilter, selectedAccountId, slaFilter, statusFilter]);
 
   const upsertRealtimeConversation = React.useCallback((conversation: WhatsAppConversation) => {
-    snapshotConversationsToCrm([conversation]);
     setConversationPage((current) => {
       if (!current) return current;
       const matches = conversationMatchesCurrentFilters(conversation);
@@ -1824,7 +1777,7 @@ export function WhatsAppChatsPage() {
         generatedAt: new Date().toISOString(),
       };
     });
-  }, [conversationMatchesCurrentFilters, snapshotConversationsToCrm]);
+  }, [conversationMatchesCurrentFilters]);
 
   const applyRealtimeMessage = React.useCallback((message: WhatsAppMessage) => {
     const loadedAt = new Date().toISOString();

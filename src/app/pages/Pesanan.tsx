@@ -87,6 +87,46 @@ import {
   getScheduleConflictItemKey,
   getTechnicianDaySchedule,
 } from '@/app/services/orderScheduleValidation';
+import {
+  saveOrderToCrmContact,
+  saveOrdersToCrmContacts,
+} from '@/app/services/crmContactsService';
+
+const ORDER_ACTION_ICON_CLASS =
+  'relative h-8 w-8 rounded-md bg-transparent p-0 text-slate-500 shadow-none transition-colors hover:bg-transparent hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-200 dark:text-slate-400 dark:hover:text-slate-100';
+
+const ORDER_MENU_CONTENT_CLASS =
+  'w-56 border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800';
+
+const ORDER_MENU_ITEM_CLASS = 'cursor-pointer gap-2 text-sm';
+
+function OrderActionButton({
+  label,
+  className = '',
+  children,
+  ...props
+}: React.ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={label}
+          title={label}
+          className={`${ORDER_ACTION_ICON_CLASS} ${className}`.trim()}
+          {...props}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 // Extracted modules
 import { WhatsappIcon } from './orders/WhatsappIcon';
@@ -270,6 +310,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [waSheetOpen, setWaSheetOpen] = useState(false);
   const [waTargetOrder, setWaTargetOrder] = useState<Order | null>(null);
+  const deleteOrderTarget = useMemo(
+    () => (deleteId ? orders.find((order) => order.id === deleteId) || null : null),
+    [deleteId, orders],
+  );
 
   // --- Helpers ---
   const getTechnicianName = useCallback((id?: string) => users.find(u => u.id === id)?.name || '-', [users]);
@@ -375,21 +419,25 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     setDeleteId(id);
   }, []);
 
-  const confirmDelete = useCallback(() => {
+  const confirmDelete = useCallback(async () => {
     if (deleteId) {
       const orderToDelete = orders.find(o => o.id === deleteId);
-      deleteOrder(deleteId);
-      toast.success('Pesanan berhasil dihapus');
-      if (currentUser && orderToDelete) {
-        logActivity(
-          { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-          'DELETE',
-          'Pesanan',
-          `Menghapus pesanan: ${orderToDelete.customerName}`,
-          deleteId
-        );
+      try {
+        await deleteOrder(deleteId);
+        toast.success('Pesanan berhasil dihapus');
+        if (currentUser && orderToDelete) {
+          logActivity(
+            { id: currentUser.id, name: currentUser.name, role: currentUser.role },
+            'DELETE',
+            'Pesanan',
+            `Menghapus pesanan: ${orderToDelete.customerName}`,
+            deleteId
+          );
+        }
+        setDeleteId(null);
+      } catch (error: any) {
+        toast.error(error?.message || 'Gagal menghapus pesanan');
       }
-      setDeleteId(null);
     }
   }, [deleteId, orders, deleteOrder, currentUser]);
 
@@ -424,6 +472,278 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     const url = `https://wa.me/${phone}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
     window.open(url, '_blank');
   }, [getVehicleName, currentUser, updateOrder]);
+
+  const handleSaveOrderToContacts = useCallback(async (order: Order) => {
+    const toastId = toast.loading('Menyimpan pelanggan ke Kontak CRM...');
+    try {
+      const result = await saveOrderToCrmContact(order, {
+        savedBy: currentUser?.id,
+        savedFrom: 'pesanan',
+      });
+      toast.dismiss(toastId);
+      if (!result.available) {
+        toast.warning('Tabel Kontak CRM belum tersedia, pelanggan belum tersimpan.');
+        return;
+      }
+      toast.success('Pelanggan tersimpan ke Kontak CRM');
+    } catch (error: any) {
+      toast.dismiss(toastId);
+      toast.error(error?.message || 'Gagal menyimpan pelanggan ke Kontak CRM');
+    }
+  }, [currentUser?.id]);
+
+  const handleSaveSelectedOrdersToContacts = useCallback(async () => {
+    const selectedOrders = orders.filter((order) => selectedIds.has(order.id));
+    if (!selectedOrders.length) {
+      toast.info('Pilih pesanan dulu untuk disimpan ke Kontak CRM.');
+      return;
+    }
+
+    const toastId = toast.loading(`Menyimpan ${selectedOrders.length} pelanggan ke Kontak CRM...`);
+    try {
+      const result = await saveOrdersToCrmContacts(selectedOrders, {
+        savedBy: currentUser?.id,
+        savedFrom: 'pesanan_massal',
+      });
+      toast.dismiss(toastId);
+      if (!result.available) {
+        toast.warning('Tabel Kontak CRM belum tersedia, pelanggan belum tersimpan.');
+        return;
+      }
+      if (result.saved > 0) {
+        toast.success(`${result.saved} pelanggan tersimpan ke Kontak CRM`);
+      }
+      if (result.failed > 0) {
+        toast.warning(`${result.failed} pelanggan gagal disimpan ke Kontak CRM`);
+      }
+      setSelectedIds(new Set());
+    } catch (error: any) {
+      toast.dismiss(toastId);
+      toast.error(error?.message || 'Gagal menyimpan pelanggan ke Kontak CRM');
+    }
+  }, [currentUser?.id, orders, selectedIds, setSelectedIds]);
+
+  const renderOrderActions = (order: Order, layout: 'desktop' | 'mobile' = 'desktop') => {
+    const locked = isOrderLocked(order.status);
+    const iconClass = layout === 'mobile' ? 'h-9 w-9' : '';
+    const usedTemplateCount = new Set(order.templateHistory?.map((history) => history.templateId)).size;
+    const orderTemplates = waTemplates.filter((template) =>
+      template.category === 'Orders' || template.category === 'General' || !template.category
+    );
+    const photoCount = (() => {
+      const photos = order.photos as any;
+      return (photos?.before?.length ? 1 : 0) +
+        (photos?.after?.length ? 1 : 0) +
+        (photos?.payment?.length ? 1 : 0) +
+        (photos?.signature?.length ? 1 : 0);
+    })();
+
+    const hasMenuActions =
+      canViewOrderDetails ||
+      canViewOrderPayments ||
+      canViewCustomerContact ||
+      (canViewRoute && !!order.mapsUrl) ||
+      ((canEditOrders || canDeleteOrders) && !locked) ||
+      ((canEditOrders || canDeleteOrders) && locked);
+
+    if (!hasMenuActions) return null;
+
+    return (
+      <TooltipProvider delayDuration={150}>
+        <div className="flex items-center justify-end gap-1">
+          {canViewCustomerContact && (
+            layout === 'mobile' ? (
+              <OrderActionButton
+                label="WhatsApp customer"
+                onClick={() => {
+                  setWaTargetOrder(order);
+                  setWaSheetOpen(true);
+                }}
+                className={`${iconClass} text-[#128C7E] hover:text-[#075E54]`}
+              >
+                <WhatsappIcon className="h-4 w-4" />
+                {usedTemplateCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
+                    {usedTemplateCount}
+                  </span>
+                )}
+              </OrderActionButton>
+            ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="WhatsApp customer"
+                  title="WhatsApp customer"
+                  className={`${ORDER_ACTION_ICON_CLASS} ${iconClass} text-[#128C7E] hover:text-[#075E54]`}
+                >
+                  <WhatsappIcon className="h-4 w-4" />
+                  {usedTemplateCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
+                      {usedTemplateCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="z-[60] w-[320px] border-slate-100 bg-white p-0 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Template WhatsApp</h4>
+                    <p className="mt-0.5 text-[10px] text-slate-400">
+                      {usedTemplateCount} dari {orderTemplates.length} digunakan
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 -mr-2 -mt-1 text-slate-400 hover:bg-transparent hover:text-slate-600"
+                    onClick={() => onNavigate?.('wa-templates')}
+                    title="Kelola template"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto py-1 custom-scrollbar">
+                  {orderTemplates.map((template) => {
+                    const isUsed = isTemplateUsed(order, template.id);
+                    return (
+                      <DropdownMenuItem
+                        key={template.id}
+                        onClick={() => handleWhatsappTemplate(order, template)}
+                        className={`mx-1 my-0.5 flex cursor-pointer flex-col items-start gap-1 rounded-md px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 ${isUsed ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}
+                      >
+                        <div className="flex w-full items-center justify-between">
+                          <span className={`text-sm font-medium ${isUsed ? 'text-blue-700 dark:text-blue-400' : 'text-slate-900 dark:text-slate-200'}`}>
+                            {template.title}
+                          </span>
+                          {isUsed && <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-500" />}
+                        </div>
+                        <span className="line-clamp-1 w-full text-left text-xs font-normal leading-relaxed text-slate-500 dark:text-slate-400">
+                          {template.message.replace(/\[Nama\]/g, order.customerName).substring(0, 50)}...
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
+
+                <div className="border-t border-slate-100 bg-slate-50/40 p-2 dark:border-slate-700 dark:bg-slate-800/30">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 w-full justify-center border border-transparent text-xs text-slate-600 shadow-sm transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-slate-400"
+                    onClick={() => handleWhatsappTemplate(order)}
+                  >
+                    Chat Manual
+                  </Button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            )
+          )}
+
+          {canViewOrderDetails && (
+            <OrderActionButton label="Detail Pesanan" onClick={() => handleViewDetail(order)} className={iconClass}>
+              <Eye className="h-4 w-4" />
+            </OrderActionButton>
+          )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Menu aksi pesanan"
+                title="Menu aksi"
+                className={`${ORDER_ACTION_ICON_CLASS} ${iconClass}`}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className={ORDER_MENU_CONTENT_CLASS}>
+              <DropdownMenuLabel className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Aksi Pesanan</span>
+                <span className="truncate text-xs font-normal text-slate-400">#{order.id}</span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-700" />
+
+              {canViewOrderDetails && (
+                <DropdownMenuItem onClick={() => handleViewDetail(order)} className={ORDER_MENU_ITEM_CLASS}>
+                  <Eye className="h-4 w-4" /> Detail Pesanan
+                </DropdownMenuItem>
+              )}
+              {canViewOrderDetails && (
+                <DropdownMenuItem onClick={() => setPhotoViewerOrder(order)} className={ORDER_MENU_ITEM_CLASS}>
+                  <Camera className="h-4 w-4" /> Dokumentasi
+                  {photoCount > 0 && (
+                    <span className="ml-auto rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                      {photoCount}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              )}
+              {canViewOrderPayments && (
+                <DropdownMenuItem onClick={() => handleViewPayment(order)} className={ORDER_MENU_ITEM_CLASS}>
+                  <CreditCard className="h-4 w-4" /> Pembayaran
+                </DropdownMenuItem>
+              )}
+              {canViewRoute && order.mapsUrl && (
+                <DropdownMenuItem
+                  onClick={() => window.open(order.mapsUrl, '_blank', 'noopener,noreferrer')}
+                  className={ORDER_MENU_ITEM_CLASS}
+                >
+                  <MapIcon className="h-4 w-4" /> Buka Maps
+                </DropdownMenuItem>
+              )}
+
+              {canViewCustomerContact && (
+                <>
+                  <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-700" />
+                  <DropdownMenuItem onClick={() => void handleSaveOrderToContacts(order)} className={ORDER_MENU_ITEM_CLASS}>
+                    <UserIcon className="h-4 w-4" /> Simpan Kontak CRM
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleWhatsappTemplate(order)} className={ORDER_MENU_ITEM_CLASS}>
+                    <MessageCircle className="h-4 w-4" /> Chat Manual
+                  </DropdownMenuItem>
+                </>
+              )}
+
+              {(canEditOrders || canDeleteOrders) && (
+                <>
+                  <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-700" />
+                  {locked ? (
+                    <DropdownMenuItem disabled className="gap-2 text-sm">
+                      <Lock className="h-4 w-4" /> Order terkunci
+                    </DropdownMenuItem>
+                  ) : (
+                    <>
+                      {canEditOrders && (
+                        <DropdownMenuItem onClick={() => handleEdit(order)} className={ORDER_MENU_ITEM_CLASS}>
+                          <Edit className="h-4 w-4" /> Edit Pesanan
+                        </DropdownMenuItem>
+                      )}
+                      {canDeleteOrders && (
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(order.id)}
+                          className="cursor-pointer gap-2 text-sm text-red-600 focus:bg-red-50 focus:text-red-600 dark:focus:bg-red-950/30"
+                        >
+                          <Trash2 className="h-4 w-4" /> Hapus Pesanan
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </TooltipProvider>
+    );
+  };
 
   // --- Map Data ---
   const routeGroups = useMemo(() => {
@@ -1218,18 +1538,25 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           {viewMode === 'table' ? (
           <>
           {selectedIds.size > 0 && (
-              <div className="bg-blue-50 border border-blue-100 p-2 px-4 rounded-lg flex items-center justify-between mb-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center gap-3 text-sm text-blue-700">
+              <div className="mb-4 flex flex-col gap-3 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm animate-in fade-in slide-in-from-top-2 sm:flex-row sm:items-center sm:justify-between dark:border-blue-900/40 dark:bg-blue-950/20">
+                  <div className="flex items-center gap-3 text-sm text-blue-700 dark:text-blue-300">
                       <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                       </div>
                       <span className="font-medium">{selectedIds.size} pesanan terpilih</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                       <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="h-8 text-xs text-slate-500 hover:text-slate-700">
                           Batal
                       </Button>
-                      
+
+                      {canViewCustomerContact && (
+                      <Button size="sm" variant="outline" onClick={() => void handleSaveSelectedOrdersToContacts()} className="h-8 text-xs shadow-sm bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900">
+                          <UserIcon className="w-3.5 h-3.5 mr-1.5" />
+                          Simpan Kontak ({selectedIds.size})
+                      </Button>
+                      )}
+
                       {(hasPermission('order.edit') || hasPermission('order.payment.edit_status') || hasPermission('order.status.edit') || hasPermission('order.assign_technician')) && (
                       <Button size="sm" variant="outline" onClick={() => setIsBulkEditOpen(true)} className="h-8 text-xs shadow-sm bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900">
                           <Edit className="w-3.5 h-3.5 mr-1.5" />
@@ -1777,159 +2104,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                       </TableCell>
                       {canShowOrderActions && (
                       <TableCell className="py-6 pr-6 text-right align-top">
-                       <div className="flex justify-end gap-2">
-                          {canViewCustomerContact && (
-                          <DropdownMenu>
-                             <DropdownMenuTrigger asChild>
-                               <div className="relative inline-block">
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-[#25D366] hover:text-[#128C7E] hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full">
-                                     <WhatsappIcon className="w-4 h-4" />
-                                  </Button>
-                                  {(order.templateHistory?.length || 0) > 0 && (
-                                     <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-800">
-                                        {new Set(order.templateHistory?.map(h => h.templateId)).size}
-                                     </span>
-                                  )}
-                               </div>
-                             </DropdownMenuTrigger>
-                             <DropdownMenuContent align="end" className="w-[320px] p-0 z-[60] border-slate-100 dark:border-slate-700 shadow-xl bg-white dark:bg-slate-800">
-                                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800 flex justify-between items-start rounded-t-md">
-                                  <div>
-                                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Pilih Template</h4>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">{new Set(order.templateHistory?.map(h => h.templateId)).size} dari {waTemplates.filter(t => t.category === 'Orders' || t.category === 'General' || !t.category).length} digunakan</p>
-                                  </div>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-6 w-6 text-slate-400 hover:text-slate-600 -mr-2 -mt-1"
-                                    onClick={() => onNavigate?.('wa-templates')}
-                                  >
-                                    <Settings className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                                
-                                <div className="max-h-[300px] overflow-y-auto py-1 custom-scrollbar">
-                                  {waTemplates.filter(t => t.category === 'Orders' || t.category === 'General' || !t.category).map(t => {
-                                     const isUsed = isTemplateUsed(order, t.id);
-                                     return (
-                                        <DropdownMenuItem key={t.id} onClick={() => handleWhatsappTemplate(order, t)} className={`px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 flex flex-col items-start gap-1 mx-1 rounded-md my-0.5 ${isUsed ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
-                                           <div className="flex items-center justify-between w-full">
-                                              <span className={`font-medium text-sm ${isUsed ? 'text-blue-700 dark:text-blue-400' : 'text-slate-900 dark:text-slate-200'}`}>{t.title}</span>
-                                              {isUsed && <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500" />}
-                                           </div>
-                                           <span className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 w-full text-left font-normal leading-relaxed">
-                                             {t.message.replace(/\[Nama\]/g, order.customerName).substring(0, 50)}...
-                                           </span>
-                                        </DropdownMenuItem>
-                                     );
-                                  })}
-                                </div>
-
-                                <div className="p-2 border-t border-slate-100 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30 rounded-b-md">
-                                  <Button 
-                                    variant="ghost" 
-                                    className="w-full justify-center text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 hover:bg-white border border-transparent hover:border-slate-200 shadow-sm transition-all h-9"
-                                    onClick={() => handleWhatsappTemplate(order)}
-                                  >
-                                    Chat Kosong (Tanpa Template)
-                                  </Button>
-                                </div>
-                             </DropdownMenuContent>
-                          </DropdownMenu>
-                          )}
-
-                          {canViewRoute && order.mapsUrl && (
-                          <a href={order.mapsUrl} target="_blank" rel="noopener noreferrer">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-full"
-                              title="Buka Maps"
-                            >
-                              <MapIcon className="w-4 h-4" />
-                            </Button>
-                          </a>
-                          )}
-
-                          {canViewOrderDetails && (
-                          <div className="relative">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => setPhotoViewerOrder(order)}
-                                className={`h-8 w-8 rounded-full ${
-                                    ((order.photos as any)?.before?.length && (order.photos as any)?.after?.length && (order.photos as any)?.payment?.length && (order.photos as any)?.signature?.length)
-                                    ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                                    : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
-                                }`}
-                                title="Lihat Foto"
-                              >
-                                <Camera className="w-4 h-4" />
-                              </Button>
-                              {(() => {
-                                 const p = order.photos as any;
-                                 const count = (p?.before?.length ? 1 : 0) + 
-                                               (p?.after?.length ? 1 : 0) + 
-                                               (p?.payment?.length ? 1 : 0) + 
-                                               (p?.signature?.length ? 1 : 0);
-                                 if (count > 0) {
-                                     return (
-                                        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
-                                            {count}
-                                        </span>
-                                     );
-                                 }
-                                 return null;
-                              })()}
-                          </div>
-                          )}
-
-                          {canViewOrderPayments && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleViewPayment(order)}
-                            className="h-8 w-8 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                          </Button>
-                          )}
-                          {canViewOrderDetails && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleViewDetail(order)}
-                            className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          )}
-
-                          {(canEditOrders || canDeleteOrders) && !isOrderLocked(order.status) && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
-                                 <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                              {canEditOrders && (
-                              <DropdownMenuItem onClick={() => handleEdit(order)} className="cursor-pointer">
-                                <Edit className="mr-2 h-4 w-4" /> Edit
-                              </DropdownMenuItem>
-                              )}
-                              {canDeleteOrders && (
-                                <>
-                                  <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-700" />
-                                  <DropdownMenuItem onClick={() => handleDelete(order.id)} className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50">
-                                    <Trash2 className="mr-2 h-4 w-4" /> Hapus
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          )}
-                        </div>
+                        {renderOrderActions(order)}
                       </TableCell>
                       )}
                     </TableRow>
@@ -1986,6 +2161,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                           <SelectItem value="100">100 / Halaman</SelectItem>
                           <SelectItem value="200">200 / Halaman</SelectItem>
                           <SelectItem value="300">300 / Halaman</SelectItem>
+                          <SelectItem value="500">500 / Halaman</SelectItem>
                       </SelectContent>
                   </Select>
               </div>
@@ -2163,18 +2339,22 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
             {/* Mass Delete Alert */}
             <AlertDialog open={isMassDeleteOpen} onOpenChange={setIsMassDeleteOpen}>
-              <AlertDialogContent>
+              <AlertDialogContent className="max-w-md border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Konfirmasi Hapus Massal</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Apakah Anda yakin ingin menghapus {selectedIds.size} pesanan yang dipilih? 
-                    Tindakan ini tidak dapat dibatalkan.
+                  <AlertDialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                    Hapus {selectedIds.size} pesanan?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-slate-600 dark:text-slate-400">
+                    Pesanan yang dipilih akan dihapus permanen dari database. Tindakan ini tidak dapat dibatalkan.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Batal</AlertDialogCancel>
-                  <AlertDialogAction onClick={confirmMassDelete} className="bg-red-600 hover:bg-red-700">
-                    Hapus
+                  <AlertDialogCancel className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                    Batal
+                  </AlertDialogCancel>
+                  <AlertDialogAction onClick={() => void confirmMassDelete()} className="bg-red-600 text-white hover:bg-red-700">
+                    Ya, hapus
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -2182,15 +2362,13 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
           {/* MOBILE CARD LIST (Visible on sm/xs) */}
           <div className="md:hidden p-4 space-y-3">
-              {filteredOrders.length === 0 ? (
+              {paginatedOrders.length === 0 ? (
                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                     Tidak ada pesanan ditemukan
                  </div>
               ) : (
-                 filteredOrders.map((order) => {
+                 paginatedOrders.map((order) => {
                      const technician = userMap[order.technicianId];
-                     const cs = userMap[order.csId];
-                     const isLocked = isOrderLocked(order.status);
                      const isAdvertiser = isAdvertiserUser;
                      const useCompactAdvertiserCard = isAdvertiser && !canViewCustomerContact && !canViewRoute;
                      const reasonSummary = getStatusReasonSummary(order);
@@ -2205,7 +2383,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                             <div className="flex items-center gap-2">
                                 <span className="font-bold text-blue-600 dark:text-blue-400 text-xs">#{order.id}</span>
                                 <span className="text-[10px] text-slate-400">
-                                   {new Date(order.serviceDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {order.serviceTime}
+                                   {new Date(order.serviceDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - {order.serviceTime}
                                 </span>
                             </div>
                             <div className="flex flex-col items-end gap-1">
@@ -2270,108 +2448,70 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
                         {/* Actions Footer */}
                         {canShowOrderActions && (
-                            <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                                <div className="flex items-center gap-2">
-                                     {/* WhatsApp Action - Mobile uses Bottom Sheet */}
-                                     {canViewCustomerContact && (
-                                        <Button 
-                                            variant="ghost" 
-                                            size="sm" 
-                                            className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
-                                            onClick={() => {
-                                                setWaTargetOrder(order);
-                                                setWaSheetOpen(true);
-                                            }}
-                                        >
-                                            <WhatsappIcon className="w-4 h-4 mr-1" />
-                                            <span className="text-xs">Chat</span>
-                                        </Button>
-                                     )}
-
-                                     {/* Map Action */}
-                                     {canViewRoute && order.mapsUrl && (
-                                        <a href={order.mapsUrl} target="_blank" rel="noopener noreferrer">
-                                            <Button variant="ghost" size="sm" className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                                                <MapIcon className="w-4 h-4 mr-1" />
-                                                <span className="text-xs">Peta</span>
-                                            </Button>
-                                        </a>
-                                     )}
-                                </div>
-
-                                <div className="flex items-center gap-1">
-                                    {canViewOrderDetails && (
-                                        <>
-                                        <div className="relative">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                onClick={() => setPhotoViewerOrder(order)}
-                                                className={`h-8 w-8 rounded-full ${
-                                                    ((order.photos as any)?.before?.length && (order.photos as any)?.after?.length && (order.photos as any)?.payment?.length && (order.photos as any)?.signature?.length)
-                                                    ? 'text-blue-600 hover:text-blue-700'
-                                                    : 'text-slate-400 hover:text-blue-600'
-                                                }`}
-                                            >
-                                                <Camera className="w-4 h-4" />
-                                            </Button>
-                                            {(() => {
-                                                const p = order.photos as any;
-                                                const count = (p?.before?.length ? 1 : 0) + 
-                                                              (p?.after?.length ? 1 : 0) + 
-                                                              (p?.payment?.length ? 1 : 0) + 
-                                                              (p?.signature?.length ? 1 : 0);
-                                                if (count > 0) {
-                                                    return (
-                                                        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
-                                                            {count}
-                                                        </span>
-                                                    );
-                                                }
-                                                return null;
-                                            })()}
-                                        </div>
-                                        {canViewOrderPayments && (
-                                        <Button variant="ghost" size="icon" onClick={() => handleViewPayment(order)} className="h-8 w-8 text-slate-400 hover:text-emerald-600">
-                                            <CreditCard className="w-4 h-4" />
-                                        </Button>
-                                        )}
-                                        {canViewOrderDetails && (
-                                        <Button variant="ghost" size="icon" onClick={() => handleViewDetail(order)} className="h-8 w-8 text-slate-400 hover:text-blue-600">
-                                            <Eye className="w-4 h-4" />
-                                        </Button>
-                                        )}
-                                        </>
-                                    )}
-                                    
-                                    {(canEditOrders || canDeleteOrders) && !isOrderLocked(order.status) && (
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400">
-                                                    <MoreVertical className="w-4 h-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                {canEditOrders && (
-                                                    <DropdownMenuItem onClick={() => handleEdit(order)}>
-                                                        <Edit className="w-4 h-4 mr-2" /> Edit
-                                                    </DropdownMenuItem>
-                                                )}
-                                                {canDeleteOrders && (
-                                                    <DropdownMenuItem onClick={() => handleDelete(order.id)} className="text-red-600">
-                                                        <Trash2 className="w-4 h-4 mr-2" /> Hapus
-                                                    </DropdownMenuItem>
-                                                )}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    )}
-                                </div>
+                            <div className="mt-3 flex items-center justify-end border-t border-slate-100 pt-3 dark:border-slate-700">
+                                {renderOrderActions(order, 'mobile')}
                             </div>
                         )}
                     </div>
                     );
 
                  })
+              )}
+              {paginatedOrders.length > 0 && (
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700"
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    >
+                      &lt;
+                    </Button>
+                    <div className="min-w-0 text-center">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Halaman {currentPage} / {totalPages || 1}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        Menampilkan {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredOrders.length)} dari {filteredOrders.length}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700"
+                      disabled={currentPage === totalPages || totalPages === 0}
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    >
+                      &gt;
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tampilkan</span>
+                    <Select
+                      value={itemsPerPage.toString()}
+                      onValueChange={(val) => {
+                        setItemsPerPage(Number(val));
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="h-9 flex-1 bg-white text-xs dark:bg-slate-900">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="z-[200]">
+                        <SelectItem value="50">50 / Halaman</SelectItem>
+                        <SelectItem value="100">100 / Halaman</SelectItem>
+                        <SelectItem value="200">200 / Halaman</SelectItem>
+                        <SelectItem value="300">300 / Halaman</SelectItem>
+                        <SelectItem value="500">500 / Halaman</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               )}
           </div>
           </>
@@ -2673,16 +2813,33 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
         {/* Delete Confirmation */}
         <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-          <AlertDialogContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+          <AlertDialogContent className="max-w-md border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-slate-900 dark:text-slate-100">Apakah Anda yakin?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Data pesanan yang dihapus tidak dapat dikembalikan lagi.
+              <AlertDialogTitle className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                Hapus pesanan?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2 text-slate-600 dark:text-slate-400">
+                <span className="block">
+                  {deleteOrderTarget ? (
+                    <>
+                      Pesanan <span className="font-semibold text-slate-900 dark:text-slate-100">#{deleteOrderTarget.id}</span> atas nama{' '}
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{deleteOrderTarget.customerName}</span> akan dihapus permanen.
+                    </>
+                  ) : (
+                    'Pesanan ini akan dihapus permanen.'
+                  )}
+                </span>
+                <span className="block">Tindakan ini tidak dapat dibatalkan.</span>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 border-0">Batal</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">Hapus</AlertDialogAction>
+              <AlertDialogCancel className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                Batal
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={() => void confirmDelete()} className="bg-red-600 text-white hover:bg-red-700">
+                Ya, hapus
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
