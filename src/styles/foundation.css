@@ -1,5 +1,9 @@
 /* Tokotemansaya-compatible UI foundation for Polesheadlamp.id v2. */
 
+:root {
+  --workspace-layer-left: 0px;
+}
+
 .appShell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
@@ -58,6 +62,18 @@
 .leadFilterPanel {
   overflow: visible;
   padding: 22px;
+}
+
+.workspaceModalLayer,
+.workspaceSheetOverlay {
+  left: 0;
+}
+
+@media (min-width: 1024px) {
+  .workspaceModalLayer,
+  .workspaceSheetOverlay {
+    left: var(--workspace-layer-left, 0px) !important;
+  }
 }
 
 .leadFilterGrid {
@@ -6296,6 +6312,432 @@
   scrollbar-width: thin;
   user-select: auto;
   -webkit-user-select: auto;
+}
+
+.orderPage {
+  --order-control-h: 44px;
+}
+
+.orderPage .topbar {
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.orderHeaderActions {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.orderHeaderIconButton.uiButton,
+.orderHeaderPrimaryIcon.uiButton {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  border-radius: 12px;
+  box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.42);
+  transform: none;
+}
+
+.orderHeaderIconButton.uiButton {
+  border-color: var(--ops-line-strong);
+  color: #475569;
+  background: #ffffff;
+}
+
+.orderHeaderIconButton.uiButton:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.28);
+  color: var(--ops-blue-ink);
+  background: #f8fbff;
+  transform: translateY(-1px);
+}
+
+.orderHeaderPrimaryIcon.uiButton,
+.orderHeaderPrimaryButton.uiButton {
+  border-color: transparent;
+  color: #ffffff;
+  background: #0f6bdc;
+  box-shadow: 0 16px 32px -18px rgba(15, 107, 220, 0.68);
+}
+
+.orderHeaderPrimaryButton.uiButton {
+  min-height: 42px;
+  padding: 0 22px;
+  border-radius: 12px;
+}
+
+.orderHeaderPrimaryIcon.uiButton:hover:not(:disabled),
+.orderHeaderPrimaryButton.uiButton:hover:not(:disabled) {
+  color: #ffffff;
+  background: #0b5fc8;
+  transform: translateY(-1px);
+}
+
+.orderMobileOnly {
+  display: block;
+}
+
+.orderDesktopOnly {
+  display: none;
+}
+
+.orderViewSwitch {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 42px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ops-line-strong);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.88);
+  box-shadow: 0 12px 28px -22px rgba(15, 23, 42, 0.32);
+}
+
+.orderViewButton.uiButton {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  color: #64748b;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.8rem;
+  font-weight: 760;
+  transform: none;
+}
+
+.orderViewButton.uiButton:hover:not(:disabled) {
+  color: var(--ops-ink);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: none;
+  transform: none;
+}
+
+.orderViewButton.uiButton.isActive {
+  color: var(--ops-ink);
+  background: #ffffff;
+  box-shadow: 0 10px 22px -18px rgba(15, 23, 42, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+}
+
+.orderViewButton.uiButton.isActive svg {
+  color: var(--ops-blue-ink);
+}
+
+.orderKpiGrid.metricGrid {
+  gap: 16px;
+}
+
+.orderViewTabsShell {
+  width: 100%;
+}
+
+.orderViewTabsShell .orderViewTabsViewport {
+  width: 100%;
+}
+
+.orderViewTabsShell .orderViewTabs {
+  min-width: max-content;
+  width: max-content;
+}
+
+.orderViewTabsShell .orderViewTab {
+  min-width: 132px;
+}
+
+.orderPage .metricCard {
+  min-height: 104px;
+  padding: 22px;
+}
+
+.orderPage .metricCard .metricIcon {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+}
+
+.orderFilterPanel.filterPanel {
+  overflow: visible;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.orderStatusStrip {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+  cursor: grab;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-user-select: none;
+}
+
+.orderStatusStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.orderStatusStrip[data-dragging="true"] {
+  cursor: grabbing;
+  scroll-behavior: auto;
+}
+
+.orderStatusStrip[data-dragging="true"] .orderStatusChip {
+  pointer-events: none;
+}
+
+.orderStatusChip.uiButton {
+  flex: 0 0 auto;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--ops-line-strong);
+  border-radius: 999px;
+  color: #475569;
+  background: #ffffff;
+  box-shadow: 0 8px 18px -16px rgba(15, 23, 42, 0.28);
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  transform: none;
+}
+
+.orderStatusChip.uiButton:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.24);
+  color: var(--ops-blue-ink);
+  background: #f8fbff;
+  box-shadow: 0 10px 20px -18px rgba(15, 23, 42, 0.34);
+  transform: none;
+}
+
+.orderStatusChip.uiButton.isActive {
+  border-color: #0f6bdc;
+  color: #ffffff;
+  background: #0f6bdc;
+  box-shadow: 0 14px 24px -18px rgba(15, 107, 220, 0.68);
+}
+
+.orderStatusCount {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 7px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #64748b;
+  background: #eef4fb;
+  font-size: 0.66rem;
+  font-weight: 840;
+}
+
+.orderStatusChip.isActive .orderStatusCount {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.orderFilterGrid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(220px, 252px) minmax(184px, 212px) minmax(360px, 1fr) minmax(118px, 132px);
+  gap: 10px 12px;
+  align-items: center;
+  padding-top: 12px;
+}
+
+.orderFilterGrid.hasCancelReason {
+  grid-template-columns: minmax(220px, 246px) minmax(176px, 200px) minmax(280px, 1fr) minmax(210px, 250px) minmax(118px, 132px);
+}
+
+.orderFilterDate,
+.orderSearchSlot {
+  min-width: 0;
+}
+
+.orderPage .orderFilterDate .uiPeriodPicker {
+  width: 100%;
+  height: var(--order-control-h) !important;
+  min-height: var(--order-control-h) !important;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  justify-content: flex-start;
+  box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.3);
+}
+
+.orderPage .orderFilterDate .uiPeriodPicker > span {
+  font-size: 0.84rem;
+}
+
+.orderPage .orderFilterDate .filterDateButton {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.orderFilterControl.uiSelectTrigger,
+.orderSearchInput.uiInput {
+  min-height: var(--order-control-h);
+  height: var(--order-control-h);
+  border-radius: 12px;
+  font-size: 0.86rem;
+}
+
+.orderSearchInput.uiInput {
+  padding-left: 40px !important;
+  box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.3);
+}
+
+.orderMoreFilterButton.uiButton {
+  width: 100%;
+  min-height: var(--order-control-h);
+  height: var(--order-control-h);
+  padding: 0 16px;
+  border-color: var(--ops-line-strong);
+  border-radius: 12px;
+  color: #334155;
+  background: #ffffff;
+  box-shadow: 0 10px 22px -18px rgba(15, 23, 42, 0.32);
+  transform: none;
+}
+
+.orderMoreFilterButton.uiButton:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.24);
+  color: var(--ops-blue-ink);
+  background: #f8fbff;
+  transform: none;
+}
+
+.orderMoreFilterButton.uiButton.isActive {
+  border-color: #0f6bdc;
+  color: #ffffff;
+  background: #0f6bdc;
+}
+
+.orderMoreFilterCount {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.66rem;
+  font-weight: 840;
+}
+
+.orderDataTable.uiDataTableScroller {
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.orderDataTable.uiDataTableScroller[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.orderDataTable.uiDataTableScroller[data-dragging="true"] * {
+  cursor: grabbing !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller {
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.orderPage .orderDataTable.uiDataTableScroller th {
+  height: 46px;
+  color: #64748b;
+  background: #f4f7fd;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller td {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.orderPage .orderDataTable .rowActions {
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.orderPage .orderDataTable .tableActionCell {
+  padding-right: 18px;
+}
+
+@media (min-width: 640px) {
+  .orderMobileOnly {
+    display: none;
+  }
+
+  .orderDesktopOnly {
+    display: block;
+  }
+}
+
+@media (max-width: 1279px) {
+  .orderPage .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .orderHeaderActions {
+    justify-content: flex-start;
+  }
+
+  .orderFilterGrid,
+  .orderFilterGrid.hasCancelReason {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .orderSearchSlot {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .orderPage.opsPageShell {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .orderFilterGrid,
+  .orderFilterGrid.hasCancelReason {
+    grid-template-columns: 1fr;
+  }
+
+  .orderSearchSlot {
+    grid-column: auto;
+  }
+
+  .orderViewSwitch {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .orderViewButton.uiButton {
+    flex: 1 0 auto;
+  }
 }
 
 .tableScroller table,
@@ -15894,5 +16336,851 @@ body {
   .proofAssetForwardActions .uiButton,
   .proofAssetManagedForm .masterDataFormActions .uiButton {
     width: 100%;
+  }
+}
+
+/* Order page final guards: keep broad table/detail foundation rules from leaking into Pesanan. */
+.orderPage .orderContentPanel.tablePanel {
+  display: grid;
+  gap: 18px;
+  overflow: visible;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.orderPage .orderFilterPanel.filterPanel {
+  overflow: visible;
+  border: 1px solid rgba(226, 232, 240, 0.88) !important;
+  border-radius: 22px !important;
+  background: #ffffff !important;
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.36) !important;
+}
+
+.orderPage .orderTableSurface {
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.88) !important;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.36);
+}
+
+.orderPage .orderTableHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  background: #ffffff;
+}
+
+.orderPage .orderSelectionSwitch {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 13px;
+  color: #334155;
+  background: #ffffff;
+  box-shadow: 0 8px 18px -18px rgba(15, 23, 42, 0.26);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.orderPage .orderSelectionSwitch [data-slot='switch'] {
+  height: 1.05rem;
+  width: 1.9rem;
+}
+
+.orderPage .orderSelectionSwitch span {
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.orderPage .orderSelectionToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(219, 234, 254, 0.95);
+  background: #f8fbff;
+}
+
+.orderPage .orderSelectionToolbarSummary {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.orderPage .orderSelectionToolbarSummary strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 820;
+  line-height: 1.25;
+}
+
+.orderPage .orderSelectionToolbarSummary span {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.orderPage .orderSelectionToolbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.orderPage .orderSelectionToolbarActions .uiButton {
+  min-height: 36px;
+  border-radius: 11px;
+  font-size: 0.76rem;
+  font-weight: 760;
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.orderPage .orderTableSurface .orderDataTable.uiDataTableScroller {
+  border-top: 0 !important;
+}
+
+.orderPage .orderMobileSurface {
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.36);
+}
+
+.orderFormSheet.masterDataManagedForm {
+  max-width: min(100vw, 720px) !important;
+  width: min(100vw, 720px) !important;
+  background: #f8fafc !important;
+}
+
+.orderFormSheet .orderFormHeader.masterDataFormHeader {
+  padding: 24px 28px 20px !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9) !important;
+  background: #ffffff !important;
+}
+
+.orderFormSheet .orderFormHeader .masterDataFormTitle {
+  font-size: 1.08rem;
+  font-weight: 820;
+  line-height: 1.25;
+}
+
+.orderFormSheet .orderFormHeader .masterDataFormDescription {
+  margin-top: 4px;
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.orderFormSheet .orderFormBody.masterDataDialogBody {
+  display: block;
+  min-height: 0;
+  padding: 22px 24px 26px !important;
+  background: #f8fafc;
+}
+
+.orderFormSheet .orderManagedForm.masterDataForm {
+  display: grid;
+  gap: 18px;
+  padding: 0;
+}
+
+.orderFormSheet .orderFormSection {
+  overflow: hidden;
+  padding: 0 !important;
+  border: 1px solid rgba(226, 232, 240, 0.92) !important;
+  border-radius: 22px !important;
+  background: #ffffff !important;
+  box-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.36) !important;
+}
+
+.orderFormSheet .orderFormSectionHeader {
+  margin: 0 !important;
+  padding: 17px 20px 14px !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.82) !important;
+}
+
+.orderFormSheet .orderFormSectionHeader h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.orderFormSheet .orderFormSectionHeader p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.orderFormSheet .orderFormSectionBody {
+  padding: 18px 20px 20px;
+}
+
+.orderFormSheet .orderFormSectionBody .grid {
+  min-width: 0;
+}
+
+.orderFormSheet .orderFormSectionBody .space-y-2 {
+  min-width: 0;
+}
+
+.orderFormSheet .orderFormSectionBody label,
+.orderFormSheet .orderFormSectionBody .uiLabel {
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.orderFormSheet .orderFormSectionBody .uiInput,
+.orderFormSheet .orderFormSectionBody .uiSelectTrigger,
+.orderFormSheet .orderFormSectionBody button[role="combobox"] {
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  font-size: 0.9rem;
+}
+
+.orderFormSheet .orderFormSectionBody textarea {
+  min-height: 86px;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  resize: vertical;
+}
+
+.orderFormSheet .orderFormFooter.masterDataFormActions {
+  margin-top: 0 !important;
+  padding: 16px 24px !important;
+  border-top: 1px solid rgba(226, 232, 240, 0.9) !important;
+  background: #ffffff !important;
+}
+
+.orderFormSheet .orderFormFooter .uiButton {
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller {
+  border-top: 0 !important;
+  background: #ffffff !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller > table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller thead {
+  background: #f4f7fd !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller thead tr {
+  background: #f4f7fd !important;
+  border-radius: 0 !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller th,
+.orderPage .orderDataTable.uiDataTableScroller thead th {
+  height: 48px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-radius: 0 !important;
+  background: #f4f7fd !important;
+  box-shadow: none !important;
+  color: #64748b !important;
+  font-size: 0.7rem !important;
+  font-weight: 820 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.2 !important;
+  text-transform: uppercase !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller th:first-child {
+  border-top-left-radius: 0 !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller th:last-child {
+  border-top-right-radius: 0 !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller tbody tr {
+  background: #ffffff !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller tbody tr:hover {
+  background: #f8fbff !important;
+}
+
+.orderDetailDialog {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: min(88dvh, 900px);
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 24px;
+}
+
+.orderDetailDialog > div:first-child {
+  padding: 20px 24px;
+}
+
+.orderDetailDialog > div:nth-of-type(2) {
+  padding: 18px 22px 22px;
+  background: #f8fafc;
+}
+
+.orderDetailDialog > div:last-child {
+  padding: 16px 24px;
+  background: #ffffff;
+}
+
+.orderDetailTitle span:first-child {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.orderDetailTitle span:last-child {
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.orderDetailView.foundationDetailShell {
+  gap: 12px;
+}
+
+.orderDetailView .foundationDetailHero,
+.orderDetailView .foundationDetailMetric,
+.orderDetailView .foundationDetailSection {
+  box-shadow: none;
+}
+
+.orderDetailView .foundationDetailHero {
+  align-items: start;
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.orderDetailSubtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.orderDetailSubtitle span {
+  display: inline-flex;
+  align-items: center;
+  color: #64748b;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.orderDetailSubtitle span + span::before {
+  content: "/";
+  margin-right: 10px;
+  color: #cbd5e1;
+}
+
+.orderDetailHeroActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.orderDetailHeroActions .uiButton {
+  min-height: 38px;
+  border-radius: 12px;
+  transform: none;
+}
+
+.orderDetailTriggerButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 12px;
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 12px 24px -20px rgba(15, 23, 42, 0.34);
+  font-size: 0.86rem;
+  font-weight: 720;
+  line-height: 1;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.orderDetailTriggerButton:hover,
+.orderDetailTriggerButton:focus-visible {
+  border-color: rgba(37, 99, 235, 0.28);
+  color: #0b63ce;
+  background: #f8fbff;
+  outline: none;
+}
+
+.orderDetailMetrics.foundationDetailMetricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.orderDetailView .foundationDetailMetric {
+  border-radius: 15px;
+  padding: 14px 15px;
+}
+
+.orderDetailView .foundationDetailMetric strong {
+  font-size: 0.98rem;
+}
+
+.orderDetailSectionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.orderDetailSectionGrid .foundationDetailSection {
+  height: 100%;
+}
+
+.orderDetailView .foundationDetailSection {
+  border-radius: 16px;
+}
+
+.orderDetailView .foundationDetailSectionHeader {
+  padding: 13px 16px;
+}
+
+.orderDetailView .foundationDetailField {
+  min-height: 64px;
+  padding: 12px 16px;
+}
+
+.orderDetailView .foundationDetailField > strong {
+  font-size: 0.88rem;
+  font-weight: 640;
+}
+
+.orderDetailView .foundationDetailTextBlock {
+  padding: 14px 16px 16px;
+}
+
+.orderDetailFooter .uiButton {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+@media (max-width: 980px) {
+  .orderDetailMetrics.foundationDetailMetricGrid,
+  .orderDetailSectionGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .orderDetailDialog {
+    width: calc(100vw - 18px);
+    max-height: calc(100dvh - 18px);
+    border-radius: 20px;
+  }
+
+  .orderDetailDialog > div:first-child,
+  .orderDetailDialog > div:nth-of-type(2),
+  .orderDetailDialog > div:last-child {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .orderDetailView .foundationDetailHero {
+    grid-template-columns: 1fr;
+  }
+
+  .orderDetailHeroActions {
+    justify-content: flex-start;
+  }
+
+  .orderDetailMetrics.foundationDetailMetricGrid,
+  .orderDetailSectionGrid,
+  .orderDetailView .foundationDetailFieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .orderDetailView .foundationDetailField:nth-child(odd) {
+    border-right: 0;
+  }
+}
+
+/* Pesanan mobile PWA guards */
+@media (max-width: 767px) {
+  .orderPage.opsPageShell {
+    overflow-x: hidden;
+  }
+
+  .orderPage .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .orderPage .topbarActions,
+  .orderHeaderActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderHeaderActions {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .orderHeaderIconButton.uiButton,
+  .orderHeaderPrimaryIcon.uiButton {
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+  }
+
+  .orderViewTabsShell .orderViewTabsViewport {
+    overflow: hidden;
+  }
+
+  .orderViewTabsShell .orderViewTabs {
+    min-width: max-content;
+    width: max-content;
+  }
+
+  .orderViewTabsShell .orderViewTab {
+    min-width: 118px;
+  }
+
+  .orderViewSwitch {
+    flex: 1 1 auto;
+    width: auto;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .orderViewSwitch::-webkit-scrollbar {
+    display: none;
+  }
+
+  .orderViewButton.uiButton {
+    flex: 0 0 auto;
+    min-width: 86px;
+    padding: 0 10px;
+  }
+
+  .orderMobileOnly {
+    display: block !important;
+    flex: 0 0 auto;
+  }
+
+  .orderDesktopOnly {
+    display: none !important;
+  }
+
+  .orderKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px;
+  }
+
+  .orderPage .metricCard {
+    min-height: 96px;
+    padding: 18px 20px;
+  }
+
+  .orderPage .metricValue {
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  .orderPage .metricValue > div {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+}
+
+/* Pesanan overlay and compact viewport hardening */
+.orderDetailDialog.masterDataFormDialogContent {
+  display: flex;
+  width: min(calc(100vw - 48px), 960px);
+  max-width: min(calc(100vw - 48px), 960px);
+  max-height: min(86vh, calc(100dvh - 32px));
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 26px;
+  background: #ffffff;
+  box-shadow: 0 30px 80px -48px rgba(15, 23, 42, 0.62);
+}
+
+.orderDetailDialog .masterDataFormHeader {
+  flex: 0 0 auto;
+  padding: 26px 32px 20px;
+}
+
+.orderDetailDialog .masterDataFormTitle {
+  gap: 10px;
+}
+
+.orderDetailTitle {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.orderDetailBody.masterDataDialogBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 32px 20px;
+  background: #f8fafc;
+}
+
+.orderDetailDialog .orderDetailFooter.masterDataFormActions {
+  position: relative;
+  bottom: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 14px 32px 18px;
+  background: #ffffff;
+}
+
+.orderDetailFooterInner {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.orderDetailFooterInner.hasCopyAction {
+  justify-content: space-between;
+}
+
+.orderDetailFooterActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.orderPhotoDialog.appModalPanel {
+  width: min(calc(100vw - 36px), 920px);
+  max-width: min(calc(100vw - 36px), 920px);
+  max-height: min(86vh, calc(100dvh - 32px));
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 24px;
+  box-shadow: 0 30px 80px -48px rgba(15, 23, 42, 0.62);
+}
+
+.orderPhotoDialog .appModalHeader {
+  flex: 0 0 auto;
+  padding: 20px 24px;
+}
+
+.orderPhotoDialog .appModalBody {
+  min-height: 0;
+  padding: 20px 24px 24px;
+  overflow-y: auto;
+}
+
+.orderPhotoDialog .appModalBody > div {
+  height: min(58dvh, 520px);
+  min-height: 320px;
+}
+
+@media (max-width: 1023px) {
+  .orderPage.opsPageShell {
+    max-width: 100%;
+    overflow-x: hidden;
+    padding-inline: 16px;
+  }
+
+  .orderPage.opsPageShell > .flex {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderPage .topbar {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .orderPage .topbarTitle,
+  .orderPage .topbarActions,
+  .orderHeaderActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderHeaderActions {
+    justify-content: flex-start;
+  }
+
+  .orderViewTabsShell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderViewTabsShell .orderViewTabsViewport {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .orderViewTabsShell .orderViewTabsViewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .orderViewTabsShell .orderViewTabs {
+    width: max-content;
+    min-width: max-content;
+  }
+
+  .orderViewTabsShell .orderViewTab {
+    flex: 0 0 auto;
+    min-width: 120px;
+  }
+
+  .orderKpiGrid.metricGrid {
+    display: grid !important;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px;
+  }
+
+  .orderKpiGrid.metricGrid > .metricCard,
+  .orderKpiGrid.metricGrid > .metricCard.col-span-2,
+  .orderKpiGrid.metricGrid > .metricCard.md\:col-span-1 {
+    grid-column: auto !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderPage .metricCard {
+    grid-template-columns: 50px minmax(0, 1fr);
+    min-height: 104px;
+    overflow: hidden;
+  }
+
+  .orderPage .metricValue {
+    max-width: 100%;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .orderPage .metricValue > div {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .orderPage .orderContentPanel.tablePanel {
+    width: 100%;
+    min-width: 0;
+    gap: 14px;
+  }
+
+  .orderPage .orderFilterPanel.filterPanel,
+  .orderPage .orderTableSurface,
+  .orderPage .orderMobileSurface {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderPage .orderFilterGrid,
+  .orderPage .orderFilterGrid.hasCancelReason {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px;
+  }
+
+  .orderPage .orderStatusStrip {
+    margin-inline: -2px;
+    padding-inline: 2px;
+  }
+}
+
+@media (max-width: 640px) {
+  .orderDetailDialog.masterDataFormDialogContent {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px;
+  }
+
+  .orderDetailDialog .masterDataFormHeader,
+  .orderDetailBody.masterDataDialogBody,
+  .orderDetailDialog .orderDetailFooter.masterDataFormActions {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .orderDetailFooterInner,
+  .orderDetailFooterActions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .orderDetailFooterInner .uiButton,
+  .orderDetailFooterActions .uiButton {
+    width: 100%;
+  }
+
+  .orderPhotoDialog.appModalPanel {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px;
+  }
+
+  .orderPhotoDialog .appModalHeader,
+  .orderPhotoDialog .appModalBody {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .orderPhotoDialog .appModalBody > div {
+    height: min(60dvh, 520px);
+    min-height: 300px;
   }
 }

@@ -14,6 +14,7 @@ interface UseOrderBulkActionsParams {
   deleteOrder: (id: string) => Promise<void>;
   currentUser: any;
   buildStatusUpdatePayload: (order: Order, nextStatus: Order['status'], reason?: string, reasonNote?: string) => Order;
+  canApplyBulkUpdate?: (order: Order, field: string, value: string) => boolean;
 }
 
 export function useOrderBulkActions({
@@ -25,6 +26,7 @@ export function useOrderBulkActions({
   deleteOrder,
   currentUser,
   buildStatusUpdatePayload,
+  canApplyBulkUpdate,
 }: UseOrderBulkActionsParams) {
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [bulkField, setBulkField] = useState<string>('');
@@ -63,6 +65,7 @@ export function useOrderBulkActions({
     const selectedOrders = orders.filter(o => selectedIds.has(o.id));
     const failedIds = new Set<string>();
     const failureDetails: string[] = [];
+    let skippedCount = 0;
 
     for (const order of selectedOrders) {
       try {
@@ -76,6 +79,11 @@ export function useOrderBulkActions({
             ),
           );
           successCount++;
+          continue;
+        }
+
+        if (canApplyBulkUpdate && !canApplyBulkUpdate(order, bulkField, bulkValue)) {
+          skippedCount++;
           continue;
         }
 
@@ -123,7 +131,14 @@ export function useOrderBulkActions({
     toast.dismiss(toastId);
     if (successCount > 0) {
       toast.success(`${successCount} pesanan berhasil diperbarui`, {
-        description: failureDetails.length > 0 ? `${failureDetails.length} pesanan gagal disimpan.` : undefined,
+        description: [
+          failureDetails.length > 0 ? `${failureDetails.length} pesanan gagal disimpan.` : '',
+          skippedCount > 0 ? `${skippedCount} pesanan dilewati karena tidak sesuai Master Data Akun Iklan.` : '',
+        ].filter(Boolean).join(' '),
+      });
+    } else if (skippedCount > 0) {
+      toast.warning('Tidak ada pesanan yang cocok dengan mapping akun iklan', {
+        description: `${skippedCount} pesanan dilewati. Pilih kombinasi advertiser, platform, sub channel, dan CS yang sesuai.`,
       });
     }
     if (failureDetails.length > 0) {
@@ -140,12 +155,12 @@ export function useOrderBulkActions({
         'Pesanan',
         `Memperbarui ${successCount} pesanan secara massal`,
         '',
-        { count: successCount }
+        { count: successCount, skipped: skippedCount }
       );
     }
     resetBulkEditor();
     setSelectedIds(new Set());
-  }, [bulkField, bulkValue, bulkStatusReason, bulkStatusReasonNote, selectedIds, orders, services, updateOrder, deleteOrder, currentUser, buildStatusUpdatePayload, setSelectedIds, resetBulkEditor]);
+  }, [bulkField, bulkValue, bulkStatusReason, bulkStatusReasonNote, selectedIds, orders, services, updateOrder, deleteOrder, currentUser, buildStatusUpdatePayload, setSelectedIds, resetBulkEditor, canApplyBulkUpdate]);
 
   const handleMassDelete = useCallback(() => {
     setIsMassDeleteOpen(true);

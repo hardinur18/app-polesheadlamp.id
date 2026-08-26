@@ -8,11 +8,12 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+  TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '../components/ui/table';
+import { DataTable, createDataTableColumns } from '../components/ui/data-table';
 import { Badge } from '../components/ui/badge';
 import { Modal } from '../components/ui/Modal';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
 import { MapCard } from '../components/ui/MapCard';
 import {
   Tooltip,
@@ -59,8 +60,9 @@ import { Label } from "../components/ui/label"
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { logActivity } from '@/app/services/auditService';
-import { Order, WATemplate } from './master-data/data';
-import { DatePickerWithRange } from '../components/ui/date-range-picker';
+import { AdAccount, AdAccountAssignment, Order, WATemplate } from './master-data/data';
+import { getTodayDateKey } from './master-data/dateKeys';
+import { FoundationDateRangePicker } from '../components/ui/date-range-picker';
 import { startOfDay, endOfDay } from 'date-fns';
 import { OrderForm } from './orders/OrderForm';
 import { OrderDetailDialog } from './orders/OrderDetailDialog';
@@ -82,6 +84,8 @@ import {
   OperationalPageShell,
   OperationalTableCard,
 } from '../components/ui/operational-page';
+import { MasterDataTableTitle } from '../components/ui/master-data-table-title';
+import { Switch } from '../components/ui/switch';
 import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
@@ -99,6 +103,30 @@ const ORDER_MENU_CONTENT_CLASS =
   'w-56 border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800';
 
 const ORDER_MENU_ITEM_CLASS = 'cursor-pointer gap-2 text-sm';
+
+const ORDER_TABLE_PAGE_SIZE_OPTIONS = [50, 100, 300, 500];
+const ORDER_TABLE_INTERACTIVE_SELECTOR =
+  'button, a, input, textarea, select, [data-slot="checkbox"], [role="button"], [role="checkbox"], [role="menuitem"]';
+const ORDER_FILTER_CONTROL_CLASS =
+  'orderFilterControl bg-white text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
+const ORDER_VIEW_MODES = [
+  { value: 'table', label: 'List', icon: Settings },
+  { value: 'map', label: 'Peta', icon: MapIcon },
+  { value: 'calendar', label: 'Kalender', icon: Calendar },
+] as const;
+const ORDER_STATUS_FILTER_OPTIONS = [
+  { value: 'pending', label: 'Terjadwal' },
+  { value: 'otw', label: 'OTW Jalan' },
+  { value: 'working', label: 'Pengerjaan' },
+  { value: 'qc', label: 'Menunggu QC' },
+  { value: 'processing', label: 'Proses' },
+  { value: 'done', label: 'Selesai' },
+  { value: 'reschedule', label: 'Jadwal Ulang' },
+  { value: 'cancelled', label: 'Cancel' },
+] as const;
+
+const uniqueById = <T extends { id: string }>(items: T[]) =>
+  Array.from(new Map(items.map((item) => [item.id, item])).values());
 
 function OrderActionButton({
   label,
@@ -162,6 +190,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     cancelReasons = [],
     technicianSchedules = [],
     prospectBookings = [],
+    adAccounts = [],
+    adAccountAssignments = [],
+    adAccountOwnerAssignments = [],
   } = useMasterData();
   const { hasPermission, isOrderLocked } = usePermissions();
   const nonScheduleLeadIds = useMemo(
@@ -260,9 +291,133 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     handleImportClick, handleConfirmImport, handleImportOrders,
   } = useOrderImport({ users, services, vehicles, branches, areas, platforms, payments, addOrder });
 
+  const todayKey = getTodayDateKey();
+  const isActiveAdAssignment = useCallback(
+    (assignment: { startDate?: string | null; endDate?: string | null; status?: string | null }) => {
+      if (assignment.status && assignment.status !== 'active') return false;
+      if (assignment.startDate && assignment.startDate > todayKey) return false;
+      if (assignment.endDate && assignment.endDate < todayKey) return false;
+      return true;
+    },
+    [todayKey],
+  );
+  const activeAdAccounts = useMemo<AdAccount[]>(
+    () => adAccounts.filter((account) => account.status === 'active'),
+    [adAccounts],
+  );
+  const activeOwnerByAccountId = useMemo(() => {
+    const map = new Map<string, string>();
+    [...adAccountOwnerAssignments]
+      .filter(isActiveAdAssignment)
+      .sort((left, right) => right.startDate.localeCompare(left.startDate))
+      .forEach((assignment) => {
+        if (!map.has(assignment.adAccountId)) {
+          map.set(assignment.adAccountId, assignment.advertiserId);
+        }
+      });
+    return map;
+  }, [adAccountOwnerAssignments, isActiveAdAssignment]);
+  const activeCsAssignmentsByAccountId = useMemo(() => {
+    const map = new Map<string, AdAccountAssignment[]>();
+    adAccountAssignments
+      .filter(isActiveAdAssignment)
+      .forEach((assignment) => {
+        const list = map.get(assignment.adAccountId) || [];
+        list.push(assignment);
+        map.set(assignment.adAccountId, list);
+      });
+    return map;
+  }, [adAccountAssignments, isActiveAdAssignment]);
+  const getAccountAdvertiserId = useCallback(
+    (account: AdAccount) => activeOwnerByAccountId.get(account.id) || account.advertiserId,
+    [activeOwnerByAccountId],
+  );
+  const getScopedOrderAdAccounts = useCallback(
+    (scope?: { advertiserId?: string; platformId?: string; subChannelId?: string; csId?: string }) => {
+      let accounts = activeAdAccounts;
+
+      if (isAdvertiserUser && currentUser) {
+        accounts = accounts.filter((account) => getAccountAdvertiserId(account) === currentUser.id);
+      } else if (isCsUser && currentUser) {
+        accounts = accounts.filter((account) =>
+          (activeCsAssignmentsByAccountId.get(account.id) || []).some((assignment) => assignment.csId === currentUser.id),
+        );
+      }
+
+      if (scope?.advertiserId) {
+        accounts = accounts.filter((account) => getAccountAdvertiserId(account) === scope.advertiserId);
+      }
+      if (scope?.platformId) {
+        accounts = accounts.filter((account) => account.platformId === scope.platformId);
+      }
+      if (scope?.subChannelId) {
+        accounts = accounts.filter((account) =>
+          account.subChannelId === scope.subChannelId ||
+          (activeCsAssignmentsByAccountId.get(account.id) || []).some((assignment) => assignment.subChannelId === scope.subChannelId),
+        );
+      }
+      if (scope?.csId) {
+        accounts = accounts.filter((account) =>
+          (activeCsAssignmentsByAccountId.get(account.id) || []).some((assignment) => assignment.csId === scope.csId),
+        );
+      }
+
+      return accounts;
+    },
+    [
+      activeAdAccounts,
+      activeCsAssignmentsByAccountId,
+      currentUser,
+      getAccountAdvertiserId,
+      isAdvertiserUser,
+      isCsUser,
+    ],
+  );
+  const bulkAdvertisers = useMemo(() => {
+    const scopedAccounts = getScopedOrderAdAccounts();
+    if (scopedAccounts.length === 0) return advertisers;
+
+    const advertiserIds = new Set(scopedAccounts.map(getAccountAdvertiserId).filter(Boolean));
+    const fromAdAccounts = advertisers.filter((advertiser) => advertiserIds.has(advertiser.id));
+    return fromAdAccounts.length > 0 ? uniqueById(fromAdAccounts) : advertisers;
+  }, [advertisers, getAccountAdvertiserId, getScopedOrderAdAccounts]);
+  const bulkCsUsers = useMemo(() => {
+    const scopedAccounts = getScopedOrderAdAccounts();
+    if (scopedAccounts.length === 0) return csUsers;
+
+    const csIds = new Set<string>();
+    scopedAccounts.forEach((account) => {
+      (activeCsAssignmentsByAccountId.get(account.id) || []).forEach((assignment) => {
+        if (assignment.csId) csIds.add(assignment.csId);
+      });
+    });
+    const fromAdAccounts = csUsers.filter((cs) => csIds.has(cs.id));
+    return fromAdAccounts.length > 0 ? uniqueById(fromAdAccounts) : csUsers;
+  }, [activeCsAssignmentsByAccountId, csUsers, getScopedOrderAdAccounts]);
+  const canApplyOrderBulkUpdate = useCallback(
+    (order: Order, field: string, value: string) => {
+      if (!['advertiserId', 'csId'].includes(field) || activeAdAccounts.length === 0) {
+        return true;
+      }
+
+      const nextAdvertiserId = field === 'advertiserId' ? value : order.advertiserId;
+      const nextCsId = field === 'csId' ? value : order.csId;
+      const scopedAccounts = getScopedOrderAdAccounts({
+        advertiserId: nextAdvertiserId,
+        platformId: order.platformId,
+        subChannelId: order.subChannelId,
+        csId: nextCsId,
+      });
+
+      return scopedAccounts.length > 0;
+    },
+    [activeAdAccounts.length, getScopedOrderAdAccounts],
+  );
+
   const bulkActions = useOrderBulkActions({
     orders, services, selectedIds, setSelectedIds,
     updateOrder, deleteOrder, currentUser, buildStatusUpdatePayload,
+    canApplyBulkUpdate: canApplyOrderBulkUpdate,
   });
   const {
     isBulkEditOpen, setIsBulkEditOpen,
@@ -298,6 +453,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
   // --- Local UI State ---
   const [viewMode, setViewMode] = useState<'table' | 'map' | 'calendar'>('table');
+  const [showOrderSelection, setShowOrderSelection] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -310,10 +466,27 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [waSheetOpen, setWaSheetOpen] = useState(false);
   const [waTargetOrder, setWaTargetOrder] = useState<Order | null>(null);
+  const orderTableDragRef = React.useRef({
+    active: false,
+    dragging: false,
+    pointerId: null as number | null,
+    scrollLeft: 0,
+    startX: 0,
+  });
+  const suppressOrderTableClickRef = React.useRef(false);
+  const orderStatusDragRef = React.useRef({
+    active: false,
+    dragging: false,
+    pointerId: null as number | null,
+    scrollLeft: 0,
+    startX: 0,
+  });
+  const suppressOrderStatusClickRef = React.useRef(false);
   const deleteOrderTarget = useMemo(
     () => (deleteId ? orders.find((order) => order.id === deleteId) || null : null),
     [deleteId, orders],
   );
+  const orderTableColumnCount = (showOrderSelection ? 1 : 0) + 9 + (canShowOrderActions ? 1 : 0);
 
   // --- Helpers ---
   const getTechnicianName = useCallback((id?: string) => users.find(u => u.id === id)?.name || '-', [users]);
@@ -404,6 +577,158 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     setDetailOrder(order);
     setIsDetailOpen(true);
   }, []);
+
+  const isOrderRowInteractiveTarget = (target: EventTarget | null) => {
+    return target instanceof HTMLElement && Boolean(target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR));
+  };
+
+  const resetOrderTableDrag = (target: HTMLDivElement, pointerId?: number) => {
+    if (pointerId !== undefined && target.hasPointerCapture?.(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+    target.removeAttribute('data-dragging');
+    orderTableDragRef.current.active = false;
+    orderTableDragRef.current.dragging = false;
+    orderTableDragRef.current.pointerId = null;
+  };
+
+  const resetOrderStatusDrag = (target: HTMLDivElement, pointerId?: number) => {
+    if (pointerId !== undefined && target.hasPointerCapture?.(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+    target.removeAttribute('data-dragging');
+    orderStatusDragRef.current.active = false;
+    orderStatusDragRef.current.dragging = false;
+    orderStatusDragRef.current.pointerId = null;
+  };
+
+  const handleOrderStatusPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    const scroller = event.currentTarget;
+    if (scroller.scrollWidth <= scroller.clientWidth) return;
+
+    suppressOrderStatusClickRef.current = false;
+    orderStatusDragRef.current = {
+      active: true,
+      dragging: false,
+      pointerId: event.pointerId,
+      scrollLeft: scroller.scrollLeft,
+      startX: event.clientX,
+    };
+    scroller.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleOrderStatusPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = orderStatusDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > 6) {
+      drag.dragging = true;
+      suppressOrderStatusClickRef.current = true;
+      event.currentTarget.setAttribute('data-dragging', 'true');
+      event.preventDefault();
+      event.currentTarget.scrollLeft = drag.scrollLeft - deltaX;
+    }
+  };
+
+  const handleOrderStatusPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = orderStatusDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    if (drag.dragging) {
+      suppressOrderStatusClickRef.current = true;
+      window.setTimeout(() => {
+        suppressOrderStatusClickRef.current = false;
+      }, 0);
+    }
+    resetOrderStatusDrag(event.currentTarget, event.pointerId);
+  };
+
+  const handleOrderStatusFilterClick = (event: React.MouseEvent<HTMLButtonElement>, nextStatus: string) => {
+    if (suppressOrderStatusClickRef.current || orderStatusDragRef.current.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressOrderStatusClickRef.current = false;
+      return;
+    }
+
+    setStatusFilter(nextStatus);
+  };
+
+  const handleOrderSelectionModeChange = useCallback((checked: boolean) => {
+    setShowOrderSelection(checked);
+    if (!checked) {
+      setSelectedIds(new Set());
+    }
+  }, [setSelectedIds]);
+
+  const handleOrderRowClick = (event: React.MouseEvent<HTMLTableRowElement>, order: Order) => {
+    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target)) return;
+
+    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressOrderTableClickRef.current = false;
+      return;
+    }
+
+    handleViewDetail(order);
+  };
+
+  const handleOrderRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>, order: Order) => {
+    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target)) return;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleViewDetail(order);
+    }
+  };
+
+  const handleOrderTablePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || isOrderRowInteractiveTarget(event.target)) return;
+
+    const scroller = event.currentTarget;
+    if (scroller.scrollWidth <= scroller.clientWidth) return;
+
+    suppressOrderTableClickRef.current = false;
+    orderTableDragRef.current = {
+      active: true,
+      dragging: false,
+      pointerId: event.pointerId,
+      scrollLeft: scroller.scrollLeft,
+      startX: event.clientX,
+    };
+    scroller.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleOrderTablePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = orderTableDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > 8) {
+      drag.dragging = true;
+      suppressOrderTableClickRef.current = true;
+      event.currentTarget.setAttribute('data-dragging', 'true');
+      event.preventDefault();
+      event.currentTarget.scrollLeft = drag.scrollLeft - deltaX;
+    }
+  };
+
+  const handleOrderTablePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = orderTableDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    if (drag.dragging) {
+      suppressOrderTableClickRef.current = true;
+      window.setTimeout(() => {
+        suppressOrderTableClickRef.current = false;
+      }, 0);
+    }
+    resetOrderTableDrag(event.currentTarget, event.pointerId);
+  };
 
   const handleViewPayment = useCallback((order: Order) => {
     setPaymentOrder(order);
@@ -550,7 +875,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
     return (
       <TooltipProvider delayDuration={150}>
-        <div className="flex items-center justify-end gap-1">
+        <div className="rowActions orderRowActions">
           {canViewCustomerContact && (
             layout === 'mobile' ? (
               <OrderActionButton
@@ -645,7 +970,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             )
           )}
 
-          {canViewOrderDetails && (
+          {canViewOrderDetails && layout === 'mobile' && (
             <OrderActionButton label="Detail Pesanan" onClick={() => handleViewDetail(order)} className={iconClass}>
               <Eye className="h-4 w-4" />
             </OrderActionButton>
@@ -900,7 +1225,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   }
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="orderPage">
       <div className="flex flex-col space-y-4">
         <OperationalPageHeader
           title="Pesanan & Layanan"
@@ -908,14 +1233,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           eyebrow="Operasional"
           icon={ClipboardList}
           actions={
-            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <div className="orderHeaderActions">
              {/* Export Button - Hidden for Advertiser */}
              {!isAdvertiserUser && (
              <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-9 bg-white px-3 text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700" title="Export / Import Data">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="orderHeaderIconButton"
+                      title="Export / Import Data"
+                    >
                       <FileSpreadsheet className="w-4 h-4" />
-                      <ChevronDown className="w-3 h-3 ml-2 opacity-50" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
@@ -945,67 +1274,64 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   </DropdownMenuContent>
                 </DropdownMenu>
              )}
-             
-             <div className="flex h-9 shrink-0 items-center rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800">
-                <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className={`h-7 px-3 ${viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-300'}`}
-                    onClick={() => setViewMode('table')}
-                >
-                    <Settings className="w-4 h-4 mr-2" /> List
-                </Button>
-                {!isAdvertiserUser && (
-                <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className={`h-7 px-3 ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-300'}`}
-                    onClick={() => setViewMode('map')}
-                >
-                    <MapIcon className="w-4 h-4 mr-2" /> Peta
-                </Button>
-                )}
-                
-                <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className={`h-7 px-3 ${viewMode === 'calendar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-300'}`}
-                    onClick={() => setViewMode('calendar')}
-                >
-                    <Calendar className="w-4 h-4 mr-2" /> Kalender
-                </Button>
-             </div>
-
              {hasPermission('order.create') && (
              <>
                  {/* Mobile Add Button (Square Icon) */}
-                 <Button 
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 p-0 text-white shadow-sm hover:bg-blue-700 sm:hidden"
-                    onClick={() => {
-                       setEditingOrder(null);
-                       setIsFormOpen(true);
-                    }}
-                 >
-                    <Plus className="h-5 w-5" />
-                 </Button>
+                 <div className="orderMobileOnly">
+                   <Button
+                      className="orderHeaderPrimaryIcon"
+                      aria-label="Tambah Pesanan"
+                      onClick={() => {
+                         setEditingOrder(null);
+                         setIsFormOpen(true);
+                      }}
+                   >
+                      <Plus className="h-5 w-5" />
+                   </Button>
+                 </div>
 
                  {/* Desktop Add Button (Full Text) */}
-                 <Button 
-                    className="hidden h-9 items-center bg-blue-600 text-white shadow-sm hover:bg-blue-700 sm:flex"
-                    onClick={() => {
-                       setEditingOrder(null);
-                       setIsFormOpen(true);
-                    }}
-                 >
-                    <Plus className="mr-2 h-4 w-4" /> Tambah Pesanan
-                 </Button>
+                 <div className="orderDesktopOnly">
+                   <Button
+                      className="orderHeaderPrimaryButton"
+                      onClick={() => {
+                         setEditingOrder(null);
+                         setIsFormOpen(true);
+                      }}
+                   >
+                      <Plus className="h-4 w-4" /> Tambah Pesanan
+                   </Button>
+                 </div>
              </>
              )}
             </div>
           }
         />
 
-        <OperationalKpiGrid className="grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <Tabs
+          value={viewMode}
+          onValueChange={(value) => setViewMode(value as 'table' | 'map' | 'calendar')}
+          className="masterDataTabsShell orderViewTabsShell"
+        >
+          <TabsViewport className="orderViewTabsViewport">
+            <TabsRail className="masterDataTabs orderViewTabs">
+              {ORDER_VIEW_MODES
+                .filter((mode) => mode.value !== 'map' || !isAdvertiserUser)
+                .map((mode) => {
+                  const ModeIcon = mode.icon;
+
+                  return (
+                    <TabsTrigger key={mode.value} value={mode.value} className="masterDataTab orderViewTab">
+                      <ModeIcon className="h-4 w-4" />
+                      <span>{mode.label}</span>
+                    </TabsTrigger>
+                  );
+                })}
+            </TabsRail>
+          </TabsViewport>
+        </Tabs>
+
+        <OperationalKpiGrid className="orderKpiGrid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
           <OperationalKpiCard label="Total" value={stats.total.toLocaleString('id-ID')} icon={Package} />
           <OperationalKpiCard
             label="Selesai"
@@ -1032,110 +1358,106 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         </OperationalKpiGrid>
 
         {/* Content Card */}
-        <OperationalTableCard>
+        <OperationalTableCard className="orderContentPanel">
           
           {/* Toolbar */}
-          <OperationalFilterPanel className="rounded-none border-0 border-b border-slate-100 p-4 shadow-none dark:border-slate-700 md:p-5">
+          <OperationalFilterPanel className="orderFilterPanel rounded-none border-0 border-b border-slate-100 p-4 shadow-none dark:border-slate-700 md:p-5">
             
             {/* Row 1: Status Filter */}
-            <div className="flex w-full items-center gap-2 overflow-x-auto pb-3 scrollbar-hide">
+            <div
+              className="orderStatusStrip"
+              role="tablist"
+              aria-label="Filter status pesanan"
+              onPointerDown={handleOrderStatusPointerDown}
+              onPointerMove={handleOrderStatusPointerMove}
+              onPointerUp={handleOrderStatusPointerEnd}
+              onPointerCancel={handleOrderStatusPointerEnd}
+            >
               <Button 
                 variant={statusFilter === 'all' ? 'default' : 'outline'} 
                 size="sm" 
-                onClick={() => setStatusFilter('all')}
-                className={statusFilter === 'all' ? "bg-slate-900 dark:bg-blue-600 text-white shadow-sm uppercase text-xs h-8 px-3" : "text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 uppercase text-xs h-8 px-3"}
+                onClick={(event) => handleOrderStatusFilterClick(event, 'all')}
+                className={`orderStatusChip ${statusFilter === 'all' ? 'isActive' : ''}`}
               >
                 Semua
-                <span className={`ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${statusFilter === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                <span className="orderStatusCount">
                    {filteredOrdersBase.length}
                 </span>
               </Button>
-               {[
-                 { value: 'pending', label: 'Terjadwal' },
-                 { value: 'otw', label: 'OTW Jalan' },
-                 { value: 'working', label: 'Pengerjaan' },
-                 { value: 'qc', label: 'Menunggu QC' },
-                 { value: 'processing', label: 'Proses' },
-                 { value: 'done', label: 'Selesai' },
-                 { value: 'reschedule', label: 'Jadwal Ulang' },
-                 { value: 'cancelled', label: 'Cancel' }
-               ].map(option => (
+               {ORDER_STATUS_FILTER_OPTIONS.map(option => (
                   <Button 
                     key={option.value}
                     variant={statusFilter === option.value ? 'default' : 'outline'} 
                     size="sm" 
-                    onClick={() => setStatusFilter(option.value)}
-                    className={statusFilter === option.value ? "bg-slate-900 dark:bg-blue-600 text-white shadow-sm uppercase text-xs h-8 px-3" : "text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 uppercase text-xs h-8 px-3"}
+                    onClick={(event) => handleOrderStatusFilterClick(event, option.value)}
+                    className={`orderStatusChip ${statusFilter === option.value ? 'isActive' : ''}`}
                   >
                     {option.label}
-                    <span className={`ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold ${statusFilter === option.value ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
+                    <span className="orderStatusCount">
                        {statusCounts[option.value] || 0}
                     </span>
                   </Button>
                ))}
             </div>
 
-            {/* Row 2: Filters & Search - MINIMALIST */}
-            <div className="flex flex-col items-start justify-between gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 xl:flex-row xl:items-center">
-              {/* Left: Search & Date */}
-              <div className="grid w-full flex-1 grid-cols-1 gap-3 md:grid-cols-[minmax(260px,1fr)_auto] xl:max-w-[760px]">
-                 <div className="relative w-full">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-                    <Input 
-                      placeholder="Cari Order ID, Nama, No HP..." 
-                      className="pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 transition-all w-full shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                 </div>
-                 <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                    <Select value={dateFilterMode} onValueChange={(v: any) => setDateFilterMode(v)}>
-                        <SelectTrigger className="w-full sm:w-[150px] shrink-0 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="service">Jadwal Service</SelectItem>
-                            <SelectItem value="lead">Tanggal Leads</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <div className="flex-1 sm:w-auto">
-                        <DatePickerWithRange 
-                        date={dateRange}
-                        setDate={setDateRange}
-                        className="w-full"
-                        />
-                    </div>
-                 </div>
-                 {statusFilter === 'cancelled' && (
-                    <div className="w-full sm:w-[220px]">
-                      <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
-                        <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                          <SelectValue placeholder="Semua alasan cancel" />
-                        </SelectTrigger>
-                        <SelectContent className="z-[200]">
-                          <SelectItem value="all">Semua alasan cancel</SelectItem>
-                          {cancelReasonFilterOptions.map((option) => (
-                            <SelectItem key={option.label} value={option.label}>
-                              {option.label} ({option.count})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                 )}
+            {/* Row 2: Filters & Search */}
+            <div className={`orderFilterGrid ${statusFilter === 'cancelled' ? 'hasCancelReason' : ''}`}>
+              <div className="orderFilterDate">
+                <FoundationDateRangePicker
+                  date={dateRange}
+                  setDate={setDateRange}
+                  className="orderFilterDateControl"
+                  contentClassName="orderDateRangePopover"
+                />
               </div>
 
-              {/* Right: Filter Button (Sheet) */}
+              <Select value={dateFilterMode} onValueChange={(v: any) => setDateFilterMode(v)}>
+                <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="service">Jadwal Service</SelectItem>
+                  <SelectItem value="lead">Tanggal Leads</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div className="orderSearchSlot relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                <Input
+                  placeholder="Cari Order ID, nama, no HP, alamat, atau nominal..."
+                  className="orderSearchInput pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 transition-all w-full shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+
+              {statusFilter === 'cancelled' && (
+                <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
+                  <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
+                    <SelectValue placeholder="Semua alasan cancel" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[200]">
+                    <SelectItem value="all">Semua alasan cancel</SelectItem>
+                    {cancelReasonFilterOptions.map((option) => (
+                      <SelectItem key={option.label} value={option.label}>
+                        {option.label} ({option.count})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Filter Button (Sheet) */}
               <Sheet>
                  <SheetTrigger asChild>
-                    <Button 
-                        variant={activeFilterCount > 0 ? "default" : "outline"} 
-                        className={`${activeFilterCount > 0 ? "bg-blue-600 hover:bg-blue-700 text-white border-transparent" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"} shadow-sm whitespace-nowrap px-4 transition-all duration-200`}
+                    <Button
+                        variant="outline"
+                        className={`orderMoreFilterButton ${activeFilterCount > 0 ? 'isActive' : ''}`}
                     >
-                       <Filter className="w-4 h-4 mr-2" />
+                       <Filter className="h-4 w-4" />
                        Filter
                        {activeFilterCount > 0 && (
-                          <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white/20 text-white text-[10px] font-bold px-1">
+                          <span className="orderMoreFilterCount">
                              {activeFilterCount}
                           </span>
                        )}
@@ -1537,48 +1859,78 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           {/* Data Content: Table or Map */}
           {viewMode === 'table' ? (
           <>
-          {selectedIds.size > 0 && (
-              <div className="mb-4 flex flex-col gap-3 rounded-xl border border-blue-100 bg-blue-50/80 p-3 shadow-sm animate-in fade-in slide-in-from-top-2 sm:flex-row sm:items-center sm:justify-between dark:border-blue-900/40 dark:bg-blue-950/20">
-                  <div className="flex items-center gap-3 text-sm text-blue-700 dark:text-blue-300">
-                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-medium">{selectedIds.size} pesanan terpilih</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="h-8 text-xs text-slate-500 hover:text-slate-700">
-                          Batal
-                      </Button>
+          <div className="orderTableSurface hidden border border-slate-100 bg-white md:block dark:border-slate-800 dark:bg-slate-900">
+            <div className="orderTableHeader">
+              <MasterDataTableTitle title="Data Pesanan" count={filteredOrders.length} icon={ClipboardList} />
+              <label className="orderSelectionSwitch">
+                <Switch checked={showOrderSelection} onCheckedChange={handleOrderSelectionModeChange} />
+                <span>{showOrderSelection ? 'Mode pilih aktif' : 'Pilih baris'}</span>
+              </label>
+            </div>
+            {showOrderSelection && selectedIds.size > 0 && (
+              <div className="orderSelectionToolbar">
+                <div className="orderSelectionToolbarSummary">
+                  <strong>{selectedIds.size} pesanan terpilih</strong>
+                  <span>{paginatedOrders.length} data aktif di halaman ini</span>
+                </div>
+                <div className="orderSelectionToolbarActions">
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                    Batal
+                  </Button>
 
-                      {canViewCustomerContact && (
-                      <Button size="sm" variant="outline" onClick={() => void handleSaveSelectedOrdersToContacts()} className="h-8 text-xs shadow-sm bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900">
-                          <UserIcon className="w-3.5 h-3.5 mr-1.5" />
-                          Simpan Kontak ({selectedIds.size})
-                      </Button>
-                      )}
+                  {canViewCustomerContact && (
+                    <Button size="sm" variant="outline" onClick={() => void handleSaveSelectedOrdersToContacts()}>
+                      <UserIcon className="w-3.5 h-3.5" />
+                      Simpan Kontak ({selectedIds.size})
+                    </Button>
+                  )}
 
-                      {(hasPermission('order.edit') || hasPermission('order.payment.edit_status') || hasPermission('order.status.edit') || hasPermission('order.assign_technician')) && (
-                      <Button size="sm" variant="outline" onClick={() => setIsBulkEditOpen(true)} className="h-8 text-xs shadow-sm bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900">
-                          <Edit className="w-3.5 h-3.5 mr-1.5" />
-                          Edit ({selectedIds.size})
-                      </Button>
-                      )}
+                  {(hasPermission('order.edit') || hasPermission('order.payment.edit_status') || hasPermission('order.status.edit') || hasPermission('order.assign_technician')) && (
+                    <Button size="sm" variant="outline" onClick={() => setIsBulkEditOpen(true)}>
+                      <Edit className="w-3.5 h-3.5" />
+                      Edit ({selectedIds.size})
+                    </Button>
+                  )}
 
-                      {hasPermission('order.delete') && (
-                      <Button size="sm" variant="destructive" onClick={handleMassDelete} className="h-8 text-xs shadow-sm">
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-                          Hapus ({selectedIds.size})
-                      </Button>
-                      )}
-                  </div>
+                  {hasPermission('order.delete') && (
+                    <Button size="sm" variant="destructive" onClick={handleMassDelete}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Hapus ({selectedIds.size})
+                    </Button>
+                  )}
+                </div>
               </div>
-          )}
-
-          <div className="hidden border-t border-slate-100 bg-white md:block dark:border-slate-800 dark:bg-slate-900">
-            <div className="overflow-x-auto">
-            <Table>
+            )}
+            <DataTable
+              actionWidth={canShowOrderActions ? 86 : undefined}
+              cellY={14}
+              className="orderDataTable"
+              columns={createDataTableColumns([
+                showOrderSelection && 'checkbox',
+                'number',
+                { preset: 'text', minWidth: 136, width: 'clamp(136px, 10vw, 164px)' },
+                'date',
+                'wide',
+                { preset: 'description', minWidth: 260, width: 'clamp(260px, 18vw, 340px)' },
+                { preset: 'text', minWidth: 210, width: 'clamp(210px, 15vw, 280px)' },
+                { preset: 'compact', minWidth: 148, width: 'clamp(148px, 10vw, 180px)' },
+                'status',
+                'status',
+                canShowOrderActions && 'action',
+              ])}
+              minWidth={showOrderSelection ? 1600 : 1552}
+              onPointerCancel={handleOrderTablePointerEnd}
+              onPointerDown={handleOrderTablePointerDown}
+              onPointerLeave={handleOrderTablePointerEnd}
+              onPointerMove={handleOrderTablePointerMove}
+              onPointerUp={handleOrderTablePointerEnd}
+              rowMinHeight={82}
+              textMax={340}
+            >
+            <table>
               <TableHeader className="bg-slate-50 dark:bg-slate-900">
                 <TableRow className="border-b border-slate-200 hover:bg-transparent dark:border-slate-800">
+                  {showOrderSelection && (
                   <TableHead className="w-[50px] py-4 pl-4">
                     <Checkbox 
                         className="border-slate-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
@@ -1586,6 +1938,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
                     />
                   </TableHead>
+                  )}
                   <TableHead className="w-[50px] font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 text-center">No</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 pl-4">ID Order</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Jadwal</TableHead>
@@ -1614,7 +1967,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
               <TableBody>
                 {paginatedOrders.length === 0 ? (
                    <TableRow>
-                     <TableCell colSpan={11}>
+                     <TableCell colSpan={orderTableColumnCount}>
                         <OperationalEmptyState
                           icon={ClipboardList}
                           title="Tidak ada pesanan ditemukan"
@@ -1630,7 +1983,16 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                     );
 
                     return (
-                    <TableRow key={order.id} className={`border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/70 ${selectedIds.has(order.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                    <TableRow
+                      key={order.id}
+                      data-order-id={order.id}
+                      tabIndex={canViewOrderDetails ? 0 : undefined}
+                      aria-label={canViewOrderDetails ? `Buka detail pesanan ${order.id}` : undefined}
+                      onClick={(event) => handleOrderRowClick(event, order)}
+                      onKeyDown={(event) => handleOrderRowKeyDown(event, order)}
+                      className={`border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-200 dark:border-slate-800 dark:hover:bg-slate-800/70 ${canViewOrderDetails ? 'cursor-pointer' : ''} ${selectedIds.has(order.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                    >
+                      {showOrderSelection && (
                       <TableCell className="py-6 pl-4 align-top w-[40px]">
                         <Checkbox 
                             className="border-slate-400 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
@@ -1638,6 +2000,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                             onCheckedChange={(checked) => handleSelectRow(order.id, checked as boolean)}
                         />
                       </TableCell>
+                      )}
                       <TableCell className="py-6 align-top text-center text-sm text-slate-500 dark:text-slate-400 font-medium w-[50px]">
                         {(currentPage - 1) * itemsPerPage + index + 1}
                       </TableCell>
@@ -1748,7 +2111,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         </div>
                       </TableCell>
                       <TableCell className="py-6 align-top">
-                        <div className="flex flex-col gap-1 max-w-[150px]">
+                        <div className="flex flex-col gap-1 max-w-[240px]">
                           <span 
                             className="text-[11px] font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap overflow-hidden text-ellipsis" 
                             title={serviceMap[order.serviceId]?.name || order.serviceId}
@@ -1842,7 +2205,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                                <MessageCircle className="w-4 h-4" />
                                             </a>
                                          )}
-                                         <div className="flex items-center gap-1.5 max-w-[140px]">
+                                         <div className="flex items-center gap-1.5 max-w-[180px]">
                                             <span className="text-[10px] text-slate-500 font-medium shrink-0">Teknisi</span>
                                             <span className="text-slate-300 dark:text-slate-600 shrink-0">|</span>
                                             <span 
@@ -1926,7 +2289,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
                                  {/* 2. Cabang Only (Area hidden) */}
                                  {!isAdvertiserUser && branch && (
-                                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 ml-0.5 max-w-[150px]">
+                                    <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 ml-0.5 max-w-[180px]">
                                        <Building2 className="w-3.5 h-3.5 shrink-0" />
                                        <span className="text-[11px] whitespace-nowrap overflow-hidden text-ellipsis min-w-0" title={branch?.name}>
                                           {branch?.name}
@@ -1948,7 +2311,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                              <MessageCircle className="w-3.5 h-3.5" />
                                           </a>
                                        )}
-                                       <div className="flex items-center gap-1.5 max-w-[140px]">
+                                       <div className="flex items-center gap-1.5 max-w-[180px]">
                                           <span 
                                              className="text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap overflow-hidden text-ellipsis min-w-0"
                                              title={cs.name}
@@ -2112,8 +2475,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   })
                 )}
               </TableBody>
-            </Table>
-            </div>
+            </table>
+            </DataTable>
             {/* Pagination Controls */}
             <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 p-4">
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
@@ -2157,11 +2520,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                           <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-[200]">
-                          <SelectItem value="50">50 / Halaman</SelectItem>
-                          <SelectItem value="100">100 / Halaman</SelectItem>
-                          <SelectItem value="200">200 / Halaman</SelectItem>
-                          <SelectItem value="300">300 / Halaman</SelectItem>
-                          <SelectItem value="500">500 / Halaman</SelectItem>
+                          {ORDER_TABLE_PAGE_SIZE_OPTIONS.map((size) => (
+                            <SelectItem key={size} value={String(size)}>{size} / Halaman</SelectItem>
+                          ))}
                       </SelectContent>
                   </Select>
               </div>
@@ -2229,7 +2590,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                 <Select value={bulkValue} onValueChange={setBulkValue}>
                                     <SelectTrigger><SelectValue placeholder="Pilih CS" /></SelectTrigger>
                                     <SelectContent className="z-[250]">
-                                        {csUsers.map(u => (
+                                        {bulkCsUsers.map(u => (
                                             <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -2238,7 +2599,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                 <Select value={bulkValue} onValueChange={setBulkValue}>
                                     <SelectTrigger><SelectValue placeholder="Pilih Advertiser" /></SelectTrigger>
                                     <SelectContent className="z-[250]">
-                                        {advertisers.map(u => (
+                                        {bulkAdvertisers.map(u => (
                                             <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                                         ))}
                                     </SelectContent>
@@ -2361,7 +2722,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             </AlertDialog>
 
           {/* MOBILE CARD LIST (Visible on sm/xs) */}
-          <div className="md:hidden p-4 space-y-3">
+          <div className="orderMobileSurface md:hidden p-4 space-y-3">
               {paginatedOrders.length === 0 ? (
                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
                     Tidak ada pesanan ditemukan
@@ -2503,11 +2864,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-[200]">
-                        <SelectItem value="50">50 / Halaman</SelectItem>
-                        <SelectItem value="100">100 / Halaman</SelectItem>
-                        <SelectItem value="200">200 / Halaman</SelectItem>
-                        <SelectItem value="300">300 / Halaman</SelectItem>
-                        <SelectItem value="500">500 / Halaman</SelectItem>
+                        {ORDER_TABLE_PAGE_SIZE_OPTIONS.map((size) => (
+                          <SelectItem key={size} value={String(size)}>{size} / Halaman</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -2701,6 +3060,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             onClose={() => setPhotoViewerOrder(null)}
             title="Dokumentasi Pekerjaan"
             size="lg"
+            className="orderPhotoDialog"
         >
             {photoViewerOrder && (
                 <div className="h-[500px] flex flex-col">

@@ -320,6 +320,21 @@ export function AppLayout() {
     currentUserIssue?.message ||
     'Sesi browser masih aktif, tetapi profil pengguna belum siap dipakai di app v2.';
 
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const workspaceLayerLeft = isTechnicianRole(currentRole)
+      ? '0px'
+      : isSidebarCollapsed
+        ? '88px'
+        : '304px';
+
+    root.style.setProperty('--workspace-layer-left', workspaceLayerLeft);
+
+    return () => {
+      root.style.removeProperty('--workspace-layer-left');
+    };
+  }, [currentRole, isSidebarCollapsed]);
+
   const preferredDashboardView = currentRole ? DEFAULT_DASHBOARD_VIEW_BY_ROLE[currentRole] : undefined;
   const preferredDashboardPermission = preferredDashboardView
     ? DASHBOARD_VIEW_PERMISSION_MAP[preferredDashboardView]

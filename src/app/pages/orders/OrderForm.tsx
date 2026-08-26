@@ -8,7 +8,16 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { useMasterData } from '../master-data/context';
-import { Order, AVAILABLE_TIME_SLOTS } from '../master-data/data';
+import {
+  AVAILABLE_TIME_SLOTS,
+  AdAccount,
+  AdAccountAssignment,
+  Order,
+  Platform,
+  SubChannel,
+  User,
+} from '../master-data/data';
+import { getTodayDateKey } from '../master-data/dateKeys';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { toast } from 'sonner';
 import { logActivity } from '@/app/services/auditService';
@@ -71,12 +80,14 @@ const FormSection = ({
   description?: string;
   children: React.ReactNode;
 }) => (
-  <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-    <div className="mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-      {description && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>}
+  <section className="orderFormSection rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="orderFormSectionHeader mb-4 border-b border-slate-100 pb-3 dark:border-slate-800">
+      <h3>{title}</h3>
+      {description && <p>{description}</p>}
     </div>
-    {children}
+    <div className="orderFormSectionBody">
+      {children}
+    </div>
   </section>
 );
 
@@ -87,6 +98,11 @@ function normalizeCustomerPhone(value?: string | null) {
   if (digits.startsWith('8')) return `62${digits}`;
   return digits;
 }
+
+const MANDATORY_ORDER_PLATFORM_NAMES = ['repeat order', 'organik'];
+
+const uniqueById = <T extends { id: string }>(items: T[]) =>
+  Array.from(new Map(items.map((item) => [item.id, item])).values());
 
 interface OrderFormProps {
   isOpen: boolean;
@@ -101,7 +117,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     addOrder, updateOrder, orders, prospectBookings, leads,
     services, vehicles, platforms, subChannels, users, areas, payments, activeBranches: branches,
     currentUser, currentRole, technicianSchedules, advertiserConfigs, affiliates,
-    cancelReasons
+    cancelReasons,
+    adAccounts,
+    adAccountAssignments,
+    adAccountOwnerAssignments,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const isAdminManagementUser = isAdminManagementRole(currentRole);
@@ -291,127 +310,340 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     users,
   ]);
 
-  // --- FILTERING LOGIC (ADVERTISER CONFIG) ---
-  const filteredAdvertisers = React.useMemo(() => {
-      const ads = users.filter((u) => isAdvertiserRole(u.role) && u.status === 'active');
-      if (isCsUser && currentUser) {
-          const myAdvertiserIds = advertiserConfigs
-              .filter(cfg => cfg.csIds.includes(currentUser.id))
-              .map(cfg => cfg.advertiserId);
-          if (myAdvertiserIds.length > 0) return ads.filter(a => myAdvertiserIds.includes(a.id));
-          return ads; 
+  // --- FILTERING LOGIC (MASTER DATA AKUN IKLAN + LEGACY FALLBACK) ---
+  const todayKey = getTodayDateKey();
+  const allAdvertiserUsers = React.useMemo<User[]>(
+    () => users.filter((user) => isAdvertiserRole(user.role) && user.status === 'active'),
+    [users],
+  );
+  const allCsUsers = React.useMemo<User[]>(
+    () => users.filter((user) => isCsRole(user.role) && user.status === 'active'),
+    [users],
+  );
+  const selectedAdvertiserId = formData.advertiserId || (isAdvertiserUser ? currentUser?.id : undefined) || '';
+  const selectedPlatformId = formData.platformId || '';
+  const selectedSubChannelId = formData.subChannelId || '';
+  const sourceOrder = initialData || prefillData;
+  const originalAdvertiserId = sourceOrder?.advertiserId || '';
+  const originalPlatformId = sourceOrder?.platformId || '';
+  const originalSubChannelId = sourceOrder?.subChannelId || '';
+  const originalCsId = sourceOrder?.csId || '';
+  const preserveOriginalPlatform = Boolean(sourceOrder) && selectedAdvertiserId === originalAdvertiserId;
+  const preserveOriginalSubChannel = preserveOriginalPlatform && selectedPlatformId === originalPlatformId;
+  const preserveOriginalCs = preserveOriginalSubChannel && selectedSubChannelId === originalSubChannelId;
+
+  const isActiveAdAssignment = React.useCallback(
+    (assignment: { startDate?: string | null; endDate?: string | null; status?: string | null }) => {
+      if (assignment.status && assignment.status !== 'active') return false;
+      if (assignment.startDate && assignment.startDate > todayKey) return false;
+      if (assignment.endDate && assignment.endDate < todayKey) return false;
+      return true;
+    },
+    [todayKey],
+  );
+
+  const activeAdAccounts = React.useMemo<AdAccount[]>(
+    () => adAccounts.filter((account) => account.status === 'active'),
+    [adAccounts],
+  );
+
+  const activeOwnerByAccountId = React.useMemo(() => {
+    const map = new Map<string, string>();
+    [...adAccountOwnerAssignments]
+      .filter(isActiveAdAssignment)
+      .sort((left, right) => right.startDate.localeCompare(left.startDate))
+      .forEach((assignment) => {
+        if (!map.has(assignment.adAccountId)) {
+          map.set(assignment.adAccountId, assignment.advertiserId);
+        }
+      });
+    return map;
+  }, [adAccountOwnerAssignments, isActiveAdAssignment]);
+
+  const activeCsAssignmentsByAccountId = React.useMemo(() => {
+    const map = new Map<string, AdAccountAssignment[]>();
+    adAccountAssignments
+      .filter(isActiveAdAssignment)
+      .forEach((assignment) => {
+        const list = map.get(assignment.adAccountId) || [];
+        list.push(assignment);
+        map.set(assignment.adAccountId, list);
+      });
+    return map;
+  }, [adAccountAssignments, isActiveAdAssignment]);
+
+  const getAccountAdvertiserId = React.useCallback(
+    (account: AdAccount) => activeOwnerByAccountId.get(account.id) || account.advertiserId,
+    [activeOwnerByAccountId],
+  );
+
+  const getScopedAdAccounts = React.useCallback(
+    (scope?: { advertiserId?: string; platformId?: string; subChannelId?: string; csId?: string }) => {
+      let accounts = activeAdAccounts;
+
+      if (isAdvertiserUser && currentUser) {
+        accounts = accounts.filter((account) => getAccountAdvertiserId(account) === currentUser.id);
+      } else if (isCsUser && currentUser) {
+        accounts = accounts.filter((account) =>
+          (activeCsAssignmentsByAccountId.get(account.id) || []).some((assignment) => assignment.csId === currentUser.id),
+        );
       }
-      return ads;
-  }, [advertiserConfigs, currentUser, isCsUser, users]);
+
+      if (scope?.advertiserId) {
+        accounts = accounts.filter((account) => getAccountAdvertiserId(account) === scope.advertiserId);
+      }
+
+      if (scope?.platformId) {
+        accounts = accounts.filter((account) => account.platformId === scope.platformId);
+      }
+
+      if (scope?.subChannelId) {
+        accounts = accounts.filter((account) =>
+          account.subChannelId === scope.subChannelId ||
+          (activeCsAssignmentsByAccountId.get(account.id) || []).some((assignment) => assignment.subChannelId === scope.subChannelId),
+        );
+      }
+
+      if (scope?.csId) {
+        accounts = accounts.filter((account) =>
+          (activeCsAssignmentsByAccountId.get(account.id) || []).some((assignment) => assignment.csId === scope.csId),
+        );
+      }
+
+      return accounts;
+    },
+    [
+      activeAdAccounts,
+      activeCsAssignmentsByAccountId,
+      currentUser,
+      getAccountAdvertiserId,
+      isAdvertiserUser,
+      isCsUser,
+    ],
+  );
+
+  const getAccountSubChannelIds = React.useCallback(
+    (accounts: AdAccount[]) => {
+      const ids = new Set<string>();
+      accounts.forEach((account) => {
+        if (account.subChannelId) ids.add(account.subChannelId);
+        (activeCsAssignmentsByAccountId.get(account.id) || []).forEach((assignment) => {
+          if (assignment.subChannelId) ids.add(assignment.subChannelId);
+        });
+      });
+      return ids;
+    },
+    [activeCsAssignmentsByAccountId],
+  );
 
   const activeConfig = React.useMemo(() => {
-      // Priority 1: Form Selection
-      if (formData.advertiserId) {
-         return advertiserConfigs.find(c => c.advertiserId === formData.advertiserId);
+    if (selectedAdvertiserId) {
+      return advertiserConfigs.find((config) => config.advertiserId === selectedAdvertiserId);
+    }
+    if (isAdvertiserUser && currentUser) {
+      return advertiserConfigs.find((config) => config.advertiserId === currentUser.id);
+    }
+    return null;
+  }, [advertiserConfigs, currentUser, isAdvertiserUser, selectedAdvertiserId]);
+
+  const mandatoryPlatforms = React.useMemo(
+    () => platforms.filter((platform) =>
+      platform.status === 'active' &&
+      MANDATORY_ORDER_PLATFORM_NAMES.includes(platform.name.toLowerCase()),
+    ),
+    [platforms],
+  );
+
+  const filteredAdvertisers = React.useMemo(() => {
+    const includeOriginalAdvertiser = (items: User[]) => {
+      if (!originalAdvertiserId || items.some((advertiser) => advertiser.id === originalAdvertiserId)) return items;
+      const original = allAdvertiserUsers.find((advertiser) => advertiser.id === originalAdvertiserId);
+      return original ? uniqueById([...items, original]) : items;
+    };
+
+    const scopedAccounts = getScopedAdAccounts();
+    if (scopedAccounts.length > 0) {
+      const advertiserIds = new Set(scopedAccounts.map(getAccountAdvertiserId).filter(Boolean));
+      const fromAdAccounts = allAdvertiserUsers.filter((advertiser) => advertiserIds.has(advertiser.id));
+      if (fromAdAccounts.length > 0) return includeOriginalAdvertiser(fromAdAccounts);
+    }
+
+    if (isCsUser && currentUser) {
+      const myAdvertiserIds = advertiserConfigs
+        .filter((config) => config.csIds.includes(currentUser.id))
+        .map((config) => config.advertiserId);
+      if (myAdvertiserIds.length > 0) {
+        return includeOriginalAdvertiser(allAdvertiserUsers.filter((advertiser) => myAdvertiserIds.includes(advertiser.id)));
       }
-      // Priority 2: Current User (Advertiser)
-      if (isAdvertiserUser && currentUser) {
-         return advertiserConfigs.find(c => c.advertiserId === currentUser.id);
-      }
-      return null;
-  }, [advertiserConfigs, currentUser, formData.advertiserId, isAdvertiserUser]);
+    }
+
+    return includeOriginalAdvertiser(allAdvertiserUsers);
+  }, [advertiserConfigs, allAdvertiserUsers, currentUser, getAccountAdvertiserId, getScopedAdAccounts, isCsUser, originalAdvertiserId]);
 
   const filteredPlatforms = React.useMemo(() => {
-      // RULE 1: Admins -> All
-      if (isAdminManagementUser) {
-          return platforms.filter(p => p.status === 'active');
-      }
+    const includeOriginalPlatform = (items: Platform[]) => {
+      if (!preserveOriginalPlatform || !originalPlatformId) return items;
+      if (items.some((platform) => platform.id === originalPlatformId)) return items;
 
-      // Helper
-      const mandatoryPlatformNames = ['repeat order', 'organik'];
-      const mandatoryPlatforms = platforms.filter(p => mandatoryPlatformNames.includes(p.name.toLowerCase()));
+      const original = platforms.find((platform) => platform.id === originalPlatformId);
+      return original ? uniqueById([...items, original]) : items;
+    };
 
-      // RULE 2: Config Based
-      if (activeConfig) {
-          const allowedIds = activeConfig.platformIds || [];
-          const allowedPlatforms = platforms.filter(p => allowedIds.includes(p.id));
-          
-          if (isAdvertiserUser) {
-              // Advertiser: Config Only
-              return allowedPlatforms;
-          } else {
-              // CS: Config + Mandatory
-              const combined = [...allowedPlatforms, ...mandatoryPlatforms];
-              return Array.from(new Map(combined.map(p => [p.id, p])).values());
-          }
-      }
+    const scopedAccounts = getScopedAdAccounts({ advertiserId: selectedAdvertiserId });
+    if (scopedAccounts.length > 0) {
+      const platformIds = new Set(scopedAccounts.map((account) => account.platformId).filter(Boolean));
+      const accountPlatforms = platforms.filter((platform) => platform.status === 'active' && platformIds.has(platform.id));
+      const combined = isAdvertiserUser ? accountPlatforms : [...accountPlatforms, ...mandatoryPlatforms];
+      const scopedPlatforms = uniqueById(combined);
+      if (scopedPlatforms.length > 0) return includeOriginalPlatform(scopedPlatforms);
+    }
 
-      // RULE 3: CS (No Adv selected)
-      if (isCsUser && currentUser) {
-          const myConfigs = advertiserConfigs.filter(cfg => cfg.csIds?.includes(currentUser.id));
-          if (myConfigs.length > 0) {
-              const allowedIds = new Set<string>();
-              myConfigs.forEach(cfg => cfg.platformIds?.forEach(id => allowedIds.add(id)));
-              const allowedPlatforms = platforms.filter(p => allowedIds.has(p.id));
-              const combined = [...allowedPlatforms, ...mandatoryPlatforms];
-              return Array.from(new Map(combined.map(p => [p.id, p])).values());
-          }
-          // Fallback if no config: All Active + Mandatory
-          const combined = [...platforms.filter(p => p.status === 'active'), ...mandatoryPlatforms];
-          return Array.from(new Map(combined.map(p => [p.id, p])).values());
-      }
-      
-      // Advertiser Fallback -> All Active (Safety net)
-      if (isAdvertiserUser) {
-          return platforms.filter(p => p.status === 'active');
-      }
+    if (activeConfig) {
+      const allowedIds = activeConfig.platformIds || [];
+      const allowedPlatforms = platforms.filter((platform) => platform.status === 'active' && allowedIds.includes(platform.id));
+      const combined = isAdvertiserUser ? allowedPlatforms : [...allowedPlatforms, ...mandatoryPlatforms];
+      const scopedPlatforms = uniqueById(combined);
+      if (scopedPlatforms.length > 0) return includeOriginalPlatform(scopedPlatforms);
+    }
 
-      return platforms;
-  }, [activeConfig, advertiserConfigs, currentUser, isAdminManagementUser, isAdvertiserUser, isCsUser, platforms]);
+    return includeOriginalPlatform(platforms.filter((platform) => platform.status === 'active'));
+  }, [
+    activeConfig,
+    getScopedAdAccounts,
+    isAdvertiserUser,
+    mandatoryPlatforms,
+    originalPlatformId,
+    platforms,
+    preserveOriginalPlatform,
+    selectedAdvertiserId,
+  ]);
 
   const filteredSubChannels = React.useMemo(() => {
-      let scs = subChannels;
-      
-      // Strict Config
-      if (activeConfig) {
-          // Only filter if subChannelIds is defined and not empty array (if intended)
-          // Assuming empty array = block all, but to be safe with "fallback" logic:
-          if (activeConfig.subChannelIds && activeConfig.subChannelIds.length > 0) {
-              scs = scs.filter(s => activeConfig.subChannelIds!.includes(s.id));
-          }
-      } 
-      // If no config, pass through (Show All)
+    const includeOriginalSubChannel = (items: SubChannel[]) => {
+      if (!preserveOriginalSubChannel || !originalSubChannelId) return items;
+      if (items.some((subChannel) => subChannel.id === originalSubChannelId)) return items;
 
-      if (formData.platformId) {
-          scs = scs.filter(s => s.platformId === formData.platformId);
-      }
-      return scs.filter(s => s.status === 'active');
-  }, [subChannels, activeConfig, formData.platformId]);
+      const original = subChannels.find((subChannel) => subChannel.id === originalSubChannelId);
+      return original ? uniqueById([...items, original]) : items;
+    };
+
+    let scopedSubChannels = subChannels.filter((subChannel) => subChannel.status === 'active');
+
+    if (selectedPlatformId) {
+      scopedSubChannels = scopedSubChannels.filter((subChannel) => subChannel.platformId === selectedPlatformId);
+    }
+
+    const scopedAccounts = getScopedAdAccounts({
+      advertiserId: selectedAdvertiserId,
+      platformId: selectedPlatformId,
+    });
+    const accountSubChannelIds = getAccountSubChannelIds(scopedAccounts);
+
+    if (accountSubChannelIds.size > 0) {
+      return includeOriginalSubChannel(
+        scopedSubChannels.filter((subChannel) => accountSubChannelIds.has(subChannel.id)),
+      );
+    }
+
+    if (activeConfig?.subChannelIds && activeConfig.subChannelIds.length > 0) {
+      scopedSubChannels = scopedSubChannels.filter((subChannel) => activeConfig.subChannelIds!.includes(subChannel.id));
+    }
+
+    return includeOriginalSubChannel(scopedSubChannels);
+  }, [
+    activeConfig,
+    getAccountSubChannelIds,
+    getScopedAdAccounts,
+    originalSubChannelId,
+    preserveOriginalSubChannel,
+    selectedAdvertiserId,
+    selectedPlatformId,
+    subChannels,
+  ]);
 
   const filteredCS = React.useMemo(() => {
-      const css = users.filter((u) => isCsRole(u.role) && u.status === 'active');
-      
-      // Admins -> All
-      if (isAdminManagementUser) {
-          return css;
-      }
+    const includeOriginalCs = (items: User[]) => {
+      if (!preserveOriginalCs || !originalCsId) return items;
+      if (items.some((cs) => cs.id === originalCsId)) return items;
 
-      // Strict Config
-      if (activeConfig) {
-          if (activeConfig.csIds && activeConfig.csIds.length > 0) {
-              return css.filter(c => activeConfig.csIds!.includes(c.id));
-          }
-          // If config exists but empty list -> Empty CS
-          return [];
+      const original = allCsUsers.find((cs) => cs.id === originalCsId);
+      return original ? uniqueById([...items, original]) : items;
+    };
+
+    const scopedAccounts = getScopedAdAccounts({
+      advertiserId: selectedAdvertiserId,
+      platformId: selectedPlatformId,
+      subChannelId: selectedSubChannelId,
+    });
+    const accountCsIds = new Set<string>();
+    scopedAccounts.forEach((account) => {
+      (activeCsAssignmentsByAccountId.get(account.id) || []).forEach((assignment) => {
+        if (assignment.csId) accountCsIds.add(assignment.csId);
+      });
+    });
+
+    if (accountCsIds.size > 0) {
+      return includeOriginalCs(allCsUsers.filter((cs) => accountCsIds.has(cs.id)));
+    }
+
+    if (isAdminManagementUser) {
+      return includeOriginalCs(allCsUsers);
+    }
+
+    if (activeConfig) {
+      if (activeConfig.csIds && activeConfig.csIds.length > 0) {
+        return includeOriginalCs(allCsUsers.filter((cs) => activeConfig.csIds!.includes(cs.id)));
       }
-      
-      // No Config -> All CS (Safety net)
-      return css;
-  }, [users, activeConfig, isAdminManagementUser]);
+      return includeOriginalCs([]);
+    }
+
+    return includeOriginalCs(allCsUsers);
+  }, [
+    activeConfig,
+    activeCsAssignmentsByAccountId,
+    allCsUsers,
+    getScopedAdAccounts,
+    isAdminManagementUser,
+    originalCsId,
+    preserveOriginalCs,
+    selectedAdvertiserId,
+    selectedPlatformId,
+    selectedSubChannelId,
+  ]);
 
   useEffect(() => {
-     if (formData.subChannelId && formData.platformId) {
-        const isValid = filteredSubChannels.some(sc => sc.id === formData.subChannelId);
-        if (!isValid) {
-            setFormData(prev => ({ ...prev, subChannelId: undefined }));
-        }
-     }
-  }, [formData.platformId, filteredSubChannels]);
+    if (formData.platformId && !filteredPlatforms.some((platform) => platform.id === formData.platformId)) {
+      setFormData((prev) => ({
+        ...prev,
+        platformId: undefined,
+        subChannelId: undefined,
+        csId: isCsUser ? currentUser?.id : undefined,
+      }));
+    }
+  }, [currentUser?.id, filteredPlatforms, formData.platformId, isCsUser]);
+
+  useEffect(() => {
+    if (formData.subChannelId && !filteredSubChannels.some((subChannel) => subChannel.id === formData.subChannelId)) {
+      setFormData((prev) => ({
+        ...prev,
+        subChannelId: undefined,
+        csId: isCsUser ? currentUser?.id : prev.csId,
+      }));
+    }
+  }, [currentUser?.id, filteredSubChannels, formData.subChannelId, isCsUser]);
+
+  useEffect(() => {
+    if (isCsUser && currentUser) {
+      if (formData.csId !== currentUser.id) {
+        setFormData((prev) => ({ ...prev, csId: currentUser.id }));
+      }
+      return;
+    }
+
+    if (formData.csId && !filteredCS.some((cs) => cs.id === formData.csId)) {
+      setFormData((prev) => ({ ...prev, csId: undefined }));
+    }
+  }, [currentUser, filteredCS, formData.csId, isCsUser]);
 
   const validateMapsUrl = async (url: string, silent = false): Promise<{ lat: number, lng: number } | null> => {
       let targetUrl = url || '';
@@ -571,10 +803,30 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   }, [formData.technicianId, users]);
 
   const handleChange = (field: keyof Order, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: field === 'serviceTime' ? normalizeOrderTime(value) : value,
-    }));
+    setFormData(prev => {
+      const normalizedValue = field === 'serviceTime' ? normalizeOrderTime(value) : value;
+      const next = {
+        ...prev,
+        [field]: normalizedValue,
+      };
+
+      if (field === 'advertiserId' && normalizedValue !== prev.advertiserId) {
+        next.platformId = undefined;
+        next.subChannelId = undefined;
+        next.csId = isCsUser ? currentUser?.id : undefined;
+      }
+
+      if (field === 'platformId' && normalizedValue !== prev.platformId) {
+        next.subChannelId = undefined;
+        next.csId = isCsUser ? currentUser?.id : undefined;
+      }
+
+      if (field === 'subChannelId' && normalizedValue !== prev.subChannelId) {
+        next.csId = isCsUser ? currentUser?.id : undefined;
+      }
+
+      return next;
+    });
     setIsDirty(true);
   };
 
@@ -607,6 +859,45 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     }
   };
 
+  const normalizeOrderAttributionFields = React.useCallback((draft: Partial<Order>) => {
+    const next = { ...draft };
+
+    if (isAdvertiserUser && currentUser) {
+      next.advertiserId = currentUser.id;
+    }
+
+    if (isCsUser && currentUser) {
+      next.csId = currentUser.id;
+    }
+
+    if (next.advertiserId && !filteredAdvertisers.some((advertiser) => advertiser.id === next.advertiserId)) {
+      next.advertiserId = undefined;
+    }
+
+    if (next.platformId && !filteredPlatforms.some((platform) => platform.id === next.platformId)) {
+      next.platformId = undefined;
+      next.subChannelId = undefined;
+    }
+
+    if (next.subChannelId && !filteredSubChannels.some((subChannel) => subChannel.id === next.subChannelId)) {
+      next.subChannelId = undefined;
+    }
+
+    if (next.csId && !filteredCS.some((cs) => cs.id === next.csId)) {
+      next.csId = isCsUser && currentUser ? currentUser.id : undefined;
+    }
+
+    return next;
+  }, [
+    currentUser,
+    filteredAdvertisers,
+    filteredCS,
+    filteredPlatforms,
+    filteredSubChannels,
+    isAdvertiserUser,
+    isCsUser,
+  ]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -623,6 +914,30 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
             sanitizedData[key] = undefined;
         }
     });
+
+    const attributionBeforeValidation = {
+      advertiserId: sanitizedData.advertiserId,
+      platformId: sanitizedData.platformId,
+      subChannelId: sanitizedData.subChannelId,
+      csId: sanitizedData.csId,
+    };
+    const normalizedAttribution = normalizeOrderAttributionFields(sanitizedData);
+    sanitizedData.advertiserId = normalizedAttribution.advertiserId;
+    sanitizedData.platformId = normalizedAttribution.platformId;
+    sanitizedData.subChannelId = normalizedAttribution.subChannelId;
+    sanitizedData.csId = normalizedAttribution.csId;
+
+    const invalidAttributionLabels = [
+      attributionBeforeValidation.advertiserId && !sanitizedData.advertiserId ? 'Advertiser' : '',
+      attributionBeforeValidation.platformId && !sanitizedData.platformId ? 'Platform' : '',
+      attributionBeforeValidation.subChannelId && !sanitizedData.subChannelId ? 'Sub Channel' : '',
+      attributionBeforeValidation.csId && !sanitizedData.csId ? 'CS' : '',
+    ].filter(Boolean);
+
+    if (invalidAttributionLabels.length > 0) {
+      toast.error(`Pilihan ${invalidAttributionLabels.join(', ')} tidak sesuai Master Data Akun Iklan. Pilih ulang sebelum menyimpan.`);
+      return;
+    }
 
     sanitizedData.serviceTime = normalizeOrderTime(sanitizedData.serviceTime);
 
@@ -807,20 +1122,21 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <SheetContent 
         side={isMobile ? "bottom" : "right"} 
+        showClose={false}
         className={cn(
-          "flex flex-col gap-0 border-l border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950",
+          "orderFormSheet masterDataManagedForm flex flex-col gap-0 border-l border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950",
           isMobile ? "h-[90vh] rounded-t-xl" : "h-full w-full sm:max-w-xl md:max-w-2xl"
         )}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => { e.preventDefault(); handleClose(); }}
       >
-        <SheetHeader className="sticky top-0 z-10 shrink-0 rounded-t-xl border-b border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:p-6">
+        <SheetHeader className="orderFormHeader masterDataFormHeader sticky top-0 z-10 shrink-0 rounded-t-xl border-b border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:p-6">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <SheetTitle className="text-left text-lg font-semibold text-slate-900 dark:text-slate-100">
+              <SheetTitle className="masterDataFormTitle text-left text-lg font-semibold text-slate-900 dark:text-slate-100">
                 {initialData ? 'Edit Pesanan' : 'Tambah Pesanan Baru'}
               </SheetTitle>
-              <SheetDescription className="text-left text-sm text-slate-500 dark:text-slate-400">
+              <SheetDescription className="masterDataFormDescription text-left text-sm text-slate-500 dark:text-slate-400">
                 Lengkapi detail pesanan berikut.
               </SheetDescription>
             </div>
@@ -837,8 +1153,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <form id="order-form" onSubmit={handleSubmit} className="space-y-4">
+        <div className="orderFormBody masterDataDialogBody flex-1 overflow-y-auto p-4 md:p-6">
+          <form id="order-form" onSubmit={handleSubmit} className="orderManagedForm masterDataForm space-y-4">
             
             <FormSection title="Data Pelanggan" description="Identitas customer, kontak, alamat, dan lokasi maps.">
               <div className="grid grid-cols-1 gap-4">
@@ -1440,7 +1756,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
           </form>
         </div>
 
-        <SheetFooter className="sticky bottom-0 z-10 shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:gap-0 md:p-6">
+        <SheetFooter className="orderFormFooter masterDataFormActions sticky bottom-0 z-10 shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:gap-0 md:p-6">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting} className="w-full sm:w-auto mt-2 sm:mt-0">Batal</Button>
           <Button type="submit" form="order-form" disabled={isSubmitting || !!blockingScheduleMessage} className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[140px]">
             {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan...</> : "Simpan Pesanan"}

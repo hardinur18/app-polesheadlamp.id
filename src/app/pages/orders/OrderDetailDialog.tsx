@@ -1,17 +1,29 @@
 import React from 'react';
-import { Modal } from '../../components/ui/Modal';
 import { Order, WATemplate } from '../master-data/data';
 import { useMasterData } from '../master-data/context';
-import { 
-  User, Calendar, MapPin, FileText, 
-  Wrench, Building2, Wallet, Copy
-} from 'lucide-react';
+import { User, Calendar, MapPin, Wrench, Wallet, Copy, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { copyToClipboard } from '@/lib/clipboard';
 import { getReasonSectionLabel, isReasonRequiredStatus } from './cancelReasonOptions';
+import { getStatusBadgeVariant, getStatusLabel, getStatusReasonSummary } from './orderHelpers';
 import { OrderInvoicePreviewDialog } from './OrderInvoicePreviewDialog';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { isTechnicianRole } from '@/app/data/roleHelpers';
+import {
+  FoundationDetailField,
+  FoundationDetailFieldGrid,
+  FoundationDetailHero,
+  FoundationDetailMetric,
+  FoundationDetailMetricGrid,
+  FoundationDetailSection,
+  FoundationDetailShell,
+} from '@/app/components/ui/detail-view';
+import { Dialog, DialogFooter } from '../../components/ui/dialog';
+import {
+  MasterDataDialogBody,
+  MasterDataFormDialogContent,
+  MasterDataFormHeader,
+} from '../../components/ui/master-data-ui';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,29 +50,6 @@ interface OrderDetailDialogProps {
   order: Order | null;
 }
 
-const Section = ({ title, icon: Icon, children }: { title: string, icon: any, children: React.ReactNode }) => (
-  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-    <div className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-      <div className="rounded-md bg-slate-50 p-1.5 text-blue-600 dark:bg-slate-800 dark:text-blue-400">
-         <Icon className="w-4 h-4" />
-      </div>
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-    </div>
-    <div className="space-y-3">
-      {children}
-    </div>
-  </div>
-);
-
-const InfoRow = ({ label, value, children, isBold = false }: { label: string, value?: string | number, children?: React.ReactNode, isBold?: boolean }) => (
-  <div className="flex flex-col gap-0.5">
-    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</span>
-    <div className={`text-sm text-slate-900 dark:text-slate-200 ${isBold ? 'font-bold' : 'font-medium'}`}>
-      {children || value || '-'}
-    </div>
-  </div>
-);
-
 export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogProps) {
   const { users, services, vehicles, branches, areas, payments, platforms, subChannels, waTemplates, currentRole } = useMasterData();
   const { hasPermission } = usePermissions();
@@ -83,27 +72,6 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
   const platform = platforms.find(p => p.id === order.platformId);
   const subChannel = subChannels.find(s => s.id === order.subChannelId);
 
-  const statusMap: Record<string, string> = {
-      'pending': 'Menunggu',
-      'processing': 'Proses',
-      'waiting': 'Terjadwal',
-      'done': 'Selesai',
-      'cancelled': 'Batal',
-      'reschedule': 'Jadwal Ulang'
-  };
-
-  const getStatusColor = (status: string) => {
-      switch(status) {
-          case 'pending': return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-          case 'processing': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300';
-          case 'waiting': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
-          case 'done': return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300';
-          case 'cancelled': return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
-          case 'reschedule': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
-          default: return 'bg-slate-100 text-slate-700';
-      }
-  };
-
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('id-ID', {
@@ -116,6 +84,25 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
       return dateString;
     }
   };
+
+  const formatShortDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    try {
+      return new Date(dateString).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  const formatCurrency = (value?: number | null) => `Rp ${(value || 0).toLocaleString('id-ID')}`;
+  const effectiveStatus = ((order.photos as any)?._status && ['processing', 'pending'].includes(order.status))
+    ? (order.photos as any)._status
+    : order.status;
+  const reasonSummary = getStatusReasonSummary(order, effectiveStatus);
 
   const handleCopyToWhatsApp = async () => {
     const formattedDate = formatDate(order.serviceDate);
@@ -188,6 +175,11 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
     window.open(url, '_blank');
   };
 
+  const handleOpenMaps = () => {
+    if (!order.mapsUrl) return;
+    window.open(order.mapsUrl, '_blank', 'noopener,noreferrer');
+  };
+
   const invoiceContext = {
     order,
     service,
@@ -203,13 +195,15 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={
-        <div className="flex items-center gap-2">
+    <>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <MasterDataFormDialogContent size="wide" className="orderDetailDialog">
+        <MasterDataFormHeader
+          icon={User}
+          title={
+            <span className="orderDetailTitle">
             <span>Detail Pesanan</span>
-            <span 
+            <span
                 onClick={() => {
                     copyToClipboard(order.id, {
                         successMessage: "ID Order disalin!",
@@ -221,173 +215,216 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
             >
                 #{order.id}
             </span>
-        </div>
-      }
-      size="lg"
-      footer={
-        <div className={`flex flex-col-reverse sm:flex-row w-full gap-3 sm:gap-0 ${canCopyOrderSummary ? 'sm:justify-between' : 'sm:justify-end'}`}>
-           {canCopyOrderSummary && (
-             <Button 
-              variant="outline" 
-              onClick={handleCopyToWhatsApp}
-              className="w-full sm:w-auto border-green-200 hover:bg-green-50 text-green-700 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20"
-             >
-               <Copy className="w-4 h-4 mr-2" />
-               Salin Info
-             </Button>
-           )}
-
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Button variant="outline" onClick={onClose} className="flex-1 sm:flex-none border-slate-200 dark:border-slate-700">
-              Tutup
-            </Button>
-            {!isTechnicianRole(currentRole) && (
-              <Button onClick={() => setIsInvoicePreviewOpen(true)} className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white">
-                 Cetak Kwitansi
+            </span>
+          }
+          description="Ringkasan data pesanan, pelanggan, jadwal, pembayaran, dan tim."
+        />
+        <MasterDataDialogBody compact className="orderDetailBody">
+          <FoundationDetailShell className="orderDetailView">
+        <FoundationDetailHero
+          avatar={<User className="h-5 w-5" />}
+          eyebrow="Pesanan service"
+          title={order.customerName}
+          subtitle={
+            <span className="orderDetailSubtitle">
+              <span>#{order.id}</span>
+              <span>{canViewCustomerContact ? order.customerPhone : 'Akses kontak pelanggan dibatasi'}</span>
+              <span>{formatShortDate(order.serviceDate)} {order.serviceTime || ''}</span>
+            </span>
+          }
+          badges={
+            <>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusBadgeVariant(effectiveStatus)}`}>
+                {getStatusLabel(effectiveStatus)}
+              </span>
+              {platform?.name ? (
+                <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300">
+                  {platform.name}{subChannel?.name ? ` / ${subChannel.name}` : ''}
+                </span>
+              ) : null}
+            </>
+          }
+          actions={
+            <div className="orderDetailHeroActions">
+            {canViewCustomerContact ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="orderDetailTriggerButton" type="button">
+                  <WhatsappIcon className="h-4 w-4" />
+                  <span>Chat</span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[280px]">
+                  <DropdownMenuLabel>Pilih Template Pesan</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleWhatsappTemplate()}>
+                    Chat Tanpa Template
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {waTemplates.filter(t => t.category === 'Orders' || t.category === 'General' || !t.category).map(t => (
+                    <DropdownMenuItem key={t.id} onClick={() => handleWhatsappTemplate(t)}>
+                      <span className="truncate">{t.title}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+            {canViewRoute && order.mapsUrl ? (
+              <Button type="button" variant="outline" onClick={handleOpenMaps}>
+                <MapPin className="h-4 w-4" />
+                Maps
               </Button>
-            )}
-          </div>
+            ) : null}
+            </div>
+          }
+        />
+
+        <FoundationDetailMetricGrid className="orderDetailMetrics">
+          <FoundationDetailMetric
+            icon={CheckCircle2}
+            label="Status"
+            value={getStatusLabel(effectiveStatus)}
+            description={reasonSummary || 'Status pengerjaan saat ini'}
+          />
+          <FoundationDetailMetric
+            icon={Calendar}
+            label="Tanggal Pengerjaan"
+            value={formatShortDate(order.serviceDate)}
+            description={order.serviceTime || '-'}
+          />
+          <FoundationDetailMetric
+            icon={Wrench}
+            label="Layanan"
+            value={service?.name || '-'}
+            description={vehicle ? `${vehicle.name}${vehicle.category ? ` (${vehicle.category})` : ''}` : '-'}
+          />
+          <FoundationDetailMetric
+            icon={Wallet}
+            label="Total Biaya"
+            value={formatCurrency(order.price)}
+            description={order.paymentStatus || 'Unpaid'}
+          />
+        </FoundationDetailMetricGrid>
+
+        <FoundationDetailSection
+          title="Informasi Pelanggan"
+          description="Data kontak dan lokasi pengerjaan."
+          actions={canViewRoute && order.mapsUrl ? (
+            <Button type="button" variant="outline" size="sm" onClick={handleOpenMaps}>
+              <MapPin className="h-4 w-4" />
+              Buka Maps
+            </Button>
+          ) : null}
+        >
+          <FoundationDetailFieldGrid>
+            <FoundationDetailField label="Nama Lengkap">{order.customerName}</FoundationDetailField>
+            <FoundationDetailField label="Nomor Telepon">
+              {canViewCustomerContact ? order.customerPhone : 'Akses kontak dibatasi'}
+            </FoundationDetailField>
+            <FoundationDetailField label="Alamat" span="full">
+              {canViewCustomerContact || canViewRoute ? order.address : 'Akses alamat dibatasi'}
+            </FoundationDetailField>
+          </FoundationDetailFieldGrid>
+        </FoundationDetailSection>
+
+        <div className="orderDetailSectionGrid">
+          <FoundationDetailSection title="Jadwal & Tim" description="Status pengerjaan dan penugasan operasional.">
+            <FoundationDetailFieldGrid>
+              <FoundationDetailField label="Status Pengerjaan">
+                <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusBadgeVariant(effectiveStatus)}`}>
+                  {getStatusLabel(effectiveStatus)}
+                </span>
+              </FoundationDetailField>
+              <FoundationDetailField label="Tanggal & Jam">
+                {formatDate(order.serviceDate)} - {order.serviceTime || '-'}
+              </FoundationDetailField>
+              <FoundationDetailField label="Teknisi">{technician?.name || '-'}</FoundationDetailField>
+              <FoundationDetailField label="CS">{cs?.name || '-'}</FoundationDetailField>
+              <FoundationDetailField label="Advertiser">{advertiser?.name || '-'}</FoundationDetailField>
+              <FoundationDetailField label="Cabang / Area">
+                {branch?.name || '-'}{area?.name ? ` / ${area.name}` : ''}
+              </FoundationDetailField>
+              {reasonSummary ? (
+                <FoundationDetailField label={getReasonSectionLabel(order.status)} span="full">
+                  {reasonSummary}
+                </FoundationDetailField>
+              ) : null}
+              {isReasonRequiredStatus(order.status) && order.cancelReason === 'Lainnya' && order.cancelReasonNote ? (
+                <FoundationDetailField label="Catatan Alasan" span="full">
+                  {order.cancelReasonNote}
+                </FoundationDetailField>
+              ) : null}
+            </FoundationDetailFieldGrid>
+          </FoundationDetailSection>
+
+          <FoundationDetailSection title="Layanan & Sumber" description="Paket, kendaraan, dan asal order.">
+            <FoundationDetailFieldGrid>
+              <FoundationDetailField label="Layanan">{service?.name || '-'}</FoundationDetailField>
+              <FoundationDetailField label="Kategori">{order.serviceCategory || '-'}</FoundationDetailField>
+              <FoundationDetailField label="Kendaraan">
+                {vehicle ? `${vehicle.name}${vehicle.category ? ` (${vehicle.category})` : ''}` : '-'}
+              </FoundationDetailField>
+              <FoundationDetailField label="Unit">{order.units || 1}</FoundationDetailField>
+              <FoundationDetailField label="Platform">
+                {platform?.name || '-'}{subChannel?.name ? ` / ${subChannel.name}` : ''}
+              </FoundationDetailField>
+              <FoundationDetailField label="Tanggal Leads">{formatShortDate(order.leadDate)}</FoundationDetailField>
+            </FoundationDetailFieldGrid>
+          </FoundationDetailSection>
         </div>
-      }
-    >
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-         <div className="space-y-4">
-            <Section title="Informasi Pelanggan" icon={User}>
-               <InfoRow label="Nama Lengkap" value={order.customerName} isBold />
-               <InfoRow label="Nomor Telepon">
-                  {canViewCustomerContact ? (
-                  <div className="flex items-center gap-2">
-                     <span>{order.customerPhone}</span>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                           <Button 
-                             variant="ghost" 
-                             size="icon" 
-                             className="h-6 w-6 text-[#25D366] hover:text-[#128C7E] hover:bg-green-50 dark:hover:bg-green-900/20 p-0 rounded-full"
-                             title="Chat WhatsApp"
-                           >
-                              <WhatsappIcon className="w-4 h-4" />
-                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-[280px]">
-                           <DropdownMenuLabel>Pilih Template Pesan</DropdownMenuLabel>
-                           <DropdownMenuSeparator />
-                           <DropdownMenuItem onClick={() => handleWhatsappTemplate()}>
-                              Chat Tanpa Template
-                           </DropdownMenuItem>
-                           <DropdownMenuSeparator />
-                           {waTemplates.filter(t => t.category === 'Leads' || t.category === 'General' || !t.category).map(t => (
-                              <DropdownMenuItem key={t.id} onClick={() => handleWhatsappTemplate(t)}>
-                                 <span className="truncate">{t.title}</span>
-                              </DropdownMenuItem>
-                           ))}
-                        </DropdownMenuContent>
-                     </DropdownMenu>
-                  </div>
-                  ) : (
-                    <span className="text-slate-400">Akses kontak dibatasi</span>
-                  )}
-               </InfoRow>
-               <InfoRow label="Alamat">
-                  <span>{order.address}</span>
-                  {canViewRoute && order.mapsUrl && (
-                     <a href={order.mapsUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 text-xs mt-1.5 hover:underline bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded border border-blue-100 dark:border-blue-800">
-                        <MapPin className="w-3 h-3" /> Buka di Maps
-                     </a>
-                  )}
-               </InfoRow>
-            </Section>
 
-            <Section title="Layanan & Kendaraan" icon={Wrench}>
-               <div className="grid grid-cols-2 gap-4">
-                  <InfoRow label="Layanan" value={service?.name} />
-                  <InfoRow label="Kategori" value={order.serviceCategory} />
-               </div>
-               <InfoRow label="Kendaraan" value={`${vehicle?.name || '-'} ${vehicle?.category ? `(${vehicle.category})` : ''}`} />
-               <InfoRow label="Total Biaya">
-                  <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                    Rp {order.price.toLocaleString('id-ID')}
-                  </span>
-               </InfoRow>
-            </Section>
-         </div>
+        <FoundationDetailSection title="Pembayaran" description="Status, metode, dan akun pembayaran.">
+          <FoundationDetailFieldGrid>
+            <FoundationDetailField label="Total Biaya">{formatCurrency(order.price)}</FoundationDetailField>
+            <FoundationDetailField label="Status Pembayaran">{order.paymentStatus || 'Unpaid'}</FoundationDetailField>
+            <FoundationDetailField label="Metode">{order.paymentType || '-'}</FoundationDetailField>
+            <FoundationDetailField label="Detail Bank">
+              {order.paymentType === 'Transfer' && paymentMethod
+                ? `${paymentMethod.bankName} / ${paymentMethod.accountNumber}`
+                : '-'}
+            </FoundationDetailField>
+          </FoundationDetailFieldGrid>
+        </FoundationDetailSection>
 
-         <div className="space-y-4">
-             <Section title="Jadwal & Lokasi" icon={Calendar}>
-                <div className="mb-3">
-                   <InfoRow label="Status Pengerjaan">
-                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase inline-block ${getStatusColor(order.status)}`}>
-                         {statusMap[order.status] || order.status}
-                      </span>
-                   </InfoRow>
-                </div>
-                <InfoRow label="Tanggal Pengerjaan" value={formatDate(order.serviceDate)} isBold />
-                <div className="grid grid-cols-2 gap-4">
-                   <InfoRow label="Jam" value={order.serviceTime} />
-                   <InfoRow label="Teknisi" value={technician?.name} />
-                   <InfoRow label="CS" value={cs?.name} />
-                   <InfoRow label="Advertiser" value={advertiser?.name} />
-                </div>
-                {isReasonRequiredStatus(order.status) && order.cancelReason && (
-                   <div className="grid grid-cols-1 gap-3">
-                      <InfoRow label={getReasonSectionLabel(order.status)} value={order.cancelReason} />
-                      {order.cancelReason === 'Lainnya' && order.cancelReasonNote && (
-                         <InfoRow label="Catatan Alasan" value={order.cancelReasonNote} />
-                      )}
-                   </div>
-                )}
-                <InfoRow label="Lokasi">
-                   <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-slate-400" />
-                      <span>{branch?.name} {area ? `- ${area.name}` : ''}</span>
-                   </div>
-                </InfoRow>
-             </Section>
+        <FoundationDetailSection title="Catatan" description="Catatan internal yang tersimpan di pesanan.">
+          <div className="foundationDetailTextBlock">
+            {order.notes || 'Tidak ada catatan.'}
+          </div>
+        </FoundationDetailSection>
+          </FoundationDetailShell>
+        </MasterDataDialogBody>
 
-             <Section title="Pembayaran" icon={Wallet}>
-                <div className="grid grid-cols-2 gap-4">
-                   <InfoRow label="Status Pembayaran">
-                      <span className={`
-                        px-2 py-0.5 rounded text-xs font-bold uppercase
-                        ${order.paymentStatus === 'Paid' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : ''}
-                        ${order.paymentStatus === 'Unpaid' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : ''}
-                        ${order.paymentStatus === 'Down Payment' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : ''}
-                      `}>
-                        {order.paymentStatus}
-                      </span>
-                   </InfoRow>
-                   <InfoRow label="Metode">
-                      <span>{order.paymentType || '-'}</span>
-                   </InfoRow>
-                </div>
-                {order.paymentType === 'Transfer' && (
-                   <div className="mt-2 pt-2 border-t border-dashed border-slate-200 dark:border-slate-700">
-                      <InfoRow label="Detail Bank">
-                          {paymentMethod ? (
-                            <div className="flex items-center gap-2">
-                               <span className="font-bold">{paymentMethod.bankName}</span>
-                               <span className="text-slate-400">|</span>
-                               <span className="font-mono">{paymentMethod.accountNumber}</span>
-                            </div>
-                          ) : '-'}
-                      </InfoRow>
-                   </div>
-                )}
-             </Section>
-             
-             <Section title="Catatan" icon={FileText}>
-                <p className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm italic text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
-                  {order.notes ? `"${order.notes}"` : '-'}
-                </p>
-             </Section>
-         </div>
-      </div>
+        <DialogFooter className="masterDataFormActions orderDetailFooter">
+          <div className={`orderDetailFooterInner ${canCopyOrderSummary ? 'hasCopyAction' : ''}`}>
+             {canCopyOrderSummary && (
+               <Button
+                variant="outline"
+                onClick={handleCopyToWhatsApp}
+                className="border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20"
+               >
+                 <Copy className="h-4 w-4" />
+                 Salin Info
+               </Button>
+             )}
 
-      <OrderInvoicePreviewDialog
-        isOpen={isInvoicePreviewOpen}
-        onClose={() => setIsInvoicePreviewOpen(false)}
-        context={invoiceContext}
-      />
-    </Modal>
+            <div className="orderDetailFooterActions">
+              <Button variant="outline" onClick={onClose} className="border-slate-200 dark:border-slate-700">
+                Tutup
+              </Button>
+              {!isTechnicianRole(currentRole) && (
+                <Button onClick={() => setIsInvoicePreviewOpen(true)} className="bg-blue-600 text-white hover:bg-blue-700">
+                   Cetak Kwitansi
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogFooter>
+
+      </MasterDataFormDialogContent>
+    </Dialog>
+    <OrderInvoicePreviewDialog
+      isOpen={isInvoicePreviewOpen}
+      onClose={() => setIsInvoicePreviewOpen(false)}
+      context={invoiceContext}
+    />
+    </>
   );
 }

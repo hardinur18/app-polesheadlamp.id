@@ -96,24 +96,28 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {
     showOverlay?: boolean;
+    showClose?: boolean;
+    scope?: "viewport" | "workspace";
 }
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, showOverlay = true, ...props }, ref) => (
+>(({ side = "right", className, children, showOverlay = true, showClose = true, scope = "viewport", ...props }, ref) => (
   <SheetPortal>
-    {showOverlay && <SheetOverlay />}
+    {showOverlay && <SheetOverlay className={cn(scope === "workspace" && "workspaceSheetOverlay")} />}
     <CleanContent
       ref={ref}
-      className={cn(sheetVariants({ side }), className)}
+      className={cn(sheetVariants({ side }), scope === "workspace" && "workspaceSheetContent", className)}
       {...props}
     >
       {children}
-      <CleanClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </CleanClose>
+      {showClose && (
+        <CleanClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </CleanClose>
+      )}
     </CleanContent>
   </SheetPortal>
 ))
