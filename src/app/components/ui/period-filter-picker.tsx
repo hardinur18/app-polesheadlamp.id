@@ -186,7 +186,10 @@ const dayPickerClassNames = {
 };
 
 const useCompactPeriodPicker = (enabled: boolean) => {
-  const [isCompact, setIsCompact] = React.useState(false);
+  const [isCompact, setIsCompact] = React.useState(() => {
+    if (!enabled || typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 900px)").matches;
+  });
 
   React.useEffect(() => {
     if (!enabled || typeof window === "undefined") {

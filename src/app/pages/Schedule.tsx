@@ -2798,19 +2798,19 @@ export default function Schedule() {
 
   return (
     <>
-    <div className="flex flex-col md:h-full min-h-screen gap-4 p-0 md:p-6 w-full max-w-[1600px] mx-auto md:overflow-hidden bg-slate-50 dark:bg-slate-950">
+    <div className="schedulePage flex flex-col md:h-full min-h-screen gap-4 p-0 md:p-6 w-full max-w-[1600px] mx-auto md:overflow-hidden bg-slate-50 dark:bg-slate-950">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col gap-4">
         
         {/* TOP: Title (Scrolls away on mobile) */}
-        <div className="px-4 pt-4 md:px-0 md:pt-0 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div className="scheduleHeader px-4 pt-4 md:px-0 md:pt-0 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
             <div>
               <h1 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">Jadwal & Penugasan</h1>
               <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm">Monitoring kapasitas teknisi untuk pesanan dan booking prospek.</p>
             </div>
             
-            <div className="hidden md:flex flex-wrap items-center justify-end gap-2">
+            <div className="scheduleHeaderFilters hidden md:flex flex-wrap items-center justify-end gap-2">
                  {!isAdvertiserUser && (
                     <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">19:00</span>
@@ -2870,8 +2870,8 @@ export default function Schedule() {
         </div>
 
         {/* STICKY BAR: Branch, Search, Month Nav */}
-        <div className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md md:static md:bg-transparent px-4 pb-3 pt-2 md:p-0 border-b md:border-0 border-slate-200/50 shadow-sm md:shadow-none -mx-0 transition-all">
-             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="scheduleToolbar sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md md:static md:bg-transparent px-4 pb-3 pt-2 md:p-0 border-b md:border-0 border-slate-200/50 shadow-sm md:shadow-none -mx-0 transition-all">
+             <div className="scheduleToolbarInner flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 
                 {/* Row 1: Branch + Month Nav */}
                 <div className="flex items-center gap-2 justify-between">
@@ -2928,7 +2928,7 @@ export default function Schedule() {
                     {/* Desktop: View Toggle & Search Container (Hidden on Mobile) */}
                     <div className="hidden md:flex items-center gap-2">
                          {/* View Toggle */}
-                        <div className="flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
+                        <div className="scheduleViewSwitch flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
                             <button 
                                 onClick={() => { setView('month'); setListDateMode('all'); }}
                                 className={cn(
@@ -3015,7 +3015,7 @@ export default function Schedule() {
                 )}
 
                 {/* Row 2: Mobile Toolbar (Filter Toggle | View Toggles | Search) */}
-                <div className="flex md:hidden items-center gap-2 justify-between">
+                <div className="scheduleMobileToolbar flex md:hidden items-center gap-2 justify-between">
                     {/* Filter Toggle Button */}
                     {canShowMobileFilterToggle && (
                         <button 
@@ -3373,7 +3373,7 @@ export default function Schedule() {
     <Dialog open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
       <DialogContent
         className={cn(
-          "max-w-[calc(100%-1.5rem)] rounded-[28px] border border-slate-200 bg-white p-0 gap-0 overflow-hidden",
+          "scheduleDateDialog max-w-[calc(100%-1.5rem)] rounded-[28px] border border-slate-200 bg-white p-0 gap-0 overflow-hidden",
           isAvailabilityView ? "sm:max-w-[760px]" : "sm:max-w-[360px]"
         )}
       >

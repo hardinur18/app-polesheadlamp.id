@@ -6320,6 +6320,132 @@
   backdrop-filter: blur(12px) saturate(130%);
 }
 
+/* Jadwal foundation polish. */
+.schedulePage {
+  max-width: none !important;
+  padding: 34px 36px 40px !important;
+  background: #ffffff !important;
+}
+
+.scheduleHeader {
+  align-items: flex-start !important;
+  padding: 0 !important;
+}
+
+.scheduleHeader h1 {
+  color: var(--ops-ink);
+  font-size: clamp(1.85rem, 2.2vw, 2.35rem);
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 1.06;
+}
+
+.scheduleHeader p {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 0.94rem;
+  font-weight: 540;
+  line-height: 1.45;
+}
+
+.scheduleHeaderFilters {
+  max-width: 720px;
+}
+
+.scheduleHeaderFilters .uiSelectTrigger,
+.scheduleToolbar .uiSelectTrigger,
+.scheduleToolbar input,
+.scheduleToolbar button {
+  min-height: 42px;
+  border-radius: 13px;
+}
+
+.scheduleToolbar {
+  margin: 0 !important;
+  padding: 12px !important;
+  border: 1px solid rgba(226, 232, 240, 0.88) !important;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94) !important;
+  box-shadow: 0 18px 42px -36px rgba(15, 23, 42, 0.35) !important;
+}
+
+.scheduleToolbarInner {
+  gap: 12px !important;
+}
+
+.scheduleViewSwitch {
+  min-height: 42px;
+  gap: 3px;
+  border-radius: 16px !important;
+  padding: 4px !important;
+}
+
+.scheduleViewSwitch button {
+  min-height: 32px;
+  border-radius: 12px !important;
+  font-weight: 720 !important;
+}
+
+.scheduleDateDialog {
+  display: flex !important;
+  max-height: min(86vh, calc(100dvh - 32px)) !important;
+  flex-direction: column;
+}
+
+.scheduleDateDialog > div:last-child {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1023px) {
+  .schedulePage {
+    padding: 22px 16px 96px !important;
+    overflow-x: hidden;
+  }
+
+  .scheduleHeader h1 {
+    font-size: 1.55rem;
+    line-height: 1.12;
+  }
+
+  .scheduleHeader p {
+    max-width: 34rem;
+    font-size: 0.88rem;
+  }
+
+  .scheduleToolbar {
+    position: relative !important;
+    top: auto !important;
+    z-index: 10;
+  }
+
+  .scheduleMobileToolbar {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .scheduleMobileToolbar > div:nth-child(2) {
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .scheduleMobileToolbar > div:nth-child(2)::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .scheduleDateDialog {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    max-height: calc(100dvh - 20px) !important;
+    border-radius: 22px !important;
+  }
+}
+
 .controlRow {
   gap: 12px;
 }
@@ -6648,12 +6774,25 @@
 }
 
 .orderFilterGrid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns:
+    minmax(190px, 0.72fr)
+    minmax(188px, 0.68fr)
+    minmax(340px, 1.55fr)
+    minmax(132px, 0.44fr);
   width: 100%;
   min-width: 0;
-  gap: 10px 12px;
+  gap: 12px;
   align-items: center;
+}
+
+.orderFilterGrid.hasCancelReason {
+  grid-template-columns:
+    minmax(180px, 0.62fr)
+    minmax(188px, 0.62fr)
+    minmax(300px, 1.18fr)
+    minmax(220px, 0.78fr)
+    minmax(132px, 0.38fr);
 }
 
 .orderFilterDate,
@@ -6661,33 +6800,14 @@
 .orderSearchSlot,
 .orderCancelReason,
 .orderFilterAction {
+  width: 100%;
   min-width: 0;
 }
 
-.orderFilterMode {
-  flex: 0 0 212px;
-}
-
-.orderFilterDate {
-  flex: 0 0 auto;
-}
-
-.orderSearchSlot {
-  flex: 1 1 340px;
-}
-
-.orderCancelReason {
-  flex: 0 1 240px;
-}
-
-.orderFilterAction {
-  flex: 0 0 132px;
-}
-
 .orderPage .orderFilterDate .uiPeriodPicker {
-  width: max-content !important;
-  min-width: 188px;
-  max-width: 260px;
+  width: 100% !important;
+  min-width: 0;
+  max-width: 100%;
   height: var(--order-control-h) !important;
   min-height: var(--order-control-h) !important;
   border-radius: 12px;
@@ -6701,9 +6821,9 @@
 }
 
 .orderPage .orderFilterDate .filterDateButton {
-  width: max-content !important;
+  width: 100% !important;
   min-width: 0;
-  max-width: 260px;
+  max-width: 100%;
 }
 
 .orderFilterControl.uiSelectTrigger,
@@ -6825,12 +6945,13 @@
 
   .orderFilterGrid,
   .orderFilterGrid.hasCancelReason {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .orderFilterMode,
   .orderFilterDate {
-    flex: 1 1 calc(50% - 6px);
+    width: 100%;
   }
 
   .orderPage .orderFilterDate .uiPeriodPicker,
@@ -6840,15 +6961,15 @@
   }
 
   .orderSearchSlot {
-    flex: 1 1 calc(100% - 144px);
+    grid-column: 1 / -1;
   }
 
   .orderCancelReason {
-    flex: 1 1 calc(50% - 6px);
+    width: 100%;
   }
 
   .orderFilterAction {
-    flex: 0 0 132px;
+    width: 100%;
   }
 }
 
@@ -6860,7 +6981,8 @@
 
   .orderFilterGrid,
   .orderFilterGrid.hasCancelReason {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .orderFilterMode,
@@ -6868,7 +6990,8 @@
   .orderCancelReason,
   .orderFilterAction,
   .orderSearchSlot {
-    flex: 1 1 100%;
+    grid-column: auto;
+    width: 100%;
   }
 
   .orderViewSwitch {
@@ -17671,10 +17794,12 @@ body {
 
 .orderInvoiceFramePanel {
   min-height: min(58dvh, 560px);
-  overflow: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(226, 232, 240, 0.92);
   border-radius: 18px;
   background: #e5e7eb;
+  -webkit-overflow-scrolling: touch;
 }
 
 .orderInvoiceFrame {
@@ -17684,6 +17809,7 @@ body {
   min-height: 420px;
   border: 0;
   background: #ffffff;
+  pointer-events: auto;
 }
 
 .orderInvoiceEmptyState {
@@ -17842,8 +17968,13 @@ body {
 
   .orderPage .orderFilterGrid,
   .orderPage .orderFilterGrid.hasCancelReason {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .orderPage .orderSearchSlot {
+    grid-column: 1 / -1;
   }
 
   .orderPage .orderStatusStrip {
@@ -17901,7 +18032,7 @@ body {
   .periodPickerContent.periodPickerContent--foundation {
     width: min(420px, calc(100vw - 24px)) !important;
     max-width: calc(100vw - 24px) !important;
-    max-height: min(82dvh, 720px);
+    max-height: min(86dvh, 720px);
     overflow-y: auto;
     overflow-x: hidden;
     border-radius: 18px;
@@ -17914,9 +18045,12 @@ body {
   }
 
   .periodPickerContent--foundation .periodPickerSidebar {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+    align-items: stretch;
+    align-content: start;
     border-right: 0;
     border-bottom: 1px solid #e2e8f0;
     padding: 12px;
@@ -17931,8 +18065,9 @@ body {
   }
 
   .periodPickerContent--foundation .periodPickerPreset {
-    flex: 0 0 auto;
+    width: 100%;
     min-height: 34px;
+    justify-content: flex-start;
     border: 1px solid #dbe4ef;
     border-radius: 12px;
     background: #ffffff;
@@ -17957,6 +18092,7 @@ body {
     --period-day-size: clamp(34px, calc((100vw - 92px) / 7), 40px);
     width: 100% !important;
     min-width: 0;
+    min-height: 348px;
     overflow-x: hidden;
     padding: 14px 16px 16px;
   }
@@ -17973,6 +18109,10 @@ body {
     grid-template-columns: minmax(0, 1fr) !important;
     gap: 0 !important;
     width: 100% !important;
+  }
+
+  .periodPickerContent--foundation .periodPickerMain .rdp .rdp-months > .rdp-month:nth-child(n + 2) {
+    display: none !important;
   }
 
   .periodPickerContent--foundation .periodPickerMain .rdp .rdp-head_row,
@@ -18017,6 +18157,7 @@ body {
 
   .periodPickerContent--foundation .periodPickerFooter {
     margin-top: 10px;
+    min-height: 46px;
     padding-top: 10px;
   }
 
@@ -18066,7 +18207,7 @@ body {
 
   .orderFormSheet.masterDataManagedForm {
     --order-form-mobile-footer-space: calc(132px + env(safe-area-inset-bottom));
-    z-index: 90 !important;
+    z-index: 130 !important;
     width: calc(100vw - 16px) !important;
     max-width: calc(100vw - 16px) !important;
     height: min(92dvh, calc(100dvh - 16px)) !important;

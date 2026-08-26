@@ -13,7 +13,7 @@ import {
 import { DataTable, createDataTableColumns } from '../components/ui/data-table';
 import { Badge } from '../components/ui/badge';
 import { Modal } from '../components/ui/Modal';
-import { Tabs, TabsContent, TabsList, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Tooltip,
   TooltipContent,
@@ -124,11 +124,6 @@ const ORDER_TABLE_INTERACTIVE_SELECTOR =
   'button, a, input, textarea, select, [data-slot="checkbox"], [role="button"], [role="checkbox"], [role="menuitem"]';
 const ORDER_FILTER_CONTROL_CLASS =
   'orderFilterControl bg-white text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
-const ORDER_VIEW_MODES = [
-  { value: 'table', label: 'List', icon: Settings },
-  { value: 'map', label: 'Peta', icon: MapIcon },
-  { value: 'calendar', label: 'Kalender', icon: Calendar },
-] as const;
 const ORDER_STATUS_FILTER_OPTIONS = [
   { value: 'pending', label: 'Terjadwal' },
   { value: 'otw', label: 'OTW Jalan' },
@@ -181,6 +176,7 @@ import { useOrderExport } from './orders/hooks/useOrderExport';
 import { useOrderImport } from './orders/hooks/useOrderImport';
 import { useOrderBulkActions } from './orders/hooks/useOrderBulkActions';
 import { useOrderStatusActions } from './orders/hooks/useOrderStatusActions';
+import { OrderViewModeTabs, type OrderViewMode } from './orders/OrderViewModeTabs';
 
 export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   // --- Context & Permissions ---
@@ -467,7 +463,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
 
   // --- Local UI State ---
-  const [viewMode, setViewMode] = useState<'table' | 'map' | 'calendar'>('table');
+  const [viewMode, setViewMode] = useState<OrderViewMode>('table');
   const [showOrderSelection, setShowOrderSelection] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -1343,28 +1339,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           }
         />
 
-        <Tabs
+        <OrderViewModeTabs
           value={viewMode}
-          onValueChange={(value) => setViewMode(value as 'table' | 'map' | 'calendar')}
-          className="masterDataTabsShell orderViewTabsShell"
-        >
-          <TabsViewport className="orderViewTabsViewport">
-            <TabsRail className="masterDataTabs orderViewTabs">
-              {ORDER_VIEW_MODES
-                .filter((mode) => mode.value !== 'map' || !isAdvertiserUser)
-                .map((mode) => {
-                  const ModeIcon = mode.icon;
-
-                  return (
-                    <TabsTrigger key={mode.value} value={mode.value} className="masterDataTab orderViewTab">
-                      <ModeIcon className="h-4 w-4" />
-                      <span>{mode.label}</span>
-                    </TabsTrigger>
-                  );
-                })}
-            </TabsRail>
-          </TabsViewport>
-        </Tabs>
+          onChange={setViewMode}
+          isAdvertiserUser={isAdvertiserUser}
+        />
 
         <OperationalKpiGrid className="orderKpiGrid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
           <OperationalKpiCard label="Total" value={stats.total.toLocaleString('id-ID')} icon={Package} />
