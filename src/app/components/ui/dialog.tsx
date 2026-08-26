@@ -4,12 +4,12 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 
-import { cn, stripFigmaProps } from "./utils";
+import { cn, stripInternalDomProps } from "./utils";
 
 function createCleanRadix<T extends React.ElementType>(Primitive: T, wrapAsChild: boolean = false) {
   const CleanPrimitive = React.forwardRef<React.ElementRef<T>, React.ComponentPropsWithoutRef<T>>(
     (props, ref) => {
-      const cleanProps = stripFigmaProps(props as Record<string, unknown>);
+      const cleanProps = stripInternalDomProps(props as Record<string, unknown>);
       
       if (wrapAsChild && cleanProps.asChild && React.isValidElement(cleanProps.children)) {
         if (typeof cleanProps.children.type !== 'string') {
@@ -90,7 +90,7 @@ const DialogHeader = ({
       "flex flex-col space-y-1.5 text-center sm:text-left",
       className
     )}
-    {...stripFigmaProps(props as Record<string, unknown>)}
+    {...stripInternalDomProps(props as Record<string, unknown>)}
   />
 );
 DialogHeader.displayName = "DialogHeader";
@@ -104,7 +104,7 @@ const DialogFooter = ({
       "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
       className
     )}
-    {...stripFigmaProps(props as Record<string, unknown>)}
+    {...stripInternalDomProps(props as Record<string, unknown>)}
   />
 );
 DialogFooter.displayName = "DialogFooter";

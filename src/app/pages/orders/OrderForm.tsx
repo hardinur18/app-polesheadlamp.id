@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { 
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription
-} from '../../components/ui/sheet';
+import { Dialog, DialogFooter } from '../../components/ui/dialog';
+import {
+  MasterDataDialogBody,
+  MasterDataFormDialogContent,
+  MasterDataFormHeader,
+} from '../../components/ui/master-data-ui';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -22,13 +25,12 @@ import { usePermissions } from '@/app/hooks/usePermissions';
 import { toast } from 'sonner';
 import { logActivity } from '@/app/services/auditService';
 import {
-  isAdminManagementRole,
   isAdvertiserRole,
   isCsRole,
   isOwnerLikeRole,
   isTechnicianRole,
 } from '@/app/data/roleHelpers';
-import { Loader2, MapPin, Check, ChevronsUpDown, AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronsUpDown, ClipboardList, Loader2, MapPin } from 'lucide-react';
 import { Alert } from '../../components/ui/alert';
 import {
   Command,
@@ -99,7 +101,18 @@ function normalizeCustomerPhone(value?: string | null) {
   return digits;
 }
 
-const MANDATORY_ORDER_PLATFORM_NAMES = ['repeat order', 'organik'];
+type OrderSourceMode = 'organic' | 'repeat_order' | 'paid_ads';
+
+const ORDER_SOURCE_MODE_LABEL: Record<OrderSourceMode, string> = {
+  organic: 'Organik',
+  repeat_order: 'Repeat Order',
+  paid_ads: 'Iklan',
+};
+
+const ORDER_SOURCE_PLATFORM_NAME: Partial<Record<OrderSourceMode, string>> = {
+  organic: 'organik',
+  repeat_order: 'repeat order',
+};
 
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
@@ -116,14 +129,13 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const { 
     addOrder, updateOrder, orders, prospectBookings, leads,
     services, vehicles, platforms, subChannels, users, areas, payments, activeBranches: branches,
-    currentUser, currentRole, technicianSchedules, advertiserConfigs, affiliates,
+    currentUser, currentRole, technicianSchedules, affiliates,
     cancelReasons,
     adAccounts,
     adAccountAssignments,
     adAccountOwnerAssignments,
   } = useMasterData();
   const { hasPermission } = usePermissions();
-  const isAdminManagementUser = isAdminManagementRole(currentRole);
   const isAdvertiserUser = isAdvertiserRole(currentRole);
   const isCsUser = isCsRole(currentRole);
   const isTechnicianUser = isTechnicianRole(currentRole);
@@ -138,17 +150,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const canValidatePayment = canEditPaymentStatus || hasPermission('finance.manage') || isOwnerLikeUser;
 
   const [formData, setFormData] = useState<Partial<Order>>({});
-  
-  // Mobile Detection for Sheet Behavior
-  const [isMobile, setIsMobile] = useState(false);
+  const [selectedAdAccountId, setSelectedAdAccountId] = useState('');
+  const [orderSourceMode, setOrderSourceMode] = useState<OrderSourceMode>('organic');
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile(); // Check on mount
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -310,7 +314,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     users,
   ]);
 
-  // --- FILTERING LOGIC (MASTER DATA AKUN IKLAN + LEGACY FALLBACK) ---
+  // --- FILTERING LOGIC (MASTER DATA AKUN IKLAN) ---
   const todayKey = getTodayDateKey();
   const allAdvertiserUsers = React.useMemo<User[]>(
     () => users.filter((user) => isAdvertiserRole(user.role) && user.status === 'active'),
@@ -351,7 +355,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     const map = new Map<string, string>();
     [...adAccountOwnerAssignments]
       .filter(isActiveAdAssignment)
-      .sort((left, right) => right.startDate.localeCompare(left.startDate))
+      .sort((left, right) => (right.startDate || '').localeCompare(left.startDate || ''))
       .forEach((assignment) => {
         if (!map.has(assignment.adAccountId)) {
           map.set(assignment.adAccountId, assignment.advertiserId);
@@ -436,21 +440,16 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     [activeCsAssignmentsByAccountId],
   );
 
-  const activeConfig = React.useMemo(() => {
-    if (selectedAdvertiserId) {
-      return advertiserConfigs.find((config) => config.advertiserId === selectedAdvertiserId);
-    }
-    if (isAdvertiserUser && currentUser) {
-      return advertiserConfigs.find((config) => config.advertiserId === currentUser.id);
-    }
-    return null;
-  }, [advertiserConfigs, currentUser, isAdvertiserUser, selectedAdvertiserId]);
+  const getSourceModePlatform = React.useCallback(
+    (mode: OrderSourceMode) => {
+      const platformName = ORDER_SOURCE_PLATFORM_NAME[mode];
+      if (!platformName) return undefined;
 
-  const mandatoryPlatforms = React.useMemo(
-    () => platforms.filter((platform) =>
-      platform.status === 'active' &&
-      MANDATORY_ORDER_PLATFORM_NAMES.includes(platform.name.toLowerCase()),
-    ),
+      return platforms.find((platform) =>
+        platform.status === 'active' &&
+        platform.name.trim().toLowerCase() === platformName,
+      );
+    },
     [platforms],
   );
 
@@ -465,20 +464,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     if (scopedAccounts.length > 0) {
       const advertiserIds = new Set(scopedAccounts.map(getAccountAdvertiserId).filter(Boolean));
       const fromAdAccounts = allAdvertiserUsers.filter((advertiser) => advertiserIds.has(advertiser.id));
-      if (fromAdAccounts.length > 0) return includeOriginalAdvertiser(fromAdAccounts);
+      return includeOriginalAdvertiser(fromAdAccounts);
     }
 
-    if (isCsUser && currentUser) {
-      const myAdvertiserIds = advertiserConfigs
-        .filter((config) => config.csIds.includes(currentUser.id))
-        .map((config) => config.advertiserId);
-      if (myAdvertiserIds.length > 0) {
-        return includeOriginalAdvertiser(allAdvertiserUsers.filter((advertiser) => myAdvertiserIds.includes(advertiser.id)));
-      }
-    }
-
-    return includeOriginalAdvertiser(allAdvertiserUsers);
-  }, [advertiserConfigs, allAdvertiserUsers, currentUser, getAccountAdvertiserId, getScopedAdAccounts, isCsUser, originalAdvertiserId]);
+    return includeOriginalAdvertiser([]);
+  }, [allAdvertiserUsers, getAccountAdvertiserId, getScopedAdAccounts, originalAdvertiserId]);
 
   const filteredPlatforms = React.useMemo(() => {
     const includeOriginalPlatform = (items: Platform[]) => {
@@ -489,29 +479,21 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       return original ? uniqueById([...items, original]) : items;
     };
 
+    if (orderSourceMode !== 'paid_ads') {
+      return includeOriginalPlatform(platforms.filter((platform) => platform.status === 'active'));
+    }
+
     const scopedAccounts = getScopedAdAccounts({ advertiserId: selectedAdvertiserId });
     if (scopedAccounts.length > 0) {
       const platformIds = new Set(scopedAccounts.map((account) => account.platformId).filter(Boolean));
       const accountPlatforms = platforms.filter((platform) => platform.status === 'active' && platformIds.has(platform.id));
-      const combined = isAdvertiserUser ? accountPlatforms : [...accountPlatforms, ...mandatoryPlatforms];
-      const scopedPlatforms = uniqueById(combined);
-      if (scopedPlatforms.length > 0) return includeOriginalPlatform(scopedPlatforms);
+      return includeOriginalPlatform(accountPlatforms);
     }
 
-    if (activeConfig) {
-      const allowedIds = activeConfig.platformIds || [];
-      const allowedPlatforms = platforms.filter((platform) => platform.status === 'active' && allowedIds.includes(platform.id));
-      const combined = isAdvertiserUser ? allowedPlatforms : [...allowedPlatforms, ...mandatoryPlatforms];
-      const scopedPlatforms = uniqueById(combined);
-      if (scopedPlatforms.length > 0) return includeOriginalPlatform(scopedPlatforms);
-    }
-
-    return includeOriginalPlatform(platforms.filter((platform) => platform.status === 'active'));
+    return includeOriginalPlatform([]);
   }, [
-    activeConfig,
     getScopedAdAccounts,
-    isAdvertiserUser,
-    mandatoryPlatforms,
+    orderSourceMode,
     originalPlatformId,
     platforms,
     preserveOriginalPlatform,
@@ -533,6 +515,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       scopedSubChannels = scopedSubChannels.filter((subChannel) => subChannel.platformId === selectedPlatformId);
     }
 
+    if (orderSourceMode !== 'paid_ads') {
+      return includeOriginalSubChannel(scopedSubChannels);
+    }
+
     const scopedAccounts = getScopedAdAccounts({
       advertiserId: selectedAdvertiserId,
       platformId: selectedPlatformId,
@@ -545,15 +531,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       );
     }
 
-    if (activeConfig?.subChannelIds && activeConfig.subChannelIds.length > 0) {
-      scopedSubChannels = scopedSubChannels.filter((subChannel) => activeConfig.subChannelIds!.includes(subChannel.id));
-    }
-
-    return includeOriginalSubChannel(scopedSubChannels);
+    return includeOriginalSubChannel([]);
   }, [
-    activeConfig,
     getAccountSubChannelIds,
     getScopedAdAccounts,
+    orderSourceMode,
     originalSubChannelId,
     preserveOriginalSubChannel,
     selectedAdvertiserId,
@@ -569,6 +551,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       const original = allCsUsers.find((cs) => cs.id === originalCsId);
       return original ? uniqueById([...items, original]) : items;
     };
+
+    if (orderSourceMode !== 'paid_ads') {
+      return includeOriginalCs(allCsUsers);
+    }
 
     const scopedAccounts = getScopedAdAccounts({
       advertiserId: selectedAdvertiserId,
@@ -586,29 +572,229 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       return includeOriginalCs(allCsUsers.filter((cs) => accountCsIds.has(cs.id)));
     }
 
-    if (isAdminManagementUser) {
-      return includeOriginalCs(allCsUsers);
-    }
-
-    if (activeConfig) {
-      if (activeConfig.csIds && activeConfig.csIds.length > 0) {
-        return includeOriginalCs(allCsUsers.filter((cs) => activeConfig.csIds!.includes(cs.id)));
-      }
-      return includeOriginalCs([]);
-    }
-
-    return includeOriginalCs(allCsUsers);
+    return includeOriginalCs([]);
   }, [
-    activeConfig,
     activeCsAssignmentsByAccountId,
     allCsUsers,
     getScopedAdAccounts,
-    isAdminManagementUser,
+    orderSourceMode,
     originalCsId,
     preserveOriginalCs,
     selectedAdvertiserId,
     selectedPlatformId,
     selectedSubChannelId,
+  ]);
+
+  const userNameById = React.useMemo(
+    () => new Map(users.map((user) => [user.id, user.name])),
+    [users],
+  );
+
+  const platformNameById = React.useMemo(
+    () => new Map(platforms.map((platform) => [platform.id, platform.name])),
+    [platforms],
+  );
+
+  const subChannelNameById = React.useMemo(
+    () => new Map(subChannels.map((subChannel) => [subChannel.id, subChannel.name])),
+    [subChannels],
+  );
+
+  const getPrimaryAdAccountAssignment = React.useCallback(
+    (accountId: string, preferredCsId?: string) => {
+      const assignments = [...(activeCsAssignmentsByAccountId.get(accountId) || [])]
+        .sort((left, right) => (right.startDate || '').localeCompare(left.startDate || ''));
+
+      if (preferredCsId) {
+        return assignments.find((assignment) => assignment.csId === preferredCsId) || assignments[0];
+      }
+
+      return assignments[0];
+    },
+    [activeCsAssignmentsByAccountId],
+  );
+
+  const orderAdAccountOptions = React.useMemo(() => {
+    const scopedCsId = isCsUser && currentUser ? currentUser.id : formData.csId;
+
+    return getScopedAdAccounts({ csId: scopedCsId || undefined })
+      .map((account) => {
+        const preferredCsId = isCsUser ? currentUser?.id : undefined;
+        const assignment = getPrimaryAdAccountAssignment(account.id, preferredCsId);
+        const advertiserId = getAccountAdvertiserId(account);
+        const platformId = account.platformId;
+        const subChannelId = account.subChannelId || assignment?.subChannelId || undefined;
+        const csId = isCsUser && currentUser ? currentUser.id : assignment?.csId;
+
+        const advertiserName = advertiserId ? userNameById.get(advertiserId) : undefined;
+        const platformName = platformId ? platformNameById.get(platformId) : undefined;
+        const subChannelName = subChannelId ? subChannelNameById.get(subChannelId) : undefined;
+        const csName = csId ? userNameById.get(csId) : undefined;
+
+        return {
+          account,
+          advertiserId,
+          advertiserName: advertiserName || 'Belum diset',
+          csId,
+          csName: csName || 'Belum diset',
+          isComplete: Boolean(advertiserId && platformId && csId),
+          platformId,
+          platformName: platformName || 'Belum diset',
+          subChannelId,
+          subChannelName: subChannelName || 'Tanpa sub channel',
+        };
+      })
+      .sort((left, right) => left.account.accountName.localeCompare(right.account.accountName));
+  }, [
+    currentUser,
+    formData.csId,
+    getAccountAdvertiserId,
+    getPrimaryAdAccountAssignment,
+    getScopedAdAccounts,
+    isCsUser,
+    platformNameById,
+    subChannelNameById,
+    userNameById,
+  ]);
+
+  const selectedAdAccountOption = React.useMemo(
+    () => orderAdAccountOptions.find((option) => option.account.id === selectedAdAccountId) || null,
+    [orderAdAccountOptions, selectedAdAccountId],
+  );
+
+  const inferAdAccountIdFromOrder = React.useCallback(
+    (draft: Partial<Order>) => {
+      const hasAdAttribution =
+        Boolean(draft.advertiserId) ||
+        Boolean(draft.platformId) ||
+        Boolean(draft.subChannelId);
+
+      if (!hasAdAttribution) {
+        return '';
+      }
+
+      const exactMatch = orderAdAccountOptions.find((option) =>
+        (!draft.advertiserId || option.advertiserId === draft.advertiserId) &&
+        (!draft.platformId || option.platformId === draft.platformId) &&
+        (!draft.subChannelId || option.subChannelId === draft.subChannelId) &&
+        (!draft.csId || option.csId === draft.csId)
+      );
+
+      return exactMatch?.account.id || '';
+    },
+    [orderAdAccountOptions],
+  );
+
+  const inferOrderSourceMode = React.useCallback(
+    (draft: Partial<Order>, inferredAdAccountId?: string): OrderSourceMode => {
+      if (inferredAdAccountId || inferAdAccountIdFromOrder(draft)) {
+        return 'paid_ads';
+      }
+
+      const platformName = draft.platformId
+        ? platformNameById.get(draft.platformId)?.trim().toLowerCase()
+        : '';
+
+      if (platformName === ORDER_SOURCE_PLATFORM_NAME.repeat_order) return 'repeat_order';
+      if (platformName === ORDER_SOURCE_PLATFORM_NAME.organic) return 'organic';
+      if (draft.platformId) return 'paid_ads';
+
+      return 'organic';
+    },
+    [inferAdAccountIdFromOrder, platformNameById],
+  );
+
+  const applyAdAccountFieldsToDraft = React.useCallback(
+    (draft: Partial<Order>, accountId: string) => {
+      const option = orderAdAccountOptions.find((item) => item.account.id === accountId);
+      if (!option?.isComplete) return draft;
+
+      return {
+        ...draft,
+        advertiserId: option.advertiserId,
+        platformId: option.platformId,
+        subChannelId: option.subChannelId,
+        csId: option.csId,
+      };
+    },
+    [orderAdAccountOptions],
+  );
+
+  const formatAdAccountContext = React.useCallback((account: AdAccount) => {
+    const ownerId = getAccountAdvertiserId(account);
+    const ownerName = ownerId ? userNameById.get(ownerId) : undefined;
+    const platformName = platformNameById.get(account.platformId);
+    const subChannelName = account.subChannelId ? subChannelNameById.get(account.subChannelId) : undefined;
+
+    return [
+      account.accountName,
+      platformName,
+      subChannelName,
+      ownerName,
+    ].filter(Boolean).join(' / ');
+  }, [getAccountAdvertiserId, platformNameById, subChannelNameById, userNameById]);
+
+  const adAccountContextText = React.useMemo(() => {
+    if (orderSourceMode !== 'paid_ads') {
+      return {
+        title: ORDER_SOURCE_MODE_LABEL[orderSourceMode],
+        description: 'Order non-iklan tidak perlu advertiser atau akun iklan. CS owner tetap dicatat untuk follow up.',
+        tone: 'neutral' as const,
+      };
+    }
+
+    if (!formData.csId && !isCsUser) {
+      return {
+        title: 'Pilih CS owner dulu',
+        description: 'Daftar akun iklan akan mengikuti assignment CS yang dipilih.',
+        tone: 'neutral' as const,
+      };
+    }
+
+    if (activeAdAccounts.length === 0) {
+      return {
+        title: 'Belum ada akun iklan aktif',
+        description: 'Aktifkan akun iklan di Master Data Akun Iklan sebelum membuat pesanan dari iklan.',
+        tone: 'warning' as const,
+      };
+    }
+
+    if (orderAdAccountOptions.length === 0) {
+      return {
+        title: 'Tidak ada akun iklan sesuai akses',
+        description: 'Akun aktif tersedia, tapi belum ada yang sesuai role atau assignment user ini.',
+        tone: 'warning' as const,
+      };
+    }
+
+    if (!selectedAdAccountOption) {
+      return {
+        title: 'Pilih akun iklan',
+        description: 'Advertiser, platform, sub channel, dan CS akan terisi otomatis dari akun iklan yang dipilih.',
+        tone: 'neutral' as const,
+      };
+    }
+
+    if (!selectedAdAccountOption.isComplete) {
+      return {
+        title: 'Akun iklan belum lengkap',
+        description: 'Lengkapi advertiser, platform, dan CS assignment di Master Akun Iklan sebelum dipakai untuk pesanan.',
+        tone: 'warning' as const,
+      };
+    }
+
+    return {
+      title: selectedAdAccountOption.account.accountName,
+      description: 'Attribution pesanan otomatis mengikuti Master Data Akun Iklan.',
+      tone: 'success' as const,
+    };
+  }, [
+    activeAdAccounts.length,
+    formData.csId,
+    isCsUser,
+    orderAdAccountOptions.length,
+    orderSourceMode,
+    selectedAdAccountOption,
   ]);
 
   useEffect(() => {
@@ -733,6 +919,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   useEffect(() => {
     if (!isOpen) {
       lastInitializedSourceRef.current = null;
+      setSelectedAdAccountId('');
+      setOrderSourceMode('organic');
       return;
     }
 
@@ -746,11 +934,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     setMapsUrlError(null);
 
     if (initialData) {
-      setFormData({
+      const nextFormData = {
         ...initialData,
         serviceTime: normalizeOrderTime(initialData.serviceTime),
         units: initialData.units || 1,
-      });
+      };
+      const inferredAdAccountId = inferAdAccountIdFromOrder(nextFormData);
+      setOrderSourceMode(inferOrderSourceMode(nextFormData, inferredAdAccountId));
+      setSelectedAdAccountId(inferredAdAccountId);
+      setFormData(
+        inferredAdAccountId
+          ? applyAdAccountFieldsToDraft(nextFormData, inferredAdAccountId)
+          : nextFormData,
+      );
       return;
     }
 
@@ -763,7 +959,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
         }
       : undefined;
 
-    setFormData({
+    const nextFormData = {
       id: `OP-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
       leadDate: new Date().toISOString().split('T')[0],
       status: 'pending',
@@ -776,17 +972,53 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       branchId: isTechnicianUser ? currentUser?.branchId : undefined,
       advertiserId: isAdvertiserUser ? currentUser?.id : undefined,
       ...normalizedPrefillData
-    });
+    };
+    const inferredAdAccountId = inferAdAccountIdFromOrder(nextFormData);
+    setOrderSourceMode(inferOrderSourceMode(nextFormData, inferredAdAccountId));
+    setSelectedAdAccountId(inferredAdAccountId);
+    setFormData(
+      inferredAdAccountId
+        ? applyAdAccountFieldsToDraft(nextFormData, inferredAdAccountId)
+        : nextFormData,
+    );
   }, [
+    applyAdAccountFieldsToDraft,
     currentUser?.branchId,
     currentUser?.id,
     formSourceKey,
+    inferAdAccountIdFromOrder,
+    inferOrderSourceMode,
     initialData,
     isAdvertiserUser,
     isCsUser,
     isOpen,
     isTechnicianUser,
     prefillData,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || selectedAdAccountId || orderAdAccountOptions.length === 0) {
+      return;
+    }
+
+    const inferredAdAccountId = inferAdAccountIdFromOrder(formData);
+    if (!inferredAdAccountId) {
+      return;
+    }
+
+    setSelectedAdAccountId(inferredAdAccountId);
+    setOrderSourceMode('paid_ads');
+    setFormData((prev) => applyAdAccountFieldsToDraft(prev, inferredAdAccountId));
+  }, [
+    applyAdAccountFieldsToDraft,
+    formData.advertiserId,
+    formData.csId,
+    formData.platformId,
+    formData.subChannelId,
+    inferAdAccountIdFromOrder,
+    isOpen,
+    orderAdAccountOptions.length,
+    selectedAdAccountId,
   ]);
 
   useEffect(() => {
@@ -830,6 +1062,79 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     setIsDirty(true);
   };
 
+  const handleCsOwnerChange = (csId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      csId,
+      ...(orderSourceMode === 'paid_ads'
+        ? {
+            advertiserId: undefined,
+            platformId: undefined,
+            subChannelId: undefined,
+          }
+        : {}),
+    }));
+    setSelectedAdAccountId('');
+    setIsDirty(true);
+  };
+
+  const handleOrderSourceModeChange = (mode: OrderSourceMode) => {
+    setOrderSourceMode(mode);
+    setIsDirty(true);
+
+    if (mode === 'paid_ads') {
+      const canAutoPickAccount = Boolean(isCsUser || formData.csId);
+      const onlyCompleteAccount =
+        canAutoPickAccount &&
+        orderAdAccountOptions.length === 1 &&
+        orderAdAccountOptions[0].isComplete
+          ? orderAdAccountOptions[0].account.id
+          : '';
+
+      setSelectedAdAccountId(onlyCompleteAccount);
+      setFormData((prev) => {
+        const next = {
+          ...prev,
+          advertiserId: undefined,
+          platformId: undefined,
+          subChannelId: undefined,
+          csId: isCsUser && currentUser ? currentUser.id : prev.csId,
+        };
+
+        return onlyCompleteAccount
+          ? applyAdAccountFieldsToDraft(next, onlyCompleteAccount)
+          : next;
+      });
+      return;
+    }
+
+    const sourcePlatform = getSourceModePlatform(mode);
+    setSelectedAdAccountId('');
+    setFormData((prev) => ({
+      ...prev,
+      advertiserId: undefined,
+      platformId: sourcePlatform?.id,
+      subChannelId: undefined,
+      csId: isCsUser && currentUser ? currentUser.id : prev.csId,
+    }));
+
+    if (!sourcePlatform) {
+      toast.warning(`Platform ${ORDER_SOURCE_MODE_LABEL[mode]} belum ada di master platform.`);
+    }
+  };
+
+  const handleAdAccountSelect = (accountId: string) => {
+    const option = orderAdAccountOptions.find((item) => item.account.id === accountId);
+    setSelectedAdAccountId(accountId);
+    setOrderSourceMode('paid_ads');
+    setFormData((prev) => applyAdAccountFieldsToDraft(prev, accountId));
+    setIsDirty(true);
+
+    if (!option?.isComplete) {
+      toast.warning('Akun iklan ini belum lengkap. Lengkapi advertiser, platform, dan CS assignment di Master Data.');
+    }
+  };
+
   const handleStatusChange = (value: string) => {
     setFormData((prev) => {
       const nextStatus = value as Order['status'];
@@ -861,6 +1166,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
 
   const normalizeOrderAttributionFields = React.useCallback((draft: Partial<Order>) => {
     const next = { ...draft };
+    const selectedOption = selectedAdAccountId
+      ? orderAdAccountOptions.find((option) => option.account.id === selectedAdAccountId)
+      : null;
+
+    if (orderSourceMode !== 'paid_ads') {
+      next.advertiserId = undefined;
+      next.subChannelId = undefined;
+    } else if (selectedOption?.isComplete) {
+      next.advertiserId = selectedOption.advertiserId;
+      next.platformId = selectedOption.platformId;
+      next.subChannelId = selectedOption.subChannelId;
+      next.csId = selectedOption.csId;
+    }
 
     if (isAdvertiserUser && currentUser) {
       next.advertiserId = currentUser.id;
@@ -883,12 +1201,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       next.subChannelId = undefined;
     }
 
-    if (next.csId && !filteredCS.some((cs) => cs.id === next.csId)) {
+    const validCsUsers = orderSourceMode === 'paid_ads' ? filteredCS : allCsUsers;
+
+    if (next.csId && !validCsUsers.some((cs) => cs.id === next.csId)) {
       next.csId = isCsUser && currentUser ? currentUser.id : undefined;
     }
 
     return next;
   }, [
+    allCsUsers,
     currentUser,
     filteredAdvertisers,
     filteredCS,
@@ -896,6 +1217,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     filteredSubChannels,
     isAdvertiserUser,
     isCsUser,
+    orderSourceMode,
+    orderAdAccountOptions,
+    selectedAdAccountId,
   ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -914,6 +1238,23 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
             sanitizedData[key] = undefined;
         }
     });
+
+    const selectedOption = selectedAdAccountId
+      ? orderAdAccountOptions.find((option) => option.account.id === selectedAdAccountId)
+      : null;
+    const requiresMasterAdAccount = orderSourceMode === 'paid_ads' && canEditOrderInfo;
+
+    if (requiresMasterAdAccount && !selectedOption?.isComplete) {
+      toast.error('Pilih akun iklan yang lengkap dari Master Data Akun Iklan.');
+      return;
+    }
+
+    if (orderSourceMode !== 'paid_ads') {
+      const sourcePlatform = getSourceModePlatform(orderSourceMode);
+      sanitizedData.advertiserId = undefined;
+      sanitizedData.subChannelId = undefined;
+      sanitizedData.platformId = sourcePlatform?.id || sanitizedData.platformId;
+    }
 
     const attributionBeforeValidation = {
       advertiserId: sanitizedData.advertiserId,
@@ -1077,7 +1418,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     const commonFields: (keyof Order)[] = [
       'leadDate', 'customerName', 'customerPhone', 'address', 
       'serviceDate', 'serviceTime', 'serviceId', 'serviceCategory', 
-      'mapsUrl', 'vehicleId', 'price', 'platformId', 'notes', 
+      'mapsUrl', 'vehicleId', 'price', 'platformId', 'subChannelId', 'notes',
       'areaId', 'affiliateName'
     ];
     if (commonFields.includes(field)) {
@@ -1110,50 +1451,37 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     return true; 
   };
 
-  const csUsers = filteredCS;
+  const csUsers = orderSourceMode === 'paid_ads' ? filteredCS : allCsUsers;
   const techUsers = users.filter((u) => isTechnicianRole(u.role) && u.status === 'active');
-  const advertiserUsers = filteredAdvertisers;
   const filteredAreas = formData.branchId ? areas.filter(a => a.branchId === formData.branchId) : areas;
-  
+  const selectedCsDisplayName =
+    (formData.csId ? userNameById.get(formData.csId) : undefined) ||
+    (isCsUser ? currentUser?.name : undefined) ||
+    '-';
+  const canSelectPaidAdAccount = Boolean(formData.csId || isCsUser);
+  const selectedSourcePlatform = getSourceModePlatform(orderSourceMode);
   // Use real data from affiliates context instead of mock
   const activeAffiliates = (affiliates || []).filter(a => a.status === 'Active');
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
-      <SheetContent 
-        side={isMobile ? "bottom" : "right"} 
-        showClose={false}
-        className={cn(
-          "orderFormSheet masterDataManagedForm flex flex-col gap-0 border-l border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950",
-          isMobile ? "h-[90vh] rounded-t-xl" : "h-full w-full sm:max-w-xl md:max-w-2xl"
-        )}
-        onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => { e.preventDefault(); handleClose(); }}
-      >
-        <SheetHeader className="orderFormHeader masterDataFormHeader sticky top-0 z-10 shrink-0 rounded-t-xl border-b border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:p-6">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <SheetTitle className="masterDataFormTitle text-left text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {initialData ? 'Edit Pesanan' : 'Tambah Pesanan Baru'}
-              </SheetTitle>
-              <SheetDescription className="masterDataFormDescription text-left text-sm text-slate-500 dark:text-slate-400">
-                Lengkapi detail pesanan berikut.
-              </SheetDescription>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              className="h-8 w-8 text-slate-400 hover:text-slate-600 -mr-2 -mt-1 rounded-full"
-            >
-              <X className="w-4 h-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </div>
-        </SheetHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+        <MasterDataFormDialogContent
+          size="wide"
+          className="orderFormSheet orderFormDialog masterDataManagedForm"
+          onEscapeKeyDown={(e) => {
+            e.preventDefault();
+            handleClose();
+          }}
+        >
+          <MasterDataFormHeader
+            className="orderFormHeader"
+            icon={ClipboardList}
+            title={initialData ? 'Edit Pesanan' : 'Tambah Pesanan Baru'}
+            description="Lengkapi detail pesanan berikut."
+          />
 
-        <div className="orderFormBody masterDataDialogBody flex-1 overflow-y-auto p-4 md:p-6">
+          <MasterDataDialogBody className="orderFormBody">
           <form id="order-form" onSubmit={handleSubmit} className="orderManagedForm masterDataForm space-y-4">
             
             <FormSection title="Data Pelanggan" description="Identitas customer, kontak, alamat, dan lokasi maps.">
@@ -1223,9 +1551,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                  />
                </div>
 
-               <div className="space-y-2">
+               <div className="orderFormMapField space-y-2">
                  <RequiredLabel>Maps URL</RequiredLabel>
-                 <div className="flex gap-2">
+                 <div className="orderFormMapControl">
+                   <div className="orderFormMapInput">
                      <Input 
                          value={formData.mapsUrl || ''} 
                          onChange={(e) => {
@@ -1238,8 +1567,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                          }}
                          disabled={!canEdit('mapsUrl')}
                          placeholder="https://maps.google.com/..."
-                         className={`flex-1 ${mapsUrlError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                         className={mapsUrlError ? "border-red-500 focus-visible:ring-red-500" : ""}
                      />
+                   </div>
                      <Button
                          type="button"
                          variant="secondary"
@@ -1247,7 +1577,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                          onClick={handleRecommendBranch}
                          disabled={!formData.mapsUrl}
                          title="Cari Cabang Terdekat"
-                         className="shrink-0"
+                         className="orderFormMapButton"
                      >
                          <MapPin className="w-4 h-4" />
                      </Button>
@@ -1443,65 +1773,153 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
             </FormSection>
 
             <FormSection title="Operasional" description="Sumber order, PIC, cabang, teknisi, daerah, dan status layanan.">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="orderFormSourceControls">
                 <div className="space-y-2">
-                  <RequiredLabel>Platform</RequiredLabel>
-                  <Select 
-                    value={formData.platformId} 
-                    onValueChange={(val) => handleChange('platformId', val)}
-                    disabled={!canEdit('platformId')}
+                  <RequiredLabel>Customer Service</RequiredLabel>
+                  {isCsUser ? (
+                    <div className="orderFormLockedField">
+                      <span>CS owner</span>
+                      <strong>{selectedCsDisplayName}</strong>
+                      <small>Terkunci sesuai akun login</small>
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.csId || undefined}
+                      onValueChange={handleCsOwnerChange}
+                      disabled={!canEdit('csId')}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Pilih CS Owner" /></SelectTrigger>
+                      <SelectContent>
+                        {csUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <RequiredLabel>Sumber Order</RequiredLabel>
+                  <Select
+                    value={orderSourceMode}
+                    onValueChange={(val) => handleOrderSourceModeChange(val as OrderSourceMode)}
+                    disabled={!canEditOrderInfo}
                   >
-                    <SelectTrigger><SelectValue placeholder="Pilih Platform" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Pilih sumber order" /></SelectTrigger>
                     <SelectContent>
-                      {filteredPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      <SelectItem value="organic">Organik</SelectItem>
+                      <SelectItem value="repeat_order">Repeat Order</SelectItem>
+                      <SelectItem value="paid_ads">Iklan</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                
-                {formData.platformId && filteredSubChannels.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Sub Channel</Label>
-                    <Select 
-                      value={formData.subChannelId} 
-                      onValueChange={(val) => handleChange('subChannelId', val)}
-                      disabled={!canEdit('platformId')} 
+              </div>
+
+              <div className="orderFormAdAccountContext" data-tone={adAccountContextText.tone}>
+                <div className="orderFormAdAccountCopy">
+                  <span>{orderSourceMode === 'paid_ads' ? 'Master Akun Iklan' : 'Sumber Non-Iklan'}</span>
+                  <strong>{adAccountContextText.title}</strong>
+                  <p>{adAccountContextText.description}</p>
+                </div>
+                {orderSourceMode === 'paid_ads' ? (
+                  <div className="orderFormAdAccountChips" aria-label="Akun iklan order">
+                    {selectedAdAccountOption ? (
+                      <span title={formatAdAccountContext(selectedAdAccountOption.account)}>
+                        {selectedAdAccountOption.account.accountName}
+                      </span>
+                    ) : (
+                      <span>{canSelectPaidAdAccount ? `${orderAdAccountOptions.length} akun tersedia` : 'Pilih CS dulu'}</span>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {orderSourceMode === 'paid_ads' ? (
+                <>
+                  <div className="orderFormAdAccountPicker space-y-2">
+                    <RequiredLabel>Akun Iklan</RequiredLabel>
+                    <Select
+                      value={selectedAdAccountId || undefined}
+                      onValueChange={handleAdAccountSelect}
+                      disabled={!canEdit('platformId') || !canSelectPaidAdAccount}
                     >
-                      <SelectTrigger><SelectValue placeholder="Pilih Sub Channel" /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder={canSelectPaidAdAccount ? 'Pilih Akun Iklan' : 'Pilih CS dulu'} />
+                      </SelectTrigger>
                       <SelectContent>
-                        {filteredSubChannels.map(sc => <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>)}
+                        {orderAdAccountOptions.map((option) => (
+                          <SelectItem
+                            key={option.account.id}
+                            value={option.account.id}
+                            disabled={!option.isComplete}
+                            textValue={`${option.account.accountName} ${option.platformName} ${option.subChannelName} ${option.advertiserName} ${option.csName}`}
+                          >
+                            {option.account.accountName} - {option.platformName} / {option.subChannelName} / {option.advertiserName} / {option.csName}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <Label>Advertiser</Label>
-                  <Select 
-                    value={formData.advertiserId} 
-                    onValueChange={(val) => handleChange('advertiserId', val)}
-                    disabled={!canEdit('advertiserId')}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Pilih Advertiser" /></SelectTrigger>
-                    <SelectContent>
-                      {advertiserUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <div className="orderFormAutoAttributionGrid">
+                    <div>
+                      <span>Platform</span>
+                      <strong>{selectedAdAccountOption?.platformName || '-'}</strong>
+                    </div>
+                    <div>
+                      <span>Sub Channel</span>
+                      <strong>{selectedAdAccountOption?.subChannelName || '-'}</strong>
+                    </div>
+                    <div>
+                      <span>Advertiser</span>
+                      <strong>{selectedAdAccountOption?.advertiserName || '-'}</strong>
+                    </div>
+                    <div>
+                      <span>Customer Service</span>
+                      <strong>{selectedAdAccountOption?.csName || '-'}</strong>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="orderFormAutoAttributionGrid isSourceSummary">
+                    <div>
+                      <span>Customer Service</span>
+                      <strong>{selectedCsDisplayName}</strong>
+                    </div>
+                    <div>
+                      <span>Sumber</span>
+                      <strong>{ORDER_SOURCE_MODE_LABEL[orderSourceMode]}</strong>
+                    </div>
+                    <div>
+                      <span>Platform</span>
+                      <strong>{selectedSourcePlatform?.name || '-'}</strong>
+                    </div>
+                    <div>
+                      <span>Advertiser</span>
+                      <strong>-</strong>
+                    </div>
+                  </div>
 
-                <div className="space-y-2">
-                  <RequiredLabel>Customer Service</RequiredLabel>
-                  <Select 
-                    value={formData.csId} 
-                    onValueChange={(val) => handleChange('csId', val)}
-                    disabled={!canEdit('csId')}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Pilih CS" /></SelectTrigger>
-                    <SelectContent>
-                      {csUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  {!selectedSourcePlatform && (
+                    <div className="orderFormLegacyAttributionGrid grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <RequiredLabel>Platform</RequiredLabel>
+                        <Select
+                          value={formData.platformId}
+                          onValueChange={(val) => handleChange('platformId', val)}
+                          disabled={!canEdit('platformId')}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Pilih Platform" /></SelectTrigger>
+                          <SelectContent>
+                            {filteredPlatforms.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cabang</Label>
                   <Select 
@@ -1751,18 +2169,17 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                </div>
             </FormSection>
             
-            {/* Added extra padding for mobile bottom nav usually covering content */}
-            <div className="h-12 md:hidden"></div>
           </form>
-        </div>
+          </MasterDataDialogBody>
 
-        <SheetFooter className="orderFormFooter masterDataFormActions sticky bottom-0 z-10 shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:gap-0 md:p-6">
+          <DialogFooter className="orderFormFooter masterDataFormActions">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting} className="w-full sm:w-auto mt-2 sm:mt-0">Batal</Button>
           <Button type="submit" form="order-form" disabled={isSubmitting || !!blockingScheduleMessage} className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[140px]">
             {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan...</> : "Simpan Pesanan"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
+          </DialogFooter>
+        </MasterDataFormDialogContent>
+      </Dialog>
 
       <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
         <AlertDialogContent>
@@ -1786,6 +2203,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Sheet>
+    </>
   );
 };

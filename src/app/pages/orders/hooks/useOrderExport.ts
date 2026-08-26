@@ -1,11 +1,18 @@
 import { useCallback } from 'react';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 import { Order } from '../../master-data/data';
 import { getStatusLabel } from '../orderHelpers';
+
+const loadCsvParser = async () => (await import('papaparse')).default;
+const loadSpreadsheet = async () => import('xlsx');
+const loadPdfTools = async () => {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+
+  return { jsPDF, autoTable };
+};
 
 interface UseOrderExportParams {
   filteredOrders: Order[];
@@ -95,46 +102,73 @@ export function useOrderExport({
     return { headers, data };
   }, [filteredOrders, users, services, vehicles, branches, areas, platforms, payments]);
 
-  const handleExportCSV = useCallback(() => {
-    const { headers, data } = getExportData();
-    const csv = Papa.unparse({ fields: headers, data });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `Data_Pesanan_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success("Data berhasil diexport ke CSV");
+  const handleExportCSV = useCallback(async () => {
+    try {
+      const Papa = await loadCsvParser();
+      const { headers, data } = getExportData();
+      const csv = Papa.unparse({ fields: headers, data });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Data_Pesanan_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Data berhasil diexport ke CSV");
+    } catch (error) {
+      console.error("Failed to export orders to CSV", error);
+      toast.error("Gagal export data ke CSV");
+    }
   }, [getExportData]);
 
-  const handleExportXLSX = useCallback(() => {
-    const { headers, data } = getExportData();
-    const wsData = [headers, ...data];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Pesanan");
-    XLSX.writeFile(wb, `Data_Pesanan_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`);
-    toast.success("Data berhasil diexport ke Excel");
+  const handleExportXLSX = useCallback(async () => {
+    const toastId = toast.loading("Menyiapkan file Excel...");
+
+    try {
+      const XLSX = await loadSpreadsheet();
+      const { headers, data } = getExportData();
+      const wsData = [headers, ...data];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Pesanan");
+      XLSX.writeFile(wb, `Data_Pesanan_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`);
+      toast.success("Data berhasil diexport ke Excel");
+    } catch (error) {
+      console.error("Failed to export orders to Excel", error);
+      toast.error("Gagal export data ke Excel");
+    } finally {
+      toast.dismiss(toastId);
+    }
   }, [getExportData]);
 
-  const handleExportPDF = useCallback(() => {
-    const { headers, data } = getExportData();
-    const doc = new jsPDF({ orientation: 'landscape' });
+  const handleExportPDF = useCallback(async () => {
+    const toastId = toast.loading("Menyiapkan file PDF...");
 
-    autoTable(doc, {
-      head: [headers],
-      body: data,
-      styles: { fontSize: 6 },
-      headStyles: { fillColor: [22, 163, 74] },
-    });
+    try {
+      const { jsPDF, autoTable } = await loadPdfTools();
+      const { headers, data } = getExportData();
+      const doc = new jsPDF({ orientation: 'landscape' });
 
-    doc.save(`Data_Pesanan_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.pdf`);
-    toast.success("Data berhasil diexport ke PDF");
+      autoTable(doc, {
+        head: [headers],
+        body: data,
+        styles: { fontSize: 6 },
+        headStyles: { fillColor: [22, 163, 74] },
+      });
+
+      doc.save(`Data_Pesanan_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.pdf`);
+      toast.success("Data berhasil diexport ke PDF");
+    } catch (error) {
+      console.error("Failed to export orders to PDF", error);
+      toast.error("Gagal export data ke PDF");
+    } finally {
+      toast.dismiss(toastId);
+    }
   }, [getExportData]);
 
-  const handleDownloadTemplate = useCallback(() => {
+  const handleDownloadTemplate = useCallback(async () => {
     const templateData = [
       {
         "Tanggal Lead": "2025-01-01",
@@ -165,11 +199,21 @@ export function useOrderExport({
       }
     ];
 
-    const ws = XLSX.utils.json_to_sheet(templateData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "Template_Import_Pesanan.xlsx");
-    toast.success("Template Excel berhasil didownload");
+    const toastId = toast.loading("Menyiapkan template Excel...");
+
+    try {
+      const XLSX = await loadSpreadsheet();
+      const ws = XLSX.utils.json_to_sheet(templateData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template");
+      XLSX.writeFile(wb, "Template_Import_Pesanan.xlsx");
+      toast.success("Template Excel berhasil didownload");
+    } catch (error) {
+      console.error("Failed to download order import template", error);
+      toast.error("Gagal download template Excel");
+    } finally {
+      toast.dismiss(toastId);
+    }
   }, []);
 
   return {

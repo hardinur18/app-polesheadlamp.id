@@ -8,13 +8,12 @@ import {
   ChevronUpIcon,
 } from "lucide-react";
 
-import { cn, stripFigmaProps } from "./utils";
+import { cn, stripInternalDomProps } from "./utils";
 
-// Wrapper to prevent Figma Make's compiler from injecting _fg* props into Radix primitives
 function createCleanRadix<T extends React.ElementType>(Primitive: T, wrapAsChild: boolean = false) {
   const CleanPrimitive = React.forwardRef<React.ElementRef<T>, React.ComponentPropsWithoutRef<T>>(
     (props, ref) => {
-      const cleanProps = stripFigmaProps(props as Record<string, unknown>);
+      const cleanProps = stripInternalDomProps(props as Record<string, unknown>);
       
       if (wrapAsChild && cleanProps.asChild && React.isValidElement(cleanProps.children)) {
         if (typeof cleanProps.children.type !== 'string') {

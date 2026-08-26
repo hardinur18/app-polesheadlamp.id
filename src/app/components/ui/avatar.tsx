@@ -3,15 +3,7 @@
 import * as React from "react";
 import * as AvatarPrimitive from "@radix-ui/react-avatar";
 
-import { cn } from "./utils";
-
-// Strip Figma inspector props (_fgT, _fgS, _fgB, etc.) that leak into DOM elements
-// from Figma Make's FGCmp wrapper system.
-function stripFigmaProps<T extends Record<string, unknown>>(props: T): T {
-  return Object.fromEntries(
-    Object.entries(props).filter(([key]) => !key.startsWith("_fg"))
-  ) as T;
-}
+import { cn, stripInternalDomProps } from "./utils";
 
 function Avatar({
   className,
@@ -24,7 +16,7 @@ function Avatar({
         "relative flex size-10 shrink-0 overflow-hidden rounded-full",
         className,
       )}
-      {...stripFigmaProps(props as unknown as Record<string, unknown>)}
+      {...stripInternalDomProps(props as unknown as Record<string, unknown>)}
     />
   );
 }
@@ -37,7 +29,7 @@ function AvatarImage({
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
-      {...stripFigmaProps(props as unknown as Record<string, unknown>)}
+      {...stripInternalDomProps(props as unknown as Record<string, unknown>)}
     />
   );
 }
@@ -53,7 +45,7 @@ function AvatarFallback({
         "bg-muted flex size-full items-center justify-center rounded-full",
         className,
       )}
-      {...stripFigmaProps(props as unknown as Record<string, unknown>)}
+      {...stripInternalDomProps(props as unknown as Record<string, unknown>)}
     />
   );
 }

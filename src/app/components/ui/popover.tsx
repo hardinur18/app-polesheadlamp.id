@@ -3,12 +3,12 @@
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
-import { cn, stripFigmaProps } from "./utils";
+import { cn, stripInternalDomProps } from "./utils";
 
 function createCleanRadix<T extends React.ElementType>(Primitive: T, wrapAsChild: boolean = false) {
   const CleanPrimitive = React.forwardRef<React.ElementRef<T>, React.ComponentPropsWithoutRef<T>>(
     (props, ref) => {
-      const cleanProps = stripFigmaProps(props as Record<string, unknown>);
+      const cleanProps = stripInternalDomProps(props as Record<string, unknown>);
       
       if (wrapAsChild && cleanProps.asChild && React.isValidElement(cleanProps.children)) {
         if (typeof cleanProps.children.type !== 'string') {

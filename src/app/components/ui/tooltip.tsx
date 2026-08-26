@@ -3,12 +3,12 @@
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
-import { cn, stripFigmaProps } from "./utils";
+import { cn, stripInternalDomProps } from "./utils";
 
 function createCleanRadix<T extends React.ElementType>(Primitive: T, wrapAsChild: boolean = false) {
   const CleanPrimitive = React.forwardRef<React.ElementRef<T>, React.ComponentPropsWithoutRef<T>>(
     (props, ref) => {
-      const cleanProps = stripFigmaProps(props as Record<string, unknown>);
+      const cleanProps = stripInternalDomProps(props as Record<string, unknown>);
       
       if (wrapAsChild && cleanProps.asChild && React.isValidElement(cleanProps.children)) {
         if (typeof cleanProps.children.type !== 'string') {
@@ -37,7 +37,7 @@ function TooltipProvider({
   delayDuration = 0,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
-  const { children, ...cleanProps } = stripFigmaProps(
+  const { children, ...cleanProps } = stripInternalDomProps(
     props as Record<string, unknown>,
   ) as unknown as React.ComponentProps<typeof TooltipPrimitive.Provider>;
 
@@ -57,7 +57,7 @@ function Tooltip({
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
   return (
     <TooltipProvider>
-      <TooltipPrimitive.Root data-slot="tooltip" {...stripFigmaProps(props as Record<string, unknown>)} />
+      <TooltipPrimitive.Root data-slot="tooltip" {...stripInternalDomProps(props as Record<string, unknown>)} />
     </TooltipProvider>
   );
 }

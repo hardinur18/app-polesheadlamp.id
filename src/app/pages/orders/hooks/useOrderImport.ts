@@ -1,6 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { Order } from '../../master-data/data';
 import {
@@ -9,6 +7,9 @@ import {
   isTechnicianRole,
 } from '@/app/data/roleHelpers';
 import { normalizeOrderTime } from '@/app/services/orderTime';
+
+const loadCsvParser = async () => (await import('papaparse')).default;
+const loadSpreadsheet = async () => import('xlsx');
 
 interface UseOrderImportParams {
   users: any[];
@@ -83,7 +84,7 @@ export function useOrderImport({
     setImportPreviewData([]);
   }, [addOrder]);
 
-  const handleImportOrders = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportOrders = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -226,18 +227,29 @@ export function useOrderImport({
     };
 
     if (file.name.match(/\.csv$/i)) {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: async (results) => {
-          await processRows(results.data as any[]);
-        }
-      });
+      try {
+        const Papa = await loadCsvParser();
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: async (results) => {
+            await processRows(results.data as any[]);
+          },
+          error: (error) => {
+            console.error("Error reading CSV file:", error);
+            toast.error("Gagal membaca file CSV.");
+          },
+        });
+      } catch (error) {
+        console.error("Error loading CSV parser:", error);
+        toast.error("Gagal menyiapkan import CSV.");
+      }
     } else if (file.name.match(/\.(xlsx|xls)$/i)) {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const data = e.target?.result;
         try {
+          const XLSX = await loadSpreadsheet();
           const workbook = XLSX.read(data, { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];

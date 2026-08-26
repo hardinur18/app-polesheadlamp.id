@@ -2,15 +2,7 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
-import { cn } from "./utils";
-
-// Strip Figma inspector props (_fgT, _fgS, _fgB, etc.) that leak into DOM elements
-// from Figma Make's FGCmp wrapper system.
-function stripFigmaProps<T extends Record<string, unknown>>(props: T): T {
-  return Object.fromEntries(
-    Object.entries(props).filter(([key]) => !key.startsWith("_fg"))
-  ) as T;
-}
+import { cn, stripInternalDomProps } from "./utils";
 
 const badgeVariants = cva(
   "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
@@ -86,7 +78,7 @@ function Badge({
         size === "sm" && "px-1.5 py-0 text-[10px]",
         className,
       )}
-      {...stripFigmaProps(props as unknown as Record<string, unknown>)}
+      {...stripInternalDomProps(props as unknown as Record<string, unknown>)}
     >
       {renderedChildren}
     </Comp>

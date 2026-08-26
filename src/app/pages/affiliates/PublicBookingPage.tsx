@@ -218,7 +218,6 @@ export const PublicBookingPage: React.FC = () => {
       
       <p className="mt-8 text-xs text-slate-400 dark:text-slate-500 text-center max-w-xs">
         &copy; {new Date().getFullYear()} RHI System. All rights reserved.<br/>
-        Apps by Figma Make
       </p>
     </div>
   );

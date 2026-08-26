@@ -14,7 +14,6 @@ import { DataTable, createDataTableColumns } from '../components/ui/data-table';
 import { Badge } from '../components/ui/badge';
 import { Modal } from '../components/ui/Modal';
 import { Tabs, TabsContent, TabsList, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
-import { MapCard } from '../components/ui/MapCard';
 import {
   Tooltip,
   TooltipContent,
@@ -64,12 +63,8 @@ import { AdAccount, AdAccountAssignment, Order, WATemplate } from './master-data
 import { getTodayDateKey } from './master-data/dateKeys';
 import { FoundationDateRangePicker } from '../components/ui/date-range-picker';
 import { startOfDay, endOfDay } from 'date-fns';
-import { OrderForm } from './orders/OrderForm';
-import { OrderDetailDialog } from './orders/OrderDetailDialog';
-import { OrderPaymentDialog } from './orders/OrderPaymentDialog';
 import { OrderStatusReasonFields } from './orders/OrderStatusReasonFields';
 import { toast } from 'sonner';
-import { ImportPreviewModal } from './orders/ImportPreviewModal';
 import { isReasonRequiredStatus } from './orders/cancelReasonOptions';
 import { getCoordinatesFromUrl, expandShortUrl } from '../../utils/mapUtils';
 import { Upload } from '../components/ui/Upload';
@@ -95,6 +90,26 @@ import {
   saveOrderToCrmContact,
   saveOrdersToCrmContacts,
 } from '@/app/services/crmContactsService';
+
+const MapCard = React.lazy(() =>
+  import('../components/ui/MapCard').then((module) => ({ default: module.MapCard })),
+);
+
+const OrderForm = React.lazy(() =>
+  import('./orders/OrderForm').then((module) => ({ default: module.OrderForm })),
+);
+
+const OrderDetailDialog = React.lazy(() =>
+  import('./orders/OrderDetailDialog').then((module) => ({ default: module.OrderDetailDialog })),
+);
+
+const OrderPaymentDialog = React.lazy(() =>
+  import('./orders/OrderPaymentDialog').then((module) => ({ default: module.OrderPaymentDialog })),
+);
+
+const ImportPreviewModal = React.lazy(() =>
+  import('./orders/ImportPreviewModal').then((module) => ({ default: module.ImportPreviewModal })),
+);
 
 const ORDER_ACTION_ICON_CLASS =
   'relative h-8 w-8 rounded-md bg-transparent p-0 text-slate-500 shadow-none transition-colors hover:bg-transparent hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-200 dark:text-slate-400 dark:hover:text-slate-100';
@@ -309,7 +324,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     const map = new Map<string, string>();
     [...adAccountOwnerAssignments]
       .filter(isActiveAdAssignment)
-      .sort((left, right) => right.startDate.localeCompare(left.startDate))
+      .sort((left, right) => (right.startDate || '').localeCompare(left.startDate || ''))
       .forEach((assignment) => {
         if (!map.has(assignment.adAccountId)) {
           map.set(assignment.adAccountId, assignment.advertiserId);
@@ -582,6 +597,12 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     return target instanceof HTMLElement && Boolean(target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR));
   };
 
+  const isOrderCardInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLElement) => {
+    if (!(target instanceof HTMLElement)) return false;
+    const interactiveElement = target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR);
+    return Boolean(interactiveElement && interactiveElement !== currentTarget);
+  };
+
   const resetOrderTableDrag = (target: HTMLDivElement, pointerId?: number) => {
     if (pointerId !== undefined && target.hasPointerCapture?.(pointerId)) {
       target.releasePointerCapture(pointerId);
@@ -679,6 +700,20 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
   const handleOrderRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>, order: Order) => {
     if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target)) return;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleViewDetail(order);
+    }
+  };
+
+  const handleOrderCardClick = (event: React.MouseEvent<HTMLDivElement>, order: Order) => {
+    if (!canViewOrderDetails || isOrderCardInteractiveTarget(event.target, event.currentTarget)) return;
+    handleViewDetail(order);
+  };
+
+  const handleOrderCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, order: Order) => {
+    if (!canViewOrderDetails || isOrderCardInteractiveTarget(event.target, event.currentTarget)) return;
 
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -1361,47 +1396,61 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         <OperationalTableCard className="orderContentPanel">
           
           {/* Toolbar */}
-          <OperationalFilterPanel className="orderFilterPanel rounded-none border-0 border-b border-slate-100 p-4 shadow-none dark:border-slate-700 md:p-5">
+          <OperationalFilterPanel className="orderFilterPanel orderControlPanel rounded-none border-0 border-b border-slate-100 p-4 shadow-none dark:border-slate-700 md:p-5">
             
             {/* Row 1: Status Filter */}
-            <div
-              className="orderStatusStrip"
-              role="tablist"
-              aria-label="Filter status pesanan"
-              onPointerDown={handleOrderStatusPointerDown}
-              onPointerMove={handleOrderStatusPointerMove}
-              onPointerUp={handleOrderStatusPointerEnd}
-              onPointerCancel={handleOrderStatusPointerEnd}
-            >
-              <Button 
-                variant={statusFilter === 'all' ? 'default' : 'outline'} 
-                size="sm" 
-                onClick={(event) => handleOrderStatusFilterClick(event, 'all')}
-                className={`orderStatusChip ${statusFilter === 'all' ? 'isActive' : ''}`}
+            <div className="orderStatusRail">
+              <div
+                className="orderStatusStrip"
+                role="tablist"
+                aria-label="Filter status pesanan"
+                onPointerDown={handleOrderStatusPointerDown}
+                onPointerMove={handleOrderStatusPointerMove}
+                onPointerUp={handleOrderStatusPointerEnd}
+                onPointerCancel={handleOrderStatusPointerEnd}
               >
-                Semua
-                <span className="orderStatusCount">
-                   {filteredOrdersBase.length}
-                </span>
-              </Button>
-               {ORDER_STATUS_FILTER_OPTIONS.map(option => (
-                  <Button 
-                    key={option.value}
-                    variant={statusFilter === option.value ? 'default' : 'outline'} 
-                    size="sm" 
-                    onClick={(event) => handleOrderStatusFilterClick(event, option.value)}
-                    className={`orderStatusChip ${statusFilter === option.value ? 'isActive' : ''}`}
-                  >
-                    {option.label}
-                    <span className="orderStatusCount">
-                       {statusCounts[option.value] || 0}
-                    </span>
-                  </Button>
-               ))}
+                <Button
+                  variant={statusFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={(event) => handleOrderStatusFilterClick(event, 'all')}
+                  className={`orderStatusChip ${statusFilter === 'all' ? 'isActive' : ''}`}
+                >
+                  Semua
+                  <span className="orderStatusCount">
+                     {filteredOrdersBase.length}
+                  </span>
+                </Button>
+                 {ORDER_STATUS_FILTER_OPTIONS.map(option => (
+                    <Button
+                      key={option.value}
+                      variant={statusFilter === option.value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={(event) => handleOrderStatusFilterClick(event, option.value)}
+                      className={`orderStatusChip ${statusFilter === option.value ? 'isActive' : ''}`}
+                    >
+                      {option.label}
+                      <span className="orderStatusCount">
+                         {statusCounts[option.value] || 0}
+                      </span>
+                    </Button>
+                 ))}
+              </div>
             </div>
 
             {/* Row 2: Filters & Search */}
             <div className={`orderFilterGrid ${statusFilter === 'cancelled' ? 'hasCancelReason' : ''}`}>
+              <div className="orderFilterMode">
+                <Select value={dateFilterMode} onValueChange={(v: any) => setDateFilterMode(v)}>
+                  <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="service">Jadwal Service</SelectItem>
+                    <SelectItem value="lead">Tanggal Leads</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="orderFilterDate">
                 <FoundationDateRangePicker
                   date={dateRange}
@@ -1410,16 +1459,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   contentClassName="orderDateRangePopover"
                 />
               </div>
-
-              <Select value={dateFilterMode} onValueChange={(v: any) => setDateFilterMode(v)}>
-                <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="service">Jadwal Service</SelectItem>
-                  <SelectItem value="lead">Tanggal Leads</SelectItem>
-                </SelectContent>
-              </Select>
 
               <div className="orderSearchSlot relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
@@ -1432,23 +1471,26 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
               </div>
 
               {statusFilter === 'cancelled' && (
-                <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
-                  <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
-                    <SelectValue placeholder="Semua alasan cancel" />
-                  </SelectTrigger>
-                  <SelectContent className="z-[200]">
-                    <SelectItem value="all">Semua alasan cancel</SelectItem>
-                    {cancelReasonFilterOptions.map((option) => (
-                      <SelectItem key={option.label} value={option.label}>
-                        {option.label} ({option.count})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="orderCancelReason">
+                  <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
+                    <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
+                      <SelectValue placeholder="Semua alasan cancel" />
+                    </SelectTrigger>
+                    <SelectContent className="z-[200]">
+                      <SelectItem value="all">Semua alasan cancel</SelectItem>
+                      {cancelReasonFilterOptions.map((option) => (
+                        <SelectItem key={option.label} value={option.label}>
+                          {option.label} ({option.count})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
 
               {/* Filter Button (Sheet) */}
               <Sheet>
+                <div className="orderFilterAction">
                  <SheetTrigger asChild>
                     <Button
                         variant="outline"
@@ -1463,6 +1505,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                        )}
                     </Button>
                  </SheetTrigger>
+                </div>
                  <SheetContent side="right" className="w-[400px] sm:w-[540px] z-[150] flex flex-col h-full p-0 gap-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800">
                       <SheetHeader className="text-left p-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
                         <SheetTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Filter Pesanan</SheetTitle>
@@ -2478,27 +2521,27 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             </table>
             </DataTable>
             {/* Pagination Controls */}
-            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 p-4">
-              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                   <div className="flex items-center">
+            <div className="orderTablePagination">
+              <div className="orderPaginationMeta">
+                   <div className="orderPaginationStepper">
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400" 
+                        className="orderPaginationButton"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                       >
                          &lt;
                       </Button>
-                      <div className="flex items-center justify-center min-w-[32px] font-medium text-slate-700 dark:text-slate-200">
+                      <div className="orderPaginationCurrent">
                         {currentPage}
                       </div>
-                      <span className="text-slate-400 mx-1">/</span>
-                      <span className="text-slate-400 mr-2">{totalPages}</span>
+                      <span className="orderPaginationSeparator">/</span>
+                      <span className="orderPaginationTotal">{totalPages}</span>
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400" 
+                        className="orderPaginationButton"
                         disabled={currentPage === totalPages || totalPages === 0}
                         onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                       >
@@ -2507,8 +2550,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                    </div>
               </div>
               
-              <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tampilkan:</span>
+              <div className="orderPageSizeControl">
+                  <span className="orderPageSizeLabel">Tampilkan</span>
                   <Select 
                      value={itemsPerPage.toString()} 
                      onValueChange={(val) => {
@@ -2516,7 +2559,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                          setCurrentPage(1);
                      }}
                   >
-                      <SelectTrigger className="w-[140px] h-8 text-xs bg-white dark:bg-slate-800 border border-blue-200 dark:border-slate-700 hover:border-blue-300 focus:ring-blue-200 text-slate-700 dark:text-slate-300 rounded-md shadow-sm">
+                      <SelectTrigger className="orderPageSizeTrigger">
                           <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-[200]">
@@ -2738,7 +2781,15 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                      );
 
                      return (
-                     <div key={order.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4">
+                     <div
+                        key={order.id}
+                        role={canViewOrderDetails ? 'button' : undefined}
+                        tabIndex={canViewOrderDetails ? 0 : undefined}
+                        aria-label={canViewOrderDetails ? `Buka detail pesanan ${order.id}` : undefined}
+                        onClick={(event) => handleOrderCardClick(event, order)}
+                        onKeyDown={(event) => handleOrderCardKeyDown(event, order)}
+                        className={`orderMobileCard bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 ${canViewOrderDetails ? 'isInteractive' : ''}`}
+                     >
                         {/* Header Row: ID + Status */}
                         <div className="flex justify-between items-center mb-2">
                             <div className="flex items-center gap-2">
@@ -2819,31 +2870,31 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                  })
               )}
               {paginatedOrders.length > 0 && (
-                <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                  <div className="flex items-center justify-between gap-3">
+                <div className="orderMobilePagination">
+                  <div className="orderMobilePaginationTop">
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700"
+                      className="orderPaginationButton"
                       disabled={currentPage === 1}
                       onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     >
                       &lt;
                     </Button>
-                    <div className="min-w-0 text-center">
-                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    <div className="orderMobilePaginationInfo">
+                      <p>
                         Halaman {currentPage} / {totalPages || 1}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>
                         Menampilkan {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredOrders.length)} dari {filteredOrders.length}
-                      </p>
+                      </span>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700"
+                      className="orderPaginationButton"
                       disabled={currentPage === totalPages || totalPages === 0}
                       onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     >
@@ -2851,8 +2902,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                     </Button>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tampilkan</span>
+                  <div className="orderPageSizeControl">
+                    <span className="orderPageSizeLabel">Tampilkan</span>
                     <Select
                       value={itemsPerPage.toString()}
                       onValueChange={(val) => {
@@ -2860,7 +2911,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         setCurrentPage(1);
                       }}
                     >
-                      <SelectTrigger className="h-9 flex-1 bg-white text-xs dark:bg-slate-900">
+                      <SelectTrigger className="orderPageSizeTrigger">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="z-[200]">
@@ -2958,6 +3009,14 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
                    {/* Map Area */}
                    <div className="w-full aspect-[2/3] md:aspect-auto md:flex-1 relative z-0 md:h-full order-1 lg:order-2">
+                     <React.Suspense
+                       fallback={
+                         <div className="flex h-full min-h-[360px] items-center justify-center gap-2 bg-white text-sm font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                           <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                           Memuat peta...
+                         </div>
+                       }
+                     >
                         <MapCard 
                             groups={routeGroups} 
                             branches={branchPoints}
@@ -2965,6 +3024,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                             showLegend={false} 
                             className="border-none rounded-none" 
                         />
+                     </React.Suspense>
                    </div>
                 </div>
              </div>
@@ -3028,30 +3088,38 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         </Sheet>
 
         {/* Order Form Modal */}
-        <OrderForm 
-          isOpen={isFormOpen}
-          onClose={() => setIsFormOpen(false)}
-          initialData={editingOrder}
-        />
-
-        {/* Order Detail Modal */}
-        {detailOrder && (
-        <OrderDetailDialog 
-           isOpen={isDetailOpen}
-           onClose={() => setIsDetailOpen(false)}
-           order={detailOrder}
-        />
+        {isFormOpen && (
+          <React.Suspense fallback={null}>
+            <OrderForm
+              isOpen={isFormOpen}
+              onClose={() => setIsFormOpen(false)}
+              initialData={editingOrder}
+            />
+          </React.Suspense>
         )}
 
-        {paymentOrder && (
-        <OrderPaymentDialog
-           isOpen={isPaymentDialogOpen}
-           onClose={() => {
-             setIsPaymentDialogOpen(false);
-             setPaymentOrder(null);
-           }}
-           order={paymentOrder}
-        />
+        {/* Order Detail Modal */}
+        {detailOrder && isDetailOpen && (
+          <React.Suspense fallback={null}>
+            <OrderDetailDialog
+              isOpen={isDetailOpen}
+              onClose={() => setIsDetailOpen(false)}
+              order={detailOrder}
+            />
+          </React.Suspense>
+        )}
+
+        {paymentOrder && isPaymentDialogOpen && (
+          <React.Suspense fallback={null}>
+            <OrderPaymentDialog
+              isOpen={isPaymentDialogOpen}
+              onClose={() => {
+                setIsPaymentDialogOpen(false);
+                setPaymentOrder(null);
+              }}
+              order={paymentOrder}
+            />
+          </React.Suspense>
         )}
 
         {/* Photo Viewer Modal */}
@@ -3161,15 +3229,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         </Modal>
 
       {/* Import Preview Dialog */}
-      <ImportPreviewModal 
-        isOpen={isImportPreviewOpen}
-        onClose={() => {
-            setIsImportPreviewOpen(false);
-            setImportPreviewData([]);
-        }}
-        onConfirm={handleConfirmImport}
-        initialData={importPreviewData}
-      />
+      {isImportPreviewOpen && (
+        <React.Suspense fallback={null}>
+          <ImportPreviewModal
+            isOpen={isImportPreviewOpen}
+            onClose={() => {
+              setIsImportPreviewOpen(false);
+              setImportPreviewData([]);
+            }}
+            onConfirm={handleConfirmImport}
+            initialData={importPreviewData}
+          />
+        </React.Suspense>
+      )}
 
         {/* Delete Confirmation */}
         <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

@@ -4,20 +4,12 @@ import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
-import { cn } from "./utils";
+import { cn, stripInternalDomProps } from "./utils";
 
-function stripFigmaProps<T extends Record<string, unknown>>(props: T): T {
-  return Object.fromEntries(
-    Object.entries(props).filter(([key]) => !key.startsWith("_fg"))
-  ) as T;
-}
-
-// Wrapper to prevent Figma Make's compiler from injecting _fg* props into Radix primitives
-// by avoiding JSX for the actual primitive calls.
 function createCleanRadix<T extends React.ElementType>(Primitive: T, wrapAsChild: boolean = false) {
   const CleanPrimitive = React.forwardRef<React.ElementRef<T>, React.ComponentPropsWithoutRef<T>>(
     (props, ref) => {
-      const cleanProps = stripFigmaProps(props as Record<string, unknown>);
+      const cleanProps = stripInternalDomProps(props as Record<string, unknown>);
       
       if (wrapAsChild && cleanProps.asChild && React.isValidElement(cleanProps.children)) {
         if (typeof cleanProps.children.type !== 'string') {
@@ -191,7 +183,7 @@ const DropdownMenuShortcut = ({
         "text-muted-foreground ml-auto text-xs tracking-widest",
         className
       )}
-      {...stripFigmaProps(props as Record<string, unknown>) as React.HTMLAttributes<HTMLSpanElement>}
+      {...stripInternalDomProps(props as Record<string, unknown>) as React.HTMLAttributes<HTMLSpanElement>}
     />
   );
 };

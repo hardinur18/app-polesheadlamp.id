@@ -185,6 +185,32 @@ const dayPickerClassNames = {
   day_hidden: "invisible",
 };
 
+const useCompactPeriodPicker = (enabled: boolean) => {
+  const [isCompact, setIsCompact] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!enabled || typeof window === "undefined") {
+      setIsCompact(false);
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 900px)");
+    const syncCompactState = () => setIsCompact(mediaQuery.matches);
+
+    syncCompactState();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncCompactState);
+      return () => mediaQuery.removeEventListener("change", syncCompactState);
+    }
+
+    mediaQuery.addListener(syncCompactState);
+    return () => mediaQuery.removeListener(syncCompactState);
+  }, [enabled]);
+
+  return isCompact;
+};
+
 export function PeriodFilterPicker({
   date,
   setDate,
@@ -197,6 +223,8 @@ export function PeriodFilterPicker({
   const isFoundationVariant = variant === "foundation";
   const resolvedNumberOfMonths = numberOfMonths ?? (isFoundationVariant ? 2 : 1);
   const resolvedTriggerLabelMode = triggerLabelMode ?? (isFoundationVariant ? "compact" : "full");
+  const isCompactFoundationPicker = useCompactPeriodPicker(isFoundationVariant);
+  const calendarNumberOfMonths = isCompactFoundationPicker ? 1 : resolvedNumberOfMonths;
   const [isOpen, setIsOpen] = React.useState(false);
   const [panelMode, setPanelMode] = React.useState<PeriodPanelMode>("month");
   const [pickerMonth, setPickerMonth] = React.useState(() => new Date());
@@ -422,8 +450,9 @@ export function PeriodFilterPicker({
                 mode="single"
                 locale={localeId}
                 showOutsideDays
+                fixedWeeks
                 month={pickerMonth}
-                numberOfMonths={resolvedNumberOfMonths}
+                numberOfMonths={calendarNumberOfMonths}
                 onMonthChange={setPickerMonth}
                 selected={selectedFromDate}
                 onSelect={(day) => {
@@ -439,8 +468,9 @@ export function PeriodFilterPicker({
                 mode="range"
                 locale={localeId}
                 showOutsideDays
+                fixedWeeks
                 month={pickerMonth}
-                numberOfMonths={resolvedNumberOfMonths}
+                numberOfMonths={calendarNumberOfMonths}
                 onMonthChange={setPickerMonth}
                 selected={visibleDraftRange}
                 onDayClick={handleRangeDayClick}
@@ -455,8 +485,9 @@ export function PeriodFilterPicker({
                 mode="range"
                 locale={localeId}
                 showOutsideDays
+                fixedWeeks
                 month={pickerMonth}
-                numberOfMonths={resolvedNumberOfMonths}
+                numberOfMonths={calendarNumberOfMonths}
                 onMonthChange={setPickerMonth}
                 selected={selectedFromDate && selectedToDate ? { from: selectedFromDate, to: selectedToDate } : undefined}
                 onDayClick={(day) => {

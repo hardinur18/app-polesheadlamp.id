@@ -3,13 +3,12 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
 
-import { cn, stripFigmaProps } from "./utils"
+import { cn, stripInternalDomProps } from "./utils"
 
-// Wrapper to prevent Figma Make's compiler from injecting _fg* props into Radix primitives
 function createCleanRadix<T extends React.ElementType>(Primitive: T, wrapAsChild: boolean = false) {
   const CleanPrimitive = React.forwardRef<React.ElementRef<T>, React.ComponentPropsWithoutRef<T>>(
     (props, ref) => {
-      const cleanProps = stripFigmaProps(props as Record<string, unknown>);
+      const cleanProps = stripInternalDomProps(props as Record<string, unknown>);
       
       if (wrapAsChild && cleanProps.asChild && React.isValidElement(cleanProps.children)) {
         if (typeof cleanProps.children.type !== 'string') {
@@ -132,7 +131,7 @@ const SheetHeader = ({
       "flex flex-col space-y-2 text-center sm:text-left",
       className
     )}
-    {...stripFigmaProps(props as Record<string, unknown>)}
+    {...stripInternalDomProps(props as Record<string, unknown>)}
   />
 )
 SheetHeader.displayName = "SheetHeader"
@@ -146,7 +145,7 @@ const SheetFooter = ({
       "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
       className
     )}
-    {...stripFigmaProps(props as Record<string, unknown>)}
+    {...stripInternalDomProps(props as Record<string, unknown>)}
   />
 )
 SheetFooter.displayName = "SheetFooter"
