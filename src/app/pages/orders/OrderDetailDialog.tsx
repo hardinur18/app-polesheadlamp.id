@@ -6,7 +6,6 @@ import { Button } from '../../components/ui/button';
 import { copyToClipboard } from '@/lib/clipboard';
 import { getReasonSectionLabel, isReasonRequiredStatus } from './cancelReasonOptions';
 import { getStatusBadgeVariant, getStatusLabel, getStatusReasonSummary } from './orderHelpers';
-import { OrderInvoicePreviewDialog } from './OrderInvoicePreviewDialog';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { isTechnicianRole } from '@/app/data/roleHelpers';
 import {
@@ -32,6 +31,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
+
+const OrderInvoicePreviewDialog = React.lazy(() =>
+  import('./OrderInvoicePreviewDialog').then((module) => ({ default: module.OrderInvoicePreviewDialog })),
+);
 
 const WhatsappIcon = ({ className }: { className?: string }) => (
   <svg 
@@ -103,6 +106,9 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
     ? (order.photos as any)._status
     : order.status;
   const reasonSummary = getStatusReasonSummary(order, effectiveStatus);
+  const reasonSectionLabel = isReasonRequiredStatus(order.status)
+    ? getReasonSectionLabel(order.status)
+    : 'Alasan Status';
 
   const handleCopyToWhatsApp = async () => {
     const formattedDate = formatDate(order.serviceDate);
@@ -343,7 +349,7 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
                 {branch?.name || '-'}{area?.name ? ` / ${area.name}` : ''}
               </FoundationDetailField>
               {reasonSummary ? (
-                <FoundationDetailField label={getReasonSectionLabel(order.status)} span="full">
+                <FoundationDetailField label={reasonSectionLabel} span="full">
                   {reasonSummary}
                 </FoundationDetailField>
               ) : null}
@@ -420,11 +426,15 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
 
       </MasterDataFormDialogContent>
     </Dialog>
-    <OrderInvoicePreviewDialog
-      isOpen={isInvoicePreviewOpen}
-      onClose={() => setIsInvoicePreviewOpen(false)}
-      context={invoiceContext}
-    />
+    {isInvoicePreviewOpen ? (
+      <React.Suspense fallback={null}>
+        <OrderInvoicePreviewDialog
+          isOpen={isInvoicePreviewOpen}
+          onClose={() => setIsInvoicePreviewOpen(false)}
+          context={invoiceContext}
+        />
+      </React.Suspense>
+    ) : null}
     </>
   );
 }

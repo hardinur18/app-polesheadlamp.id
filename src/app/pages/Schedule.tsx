@@ -15,7 +15,6 @@ import {
 import { getCoordinatesFromUrl, expandShortUrl } from '@/utils/mapUtils';
 import { copyToClipboard } from '@/lib/clipboard';
 import { supabase } from '@/lib/supabaseClient';
-import { ProspectBookingForm } from './leads/ProspectBookingForm';
 import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
@@ -64,6 +63,10 @@ import { toast } from 'sonner';
 
 // --- HELPER COMPONENTS ---
 
+const ProspectBookingForm = React.lazy(() =>
+  import('./leads/ProspectBookingForm').then((module) => ({ default: module.ProspectBookingForm }))
+);
+
 type ScheduleItem = {
   id: string;
   source: 'order' | 'booking';
@@ -87,6 +90,20 @@ type ScheduleItem = {
   branchId?: string;
   areaId?: string;
   status: Order['status'] | ProspectBooking['status'];
+};
+
+type BranchDayCapacity = {
+  used: number;
+  total: number;
+  percentage: number;
+  orders: ScheduleItem[];
+};
+
+const EMPTY_BRANCH_DAY_CAPACITY: BranchDayCapacity = {
+  used: 0,
+  total: 0,
+  percentage: 0,
+  orders: [],
 };
 
 type AddProspectFormRequest = {
@@ -120,6 +137,22 @@ const AVAILABILITY_PRESET_OPTIONS: Array<{
 ];
 
 const toCalendarDate = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const toScheduleDateKey = (value?: string | null) => {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+
+  const parsed = parseISO(trimmed);
+  return isValid(parsed) ? format(parsed, 'yyyy-MM-dd') : null;
+};
+
+const getScheduleMonthKey = (date: Date) => format(date, 'yyyy-MM');
 
 const createAvailabilityPresetRange = (
   presetKey: AvailabilityPreset,
@@ -347,6 +380,15 @@ export default function Schedule() {
   const isAdminManagementUser = isAdminManagementRole(currentRole);
   const isAdvertiserUser = isAdvertiserRole(currentRole);
   const isCsUser = isCsRole(currentRole);
+  const serviceNameById = useMemo(() => {
+    return new Map(services.map((service) => [service.id, service.name]));
+  }, [services]);
+  const userById = useMemo(() => {
+    return new Map(users.map((user) => [user.id, user]));
+  }, [users]);
+  const branchById = useMemo(() => {
+    return new Map(branches.map((branch) => [branch.id, branch]));
+  }, [branches]);
 
   // Filter orders for Advertiser
   const orders = useMemo(() => {
@@ -379,6 +421,8 @@ export default function Schedule() {
   const [view, setView] = useState<ScheduleView>('month');
   const [listDateMode, setListDateMode] = useState<'all' | 'daily'>('all');
   const [currentDate, setCurrentDate] = useState(() => toCalendarDate(new Date()));
+  const currentDateKey = useMemo(() => format(currentDate, 'yyyy-MM-dd'), [currentDate]);
+  const currentMonthKey = useMemo(() => getScheduleMonthKey(currentDate), [currentDate]);
   const [todayDate, setTodayDate] = useState(() => toCalendarDate(new Date()));
   const [showLateOperatingSlot, setShowLateOperatingSlot] = useState(false);
   const [availabilityPreset, setAvailabilityPreset] = useState<AvailabilityPreset | null>('next7');
@@ -482,8 +526,8 @@ export default function Schedule() {
       return `Slot ${slotTime} saat ini tidak aktif di pengaturan jadwal.`;
     }
 
-    const technician = users.find((user) => user.id === booking.technicianId);
-    const branch = branches.find((item) => item.id === booking.branchId);
+    const technician = userById.get(booking.technicianId);
+    const branch = branchById.get(booking.branchId);
     const bookingDate = parseISO(booking.scheduleDate);
     const bookingDateLabel = isValid(bookingDate)
       ? format(bookingDate, 'EEEE, d MMMM yyyy', { locale: id })
@@ -491,10 +535,7 @@ export default function Schedule() {
     const technicianLabel = technician?.name || 'teknisi ini';
     const branchLabel = branch?.name || 'cabang terpilih';
 
-    const offSchedule = technicianSchedules.find((schedule) =>
-      schedule.userId === booking.technicianId &&
-      schedule.date === booking.scheduleDate
-    );
+    const offSchedule = technicianOffScheduleByKey.get(`${booking.scheduleDate}|${booking.technicianId}`);
 
     if (offSchedule) {
       const reasonLabel = offSchedule.reason ? ` (${offSchedule.reason})` : '';
@@ -557,7 +598,7 @@ export default function Schedule() {
       if (offSchedules && offSchedules.length > 0) {
         const offSchedule = offSchedules[0];
         const reasonLabel = offSchedule.reason ? ` (${offSchedule.reason})` : '';
-        const technician = users.find((user) => user.id === booking.technicianId);
+        const technician = userById.get(booking.technicianId);
         return `${technician?.name || 'Teknisi ini'} sedang ${String(offSchedule.type).toLowerCase()}${reasonLabel} pada tanggal tersebut.`;
       }
 
@@ -675,9 +716,35 @@ export default function Schedule() {
     );
   }, [users, selectedBranchId]);
 
+  const activeTechniciansByBranchId = useMemo(() => {
+    const map = new Map<string, typeof users>();
+
+    users.forEach((user) => {
+      if (!isTechnicianRole(user.role) || user.status !== 'active' || !user.branchId) return;
+
+      const current = map.get(user.branchId) || [];
+      current.push(user);
+      map.set(user.branchId, current);
+    });
+
+    return map;
+  }, [users]);
+
+  const technicianOffScheduleByKey = useMemo(() => {
+    return new Map(
+      technicianSchedules.map((schedule) => [`${schedule.date}|${schedule.userId}`, schedule])
+    );
+  }, [technicianSchedules]);
+
   const activeCS = useMemo(() => users.filter((u) => isCsRole(u.role) && u.status === 'active'), [users]);
   const activeAdvertisers = useMemo(() => users.filter((u) => isAdvertiserRole(u.role) && u.status === 'active'), [users]);
   const branchFilterOptions = branches;
+  const selectedDisplayBranches = useMemo(
+    () => selectedBranchId === 'all'
+      ? branches
+      : branches.filter((branch) => branch.id === selectedBranchId),
+    [branches, selectedBranchId],
+  );
 
   const resolveDirectionPoint = async (primary?: string, fallback?: string) => {
     const candidates = [primary?.trim(), fallback?.trim()].filter(Boolean) as string[];
@@ -747,7 +814,7 @@ export default function Schedule() {
       serviceDate: order.serviceDate,
       serviceTime: order.serviceTime,
       serviceId: order.serviceId,
-      serviceLabel: services.find((service) => service.id === order.serviceId)?.name || order.serviceCategory || 'Pesanan',
+      serviceLabel: serviceNameById.get(order.serviceId) || order.serviceCategory || 'Pesanan',
       mapsUrl: order.mapsUrl,
       units: order.units || 1,
       platformId: order.platformId,
@@ -774,7 +841,7 @@ export default function Schedule() {
       serviceDate: booking.scheduleDate,
       serviceTime: booking.scheduleTime,
       serviceId: booking.serviceId,
-      serviceLabel: services.find((service) => service.id === booking.serviceId)?.name || 'Booking Prospek',
+      serviceLabel: serviceNameById.get(booking.serviceId || '') || 'Booking Prospek',
       mapsUrl: booking.mapsUrl,
       units: 1,
       platformId: booking.platformId,
@@ -788,7 +855,7 @@ export default function Schedule() {
     }));
 
     return [...orderItems, ...bookingItems];
-  }, [orders, prospectBookings, services]);
+  }, [orders, prospectBookings, serviceNameById]);
 
   const scheduleConflictByItemKey = useMemo(
     () => buildActiveScheduleConflictMap(orders, prospectBookings),
@@ -832,25 +899,23 @@ export default function Schedule() {
   const hasLateOperatingSchedulesInScope = useMemo(() => {
     return scheduleItems.some((item) => {
       if (isInactiveScheduleItem(item)) return false;
-      if (!item.serviceDate) return false;
+      const itemDateKey = toScheduleDateKey(item.serviceDate);
+      if (!itemDateKey) return false;
       if (selectedBranchId !== 'all' && item.branchId !== selectedBranchId) return false;
       if (selectedCSId !== 'all' && item.csId !== selectedCSId) return false;
       if (selectedTechId !== 'all' && item.technicianId !== selectedTechId) return false;
       if (selectedAdvertiserId !== 'all' && item.advertiserId !== selectedAdvertiserId) return false;
       if (getOperationalSlotTime(item.serviceTime) !== OPTIONAL_OPERATING_SLOT) return false;
 
-      const itemDate = parseISO(item.serviceDate);
-      if (!isValid(itemDate)) return false;
-
       if (view === 'availability') {
-        return item.serviceDate >= availabilityRangeStartStr && item.serviceDate <= availabilityRangeEndStr;
+        return itemDateKey >= availabilityRangeStartStr && itemDateKey <= availabilityRangeEndStr;
       }
 
       if (view === 'day' || (view === 'list' && listDateMode === 'daily')) {
-        return isSameDay(itemDate, currentDate);
+        return itemDateKey === currentDateKey;
       }
 
-      return isSameMonth(itemDate, currentDate);
+      return itemDateKey.startsWith(currentMonthKey);
     });
   }, [
     scheduleItems,
@@ -860,7 +925,8 @@ export default function Schedule() {
     selectedAdvertiserId,
     view,
     listDateMode,
-    currentDate,
+    currentDateKey,
+    currentMonthKey,
     availabilityRangeStartStr,
     availabilityRangeEndStr,
   ]);
@@ -883,10 +949,10 @@ export default function Schedule() {
     [displayOperatingSlots]
   );
 
-  const getDisplayOperationalSlotTime = (serviceTime?: string) => {
+  const getDisplayOperationalSlotTime = React.useCallback((serviceTime?: string) => {
     const slotTime = getOperationalSlotTime(serviceTime);
     return slotTime && displayOperatingSlotSet.has(slotTime) ? slotTime : null;
-  };
+  }, [displayOperatingSlotSet]);
 
   const availabilityBranches = useMemo(
     () => (selectedBranchId === 'all' ? branches : branches.filter((branch) => branch.id === selectedBranchId)),
@@ -895,6 +961,7 @@ export default function Schedule() {
 
   const availabilitySlotItemsMap = useMemo(() => {
     const map = new Map<string, ScheduleItem[]>();
+    if (view !== 'availability') return map;
 
     scheduleItems.forEach((item) => {
       if (isInactiveScheduleItem(item)) return;
@@ -912,10 +979,11 @@ export default function Schedule() {
     });
 
     return map;
-  }, [scheduleItems, availabilityRangeStartStr, availabilityRangeEndStr, selectedBranchId, displayOperatingSlotSet]);
+  }, [scheduleItems, availabilityRangeStartStr, availabilityRangeEndStr, selectedBranchId, getDisplayOperationalSlotTime, view]);
 
   const availabilityOffMap = useMemo(() => {
     const map = new Map<string, TechnicianSchedule>();
+    if (view !== 'availability') return map;
 
     technicianSchedules.forEach((schedule) => {
       if (schedule.date < availabilityRangeStartStr || schedule.date > availabilityRangeEndStr) return;
@@ -923,14 +991,16 @@ export default function Schedule() {
     });
 
     return map;
-  }, [technicianSchedules, availabilityRangeStartStr, availabilityRangeEndStr]);
+  }, [technicianSchedules, availabilityRangeStartStr, availabilityRangeEndStr, view]);
 
   const availabilityCards = useMemo(() => {
+    if (view !== 'availability') return [];
+
     return availabilityDates.map((date) => {
       const dateStr = format(date, 'yyyy-MM-dd');
 
       const branchSections = availabilityBranches.map((branch) => {
-        const branchTechnicians = activeTechnicians.filter((tech) => tech.branchId === branch.id);
+        const branchTechnicians = activeTechniciansByBranchId.get(branch.id) || [];
 
         const technicians = branchTechnicians.map((tech) => {
           const offSchedule = availabilityOffMap.get(`${dateStr}|${tech.id}`);
@@ -982,19 +1052,20 @@ export default function Schedule() {
         offCount: branchSections.reduce((total, branch) => total + branch.offCount, 0),
       };
     });
-  }, [availabilityDates, availabilityBranches, activeTechnicians, availabilityOffMap, availabilitySlotItemsMap, displayOperatingSlots, bookableOperatingSlotSet]);
+  }, [availabilityDates, availabilityBranches, activeTechniciansByBranchId, availabilityOffMap, availabilitySlotItemsMap, displayOperatingSlots, bookableOperatingSlotSet, view]);
 
   const availabilitySummary = useMemo(() => {
     return {
       totalDates: availabilityCards.length,
-      totalTechnicians: activeTechnicians.filter((tech) =>
-        selectedBranchId === 'all' ? true : tech.branchId === selectedBranchId
-      ).length,
+      totalTechnicians: selectedDisplayBranches.reduce(
+        (total, branch) => total + (activeTechniciansByBranchId.get(branch.id) || []).length,
+        0
+      ),
       totalEmptySlots: availabilityCards.reduce((total, day) => total + day.emptyCount, 0),
       totalOccupiedSlots: availabilityCards.reduce((total, day) => total + day.occupiedCount, 0),
       totalOffSlots: availabilityCards.reduce((total, day) => total + day.offCount, 0),
     };
-  }, [availabilityCards, activeTechnicians, selectedBranchId]);
+  }, [availabilityCards, activeTechniciansByBranchId, selectedDisplayBranches]);
 
   const branchAvailabilityLabel = selectedBranchId === 'all'
     ? 'semua cabang'
@@ -1015,10 +1086,10 @@ export default function Schedule() {
   const availabilityHeaderInfoLabel = useMemo(() => {
     const branchLabel = selectedBranchId === 'all'
       ? 'Semua Cabang'
-      : branches.find((branch) => branch.id === selectedBranchId)?.name || 'Cabang Terpilih';
+      : branchById.get(selectedBranchId)?.name || 'Cabang Terpilih';
 
     return `Slot kosong ${availabilityPeriodLabel.toLowerCase()} - ${branchLabel}`;
-  }, [availabilityPeriodLabel, branches, selectedBranchId]);
+  }, [availabilityPeriodLabel, branchById, selectedBranchId]);
 
   const availabilityCopyText = useMemo(() => {
     const lines = [
@@ -1086,10 +1157,13 @@ export default function Schedule() {
     selectedBranchId,
   ]);
 
-  const hasCopyableAvailability = availabilityCards.some((day) =>
-    day.branches.some((branch) =>
-      branch.technicians.some((technician) => technician.slots.some((slot) => slot.state === 'empty'))
-    )
+  const hasCopyableAvailability = useMemo(
+    () => availabilityCards.some((day) =>
+      day.branches.some((branch) =>
+        branch.technicians.some((technician) => technician.slots.some((slot) => slot.state === 'empty'))
+      )
+    ),
+    [availabilityCards],
   );
 
   const handleCopyAvailability = async () => {
@@ -1114,23 +1188,75 @@ export default function Schedule() {
     );
   }, [scheduleItems, selectedBranchId, selectedCSId, selectedTechId, selectedAdvertiserId]);
 
+  const scheduleItemsByDate = useMemo(() => {
+    const map = new Map<string, ScheduleItem[]>();
+
+    viewScheduleItems.forEach((item) => {
+      const dateKey = toScheduleDateKey(item.serviceDate);
+      if (!dateKey) return;
+
+      const current = map.get(dateKey) || [];
+      current.push(item);
+      map.set(dateKey, current);
+    });
+
+    return map;
+  }, [viewScheduleItems]);
+
+  const scheduleItemsByDateBranch = useMemo(() => {
+    const map = new Map<string, Map<string, ScheduleItem[]>>();
+
+    viewScheduleItems.forEach((item) => {
+      const dateKey = toScheduleDateKey(item.serviceDate);
+      if (!dateKey || !item.branchId) return;
+
+      let branchMap = map.get(dateKey);
+      if (!branchMap) {
+        branchMap = new Map<string, ScheduleItem[]>();
+        map.set(dateKey, branchMap);
+      }
+
+      const current = branchMap.get(item.branchId) || [];
+      current.push(item);
+      branchMap.set(item.branchId, current);
+    });
+
+    return map;
+  }, [viewScheduleItems]);
+
+  const currentMonthScheduleItems = useMemo(() => {
+    return viewScheduleItems.filter((item) =>
+      toScheduleDateKey(item.serviceDate)?.startsWith(currentMonthKey)
+    );
+  }, [currentMonthKey, viewScheduleItems]);
+
+  const currentDayScheduleItems = useMemo(
+    () => scheduleItemsByDate.get(currentDateKey) || [],
+    [currentDateKey, scheduleItemsByDate]
+  );
+
+  const currentDayItemsByTechnician = useMemo(() => {
+    const map = new Map<string, ScheduleItem[]>();
+
+    currentDayScheduleItems.forEach((item) => {
+      if (!item.technicianId) return;
+
+      const current = map.get(item.technicianId) || [];
+      current.push(item);
+      map.set(item.technicianId, current);
+    });
+
+    return map;
+  }, [currentDayScheduleItems]);
+
   // --- FILTER OPTIONS (Dynamic based on data for current Month) ---
   const { csOptions, techOptions, advertiserOptions, branchOptions } = useMemo(() => {
-      const start = startOfMonth(currentDate);
-      const end = endOfMonth(currentDate);
-
-      const monthScheduleItems = scheduleItems.filter(item => {
-          if (!item.serviceDate) return false;
-          const orderDate = parseISO(item.serviceDate);
-          return isValid(orderDate) && orderDate >= start && orderDate <= end;
-      });
-
       const csIds = new Set<string>();
       const techIds = new Set<string>();
       const advertiserIds = new Set<string>();
       const branchIds = new Set<string>();
 
-      monthScheduleItems.forEach(item => {
+      currentMonthScheduleItems.forEach(item => {
           if (item.csId) csIds.add(item.csId);
           if (item.technicianId) techIds.add(item.technicianId);
           if (item.advertiserId) advertiserIds.add(item.advertiserId);
@@ -1157,44 +1283,33 @@ export default function Schedule() {
           advertiserOptions: filteredAdvertisers,
           branchOptions: filteredBranches
       };
-  }, [scheduleItems, activeCS, activeAdvertisers, activeTechnicians, users, allBranches, selectedBranchId, currentDate]);
+  }, [currentMonthScheduleItems, activeCS, activeAdvertisers, users, allBranches, selectedBranchId]);
 
   // 3. Calculate Daily Capacity Logic
-  const getBranchDayCapacity = (date: Date, branchId: string) => {
-    // Techs working on this specific branch
-    const branchTechs = users.filter(u => 
-        isTechnicianRole(u.role) && 
-        u.status === 'active' &&
-        u.branchId === branchId
-    );
-    
-    // Filter available techs (not OFF)
+  const getBranchDayCapacity = React.useCallback((date: Date, branchId: string): BranchDayCapacity => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    const availableTechs = branchTechs.filter(t => {
-        const schedule = technicianSchedules.find(s => s.userId === t.id && s.date === dateStr);
-        // If type is present, they are OFF/sick/leave
-        return !schedule;
-    });
-
-    const dailyCapacity = availableTechs.length * bookableOperatingSlots.length; 
-
-    // Orders on this specific date AND branch
-    const ordersOnDate = viewScheduleItems.filter(item => {
-        if (!item.serviceDate) return false;
-        if (item.branchId !== branchId) return false;
-        const orderDate = parseISO(item.serviceDate);
-        return isValid(orderDate) && isSameDay(orderDate, date);
-    });
-
-    const activeOrdersOnDate = ordersOnDate.filter(item => !isInactiveScheduleItem(item) && Boolean(getDisplayOperationalSlotTime(item.serviceTime)));
+    const branchTechs = activeTechniciansByBranchId.get(branchId) || [];
+    const availableCount = branchTechs.reduce((total, technician) => (
+      technicianOffScheduleByKey.has(`${dateStr}|${technician.id}`) ? total : total + 1
+    ), 0);
+    const dailyCapacity = availableCount * bookableOperatingSlots.length;
+    const ordersOnDate = scheduleItemsByDateBranch.get(dateStr)?.get(branchId) || EMPTY_BRANCH_DAY_CAPACITY.orders;
+    const displayOrders = ordersOnDate.filter(item => Boolean(getDisplayOperationalSlotTime(item.serviceTime)));
+    const activeOrdersOnDate = displayOrders.filter(item => !isInactiveScheduleItem(item));
 
     return {
         used: activeOrdersOnDate.length,
         total: dailyCapacity,
         percentage: dailyCapacity > 0 ? (activeOrdersOnDate.length / dailyCapacity) * 100 : 0,
-        orders: ordersOnDate.filter(item => Boolean(getDisplayOperationalSlotTime(item.serviceTime)))
+        orders: displayOrders,
     };
-  };
+  }, [
+    activeTechniciansByBranchId,
+    bookableOperatingSlots.length,
+    getDisplayOperationalSlotTime,
+    scheduleItemsByDateBranch,
+    technicianOffScheduleByKey,
+  ]);
 
   // 4. Calculate Monthly Stats
   const monthlyStats = useMemo(() => {
@@ -1207,62 +1322,40 @@ export default function Schedule() {
         const dateStr = format(day, 'yyyy-MM-dd');
         
         // Count available techs for this day (from the active/filtered list)
-        const availableCount = activeTechnicians.filter(t => {
-            const isOff = technicianSchedules.some(s => s.userId === t.id && s.date === dateStr);
-            return !isOff;
-        }).length;
+        const availableCount = activeTechnicians.reduce((total, technician) => (
+            technicianOffScheduleByKey.has(`${dateStr}|${technician.id}`) ? total : total + 1
+        ), 0);
         
         return acc + (availableCount * bookableOperatingSlots.length);
     }, 0);
 
     // Monthly orders (excluding cancelled for occupancy rate)
-    const monthlyActiveOrders = viewScheduleItems.filter(item => {
-        if (!item.serviceDate || isInactiveScheduleItem(item)) return false;
+    const monthlyActiveOrders = currentMonthScheduleItems.filter(item => {
+        if (isInactiveScheduleItem(item)) return false;
         if (!getDisplayOperationalSlotTime(item.serviceTime)) return false;
-        const d = parseISO(item.serviceDate);
-        return isValid(d) && isSameMonth(d, currentDate);
+        return true;
     });
 
     const totalOrders = monthlyActiveOrders.length;
     const occupancyRate = totalCapacity > 0 ? (totalOrders / totalCapacity) * 100 : 0;
 
     return { totalOrders, totalCapacity, occupancyRate };
-  }, [currentDate, activeTechnicians, viewScheduleItems, technicianSchedules, bookableOperatingSlots, displayOperatingSlotSet, showLateOperatingSlot]);
+  }, [currentDate, activeTechnicians, currentMonthScheduleItems, technicianOffScheduleByKey, bookableOperatingSlots.length, getDisplayOperationalSlotTime]);
 
   // 5. Calculate Daily Stats (for List Daily View)
   const dailyStats = useMemo(() => {
-    // Determine branches to include (all or selected)
-    const activeBranchIds = selectedBranchId === 'all' 
-        ? branches.map(b => b.id) 
-        : [selectedBranchId];
-    
     let totalUsed = 0;
     let totalCapacity = 0;
 
-    activeBranchIds.forEach(branchId => {
-        // Reuse logic logic by manually calling it (since it's defined in scope but not memoized, it's cheap)
-        // We replicate the logic here to avoid dependency issues if getBranchDayCapacity changes signature
-        
-        // 1. Capacity
-        const branchTechs = users.filter(u => 
-            isTechnicianRole(u.role) && 
-            u.status === 'active' &&
-            u.branchId === branchId
-        );
-        const dateStr = format(currentDate, 'yyyy-MM-dd');
-        const availableTechs = branchTechs.filter(t => {
-            const schedule = technicianSchedules.find(s => s.userId === t.id && s.date === dateStr);
-            return !schedule;
-        });
-        const cap = availableTechs.length * bookableOperatingSlots.length;
+    selectedDisplayBranches.forEach((branch) => {
+        const branchId = branch.id;
+        const branchTechs = activeTechniciansByBranchId.get(branchId) || [];
+        const availableCount = branchTechs.reduce((total, technician) => (
+            technicianOffScheduleByKey.has(`${currentDateKey}|${technician.id}`) ? total : total + 1
+        ), 0);
+        const cap = availableCount * bookableOperatingSlots.length;
 
-        // 2. Used (Active Orders)
-        const ordersOnDate = viewScheduleItems.filter(item => {
-            if (!item.serviceDate) return false;
-            if (item.branchId !== branchId) return false;
-            const orderDate = parseISO(item.serviceDate);
-            return isValid(orderDate) && isSameDay(orderDate, currentDate);
-        });
+        const ordersOnDate = scheduleItemsByDateBranch.get(currentDateKey)?.get(branchId) || [];
         const activeOrders = ordersOnDate.filter(item => !isInactiveScheduleItem(item) && Boolean(getDisplayOperationalSlotTime(item.serviceTime)));
 
         totalUsed += activeOrders.length;
@@ -1274,7 +1367,15 @@ export default function Schedule() {
         totalCapacity,
         occupancyRate: totalCapacity > 0 ? (totalUsed / totalCapacity) * 100 : 0
     };
-  }, [currentDate, selectedBranchId, branches, users, technicianSchedules, viewScheduleItems, bookableOperatingSlots, displayOperatingSlotSet, showLateOperatingSlot]);
+  }, [
+    activeTechniciansByBranchId,
+    bookableOperatingSlots.length,
+    currentDateKey,
+    getDisplayOperationalSlotTime,
+    scheduleItemsByDateBranch,
+    selectedDisplayBranches,
+    technicianOffScheduleByKey,
+  ]);
 
   // --- HANDLERS ---
   const isAvailabilityView = view === 'availability';
@@ -1296,7 +1397,7 @@ export default function Schedule() {
       );
   const mobileDateLabel = view === 'availability'
     ? availabilityMobileLabel
-    : format(currentDate, isMonthScopedView ? 'MMMM' : 'd MMM', { locale: id });
+    : format(currentDate, isMonthScopedView ? 'MMM yyyy' : 'd MMM', { locale: id });
   const datePickerTitle = isMonthScopedView
     ? 'Pilih bulan jadwal'
     : 'Pilih tanggal jadwal';
@@ -1344,9 +1445,9 @@ export default function Schedule() {
   // --- RENDERERS ---
 
   const renderMobileStats = () => (
-    <div className="grid grid-cols-3 gap-2 mb-2">
+    <div className="scheduleMobileStats grid grid-cols-3 gap-2 mb-2">
         {/* Total Jadwal */}
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center">
+        <div className="scheduleMobileStatCard bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center">
             <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-5 h-5 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-500 dark:text-blue-400">
                     <CheckCircle2 className="w-3 h-3" />
@@ -1357,21 +1458,21 @@ export default function Schedule() {
         </div>
 
         {/* Capacity */}
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center">
+        <div className="scheduleMobileStatCard bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center">
              <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-5 h-5 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500">
                     <User className="w-3 h-3" />
                 </div>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Kapst</p>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Slot</p>
             </div>
             <div className="flex items-baseline gap-0.5">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{monthlyStats.totalCapacity}</h3>
-                <span className="text-[10px] font-medium text-slate-400">Slot</span>
+                <span className="text-[10px] font-medium text-slate-400">slot</span>
             </div>
         </div>
 
         {/* Occupancy */}
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center">
+        <div className="scheduleMobileStatCard bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center">
             <div className="flex items-center gap-1.5 mb-1">
                  <div className="w-5 h-5 relative flex items-center justify-center">
                      <svg className="w-full h-full transform -rotate-90">
@@ -1395,24 +1496,22 @@ export default function Schedule() {
   );
 
   const renderListView = () => {
-    const monthlyItems = viewScheduleItems.filter(item => {
-        if (!item.serviceDate) return false;
-        const d = parseISO(item.serviceDate);
-        if (listDateMode === 'daily') {
-             return isValid(d) && isSameDay(d, currentDate);
-        }
-        return isValid(d) && isSameMonth(d, currentDate);
-    }).sort((left, right) => {
-        const leftValue = new Date(`${left.serviceDate}T${left.serviceTime || '00:00'}`).getTime();
-        const rightValue = new Date(`${right.serviceDate}T${right.serviceTime || '00:00'}`).getTime();
-        return leftValue - rightValue;
+    const monthlyItems = [
+      ...(listDateMode === 'daily'
+        ? scheduleItemsByDate.get(currentDateKey) || []
+        : currentMonthScheduleItems),
+    ].sort((left, right) => {
+        const leftValue = `${toScheduleDateKey(left.serviceDate) || ''}T${left.serviceTime || '00:00'}`;
+        const rightValue = `${toScheduleDateKey(right.serviceDate) || ''}T${right.serviceTime || '00:00'}`;
+        return leftValue.localeCompare(rightValue);
     });
 
     return (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 shadow-[0_2px_10px_-2px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col flex-1 min-h-0">
              
              {/* Desktop List View */}
-             <div className="hidden md:block overflow-y-auto flex-1 no-scrollbar">
+             {isDesktop ? (
+             <div className="overflow-y-auto flex-1 no-scrollbar">
                 <Table>
                     <TableHeader className="bg-transparent">
                         <TableRow className="hover:bg-transparent border-slate-100 dark:border-slate-800">
@@ -1436,9 +1535,9 @@ export default function Schedule() {
                             </TableRow>
                         ) : (
                             monthlyItems.map((item) => {
-                                const branch = branches.find(b => b.id === item.branchId);
-                                const tech = users.find(u => u.id === item.technicianId);
-                                const cs = users.find(u => u.id === item.csId);
+                                const branch = branchById.get(item.branchId || '');
+                                const tech = userById.get(item.technicianId || '');
+                                const cs = userById.get(item.csId || '');
                                 const date = parseISO(item.serviceDate);
                                 const statusMeta = getScheduleStatusMeta(item);
                                 const scheduleConflictInfo = scheduleConflictByItemKey.get(
@@ -1542,9 +1641,9 @@ export default function Schedule() {
                     </TableBody>
                 </Table>
             </div>
+            ) : (
 
-            {/* Mobile Card View (Enhanced) */}
-            <div className="md:hidden flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-900">
                 {/* renderMobileStats moved to main layout */}
                 {listDateMode === 'daily' && (
                      <div className="flex justify-between items-center mb-2 px-1">
@@ -1559,8 +1658,8 @@ export default function Schedule() {
                     </div>
                 ) : (
                     monthlyItems.map((item) => {
-                        const tech = users.find(u => u.id === item.technicianId);
-                        const cs = users.find(u => u.id === item.csId);
+                        const tech = userById.get(item.technicianId || '');
+                        const cs = userById.get(item.csId || '');
                         const date = parseISO(item.serviceDate);
                         const statusMeta = getScheduleStatusMeta(item);
                         const order = item;
@@ -1649,6 +1748,7 @@ export default function Schedule() {
                     })
                 )}
             </div>
+            )}
 
              <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 text-xs font-medium text-slate-500 flex justify-between items-center">
                 <span>Menampilkan {monthlyItems.length} jadwal bulan {format(currentDate, 'MMMM yyyy', { locale: id })}</span>
@@ -1658,18 +1758,12 @@ export default function Schedule() {
   };
 
   const renderDailyView = () => {
-    const dateStr = format(currentDate, 'yyyy-MM-dd');
+    const dateStr = currentDateKey;
+    const dayItems = currentDayScheduleItems;
 
-    const dayItems = viewScheduleItems.filter(item => {
-        if (!item.serviceDate) return false;
-        return isSameDay(parseISO(item.serviceDate), currentDate);
-    });
-
-    // Calculate Daily Capacity Stats (Exclude cancelled)
-    // Filter out OFF technicians first
-    const availableTechs = activeTechnicians.filter(t => {
-        return !technicianSchedules.find(s => s.userId === t.id && s.date === dateStr);
-    });
+    const availableTechs = activeTechnicians.filter((technician) =>
+      !technicianOffScheduleByKey.has(`${dateStr}|${technician.id}`)
+    );
 
     const totalCapacity = availableTechs.length * bookableOperatingSlots.length; 
     const totalUsed = dayItems.filter(item => !isInactiveScheduleItem(item) && Boolean(getDisplayOperationalSlotTime(item.serviceTime))).length;
@@ -1713,13 +1807,13 @@ export default function Schedule() {
                     </div>
 
                     {/* B. BRANCH & TECH ROWS */}
-                    {(selectedBranchId === 'all' ? branches : branches.filter(b => b.id === selectedBranchId)).length === 0 ? (
+                    {selectedDisplayBranches.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
                             <p>Tidak ada data cabang.</p>
                         </div>
                     ) : (
-                        (selectedBranchId === 'all' ? branches : branches.filter(b => b.id === selectedBranchId)).map(branch => {
-                            const branchTechs = activeTechnicians.filter(t => t.branchId === branch.id);
+                        selectedDisplayBranches.map(branch => {
+                            const branchTechs = activeTechniciansByBranchId.get(branch.id) || [];
                             
                             return (
                                 <div key={branch.id} className="flex flex-col min-w-max border-b border-slate-50 dark:border-slate-800">
@@ -1741,9 +1835,9 @@ export default function Schedule() {
                                         </div>
                                     ) : (
                                         branchTechs.map((tech) => {
-                                            const schedule = technicianSchedules.find(s => s.userId === tech.id && s.date === dateStr);
+                                            const schedule = technicianOffScheduleByKey.get(`${dateStr}|${tech.id}`);
                                             const isOff = !!schedule;
-                                            const techOrders = dayItems.filter(item => item.technicianId === tech.id);
+                                            const techOrders = currentDayItemsByTechnician.get(tech.id) || [];
                                             const activeTechTimelineItems = techOrders.filter(
                                               (item) => !isInactiveScheduleItem(item) && Boolean(getDisplayOperationalSlotTime(item.serviceTime))
                                             );
@@ -1830,7 +1924,7 @@ export default function Schedule() {
                                                                     {slotOrders.length > 0 ? (
                                                                         slotOrders.map((slotOrder, idx) => {
                                                                             const statusMeta = getScheduleStatusMeta(slotOrder);
-                                                                            const cs = users.find((user) => user.id === slotOrder.csId);
+                                                                            const cs = userById.get(slotOrder.csId || '');
                                                                             const scheduleConflictInfo = scheduleConflictByItemKey.get(
                                                                               getScheduleConflictItemKey(slotOrder.source, slotOrder.sourceId)
                                                                             );
@@ -2098,27 +2192,25 @@ export default function Schedule() {
     const blanks = Array(paddingDays).fill(null);
 
     const weekDays = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    
-    // Determine which branches to show
-    const displayBranches = selectedBranchId === 'all' 
-        ? branches 
-        : branches.filter(b => b.id === selectedBranchId);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
             {/* Calendar Header (Desktop Only) */}
-            <div className="hidden md:grid grid-cols-7 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+            {isDesktop && (
+            <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
                 {weekDays.map(d => (
                     <div key={d} className="py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                         {d}
                     </div>
                 ))}
             </div>
+            )}
             
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto min-h-0 bg-slate-50 dark:bg-slate-950 p-2 md:p-1 pb-20 md:pb-20">
                 {/* Mobile View: Vertical List */}
-                <div className="md:hidden space-y-3 pb-24">
+                {!isDesktop ? (
+                <div className="space-y-3 pb-24">
                     {/* renderMobileStats moved to main layout */}
                     {days.map((date) => {
                         // Calculate stats for this day
@@ -2132,9 +2224,12 @@ export default function Schedule() {
                             cancelled: 0  
                         };
                         const performanceOrdersMap = new Map<string, ScheduleItem>();
+                        const branchCaps = selectedDisplayBranches.map((branch) => ({
+                            branch,
+                            capacity: getBranchDayCapacity(date, branch.id),
+                        }));
 
-                        displayBranches.forEach(b => {
-                             const caps = getBranchDayCapacity(date, b.id);
+                        branchCaps.forEach(({ capacity: caps }) => {
                              dailyUsed += caps.used;
                              dailyTotal += caps.total;
                              
@@ -2158,12 +2253,12 @@ export default function Schedule() {
 
                         performanceOrdersMap.forEach(o => {
                             if (o.csId) {
-                                const u = users.find(user => user.id === o.csId);
+                                const u = userById.get(o.csId);
                                 const name = u ? u.name : '??';
                                 csStats[name] = (csStats[name] || 0) + 1;
                             }
                             if (o.advertiserId) {
-                                const u = users.find(user => user.id === o.advertiserId);
+                                const u = userById.get(o.advertiserId);
                                 const name = u ? u.name : '??';
                                 advStats[name] = (advStats[name] || 0) + 1;
                             }
@@ -2219,8 +2314,8 @@ export default function Schedule() {
 
                                 {/* Branches List */}
                                 <div className="flex flex-col gap-1 flex-1 pr-1">
-                                    {displayBranches.map(branch => {
-                                        const { used, total, percentage } = getBranchDayCapacity(date, branch.id);
+                                    {branchCaps.map(({ branch, capacity }) => {
+                                        const { used, total, percentage } = capacity;
                                         
                                         // Skip branches with no capacity if showing ALL
                                         if (selectedBranchId === 'all' && total === 0) return null;
@@ -2251,7 +2346,7 @@ export default function Schedule() {
                                             </div>
                                         );
                                     })}
-                                    {selectedBranchId === 'all' && displayBranches.every(b => getBranchDayCapacity(date, b.id).total === 0) && (
+                                    {selectedBranchId === 'all' && branchCaps.every(({ capacity }) => capacity.total === 0) && (
                                         <div className="text-center py-2 text-xs text-slate-400 italic">Libur / Tidak ada teknisi</div>
                                     )}
                                 </div>
@@ -2309,9 +2404,9 @@ export default function Schedule() {
                         );
                     })}
                 </div>
+                ) : (
 
-                {/* Desktop View: Grid */}
-                <div className="hidden md:grid grid-cols-7 auto-rows-auto gap-1">
+                <div className="grid grid-cols-7 auto-rows-auto gap-1">
                     {blanks.map((_, i) => (
                         <div key={`blank-${i}`} className="bg-transparent" />
                     ))}
@@ -2332,9 +2427,12 @@ export default function Schedule() {
                         };
                         
                         const performanceOrdersMap = new Map<string, ScheduleItem>();
+                        const branchCaps = selectedDisplayBranches.map((branch) => ({
+                            branch,
+                            capacity: getBranchDayCapacity(date, branch.id),
+                        }));
 
-                        displayBranches.forEach(b => {
-                             const caps = getBranchDayCapacity(date, b.id);
+                        branchCaps.forEach(({ capacity: caps }) => {
                              dailyUsed += caps.used;
                              dailyTotal += caps.total;
                              
@@ -2362,12 +2460,12 @@ export default function Schedule() {
 
                         performanceOrdersMap.forEach(o => {
                             if (o.csId) {
-                                const u = users.find(user => user.id === o.csId);
+                                const u = userById.get(o.csId);
                                 const name = u ? u.name : '??';
                                 csStats[name] = (csStats[name] || 0) + 1;
                             }
                             if (o.advertiserId) {
-                                const u = users.find(user => user.id === o.advertiserId);
+                                const u = userById.get(o.advertiserId);
                                 const name = u ? u.name : '??';
                                 advStats[name] = (advStats[name] || 0) + 1;
                             }
@@ -2451,8 +2549,8 @@ export default function Schedule() {
 
                                 {/* Content Body: Branch Capacity List (For All Roles) */}
                                 <div className="flex flex-col gap-1 flex-1 pr-1">
-                                    {displayBranches.map(branch => {
-                                        const { used, total, percentage } = getBranchDayCapacity(date, branch.id);
+                                    {branchCaps.map(({ branch, capacity }) => {
+                                        const { used, total, percentage } = capacity;
                                         
                                         // Skip branches with no capacity if showing ALL
                                         if (selectedBranchId === 'all' && total === 0) return null;
@@ -2538,6 +2636,7 @@ export default function Schedule() {
                         );
                     })}
                 </div>
+                )}
             </div>
             <div className="p-3 bg-white dark:bg-slate-800 text-xs text-slate-500 flex gap-1 justify-end border-t border-slate-100 dark:border-slate-700">
                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Kosong</div>
@@ -2876,7 +2975,7 @@ export default function Schedule() {
                 {/* Row 1: Branch + Month Nav */}
                 <div className="flex items-center gap-2 justify-between">
                     {/* Branch Filter - Flexible Width */}
-                    <div className="flex-1 md:w-[180px] md:flex-none min-w-0">
+                    <div className="scheduleMobileBranchPicker flex-1 md:w-[180px] md:flex-none min-w-0">
                         <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
                             <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-9 md:h-10 text-xs md:text-sm rounded-xl shadow-sm w-full">
                                 <MapPin className="w-3.5 h-3.5 mr-2 text-slate-400 shrink-0" />
@@ -2892,7 +2991,7 @@ export default function Schedule() {
                     </div>
 
                     {/* Mobile Only: Simple Month Nav */}
-                    <div className="md:hidden shrink-0 flex items-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-1 shadow-sm h-9">
+                    <div className="scheduleMobileMonthNav md:hidden shrink-0 flex items-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-1 shadow-sm h-9">
                          <button
                             onClick={handlePrev}
                             disabled={isAvailabilityView}
@@ -3001,47 +3100,63 @@ export default function Schedule() {
                     </div>
                 </div>
 
-                {!isAdvertiserUser && (
-                    <div className="md:hidden flex justify-end">
-                        <div className="flex h-8 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">19:00</span>
-                            <Switch
-                                checked={showLateOperatingSlot}
-                                onCheckedChange={setShowLateOperatingSlot}
-                                aria-label="Tampilkan slot jam 19:00"
-                            />
+                {/* Row 2: Mobile Search, Filter, Late Slot */}
+                <div className="scheduleMobileControls md:hidden flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                        <div className="relative min-w-0 flex-1">
+                             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                             <input
+                                type="text"
+                                placeholder="Cari order, nama, no HP..."
+                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                             />
                         </div>
+
+                        {canShowMobileFilterToggle && (
+                            <button
+                                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                                className={cn(
+                                    "scheduleMobileSquareButton flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-all shadow-sm",
+                                    showMobileFilters
+                                        ? "bg-blue-50 border-blue-200 text-blue-600"
+                                        : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                                )}
+                                aria-label="Filter jadwal"
+                                title="Filter"
+                            >
+                                <Filter className="w-4 h-4" />
+                            </button>
+                        )}
+
+                        {!isAdvertiserUser && (
+                            <button
+                                type="button"
+                                onClick={() => setShowLateOperatingSlot((value) => !value)}
+                                aria-pressed={showLateOperatingSlot}
+                                aria-label="Tampilkan slot jam 19:00"
+                                className={cn(
+                                    "scheduleLateSlotToggle flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3 text-xs font-bold shadow-sm transition-all",
+                                    showLateOperatingSlot
+                                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                                )}
+                            >
+                                <Clock className="h-4 w-4 shrink-0" />
+                                <span>19:00</span>
+                            </button>
+                        )}
                     </div>
-                )}
 
-                {/* Row 2: Mobile Toolbar (Filter Toggle | View Toggles | Search) */}
-                <div className="scheduleMobileToolbar flex md:hidden items-center gap-2 justify-between">
-                    {/* Filter Toggle Button */}
-                    {canShowMobileFilterToggle && (
-                        <button 
-                            onClick={() => setShowMobileFilters(!showMobileFilters)}
-                            className={cn(
-                                "flex items-center justify-center w-9 h-9 rounded-xl border transition-all shrink-0 shadow-sm",
-                                showMobileFilters 
-                                    ? "bg-blue-50 border-blue-200 text-blue-600" 
-                                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                            )}
-                        >
-                            <Filter className="w-4 h-4" />
-                        </button>
-                    )}
-
-                    {/* View Toggles (Icons Only for Mobile) */}
-                    <div className="flex items-center bg-white rounded-xl border border-slate-200 p-1 flex-1 shadow-sm h-9 justify-evenly">
+                    <div className="scheduleMobileViewTabs">
                         <button 
                             onClick={() => { setView('month'); setListDateMode('all'); }} 
                             className={cn(
-                                "w-full h-full rounded-lg flex items-center justify-center transition-colors", 
-                                view === 'month' ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"
+                                "scheduleMobileViewTab",
+                                view === 'month' ? "active" : ""
                             )}
-                            title="Kalender"
                         >
                             <CalendarIcon className="w-4 h-4" />
+                            <span>Kalender</span>
                         </button>
                         
                         {!isAdvertiserUser && (
@@ -3049,54 +3164,48 @@ export default function Schedule() {
                                 <button 
                                     onClick={handleOpenAvailabilityView} 
                                     className={cn(
-                                        "w-full h-full rounded-lg flex items-center justify-center transition-colors", 
-                                        view === 'availability' ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"
+                                        "scheduleMobileViewTab",
+                                        view === 'availability' ? "active" : ""
                                     )}
-                                    title="Ketersediaan"
                                 >
                                     <CheckCircle2 className="w-4 h-4" />
+                                    <span>Slot</span>
                                 </button>
                                 
                                 <button 
                                     onClick={() => { setView('list'); setListDateMode('all'); }} 
                                     className={cn(
-                                        "w-full h-full rounded-lg flex items-center justify-center transition-colors", 
-                                        view === 'list' && listDateMode === 'all' ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"
+                                        "scheduleMobileViewTab",
+                                        view === 'list' && listDateMode === 'all' ? "active" : ""
                                     )}
-                                    title="List Jadwal"
                                 >
                                     <LayoutList className="w-4 h-4" />
+                                    <span>List</span>
                                 </button>
                                 
                                 <button 
                                     onClick={() => { setView('list'); setListDateMode('daily'); }} 
                                     className={cn(
-                                        "w-full h-full rounded-lg flex items-center justify-center transition-colors", 
-                                        view === 'list' && listDateMode === 'daily' ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"
+                                        "scheduleMobileViewTab",
+                                        view === 'list' && listDateMode === 'daily' ? "active" : ""
                                     )}
-                                    title="Harian"
                                 >
                                     <Clock className="w-4 h-4" />
+                                    <span>Harian</span>
                                 </button>
                                 
                                 <button 
                                     onClick={() => setView('day')} 
                                     className={cn(
-                                        "w-full h-full rounded-lg flex items-center justify-center transition-colors", 
-                                        view === 'day' ? "bg-blue-50 text-blue-600" : "text-slate-400 hover:bg-slate-50"
+                                        "scheduleMobileViewTab",
+                                        view === 'day' ? "active" : ""
                                     )}
-                                    title="Timeline"
                                 >
                                     <LayoutGrid className="w-4 h-4" />
+                                    <span>Timeline</span>
                                 </button>
                              </>
                         )}
-                    </div>
-                    
-                    {/* Search */}
-                    <div className="relative w-[110px] shrink-0">
-                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                         <input type="text" placeholder="Cari..." className="h-9 pl-8 pr-2 w-full text-[11px] bg-white border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                     </div>
                 </div>
 
@@ -3200,7 +3309,7 @@ export default function Schedule() {
                         {view !== 'availability' && (
                         <span className="hidden sm:inline">
                             {view === 'month' || view === 'list'
-                                ? `${selectedBranchId === 'all' ? 'Semua Cabang' : branches.find(b => b.id === selectedBranchId)?.name} • ${activeTechnicians.length} Teknisi`
+                                ? `${selectedBranchId === 'all' ? 'Semua Cabang' : branchById.get(selectedBranchId)?.name} • ${activeTechnicians.length} Teknisi`
                                 : "Geser timeline untuk melihat jadwal jam"
                             }
                         </span>
@@ -3222,10 +3331,8 @@ export default function Schedule() {
                                         DayContent: (props) => {
                                             const { date } = props;
                                             const dateStr = format(date, 'yyyy-MM-dd');
-                                            const totalOrders = viewScheduleItems.filter(item => 
-                                                item.serviceDate && 
-                                                item.serviceDate.startsWith(dateStr) && 
-                                                !isInactiveScheduleItem(item)
+                                            const totalOrders = (scheduleItemsByDate.get(dateStr) || []).filter(
+                                                (item) => !isInactiveScheduleItem(item)
                                             ).length;
 
                                             return (
@@ -3355,18 +3462,28 @@ export default function Schedule() {
               {addProspectContextSummary}
             </div>
           )}
-          <ProspectBookingForm
-            key={`timeline-${leadFormInstanceKey}`}
-            lead={bookingDraftLead}
-            initialBookingOverrides={initialBookingOverrides}
-            availableTimeSlots={bookableOperatingSlots}
-            lockSlotSelection
-            allowStatusSelection={false}
-            editableCustomerFields
-            submitLabel="Buat Booking Jadwal"
-            onSubmit={handleSubmitBookingFromTimeline}
-            onCancel={() => handleAddProspectSheetOpenChange(false)}
-          />
+          {isAddProspectOpen && (
+            <React.Suspense
+              fallback={
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-center text-xs font-semibold text-slate-500 shadow-sm">
+                  Memuat form booking...
+                </div>
+              }
+            >
+              <ProspectBookingForm
+                key={`timeline-${leadFormInstanceKey}`}
+                lead={bookingDraftLead}
+                initialBookingOverrides={initialBookingOverrides}
+                availableTimeSlots={bookableOperatingSlots}
+                lockSlotSelection
+                allowStatusSelection={false}
+                editableCustomerFields
+                submitLabel="Buat Booking Jadwal"
+                onSubmit={handleSubmitBookingFromTimeline}
+                onCancel={() => handleAddProspectSheetOpenChange(false)}
+              />
+            </React.Suspense>
+          )}
         </div>
       </SheetContent>
     </Sheet>

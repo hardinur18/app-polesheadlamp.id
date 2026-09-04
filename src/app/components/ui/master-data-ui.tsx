@@ -193,7 +193,7 @@ export function MasterDataFormDialogContent({
   );
 }
 
-type MasterDataFormHeaderProps = React.HTMLAttributes<HTMLDivElement> & {
+type MasterDataFormHeaderProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> & {
   description?: ReactNode;
   icon?: LucideIcon;
   title: ReactNode;

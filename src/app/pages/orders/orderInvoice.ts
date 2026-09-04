@@ -1,5 +1,5 @@
-import brandIcon from '@/assets/polesheadlamp-app-logo-round.png?inline';
-import brandWordmark from '../../../../File PNG/Polesheadlamp.id (1).png?inline';
+import brandIcon from '@/assets/polesheadlamp-app-logo-round.png';
+import brandWordmark from '../../../../File PNG/Polesheadlamp.id (1).png';
 import { Area, Branch, Order, PaymentMethod, Platform, ServiceType, SubChannel, User, VehicleType } from '../master-data/data';
 
 export type OrderInvoiceContext = {

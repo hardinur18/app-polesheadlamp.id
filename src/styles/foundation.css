@@ -6418,22 +6418,93 @@
     position: relative !important;
     top: auto !important;
     z-index: 10;
+    padding: 12px !important;
+    border-radius: 22px !important;
   }
 
-  .scheduleMobileToolbar {
+  .scheduleMobileBranchPicker,
+  .scheduleMobileControls {
     width: 100%;
     min-width: 0;
   }
 
-  .scheduleMobileToolbar > div:nth-child(2) {
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
+  .scheduleMobileMonthNav {
+    width: 174px;
+    max-width: 46%;
+    height: 44px !important;
+    border-radius: 16px !important;
   }
 
-  .scheduleMobileToolbar > div:nth-child(2)::-webkit-scrollbar {
+  .scheduleMobileControls input {
+    min-width: 0;
+  }
+
+  .scheduleMobileSquareButton,
+  .scheduleLateSlotToggle {
+    min-height: 44px !important;
+    border-radius: 16px !important;
+  }
+
+  .scheduleLateSlotToggle {
+    min-width: 82px;
+    white-space: nowrap;
+  }
+
+  .scheduleMobileViewTabs {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px 1px 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scheduleMobileViewTabs::-webkit-scrollbar {
     display: none;
+  }
+
+  .scheduleMobileViewTab {
+    display: inline-flex;
+    min-width: max-content;
+    min-height: 38px !important;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    border-radius: 999px !important;
+    background: #ffffff;
+    padding: 0 13px;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 760 !important;
+    box-shadow: 0 10px 24px -20px rgba(15, 23, 42, 0.55);
+    white-space: nowrap;
+  }
+
+  .scheduleMobileViewTab.active {
+    border-color: rgba(37, 99, 235, 0.24);
+    background: #eff6ff;
+    color: #075fd7;
+    box-shadow: 0 14px 30px -22px rgba(37, 99, 235, 0.55);
+  }
+
+  .scheduleMobileStats {
+    gap: 8px !important;
+  }
+
+  .scheduleMobileStatCard {
+    min-width: 0;
+    min-height: 74px;
+    border-color: rgba(226, 232, 240, 0.92) !important;
+    border-radius: 16px !important;
+  }
+
+  .scheduleMobileStatCard h3 {
+    font-size: 1.12rem !important;
+    line-height: 1.15 !important;
   }
 }
 

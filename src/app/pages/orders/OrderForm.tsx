@@ -959,7 +959,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
         }
       : undefined;
 
-    const nextFormData = {
+    const nextFormData: Partial<Order> = {
       id: `OP-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
       leadDate: new Date().toISOString().split('T')[0],
       status: 'pending',
