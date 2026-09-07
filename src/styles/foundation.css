@@ -1896,7 +1896,8 @@
 
   .periodPickerContent.periodPickerContent--foundation {
     width: calc(100vw - 24px);
-    max-height: min(78vh, 680px);
+    max-height: min(82dvh, 680px);
+    overflow-x: hidden;
     overflow-y: auto;
   }
 
@@ -1911,7 +1912,18 @@
   }
 
   .periodPickerContent--foundation .periodPickerMain {
+    min-width: 0;
     width: auto;
+  }
+
+  .periodPickerContent--foundation .periodPickerMain .rdp .rdp-month {
+    min-height: 304px;
+    width: 100%;
+  }
+
+  .periodPickerContent--foundation .periodPickerMain .rdp .rdp-table {
+    margin-inline: auto;
+    width: min(100%, 294px);
   }
 
   .periodPickerContent--foundation .periodPickerSidebar {
@@ -4278,13 +4290,18 @@
 
   .periodPickerContent {
     width: calc(100vw - 24px);
-    max-height: min(78vh, 680px);
+    max-height: min(82dvh, 680px);
+    overflow-x: hidden;
     overflow-y: auto;
   }
 
   .periodPickerShell {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
+  }
+
+  .periodPickerMain {
+    min-width: 0;
   }
 
   .periodPickerSidebar {
@@ -6323,8 +6340,10 @@
 /* Jadwal foundation polish. */
 .schedulePage {
   max-width: none !important;
+  min-width: 0;
   padding: 34px 36px 40px !important;
   background: #ffffff !important;
+  overflow-x: hidden;
 }
 
 .scheduleHeader {
@@ -6371,6 +6390,7 @@
 
 .scheduleToolbarInner {
   gap: 12px !important;
+  min-width: 0;
 }
 
 .scheduleViewSwitch {
@@ -6380,22 +6400,65 @@
   padding: 4px !important;
 }
 
-.scheduleViewSwitch button {
+.scheduleViewSwitch .scheduleViewTab {
   min-height: 32px;
   border-radius: 12px !important;
   font-weight: 720 !important;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.scheduleToolbarTopRow {
+  min-width: 0;
+}
+
+.scheduleMobileFilterPanel {
+  min-width: 0;
+}
+
+.scheduleMobileLateSlotField {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  min-height: 54px;
+  min-width: 0;
+  padding: 10px 12px;
 }
 
 .scheduleDateDialog {
   display: flex !important;
+  width: min(760px, calc(100vw - 32px)) !important;
   max-height: min(86vh, calc(100dvh - 32px)) !important;
   flex-direction: column;
+}
+
+.scheduleDateDialog--single {
+  width: min(360px, calc(100vw - 32px)) !important;
+}
+
+.scheduleDateDialog--range {
+  width: min(760px, calc(100vw - 32px)) !important;
 }
 
 .scheduleDateDialog > div:last-child {
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.scheduleDateDialog .rdp {
+  margin: 0;
+}
+
+.scheduleDateDialog .rdp-month {
+  min-height: 292px;
+}
+
+.scheduleDateDialog--range .rdp-months {
+  justify-content: center;
 }
 
 @media (max-width: 1023px) {
@@ -6422,6 +6485,16 @@
     border-radius: 22px !important;
   }
 
+  .scheduleToolbarInner {
+    gap: 10px !important;
+  }
+
+  .scheduleToolbarTopRow {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
   .scheduleMobileBranchPicker,
   .scheduleMobileControls {
     width: 100%;
@@ -6429,14 +6502,22 @@
   }
 
   .scheduleMobileMonthNav {
-    width: 174px;
-    max-width: 46%;
+    width: auto;
+    min-width: 150px;
+    max-width: none;
     height: 44px !important;
     border-radius: 16px !important;
   }
 
   .scheduleMobileControls input {
     min-width: 0;
+  }
+
+  .scheduleMobileFilterPanel {
+    background: rgba(248, 250, 252, 0.88);
+    border: 1px solid rgba(226, 232, 240, 0.86);
+    border-radius: 18px;
+    padding: 10px;
   }
 
   .scheduleMobileSquareButton,
@@ -6454,12 +6535,16 @@
     display: flex;
     width: 100%;
     min-width: 0;
-    gap: 8px;
+    gap: 4px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    border-radius: 18px;
+    background: #fff;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 2px 1px 4px;
+    padding: 4px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    box-shadow: 0 12px 30px -26px rgba(15, 23, 42, 0.55);
   }
 
   .scheduleMobileViewTabs::-webkit-scrollbar {
@@ -6468,24 +6553,23 @@
 
   .scheduleMobileViewTab {
     display: inline-flex;
-    min-width: max-content;
-    min-height: 38px !important;
+    min-width: max(86px, max-content);
+    min-height: 36px !important;
     align-items: center;
     justify-content: center;
     gap: 7px;
-    border: 1px solid rgba(226, 232, 240, 0.92);
-    border-radius: 999px !important;
-    background: #ffffff;
-    padding: 0 13px;
+    border: 0;
+    border-radius: 14px !important;
+    background: transparent;
+    padding: 0 12px;
     color: #64748b;
     font-size: 0.75rem;
     font-weight: 760 !important;
-    box-shadow: 0 10px 24px -20px rgba(15, 23, 42, 0.55);
+    box-shadow: none;
     white-space: nowrap;
   }
 
   .scheduleMobileViewTab.active {
-    border-color: rgba(37, 99, 235, 0.24);
     background: #eff6ff;
     color: #075fd7;
     box-shadow: 0 14px 30px -22px rgba(37, 99, 235, 0.55);
@@ -6514,6 +6598,15 @@
     max-width: calc(100vw - 20px) !important;
     max-height: calc(100dvh - 20px) !important;
     border-radius: 22px !important;
+  }
+
+  .scheduleDateDialog--range .rdp-months {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .scheduleDateDialog .rdp-month {
+    min-height: 292px;
   }
 }
 
@@ -6952,6 +7045,89 @@
   background: rgba(255, 255, 255, 0.2);
   font-size: 0.66rem;
   font-weight: 840;
+}
+
+.orderFilterDialog.masterDataFormDialogContent {
+  display: flex;
+  width: min(calc(100vw - 40px), 880px);
+  max-width: min(calc(100vw - 40px), 880px);
+  max-height: min(86dvh, 760px);
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 24px;
+  background: #f8fafc;
+  box-shadow: 0 30px 80px -48px rgba(15, 23, 42, 0.62);
+}
+
+.orderFilterDialog .orderFilterDialogHeader.masterDataFormHeader {
+  flex: 0 0 auto;
+  padding: 22px 28px 18px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  background: #ffffff;
+}
+
+.orderFilterDialogBody.masterDataDialogBody {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 20px;
+  overflow-y: auto;
+  padding: 22px 28px 24px;
+  background: #f8fafc;
+}
+
+.orderFilterDialogBody > .space-y-4 {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+}
+
+.orderFilterDialogBody > .space-y-4 > :not([hidden]) ~ :not([hidden]),
+.orderFilterDialogBody .space-y-2 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0 !important;
+}
+
+.orderFilterDialogBody > .space-y-4 > .flex {
+  min-height: 34px;
+}
+
+.orderFilterDialogBody > .space-y-4 > .grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.orderFilterDialogBody label {
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.orderFilterDialogBody .uiSelectTrigger {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px -18px rgba(15, 23, 42, 0.32);
+}
+
+.orderFilterDialogFooter.masterDataFormActions {
+  position: relative;
+  bottom: auto;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 16px 28px 20px;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  background: #ffffff;
+}
+
+.orderFilterDialogFooter .uiButton {
+  min-height: 44px;
+  min-width: 144px;
+  border-radius: 13px;
 }
 
 .orderDataTable.uiDataTableScroller {
@@ -14956,7 +15132,11 @@ body {
 
 .operationalReportControlStack {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+}
+
+.operationalReportPage {
+  overflow-x: hidden;
 }
 
 .operationalReportTabs {
@@ -14969,18 +15149,29 @@ body {
   display: flex;
   gap: 7px;
   min-height: 48px;
+  max-width: 100%;
   overflow-x: auto;
   padding: 6px;
+  width: fit-content;
 }
 
 .operationalReportFilterCard {
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-  border: 1px solid #edf2f7;
-  border-radius: 26px;
-  box-shadow: 0 24px 58px -46px rgba(15, 23, 42, 0.45);
-  min-height: 126px;
+  background: #ffffff;
+  border: 1px solid #e4ebf5;
+  border-radius: 22px;
+  box-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.44);
+  min-height: 0;
   overflow: visible;
-  padding: 18px;
+  padding: 16px;
+}
+
+.operationalReportMobileFilterToggle {
+  display: none;
+}
+
+.operationalReportFilterCollapse {
+  display: block;
+  min-width: 0;
 }
 
 .operationalReportTab {
@@ -15024,15 +15215,19 @@ body {
 .operationalReportControlFilters {
   align-items: center;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
 }
 
 .operationalReportControlFilters.isDaily {
-  grid-template-areas:
-    "dateType dateRange dateRange search search"
-    "technician technician role role status";
-  grid-template-columns: minmax(178px, 0.64fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+  grid-template-areas: "dateType dateRange search technician role status";
+  grid-template-columns:
+    minmax(154px, 0.72fr)
+    minmax(220px, 0.95fr)
+    minmax(320px, 1.6fr)
+    minmax(160px, 0.78fr)
+    minmax(150px, 0.72fr)
+    minmax(160px, 0.78fr);
 }
 
 .operationalReportFilterControl {
@@ -15040,12 +15235,31 @@ body {
   width: 100%;
 }
 
-.operationalReportFilterControl .uiInput,
-.operationalReportFilterControl .uiSelectTrigger,
+.operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker),
+.operationalReportFilterControl > :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker),
 .operationalReportFilterControl button[role="combobox"] {
   height: 48px;
   min-height: 48px;
   width: 100%;
+}
+
+.operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker) {
+  border-color: #dbe4ef;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px -20px rgba(15, 23, 42, 0.36);
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 720;
+}
+
+.operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker):hover {
+  border-color: #c8d7ea;
+}
+
+.operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker):focus,
+.operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker):focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 10px 24px -20px rgba(15, 23, 42, 0.48);
 }
 
 .operationalReportFilterSearch {
@@ -15072,39 +15286,28 @@ body {
   grid-area: status;
 }
 
-.operationalReportDateRange.filterDateField {
-  display: block;
-  gap: 0;
-}
-
-.operationalReportDateRange .filterDateButton {
-  background: #ffffff;
-  border-color: rgb(226 232 240);
-  border-radius: 0.75rem;
-  box-shadow: var(--shadow-sm);
-  font-size: 0.875rem;
-  font-weight: 700;
-  height: 3rem;
+.operationalReportDatePicker.uiPeriodPicker {
+  gap: 9px;
+  height: 48px !important;
+  justify-content: flex-start;
+  min-height: 48px !important;
   min-width: 0;
-  overflow: hidden;
-  padding-left: 1rem;
-  padding-right: 1rem;
-  text-overflow: ellipsis;
+  padding-inline: 14px;
   width: 100%;
 }
 
-.operationalReportDateRange .filterDateButton span {
+.operationalReportDatePicker.uiPeriodPicker span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.operationalReportDateRangePopover {
+.operationalReportDateRangePopover.periodPickerContent--foundation {
   border-color: rgba(203, 213, 225, 0.92);
   border-radius: 18px;
   box-shadow: 0 26px 70px -38px rgba(15, 23, 42, 0.48);
-  max-width: min(calc(100vw - 32px), 520px);
+  max-width: min(calc(100vw - 32px), 760px);
 }
 
 .operationalReportDateRangePopover .dateRangePickerLayout.isCompact {
@@ -15166,17 +15369,25 @@ body {
 }
 
 .operationalReportControlFilters.isSummary {
-  grid-template-areas:
-    "dateType dateRange dateRange search search"
-    "technician technician role role status";
-  grid-template-columns: minmax(178px, 0.64fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+  grid-template-areas: "dateType dateRange search technician role status";
+  grid-template-columns:
+    minmax(154px, 0.72fr)
+    minmax(220px, 0.95fr)
+    minmax(320px, 1.6fr)
+    minmax(160px, 0.78fr)
+    minmax(150px, 0.72fr)
+    minmax(160px, 0.78fr);
 }
 
 .operationalReportControlFilters.isTransactions {
-  grid-template-areas:
-    "transactionTabs transactionTabs dateRange dateRange search"
-    "technician technician role role status";
-  grid-template-columns: minmax(220px, 0.88fr) minmax(0, 0.88fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr);
+  grid-template-areas: "transactionTabs dateRange search technician role status";
+  grid-template-columns:
+    minmax(276px, 1fr)
+    minmax(220px, 0.86fr)
+    minmax(310px, 1.42fr)
+    minmax(160px, 0.72fr)
+    minmax(150px, 0.68fr)
+    minmax(160px, 0.72fr);
 }
 
 .operationalReportTransactionTabs {
@@ -15315,23 +15526,21 @@ body {
 
   .operationalReportControlFilters.isDaily {
     grid-template-areas:
-      "dateType dateRange dateRange"
-      "search search technician"
-      "role status status";
+      "dateType dateRange search"
+      "technician role status";
   }
 
   .operationalReportControlFilters.isSummary {
     grid-template-areas:
-      "dateType dateRange dateRange"
-      "search search technician"
-      "role status status";
+      "dateType dateRange search"
+      "technician role status";
   }
 
   .operationalReportControlFilters.isTransactions {
     grid-template-areas:
       "transactionTabs transactionTabs transactionTabs"
-      "dateRange search technician"
-      "role status status";
+      "dateRange search search"
+      "technician role status";
   }
 
   .operationalReportTableTopline {
@@ -15343,7 +15552,37 @@ body {
   }
 }
 
+@media (max-width: 1024px) {
+  .operationalReportControlFilters.isDaily,
+  .operationalReportControlFilters.isSummary,
+  .operationalReportControlFilters.isTransactions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .operationalReportControlFilters.isDaily,
+  .operationalReportControlFilters.isSummary {
+    grid-template-areas:
+      "dateType dateRange"
+      "search search"
+      "technician role"
+      "status status";
+  }
+
+  .operationalReportControlFilters.isTransactions {
+    grid-template-areas:
+      "transactionTabs transactionTabs"
+      "dateRange dateRange"
+      "search search"
+      "technician role"
+      "status status";
+  }
+}
+
 @media (max-width: 768px) {
+  .operationalReportPage.opsPageShell {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+
   .operationalReportControlStack {
     gap: 12px;
   }
@@ -15356,10 +15595,19 @@ body {
   .operationalReportTabs {
     border-radius: 20px;
     padding: 6px;
+    width: 100%;
+  }
+
+  .operationalReportTabs::-webkit-scrollbar,
+  .operationalReportInlineTabs::-webkit-scrollbar {
+    display: none;
   }
 
   .operationalReportTab {
+    flex: 1 0 auto;
+    justify-content: center;
     min-height: 36px;
+    min-width: 128px;
     padding: 0 12px;
   }
 
@@ -15404,19 +15652,9 @@ body {
       "status";
   }
 
-  .operationalReportDateRangePopover .dateRangePickerLayout.isCompact {
-    grid-template-columns: 1fr;
-  }
-
-  .operationalReportDateRangePopover .dateRangePresetList {
-    border-bottom: 1px solid #e8eef6;
-    border-right: 0;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .operationalReportInlineTabs {
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .operationalReportInlineTab {
@@ -15428,6 +15666,241 @@ body {
     max-height: calc(100vh - 28px) !important;
     max-width: calc(100vw - 28px) !important;
     width: calc(100vw - 28px) !important;
+  }
+
+  .operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker),
+  .operationalReportFilterControl > :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker),
+  .operationalReportFilterControl button[role="combobox"],
+  .operationalReportDatePicker.uiPeriodPicker {
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .operationalReportPage.opsPageShell {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 12px calc(108px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+    background: linear-gradient(180deg, #f8fbff 0%, #f8fafc 42%, #ffffff 100%);
+  }
+
+  .operationalReportPage .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-bottom: 0;
+  }
+
+  .operationalReportPage .topbar h1 {
+    margin: 0;
+    font-size: 1.42rem;
+    line-height: 1.12;
+    letter-spacing: 0;
+  }
+
+  .operationalReportPage .topbar p {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    line-height: 1.36;
+  }
+
+  .operationalReportPage .topbarActions {
+    width: 100%;
+  }
+
+  .operationalReportPage .topbarActions .uiButton {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 14px;
+  }
+
+  .operationalReportFilterCard {
+    padding: 8px;
+  }
+
+  .operationalReportFilterCard.isMobileExpanded {
+    padding: 8px 8px 12px;
+  }
+
+  .operationalReportMobileFilterToggle {
+    display: grid;
+    width: 100%;
+    min-height: 48px;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 16px;
+    background: #ffffff;
+    color: #0f172a;
+    cursor: pointer;
+    padding: 0 12px;
+    text-align: left;
+  }
+
+  .operationalReportMobileFilterTitle {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+    color: #075bc7;
+    font-size: 0.78rem;
+    font-weight: 820;
+    white-space: nowrap;
+  }
+
+  .operationalReportMobileFilterSummary {
+    min-width: 0;
+    overflow: hidden;
+    color: #64748b;
+    font-size: 0.74rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operationalReportMobileFilterCount {
+    display: inline-flex;
+    min-width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #075bc7;
+    font-size: 0.68rem;
+    font-weight: 820;
+  }
+
+  .operationalReportFilterCollapse {
+    display: none;
+  }
+
+  .operationalReportFilterCollapse.isOpen {
+    display: block;
+    margin-top: 8px;
+    border-top: 1px solid #e8eef6;
+    padding-top: 10px;
+  }
+
+  .operationalReportPage .metricGrid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .operationalReportPage .metricCard {
+    grid-template-columns: 38px minmax(0, 1fr);
+    min-height: 78px;
+    gap: 9px;
+    padding: 12px !important;
+    border-radius: 18px;
+    overflow: hidden;
+    transform: none !important;
+    box-shadow: 0 14px 28px -24px rgba(15, 23, 42, 0.42);
+  }
+
+  .operationalReportPage .metricCard:hover {
+    transform: none;
+  }
+
+  .operationalReportPage .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .operationalReportPage .metricIcon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .operationalReportPage .metricCard small {
+    font-size: 0.68rem;
+    line-height: 1.16;
+  }
+
+  .operationalReportPage .metricValue {
+    margin-top: 3px;
+    font-size: 1.05rem;
+    line-height: 1.1;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  .operationalReportTableCard {
+    border-radius: 20px;
+  }
+
+  .operationalReportTableHeader {
+    padding: 16px;
+  }
+
+  .operationalReportTableSubtitle {
+    margin-top: 5px;
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  .operationalReportMobileList {
+    display: grid;
+    gap: 12px;
+    min-height: 360px;
+    padding: 12px;
+    background: transparent;
+  }
+
+  .operationalReportMobileCard {
+    position: relative;
+    display: grid;
+    gap: 12px;
+    overflow: hidden;
+    border-color: rgba(203, 213, 225, 0.88) !important;
+    border-radius: 20px !important;
+    padding: 14px !important;
+    box-shadow: 0 18px 38px -31px rgba(15, 23, 42, 0.5);
+  }
+
+  .operationalReportMobileCard::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #2563eb, #14b8a6, #f59e0b);
+    content: "";
+  }
+
+  .operationalReportMobileCardHeader,
+  .operationalReportMobileTechnician,
+  .operationalReportMobileStats,
+  .operationalReportMobileSettlement,
+  .operationalReportMobileActions {
+    min-width: 0;
+  }
+
+  .operationalReportMobileTechnician {
+    padding-bottom: 10px !important;
+  }
+
+  .operationalReportMobileStats {
+    gap: 10px !important;
+  }
+
+  .operationalReportMobileSettlement {
+    border-radius: 16px !important;
+    padding: 12px !important;
+  }
+
+  .operationalReportMobileActions {
+    padding-top: 0 !important;
+  }
+
+  .operationalReportMobileActions .uiButton {
+    height: 38px;
+    min-height: 38px;
+    border-radius: 12px;
   }
 }
 
@@ -17642,13 +18115,48 @@ body {
   }
 
   .orderKpiGrid.metricGrid {
-    grid-template-columns: minmax(0, 1fr) !important;
-    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
+  }
+
+  .orderKpiGrid.metricGrid > .metricCard {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .orderKpiGrid.metricGrid > .metricCard:last-child {
+    grid-column: 1 / -1 !important;
   }
 
   .orderPage .metricCard {
-    min-height: 96px;
-    padding: 18px 20px;
+    grid-template-columns: 40px minmax(0, 1fr);
+    min-height: 82px;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 18px;
+    transform: none;
+  }
+
+  .orderPage .metricCard:hover {
+    transform: none;
+  }
+
+  .orderPage .metricCard .metricIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .orderPage .metricCard small {
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .orderPage .metricCard strong,
+  .orderPage .metricValue {
+    margin-top: 3px;
+    font-size: 1.12rem;
+    line-height: 1.12;
   }
 
   .orderPage .metricValue {
@@ -17995,8 +18503,8 @@ body {
     display: grid !important;
     width: 100%;
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) !important;
-    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px;
   }
 
   .orderKpiGrid.metricGrid > .metricCard,
@@ -18007,10 +18515,40 @@ body {
     min-width: 0;
   }
 
+  .orderKpiGrid.metricGrid > .metricCard:last-child {
+    grid-column: 1 / -1 !important;
+  }
+
   .orderPage .metricCard {
-    grid-template-columns: 50px minmax(0, 1fr);
-    min-height: 104px;
+    grid-template-columns: 40px minmax(0, 1fr);
+    min-height: 82px;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 18px;
     overflow: hidden;
+    transform: none;
+  }
+
+  .orderPage .metricCard:hover {
+    transform: none;
+  }
+
+  .orderPage .metricCard .metricIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .orderPage .metricCard small {
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .orderPage .metricCard strong,
+  .orderPage .metricValue {
+    margin-top: 3px;
+    font-size: 1.12rem;
+    line-height: 1.12;
   }
 
   .orderPage .metricValue {
@@ -18052,9 +18590,70 @@ body {
     margin-inline: -2px;
     padding-inline: 2px;
   }
+
+  .orderFilterDialog.masterDataFormDialogContent {
+    width: min(calc(100vw - 24px), 720px);
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 22px;
+  }
+
+  .orderFilterDialog .orderFilterDialogHeader.masterDataFormHeader {
+    padding: 20px 22px 16px;
+  }
+
+  .orderFilterDialogBody.masterDataDialogBody {
+    gap: 18px;
+    padding: 18px 22px 22px;
+  }
+
+  .orderFilterDialogBody > .space-y-4 > .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .orderFilterDialogFooter.masterDataFormActions {
+    padding: 14px 22px 18px;
+  }
 }
 
 @media (max-width: 640px) {
+  .orderPage.opsPageShell {
+    padding-bottom: calc(94px + env(safe-area-inset-bottom));
+  }
+
+  .orderFilterDialog.masterDataFormDialogContent {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 22px;
+  }
+
+  .orderFilterDialog .orderFilterDialogHeader.masterDataFormHeader {
+    padding: 18px 18px 15px;
+  }
+
+  .orderFilterDialogBody.masterDataDialogBody {
+    gap: 16px;
+    padding: 16px 18px 18px;
+  }
+
+  .orderFilterDialogBody > .space-y-4 > .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .orderFilterDialogFooter.masterDataFormActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .orderFilterDialogFooter .uiButton {
+    width: 100%;
+    min-width: 0;
+  }
+
   .orderDetailDialog.masterDataFormDialogContent {
     width: calc(100vw - 20px);
     max-width: calc(100vw - 20px);
@@ -18425,5 +19024,601 @@ body {
     min-height: 32px;
     padding-inline: 9px;
     font-size: 0.78rem;
+  }
+}
+
+/* App shell final UI/UX guard */
+.appShell {
+  width: 100%;
+  min-width: 0;
+}
+
+.appMain {
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspaceViewport {
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.sidebar:not(.mobile) .navList {
+  align-content: flex-start !important;
+  justify-content: flex-start !important;
+}
+
+.sidebar:not(.mobile) .navGroup {
+  margin: 0 !important;
+}
+
+.sidebar.mobile {
+  min-height: 0;
+  padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
+}
+
+.sidebar.mobile .brand {
+  padding-bottom: 18px;
+}
+
+.sidebar.mobile .navList {
+  align-content: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 12px;
+  padding: 0 4px 16px 0;
+}
+
+.sidebar.mobile .navGroup {
+  margin: 0 !important;
+}
+
+.sidebar.mobile .sidebarUser {
+  margin-top: 14px;
+}
+
+@media (max-width: 1023px) {
+  .appShell,
+  .appShell.sidebarCollapsed,
+  .appShell.sidebarHidden {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .appMain {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .appTopbar {
+    min-height: 58px;
+    gap: 8px;
+    padding: 0 14px;
+  }
+
+  .appTopbarStart {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .appTopbarActions {
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .appTopbarButton {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 13px;
+  }
+
+  .crumbLine {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.68rem;
+  }
+
+  .crumbLine span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .crumbLine span + span::before {
+    margin-right: 6px;
+  }
+
+  .appUserTrigger {
+    min-height: 42px;
+    gap: 6px;
+    padding: 2px;
+    border-radius: 999px;
+  }
+
+  .appUserAvatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .workspaceViewport.withMobileNav {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobileNavBar {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+    width: auto;
+    max-width: 540px;
+    margin-inline: auto;
+    min-height: 66px;
+    border-radius: 22px;
+  }
+
+  .mobileNavItem {
+    min-height: 54px;
+    overflow: hidden;
+  }
+
+  .mobileNavItem svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mobileNavItem span {
+    font-size: 0.62rem;
+    line-height: 1.1;
+  }
+}
+
+@media (max-width: 420px) {
+  .appTopbar {
+    padding-inline: 12px;
+  }
+
+  .mobileNavBar {
+    right: max(8px, env(safe-area-inset-right));
+    left: max(8px, env(safe-area-inset-left));
+    padding: 5px;
+  }
+
+  .mobileNavItem {
+    min-height: 52px;
+    border-radius: 15px;
+  }
+
+  .mobileNavItem span {
+    font-size: 0.58rem;
+  }
+}
+
+/* Pesanan final mobile polish */
+@media (max-width: 767px) {
+  .orderPage.opsPageShell {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 12px calc(108px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+    background:
+      linear-gradient(180deg, #f8fbff 0%, #f8fafc 34%, #ffffff 100%);
+  }
+
+  .orderPage.opsPageShell > .flex {
+    width: 100%;
+    min-width: 0;
+    gap: 13px !important;
+  }
+
+  .orderPage .topbar {
+    display: grid !important;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start;
+    gap: 10px 12px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .orderPage .topbarTitle {
+    min-width: 0;
+  }
+
+  .orderPage .eyebrowLine {
+    margin-bottom: 7px;
+    font-size: 0.68rem;
+    font-weight: 820;
+    line-height: 1.2;
+  }
+
+  .orderPage .topbar h1 {
+    margin: 0;
+    font-size: 1.42rem;
+    line-height: 1.12;
+    letter-spacing: 0;
+  }
+
+  .orderPage .topbar p {
+    margin-top: 6px;
+    max-width: 28rem;
+    font-size: 0.8rem;
+    font-weight: 560;
+    line-height: 1.36;
+  }
+
+  .orderPage .topbarActions,
+  .orderHeaderActions {
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .orderHeaderActions {
+    justify-content: flex-end !important;
+    gap: 8px;
+  }
+
+  .orderHeaderIconButton.uiButton,
+  .orderHeaderPrimaryIcon.uiButton {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    border-radius: 13px;
+  }
+
+  .orderViewTabsShell {
+    width: 100%;
+    min-width: 0;
+    margin-top: 2px;
+  }
+
+  .orderViewTabsShell .orderViewTabsViewport {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .orderViewTabsShell .orderViewTabs {
+    display: grid !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 16px;
+  }
+
+  .orderViewTabsShell .orderViewTab {
+    min-width: 0 !important;
+    height: 34px;
+    min-height: 34px;
+    justify-content: center;
+    padding: 0 8px;
+    border-radius: 12px;
+    font-size: 0.74rem;
+  }
+
+  .orderViewTabsShell .orderViewTab svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .orderKpiGrid.metricGrid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .orderKpiGrid.metricGrid > .metricCard {
+    grid-column: auto !important;
+    width: 100%;
+    min-width: 0;
+    min-height: 76px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 9px;
+    padding: 12px !important;
+    border-radius: 18px;
+    box-shadow: 0 14px 28px -24px rgba(15, 23, 42, 0.42);
+    transform: none !important;
+  }
+
+  .orderKpiGrid.metricGrid > .metricCard:last-child {
+    grid-column: 1 / -1 !important;
+  }
+
+  .orderKpiGrid.metricGrid .metricIcon {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 12px !important;
+  }
+
+  .orderKpiGrid.metricGrid .metricIcon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .orderKpiGrid.metricGrid .metricCard small {
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.16;
+  }
+
+  .orderKpiGrid.metricGrid .metricValue {
+    margin-top: 3px;
+    font-size: 1.08rem;
+    line-height: 1.1;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  .orderKpiGrid.metricGrid .metricValue > div {
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  .orderKpiGrid.metricGrid .metricValue .text-xs {
+    font-size: 0.64rem;
+  }
+
+  .orderPage .orderContentPanel.tablePanel {
+    gap: 12px !important;
+  }
+
+  .orderPage .orderFilterPanel.filterPanel {
+    padding: 12px !important;
+    border-radius: 20px !important;
+    box-shadow: 0 16px 34px -30px rgba(15, 23, 42, 0.4) !important;
+  }
+
+  .orderControlPanel.filterPanel {
+    gap: 11px !important;
+  }
+
+  .orderStatusRail {
+    margin-inline: -2px;
+    padding-bottom: 10px;
+  }
+
+  .orderStatusRail::before,
+  .orderStatusRail::after {
+    bottom: 10px;
+    width: 16px;
+  }
+
+  .orderStatusStrip {
+    gap: 7px;
+    padding-inline: 2px;
+  }
+
+  .orderStatusChip.uiButton {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 11px;
+    font-size: 0.65rem;
+  }
+
+  .orderStatusCount {
+    height: 17px;
+    min-width: 17px;
+    margin-left: 6px;
+    padding: 0 5px;
+    font-size: 0.62rem;
+  }
+
+  .orderPage .orderFilterGrid,
+  .orderPage .orderFilterGrid.hasCancelReason {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .orderPage .orderFilterMode,
+  .orderPage .orderFilterDate,
+  .orderPage .orderCancelReason {
+    grid-column: auto !important;
+  }
+
+  .orderPage .orderSearchSlot,
+  .orderPage .orderFilterAction {
+    grid-column: 1 / -1 !important;
+  }
+
+  .orderFilterControl.uiSelectTrigger,
+  .orderSearchInput.uiInput,
+  .orderMoreFilterButton.uiButton,
+  .orderPage .orderFilterDate .uiPeriodPicker {
+    min-height: 40px !important;
+    height: 40px !important;
+    border-radius: 13px !important;
+    font-size: 0.78rem;
+  }
+
+  .orderPage .orderFilterDate .uiPeriodPicker > span {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .orderSearchInput.uiInput {
+    padding-left: 38px !important;
+  }
+
+  .orderMoreFilterButton.uiButton {
+    justify-content: center;
+  }
+
+  .orderPage .orderMobileSurface {
+    display: grid;
+    gap: 12px;
+    overflow: visible;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .orderPage .orderMobileCard {
+    position: relative;
+    display: grid;
+    gap: 11px;
+    padding: 14px !important;
+    overflow: hidden;
+    border-color: rgba(203, 213, 225, 0.86) !important;
+    border-radius: 20px !important;
+    background: #ffffff !important;
+    box-shadow: 0 18px 38px -31px rgba(15, 23, 42, 0.5);
+  }
+
+  .orderPage .orderMobileCard::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #2563eb, #14b8a6, #f59e0b);
+    content: "";
+  }
+
+  .orderMobileCardHeader {
+    align-items: flex-start !important;
+    gap: 10px;
+    margin-bottom: 0 !important;
+  }
+
+  .orderMobileCardMeta {
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 6px !important;
+  }
+
+  .orderMobileOrderId {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    border-radius: 999px;
+    background: #eff6ff;
+    padding: 4px 8px;
+    font-size: 0.68rem !important;
+    line-height: 1;
+  }
+
+  .orderMobileSchedule {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: #f8fafc;
+    padding: 4px 8px;
+    color: #64748b !important;
+    font-size: 0.66rem !important;
+    font-weight: 680;
+    line-height: 1;
+  }
+
+  .orderMobileStatusStack {
+    flex: 0 0 auto;
+    max-width: 42%;
+  }
+
+  .orderMobileStatusStack .uiBadge,
+  .orderMobileStatusStack [data-slot='badge'] {
+    border-radius: 999px !important;
+  }
+
+  .orderMobileCardBody {
+    min-width: 0;
+  }
+
+  .orderMobileCustomerName {
+    overflow: hidden;
+    font-size: 0.96rem !important;
+    line-height: 1.24 !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .orderMobileInfoList {
+    display: grid;
+    gap: 6px !important;
+    margin-top: 8px !important;
+  }
+
+  .orderMobileInfoList > div {
+    min-width: 0;
+    align-items: center;
+    gap: 7px !important;
+    color: #52637a;
+    line-height: 1.35;
+  }
+
+  .orderMobileInfoList svg {
+    width: 14px !important;
+    height: 14px !important;
+    color: #2563eb;
+  }
+
+  .orderMobileInfoList span {
+    min-width: 0;
+  }
+
+  .orderMobileCardFooter {
+    margin-top: 0 !important;
+    padding-top: 10px !important;
+  }
+
+  .orderMobileCardFooter .rowActions {
+    gap: 5px;
+  }
+
+  .orderMobileCardFooter .uiButton {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+    border-radius: 12px;
+  }
+
+  .orderPage .orderMobilePagination {
+    border-radius: 20px;
+  }
+}
+
+@media (max-width: 380px) {
+  .orderPage.opsPageShell {
+    padding-inline: 10px !important;
+  }
+
+  .orderPage .topbar {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+
+  .orderPage .topbar h1 {
+    font-size: 1.3rem;
+  }
+
+  .orderHeaderIconButton.uiButton,
+  .orderHeaderPrimaryIcon.uiButton {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
+  .orderKpiGrid.metricGrid > .metricCard {
+    min-height: 72px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
+    padding: 11px !important;
+  }
+
+  .orderKpiGrid.metricGrid .metricIcon {
+    width: 34px !important;
+    height: 34px !important;
+  }
+
+  .orderKpiGrid.metricGrid .metricValue {
+    font-size: 1rem;
   }
 }

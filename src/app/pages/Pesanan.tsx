@@ -51,10 +51,8 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
-  SheetFooter,
-  SheetClose,
 } from "../components/ui/sheet"
+import { Dialog, DialogFooter } from "../components/ui/dialog"
 import { Label } from "../components/ui/label"
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -79,6 +77,11 @@ import {
   OperationalPageShell,
   OperationalTableCard,
 } from '../components/ui/operational-page';
+import {
+  MasterDataDialogBody,
+  MasterDataFormDialogContent,
+  MasterDataFormHeader,
+} from '../components/ui/master-data-ui';
 import { MasterDataTableTitle } from '../components/ui/master-data-table-title';
 import { Switch } from '../components/ui/switch';
 import {
@@ -475,6 +478,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const [photoViewerOrder, setPhotoViewerOrder] = useState<Order | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [waSheetOpen, setWaSheetOpen] = useState(false);
   const [waTargetOrder, setWaTargetOrder] = useState<Order | null>(null);
   const orderTableDragRef = React.useRef({
@@ -1467,33 +1471,37 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 </div>
               )}
 
-              {/* Filter Button (Sheet) */}
-              <Sheet>
+              {/* Filter Button */}
+              <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
                 <div className="orderFilterAction">
-                 <SheetTrigger asChild>
-                    <Button
-                        variant="outline"
-                        className={`orderMoreFilterButton ${activeFilterCount > 0 ? 'isActive' : ''}`}
-                    >
-                       <Filter className="h-4 w-4" />
-                       Filter
-                       {activeFilterCount > 0 && (
-                          <span className="orderMoreFilterCount">
-                             {activeFilterCount}
-                          </span>
-                       )}
-                    </Button>
-                 </SheetTrigger>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={`orderMoreFilterButton ${activeFilterCount > 0 ? 'isActive' : ''}`}
+                    onClick={() => setIsFilterDialogOpen(true)}
+                  >
+                    <Filter className="h-4 w-4" />
+                    Filter
+                    {activeFilterCount > 0 && (
+                      <span className="orderMoreFilterCount">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </Button>
                 </div>
-                 <SheetContent side="right" className="w-[400px] sm:w-[540px] z-[150] flex flex-col h-full p-0 gap-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800">
-                      <SheetHeader className="text-left p-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <SheetTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Filter Pesanan</SheetTitle>
-                        <SheetDescription className="text-slate-500 dark:text-slate-400 mt-1">
-                          Sesuaikan filter di bawah ini untuk menemukan data pesanan yang spesifik.
-                        </SheetDescription>
-                      </SheetHeader>
+                <MasterDataFormDialogContent
+                  preventOutsideClose={false}
+                  size="wide"
+                  className="orderFilterDialog"
+                >
+                  <MasterDataFormHeader
+                    icon={Filter}
+                    title="Filter Pesanan"
+                    description="Sesuaikan filter untuk menemukan data pesanan yang spesifik."
+                    className="orderFilterDialogHeader"
+                  />
                     
-                    <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                  <MasterDataDialogBody compact className="orderFilterDialogBody">
                         {/* 1. SDM (Teknisi, CS, Advertiser) */}
                         <div className="space-y-4">
                            <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
@@ -1746,22 +1754,26 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                               </div>
                            </div>
                         </div>
-                    </div>
+                  </MasterDataDialogBody>
 
-                    <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row gap-3">
-                      <Button 
-                        variant="outline" 
-                        onClick={resetSheetFilters}
-                        className="flex-1 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-                      >
-                         Reset Filter
-                      </Button>
-                      <SheetClose asChild>
-                        <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 shadow-sm text-white">Terapkan Filter</Button>
-                      </SheetClose>
-                    </div>
-                 </SheetContent>
-              </Sheet>
+                  <DialogFooter className="orderFilterDialogFooter masterDataFormActions">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetSheetFilters}
+                    >
+                      Reset Filter
+                    </Button>
+                    <Button
+                      type="button"
+                      className="bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                      onClick={() => setIsFilterDialogOpen(false)}
+                    >
+                      Terapkan Filter
+                    </Button>
+                  </DialogFooter>
+                </MasterDataFormDialogContent>
+              </Dialog>
             </div>
           </OperationalFilterPanel>
 
@@ -2770,14 +2782,14 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         className={`orderMobileCard bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4 ${canViewOrderDetails ? 'isInteractive' : ''}`}
                      >
                         {/* Header Row: ID + Status */}
-                        <div className="flex justify-between items-center mb-2">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-blue-600 dark:text-blue-400 text-xs">#{order.id}</span>
-                                <span className="text-[10px] text-slate-400">
+                        <div className="orderMobileCardHeader flex justify-between items-center mb-2">
+                            <div className="orderMobileCardMeta flex items-center gap-2">
+                                <span className="orderMobileOrderId font-bold text-blue-600 dark:text-blue-400 text-xs">#{order.id}</span>
+                                <span className="orderMobileSchedule text-[10px] text-slate-400">
                                    {new Date(order.serviceDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - {order.serviceTime}
                                 </span>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="orderMobileStatusStack flex flex-col items-end gap-1">
                                 <Badge className={`uppercase text-[9px] px-1.5 py-0.5 rounded-sm ${getStatusBadgeVariant(order.status)}`}>
                                     {getStatusLabel(order.status)}
                                 </Badge>
@@ -2796,8 +2808,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         )}
 
                         {/* Content Row: Name, Platform | Sub Channel */}
-                        <div className="space-y-1">
-                            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-tight">{order.customerName}</h3>
+                        <div className="orderMobileCardBody space-y-1">
+                            <h3 className="orderMobileCustomerName font-bold text-slate-900 dark:text-slate-100 text-sm leading-tight">{order.customerName}</h3>
                             
                             {/* Advertiser View: Simple Platform Info */}
                             {useCompactAdvertiserCard ? (
@@ -2814,7 +2826,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                 </div>
                             ) : (
                                 /* Normal View: More Details */
-                                <div className="space-y-1 mt-1">
+                                <div className="orderMobileInfoList space-y-1 mt-1">
                                     {canViewCustomerContact && (
                                     <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400">
                                         <Phone className="w-3 h-3" />
@@ -2839,7 +2851,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
                         {/* Actions Footer */}
                         {canShowOrderActions && (
-                            <div className="mt-3 flex items-center justify-end border-t border-slate-100 pt-3 dark:border-slate-700">
+                            <div className="orderMobileCardFooter mt-3 flex items-center justify-end border-t border-slate-100 pt-3 dark:border-slate-700">
                                 {renderOrderActions(order, 'mobile')}
                             </div>
                         )}

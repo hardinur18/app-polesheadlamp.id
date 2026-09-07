@@ -226,7 +226,7 @@ export function PeriodFilterPicker({
   const isFoundationVariant = variant === "foundation";
   const resolvedNumberOfMonths = numberOfMonths ?? (isFoundationVariant ? 2 : 1);
   const resolvedTriggerLabelMode = triggerLabelMode ?? (isFoundationVariant ? "compact" : "full");
-  const isCompactFoundationPicker = useCompactPeriodPicker(isFoundationVariant);
+  const isCompactFoundationPicker = useCompactPeriodPicker(isFoundationVariant || resolvedNumberOfMonths > 1);
   const calendarNumberOfMonths = isCompactFoundationPicker ? 1 : resolvedNumberOfMonths;
   const [isOpen, setIsOpen] = React.useState(false);
   const [panelMode, setPanelMode] = React.useState<PeriodPanelMode>("month");

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Calendar as CalendarIcon, 
+  ChevronDown,
   Search, 
+  SlidersHorizontal,
   DollarSign, 
   TrendingUp, 
   CheckCircle2,
@@ -77,7 +79,7 @@ import {
 import {
   Dialog,
 } from "@/app/components/ui/dialog";
-import { DatePickerWithRange } from "@/app/components/ui/date-range-picker";
+import { FoundationDateRangePicker } from "@/app/components/ui/date-range-picker";
 import {
   OperationalEmptyState,
   OperationalKpiCard,
@@ -575,6 +577,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Paid' | 'Unpaid'>('all');
   const [technicianFilter, setTechnicianFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1531,6 +1534,72 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
   const [viewMode, setViewMode] = useState<'daily' | 'summary' | 'transactions'>('daily');
   const [transactionTab, setTransactionTab] = useState<OperationalTransactionTab>('all');
 
+  const transactionTabOptions: Array<{
+    value: OperationalTransactionTab;
+    label: string;
+  }> = [
+    {
+      value: 'all',
+      label: 'Semua',
+    },
+    {
+      value: 'finance',
+      label: 'Rekap Finance',
+    },
+    {
+      value: 'request',
+      label: 'Req Transfer',
+    },
+  ];
+
+  const selectedTechnicianFilterLabel = useMemo(() => {
+      if (technicianFilter === 'all') return '';
+      return availableTechnicians.find((technician) => technician.id === technicianFilter)?.name || '';
+  }, [availableTechnicians, technicianFilter]);
+
+  const reportDateFilterLabel = useMemo(() => {
+      if (!dateRange?.from) return 'Semua Waktu';
+      const fromLabel = format(dateRange.from, 'd MMM yyyy', { locale: id });
+      const toLabel = dateRange.to ? format(dateRange.to, 'd MMM yyyy', { locale: id }) : fromLabel;
+      return fromLabel === toLabel ? fromLabel : `${fromLabel} - ${toLabel}`;
+  }, [dateRange]);
+
+  const reportFilterSummary = useMemo(() => {
+      const parts = [
+          dateTypeFilter === 'service_date' ? 'Tgl Service' : 'Waktu Input',
+          reportDateFilterLabel,
+      ];
+      if (selectedTechnicianFilterLabel) parts.push(selectedTechnicianFilterLabel);
+      if (!selectedTechnicianFilterLabel && roleFilter !== 'all') parts.push(roleFilter);
+      if (statusFilter !== 'all') parts.push(statusFilter === 'Paid' ? 'Sudah Dibayar' : 'Belum Dibayar');
+      if (viewMode === 'transactions' && transactionTab !== 'all') {
+          const tabLabel = transactionTabOptions.find((tab) => tab.value === transactionTab)?.label;
+          if (tabLabel) parts.push(tabLabel);
+      }
+      if (searchQuery.trim()) parts.push(`"${searchQuery.trim()}"`);
+      return parts.slice(0, 3).join(' / ');
+  }, [
+      dateTypeFilter,
+      reportDateFilterLabel,
+      roleFilter,
+      searchQuery,
+      selectedTechnicianFilterLabel,
+      statusFilter,
+      transactionTab,
+      viewMode,
+  ]);
+
+  const activeReportFilterCount = useMemo(() => {
+      let count = 0;
+      if (dateTypeFilter !== 'service_date') count += 1;
+      if (searchQuery.trim()) count += 1;
+      if (statusFilter !== 'all') count += 1;
+      if (technicianFilter !== 'all') count += 1;
+      if (roleFilter !== 'all') count += 1;
+      if (viewMode === 'transactions' && transactionTab !== 'all') count += 1;
+      return count;
+  }, [dateTypeFilter, roleFilter, searchQuery, statusFilter, technicianFilter, transactionTab, viewMode]);
+
   // --- Logic: Summary / Recap by Technician ---
   const technicianSummary = useMemo(() => {
     const summary = filteredReports.reduce((acc, curr) => {
@@ -1866,24 +1935,6 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
     });
   }, [operationalTransactions]);
 
-  const transactionTabOptions: Array<{
-    value: OperationalTransactionTab;
-    label: string;
-  }> = [
-    {
-      value: 'all',
-      label: 'Semua',
-    },
-    {
-      value: 'finance',
-      label: 'Rekap Finance',
-    },
-    {
-      value: 'request',
-      label: 'Req Transfer',
-    },
-  ];
-
   const handleCopySummary = (tech: any) => {
      const text = `Rekap Performa Teknisi\nNama: ${tech.name}\nRole: ${tech.role}\n\nTotal Job: ${tech.totalFinished} / ${tech.totalOrders}\nTotal Omset: ${formatRupiah(tech.totalRevenue)}\nTotal Setor: ${formatRupiah(tech.totalDeposit)}\nKurang Setor: ${formatRupiah(tech.totalDebt)}\n\n(Data periode ini)`;
      handleCopy(text);
@@ -2208,13 +2259,14 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         </Select>
       </div>
 
-      <DatePickerWithRange
-        date={dateRange}
-        setDate={setDateRange}
-        className="operationalReportFilterControl operationalReportDateRange"
-        compact
-        popoverClassName="operationalReportDateRangePopover"
-      />
+      <div className="operationalReportFilterControl operationalReportDateRange">
+        <FoundationDateRangePicker
+          date={dateRange}
+          setDate={setDateRange}
+          className="operationalReportDatePicker"
+          contentClassName="operationalReportDateRangePopover"
+        />
+      </div>
 
       <div className="operationalReportFilterControl operationalReportFilterSearch relative">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -2286,13 +2338,14 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
           </SelectContent>
         </Select>
       </div>
-      <DatePickerWithRange
-        date={dateRange}
-        setDate={setDateRange}
-        className="operationalReportFilterControl operationalReportDateRange"
-        compact
-        popoverClassName="operationalReportDateRangePopover"
-      />
+      <div className="operationalReportFilterControl operationalReportDateRange">
+        <FoundationDateRangePicker
+          date={dateRange}
+          setDate={setDateRange}
+          className="operationalReportDatePicker"
+          contentClassName="operationalReportDateRangePopover"
+        />
+      </div>
       <div className="operationalReportFilterControl operationalReportFilterSearch relative">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
@@ -2365,13 +2418,14 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         </div>
       </div>
 
-      <DatePickerWithRange
-        date={dateRange}
-        setDate={setDateRange}
-        className="operationalReportFilterControl operationalReportDateRange"
-        compact
-        popoverClassName="operationalReportDateRangePopover"
-      />
+      <div className="operationalReportFilterControl operationalReportDateRange">
+        <FoundationDateRangePicker
+          date={dateRange}
+          setDate={setDateRange}
+          className="operationalReportDatePicker"
+          contentClassName="operationalReportDateRangePopover"
+        />
+      </div>
       <div className="operationalReportFilterControl operationalReportFilterSearch relative">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
@@ -2428,7 +2482,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
   };
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="operationalReportPage">
       <OperationalPageHeader
         eyebrow="Operasional"
         icon={Briefcase}
@@ -2446,8 +2500,26 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
 
       <div className="operationalReportControlStack">
         {renderMainReportTabs()}
-        <div className="operationalReportFilterCard">
-          {renderTopFilters()}
+        <div className={cn('operationalReportFilterCard', isMobileFiltersOpen && 'isMobileExpanded')}>
+          <button
+            type="button"
+            className="operationalReportMobileFilterToggle"
+            aria-expanded={isMobileFiltersOpen}
+            onClick={() => setIsMobileFiltersOpen((open) => !open)}
+          >
+            <span className="operationalReportMobileFilterTitle">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filter Laporan
+            </span>
+            <span className="operationalReportMobileFilterSummary">{reportFilterSummary}</span>
+            {activeReportFilterCount > 0 && (
+              <span className="operationalReportMobileFilterCount">{activeReportFilterCount}</span>
+            )}
+            <ChevronDown className={cn('h-4 w-4 transition-transform', isMobileFiltersOpen && 'rotate-180')} />
+          </button>
+          <div className={cn('operationalReportFilterCollapse', isMobileFiltersOpen && 'isOpen')}>
+            {renderTopFilters()}
+          </div>
         </div>
       </div>
 
@@ -2501,7 +2573,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         </div>
 
         {/* Mobile View: Cards */}
-        <div className="md:hidden space-y-4 p-4 bg-slate-50/50 dark:bg-slate-950/50 min-h-[400px]">
+        <div className="md:hidden operationalReportMobileList">
              {filteredReports.length === 0 ? (
                 <OperationalEmptyState
                     icon={Briefcase}
@@ -2513,9 +2585,9 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                 filteredReports.map((r) => {
                     const calcs = calculateFinancials(r);
                     return (
-                        <div key={r.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-4 transition-all">
+                        <div key={r.id} className="operationalReportMobileCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-4 transition-all">
                             {/* Header */}
-                            <div className="flex justify-between items-start">
+                            <div className="operationalReportMobileCardHeader flex justify-between items-start">
                                 <div className="flex items-start gap-3">
                                     <Checkbox
                                         className="mt-0.5"
@@ -2558,7 +2630,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                             </div>
 
                             {/* Technician Info */}
-                            <div className="flex items-center gap-3 pb-3 border-b border-slate-50 dark:border-slate-800">
+                            <div className="operationalReportMobileTechnician flex items-center gap-3 pb-3 border-b border-slate-50 dark:border-slate-800">
                                 <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg shrink-0">
                                     {r.technicianName.charAt(0)}
                                 </div>
@@ -2572,7 +2644,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                             </div>
 
                             {/* Stats Grid */}
-                            <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="operationalReportMobileStats grid grid-cols-2 gap-4 text-sm">
                                 <div className="space-y-1">
                                     <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Order</span>
                                     <div className="font-bold text-slate-900 dark:text-slate-100 flex items-baseline gap-1">
@@ -2589,7 +2661,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                             </div>
                             
                             {/* Settlement Info Box */}
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 space-y-2 border border-slate-100 dark:border-slate-700">
+                            <div className="operationalReportMobileSettlement bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3 space-y-2 border border-slate-100 dark:border-slate-700">
                                 <div className="flex justify-between items-center text-xs">
                                     <span className="text-slate-500 dark:text-slate-400">Kewajiban (Cash)</span>
                                     <span className="font-bold text-slate-700 dark:text-slate-300">{formatRupiah(calcs.cashOnHand)}</span>
@@ -2620,7 +2692,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                             </div>
 
                             {/* Action Buttons Footer */}
-                            <div className="flex items-center gap-2 pt-2">
+                            <div className="operationalReportMobileActions flex items-center gap-2 pt-2">
                                 <Button variant="outline" size="sm" onClick={() => handleViewDetail(r)} className="flex-1 h-9 text-slate-600 dark:text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-slate-200 dark:border-slate-700 text-xs">
                                     <Eye className="w-3.5 h-3.5 mr-1.5" />
                                     Detail

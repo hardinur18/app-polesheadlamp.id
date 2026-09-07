@@ -186,7 +186,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     adAccounts,
     adAccountAssignments,
     adAccountOwnerAssignments,
-    advertiserConfigs,
     users,
     addLead,
     updateLead,
@@ -375,10 +374,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
       if (getScopedAdAccounts({ advertiserId, platformId }).length > 0) return true;
 
-      const legacyConfig = advertiserConfigs.find((config) => config.advertiserId === advertiserId);
-      return !legacyConfig?.platformIds?.length || legacyConfig.platformIds.includes(platformId);
+      return activeAdAccounts.length === 0 && activePlatforms.some((platform) => platform.id === platformId);
     },
-    [activePlatforms, advertiserConfigs, getScopedAdAccounts, isMandatoryPlatform],
+    [activeAdAccounts.length, activePlatforms, getScopedAdAccounts, isMandatoryPlatform],
   );
 
   const isSubChannelAllowedForLead = React.useCallback(
@@ -387,15 +385,15 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       const subChannel = subChannels.find((item) => item.id === subChannelId);
       if (!subChannel || subChannel.status !== 'active') return false;
       if (platformId && subChannel.platformId !== platformId) return false;
+      if (isMandatoryPlatform(platformId)) return true;
       if (!advertiserId) return true;
 
       const matchingAccounts = getScopedAdAccounts({ advertiserId, platformId, subChannelId });
       if (matchingAccounts.length > 0) return true;
 
-      const legacyConfig = advertiserConfigs.find((config) => config.advertiserId === advertiserId);
-      return !legacyConfig?.subChannelIds?.length || legacyConfig.subChannelIds.includes(subChannelId);
+      return activeAdAccounts.length === 0;
     },
-    [advertiserConfigs, getScopedAdAccounts, subChannels],
+    [activeAdAccounts.length, getScopedAdAccounts, isMandatoryPlatform, subChannels],
   );
 
   const isCsAllowedForLead = React.useCallback(
@@ -403,6 +401,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       if (!csId) return true;
       if (!csUsers.some((user) => user.id === csId)) return false;
       if (isCsUser && currentUser) return csId === currentUser.id;
+      if (!advertiserId || isMandatoryPlatform(platformId)) return true;
 
       const matchingAccounts = getScopedAdAccounts({ advertiserId, platformId, subChannelId });
       const assignedCsIds = new Set<string>();
@@ -413,12 +412,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       });
       if (assignedCsIds.size > 0) return assignedCsIds.has(csId);
 
-      const legacyConfig = advertiserId
-        ? advertiserConfigs.find((config) => config.advertiserId === advertiserId)
-        : null;
-      return !legacyConfig?.csIds?.length || legacyConfig.csIds.includes(csId);
+      return activeAdAccounts.length === 0;
     },
-    [activeCsAssignmentsByAccountId, advertiserConfigs, csUsers, currentUser, getScopedAdAccounts, isCsUser],
+    [activeAdAccounts.length, activeCsAssignmentsByAccountId, csUsers, currentUser, getScopedAdAccounts, isCsUser, isMandatoryPlatform],
   );
 
   // --- ROLE BASED DATA VISIBILITY ---

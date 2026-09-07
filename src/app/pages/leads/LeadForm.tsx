@@ -113,7 +113,6 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 }) => {
   const {
     subChannels: contextSubChannels,
-    advertiserConfigs,
     adAccounts,
     adAccountAssignments,
     adAccountOwnerAssignments,
@@ -233,7 +232,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
     return ids;
   };
 
-  // --- FILTERING LOGIC (AD ACCOUNT FOUNDATION + LEGACY FALLBACK) ---
+  // --- FILTERING LOGIC (MASTER AD ACCOUNT FOUNDATION) ---
 
   // 1. Filtered Advertisers (For CS Role)
   const filteredAdvertisers = useMemo(() => {
@@ -256,42 +255,21 @@ export const LeadForm: React.FC<LeadFormProps> = ({
       if (fromAdAccounts.length > 0) return includeSelectedAdvertiser(fromAdAccounts);
     }
 
-    // Legacy safety net: keep the old access config behavior if account assignments are not ready yet.
-    if (isCSLogin && currentUser) {
-      const myAdvertiserIds = advertiserConfigs
-        .filter(cfg => cfg.csIds.includes(currentUser.id))
-        .map(cfg => cfg.advertiserId);
-
-      if (myAdvertiserIds.length > 0) {
-        return includeSelectedAdvertiser(advertiserUsers.filter(a => myAdvertiserIds.includes(a.id)));
-      }
-      return advertiserUsers;
+    if (activeAdAccounts.length > 0 && (isCSLogin || isAdvertiserLogin)) {
+      return includeSelectedAdvertiser([]);
     }
+
     return includeSelectedAdvertiser(advertiserUsers);
   }, [
     activeAdAccounts,
     activeCsAssignmentsByAccountId,
     activeOwnerByAccountId,
-    advertiserConfigs,
     advertiserUsers,
     currentUser,
     isAdvertiserLogin,
     isCSLogin,
     selectedAdvertiserId,
   ]);
-
-  // 2. Active Config for selected Advertiser
-  const activeConfig = useMemo(() => {
-      // Priority 1: Form Selection
-      if (selectedAdvertiserId && selectedAdvertiserId !== NONE_ADVERTISER) {
-         return advertiserConfigs.find(c => c.advertiserId === selectedAdvertiserId);
-      }
-      // Priority 2: Current User (if Advertiser)
-      if (isAdvertiserRole(currentUser?.role)) {
-         return advertiserConfigs.find(c => c.advertiserId === currentUser.id);
-      }
-      return null;
-  }, [selectedAdvertiserId, advertiserConfigs, currentUser]);
 
   // 3. Filtered Platforms
   const filteredPlatforms = useMemo(() => {
@@ -317,53 +295,27 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         if (uniquePlatforms.length > 0) return includeOriginalPlatform(uniquePlatforms);
       }
 
-      // RULE 1: Admins -> All Active
       if (isAdminManagementRole(currentUser?.role)) {
           return includeOriginalPlatform(platforms.filter(p => p.status === 'active'));
       }
 
-      // RULE 2: Config Based (Advertiser OR CS selecting Advertiser)
-      if (activeConfig) {
-           const allowedIds = activeConfig.platformIds || [];
-           const allowedPlatforms = platforms.filter(p => allowedIds.includes(p.id));
-           
-           if (isAdvertiserRole(currentUser?.role)) {
-               return includeOriginalPlatform(allowedPlatforms);
-            } else {
-               const combined = [...allowedPlatforms, ...mandatoryPlatforms];
-               return includeOriginalPlatform(uniqueById(combined));
-           }
-      }
+      const hasScopedOwner =
+        (selectedAdvertiserId && selectedAdvertiserId !== NONE_ADVERTISER) ||
+        isCSLogin ||
+        isAdvertiserLogin;
 
-      // RULE 3: CS (No specific Advertiser selected yet)
-      if (isCsRole(currentUser?.role)) {
-          const myConfigs = advertiserConfigs.filter(cfg => cfg.csIds?.includes(currentUser.id));
-          if (myConfigs.length > 0) {
-              const allowedIds = new Set<string>();
-              myConfigs.forEach(cfg => cfg.platformIds?.forEach(id => allowedIds.add(id)));
-              const allowedPlatforms = platforms.filter(p => allowedIds.has(p.id));
-              const combined = [...allowedPlatforms, ...mandatoryPlatforms];
-              return includeOriginalPlatform(uniqueById(combined));
-          }
-          // Fallback if no config: Just Mandatory + Active? Or All?
-          // Safer to show Mandatory + Active to avoid blockage.
-          const combined = [...platforms.filter(p => p.status === 'active'), ...mandatoryPlatforms];
-          return includeOriginalPlatform(uniqueById(combined));
-      }
-
-      // Fallback for Advertiser with NO CONFIG -> Allow All Active (Safety net)
-      if (isAdvertiserRole(currentUser?.role)) {
-          return includeOriginalPlatform(platforms.filter(p => p.status === 'active'));
+      if (activeAdAccounts.length > 0 && hasScopedOwner) {
+        return includeOriginalPlatform(isAdvertiserLogin ? [] : mandatoryPlatforms);
       }
 
       return includeOriginalPlatform(platforms.filter(p => p.status === 'active'));
   }, [
     activeAdAccounts,
-    activeConfig,
     activeCsAssignmentsByAccountId,
     activeOwnerByAccountId,
-    advertiserConfigs,
     currentUser,
+    isAdvertiserLogin,
+    isCSLogin,
     originalPlatformId,
     platforms,
     preserveOriginalPlatform,
@@ -396,18 +348,23 @@ export const LeadForm: React.FC<LeadFormProps> = ({
       return includeOriginalSubChannel(scs.filter((subChannel) => accountSubChannelIds.has(subChannel.id)));
     }
 
-    // Legacy safety net for advertiser configs that have not been migrated into account assignments.
-    if (activeConfig?.subChannelIds && activeConfig.subChannelIds.length > 0) {
-      scs = scs.filter(s => activeConfig.subChannelIds!.includes(s.id));
+    const hasScopedSource =
+      (selectedAdvertiserId && selectedAdvertiserId !== NONE_ADVERTISER) ||
+      isCSLogin ||
+      isAdvertiserLogin;
+
+    if (activeAdAccounts.length > 0 && hasScopedSource) {
+      return includeOriginalSubChannel([]);
     }
     
     return includeOriginalSubChannel(scs);
   }, [
     activeAdAccounts,
-    activeConfig,
     activeCsAssignmentsByAccountId,
     activeOwnerByAccountId,
     currentUser,
+    isAdvertiserLogin,
+    isCSLogin,
     originalSubChannelId,
     preserveOriginalSubChannel,
     selectedAdvertiserId,
@@ -443,36 +400,34 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         return includeOriginalCs(csUsers.filter((cs) => accountCsIds.has(cs.id)));
       }
 
-      // Admins see all
       if (isAdminManagementRole(currentUser?.role)) {
           return includeOriginalCs(csUsers);
       }
-      
-      // Advertiser sees ONLY assigned
-      if (isAdvertiserRole(currentUser?.role)) {
-          if (activeConfig) {
-             if (activeConfig.csIds && activeConfig.csIds.length > 0) {
-                 return includeOriginalCs(csUsers.filter(c => activeConfig.csIds!.includes(c.id)));
-             }
-             return []; // Config exists but empty -> Empty CS
-          }
-          return includeOriginalCs(csUsers); // No Config -> Show All (Safety net)
-      }
-      
-      // CS selection logic (if applicable)
-      if (activeConfig && activeConfig.csIds && activeConfig.csIds.length > 0) {
-          return includeOriginalCs(csUsers.filter(c => activeConfig.csIds!.includes(c.id)));
+
+      const selectedPlatform = platforms.find((platform) => platform.id === selectedPlatformId);
+      const selectedPlatformIsNonPaid = Boolean(
+        selectedPlatform && ['repeat order', 'organik'].includes(selectedPlatform.name.toLowerCase()),
+      );
+      const hasScopedAttribution =
+        (selectedAdvertiserId && selectedAdvertiserId !== NONE_ADVERTISER) ||
+        (selectedPlatformId && selectedPlatformId !== NONE_PLATFORM) ||
+        (selectedSubChannelId && selectedSubChannelId !== NONE_SUBCHANNEL) ||
+        isAdvertiserLogin;
+
+      if (activeAdAccounts.length > 0 && hasScopedAttribution && !selectedPlatformIsNonPaid) {
+        return includeOriginalCs([]);
       }
       
       return includeOriginalCs(csUsers);
   }, [
     activeAdAccounts,
-    activeConfig,
     activeCsAssignmentsByAccountId,
     activeOwnerByAccountId,
     csUsers,
     currentUser,
+    isAdvertiserLogin,
     originalCsId,
+    platforms,
     preserveOriginalCs,
     selectedAdvertiserId,
     selectedPlatformId,

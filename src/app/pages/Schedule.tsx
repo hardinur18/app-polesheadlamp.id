@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Plus, Search, Filter, AlertCircle, CheckCircle2, User, LayoutList, LayoutGrid, Eye, Route, Copy } from 'lucide-react';
 import { cn } from '../components/ui/StatusBadge';
 import { useMasterData, type TechnicianSchedule } from './master-data/context';
-import { Lead, Order, ProspectBooking } from './master-data/data';
+import type { Branch, Lead, Order, ProspectBooking } from './master-data/data';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { useMediaQuery } from '../hooks/use-media-query';
 import { logActivity } from '@/app/services/auditService';
@@ -56,7 +56,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "../components/ui/sheet";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addDays, differenceInCalendarDays, getDay, parseISO, isValid } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, addDays, differenceInCalendarDays, getDay, parseISO, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
 import type { DateRange } from 'react-day-picker';
 import { toast } from 'sonner';
@@ -99,6 +99,29 @@ type BranchDayCapacity = {
   orders: ScheduleItem[];
 };
 
+type ScheduleStatusCounts = {
+  scheduled: number;
+  pending: number;
+  done: number;
+  cancelled: number;
+};
+
+type ScheduleDaySummary = {
+  date: Date;
+  dateKey: string;
+  branchCaps: Array<{
+    branch: Branch;
+    capacity: BranchDayCapacity;
+  }>;
+  dailyUsed: number;
+  dailyTotal: number;
+  dailyPercent: number;
+  stats: ScheduleStatusCounts;
+  sortedCsStats: Array<[string, number]>;
+  sortedAdvStats: Array<[string, number]>;
+  dailyConflictCount: number;
+};
+
 const EMPTY_BRANCH_DAY_CAPACITY: BranchDayCapacity = {
   used: 0,
   total: 0,
@@ -118,6 +141,8 @@ type AddProspectFormRequest = {
 
 type ScheduleView = 'day' | 'week' | 'month' | 'list' | 'availability';
 type AvailabilityPreset = 'today' | 'tomorrow' | 'next7' | 'next14';
+
+const SCHEDULE_WEEK_DAYS = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'] as const;
 
 const DEFAULT_OPERATING_SLOTS = ['08:00', '10:00', '12:00', '15:00', '17:00'] as const;
 const OPTIONAL_OPERATING_SLOT = '19:00' as const;
@@ -216,6 +241,9 @@ const getOperationalSlotTime = (serviceTime?: string) => {
 };
 
 const isInactiveScheduleItem = (item: ScheduleItem) => INACTIVE_SCHEDULE_STATUSES.has(item.status);
+
+const normalizeScheduleSearchText = (value?: string | null) =>
+  (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 const isShortMapsUrl = (value: string) =>
   value.includes('goo.gl') ||
@@ -365,7 +393,6 @@ export default function Schedule() {
     prospectBookings: rawProspectBookings,
     leads,
     users,
-    branches: allBranches,
     activeBranches: branches,
     services,
     technicianSchedules,
@@ -424,6 +451,8 @@ export default function Schedule() {
   const currentDateKey = useMemo(() => format(currentDate, 'yyyy-MM-dd'), [currentDate]);
   const currentMonthKey = useMemo(() => getScheduleMonthKey(currentDate), [currentDate]);
   const [todayDate, setTodayDate] = useState(() => toCalendarDate(new Date()));
+  const [datePickerMonth, setDatePickerMonth] = useState(() => toCalendarDate(new Date()));
+  const [availabilityPickerMonth, setAvailabilityPickerMonth] = useState(() => toCalendarDate(new Date()));
   const [showLateOperatingSlot, setShowLateOperatingSlot] = useState(false);
   const [availabilityPreset, setAvailabilityPreset] = useState<AvailabilityPreset | null>('next7');
   const [availabilityDateRange, setAvailabilityDateRange] = useState<DateRange>(() => createAvailabilityPresetRange('next7', new Date()));
@@ -431,6 +460,7 @@ export default function Schedule() {
   const [selectedCSId, setSelectedCSId] = useState<string>('all');
   const [selectedTechId, setSelectedTechId] = useState<string>('all');
   const [selectedAdvertiserId, setSelectedAdvertiserId] = useState<string>('all');
+  const [scheduleSearch, setScheduleSearch] = useState('');
   const [showUnassigned, setShowUnassigned] = useState(false); // Default hidden, triggered by FAB
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -1180,13 +1210,43 @@ export default function Schedule() {
 
   // 2. Filter schedule items for current view
   const viewScheduleItems = useMemo(() => {
+    const query = normalizeScheduleSearchText(scheduleSearch);
+
     return scheduleItems.filter((item) =>
       (selectedBranchId === 'all' || item.branchId === selectedBranchId) &&
       (selectedCSId === 'all' || item.csId === selectedCSId) &&
       (selectedTechId === 'all' || item.technicianId === selectedTechId) &&
-      (selectedAdvertiserId === 'all' || item.advertiserId === selectedAdvertiserId)
+      (selectedAdvertiserId === 'all' || item.advertiserId === selectedAdvertiserId) &&
+      (
+        !query ||
+        [
+          item.orderId,
+          item.leadId,
+          item.customerName,
+          item.customerPhone,
+          item.address,
+          item.serviceLabel,
+          item.serviceDate,
+          item.serviceTime,
+          item.status,
+          item.source === 'booking' ? 'booking prospek' : 'pesanan',
+          userById.get(item.csId || '')?.name,
+          userById.get(item.technicianId || '')?.name,
+          userById.get(item.advertiserId || '')?.name,
+          branchById.get(item.branchId || '')?.name,
+        ].some((value) => normalizeScheduleSearchText(value).includes(query))
+      )
     );
-  }, [scheduleItems, selectedBranchId, selectedCSId, selectedTechId, selectedAdvertiserId]);
+  }, [
+    branchById,
+    scheduleItems,
+    scheduleSearch,
+    selectedAdvertiserId,
+    selectedBranchId,
+    selectedCSId,
+    selectedTechId,
+    userById,
+  ]);
 
   const scheduleItemsByDate = useMemo(() => {
     const map = new Map<string, ScheduleItem[]>();
@@ -1250,17 +1310,15 @@ export default function Schedule() {
   }, [currentDayScheduleItems]);
 
   // --- FILTER OPTIONS (Dynamic based on data for current Month) ---
-  const { csOptions, techOptions, advertiserOptions, branchOptions } = useMemo(() => {
+  const { csOptions, techOptions, advertiserOptions } = useMemo(() => {
       const csIds = new Set<string>();
       const techIds = new Set<string>();
       const advertiserIds = new Set<string>();
-      const branchIds = new Set<string>();
 
       currentMonthScheduleItems.forEach(item => {
           if (item.csId) csIds.add(item.csId);
           if (item.technicianId) techIds.add(item.technicianId);
           if (item.advertiserId) advertiserIds.add(item.advertiserId);
-          if (item.branchId) branchIds.add(item.branchId);
       });
 
       // Filter master lists to only include those present in THIS MONTH'S orders
@@ -1275,15 +1333,13 @@ export default function Schedule() {
       );
 
       const filteredAdvertisers = activeAdvertisers.filter(u => advertiserIds.has(u.id));
-      const filteredBranches = allBranches.filter(b => branchIds.has(b.id));
 
       return {
           csOptions: filteredCS,
           techOptions: filteredTechs,
-          advertiserOptions: filteredAdvertisers,
-          branchOptions: filteredBranches
+          advertiserOptions: filteredAdvertisers
       };
-  }, [currentMonthScheduleItems, activeCS, activeAdvertisers, users, allBranches, selectedBranchId]);
+  }, [currentMonthScheduleItems, activeCS, activeAdvertisers, users, selectedBranchId]);
 
   // 3. Calculate Daily Capacity Logic
   const getBranchDayCapacity = React.useCallback((date: Date, branchId: string): BranchDayCapacity => {
@@ -1311,36 +1367,106 @@ export default function Schedule() {
     technicianOffScheduleByKey,
   ]);
 
-  // 4. Calculate Monthly Stats
-  const monthlyStats = useMemo(() => {
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    const daysInMonth = eachDayOfInterval({ start, end });
-    
-    // Calculate REAL capacity based on technician availability per day
-    const totalCapacity = daysInMonth.reduce((acc, day) => {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        
-        // Count available techs for this day (from the active/filtered list)
-        const availableCount = activeTechnicians.reduce((total, technician) => (
-            technicianOffScheduleByKey.has(`${dateStr}|${technician.id}`) ? total : total + 1
-        ), 0);
-        
-        return acc + (availableCount * bookableOperatingSlots.length);
-    }, 0);
+  const currentMonthCalendar = useMemo(() => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(monthStart);
+    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    const startDayOfWeek = getDay(monthStart);
+    const paddingDays = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
 
-    // Monthly orders (excluding cancelled for occupancy rate)
-    const monthlyActiveOrders = currentMonthScheduleItems.filter(item => {
-        if (isInactiveScheduleItem(item)) return false;
-        if (!getDisplayOperationalSlotTime(item.serviceTime)) return false;
-        return true;
+    return {
+      days,
+      blanks: Array.from({ length: paddingDays }),
+    };
+  }, [currentDate]);
+
+  const getScheduleDaySummary = React.useCallback((date: Date): ScheduleDaySummary => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const stats: ScheduleStatusCounts = {
+      scheduled: 0,
+      pending: 0,
+      done: 0,
+      cancelled: 0,
+    };
+    const performanceOrdersMap = new Map<string, ScheduleItem>();
+    let dailyUsed = 0;
+    let dailyTotal = 0;
+
+    const branchCaps = selectedDisplayBranches.map((branch) => ({
+      branch,
+      capacity: getBranchDayCapacity(date, branch.id),
+    }));
+
+    branchCaps.forEach(({ capacity }) => {
+      dailyUsed += capacity.used;
+      dailyTotal += capacity.total;
+
+      capacity.orders.forEach((item) => {
+        const bucket = getScheduleStatusMeta(item).bucket;
+        if (bucket === 'scheduled') stats.scheduled++;
+        else if (bucket === 'pending') stats.pending++;
+        else if (bucket === 'done') stats.done++;
+        else if (bucket === 'cancelled') stats.cancelled++;
+
+        if (!isInactiveScheduleItem(item)) {
+          performanceOrdersMap.set(item.id, item);
+        }
+      });
     });
 
-    const totalOrders = monthlyActiveOrders.length;
+    const csStats: Record<string, number> = {};
+    const advStats: Record<string, number> = {};
+
+    performanceOrdersMap.forEach((item) => {
+      if (item.csId) {
+        const user = userById.get(item.csId);
+        const name = user ? user.name : '??';
+        csStats[name] = (csStats[name] || 0) + 1;
+      }
+
+      if (item.advertiserId) {
+        const user = userById.get(item.advertiserId);
+        const name = user ? user.name : '??';
+        advStats[name] = (advStats[name] || 0) + 1;
+      }
+    });
+
+    const dailyConflictCount = Array.from(performanceOrdersMap.values()).filter((item) =>
+      scheduleConflictByItemKey.has(getScheduleConflictItemKey(item.source, item.sourceId))
+    ).length;
+
+    return {
+      date,
+      dateKey,
+      branchCaps,
+      dailyUsed,
+      dailyTotal,
+      dailyPercent: dailyTotal > 0 ? (dailyUsed / dailyTotal) * 100 : 0,
+      stats,
+      sortedCsStats: Object.entries(csStats).sort((a, b) => b[1] - a[1]),
+      sortedAdvStats: Object.entries(advStats).sort((a, b) => b[1] - a[1]),
+      dailyConflictCount,
+    };
+  }, [
+    getBranchDayCapacity,
+    scheduleConflictByItemKey,
+    selectedDisplayBranches,
+    userById,
+  ]);
+
+  const monthlyDaySummaries = useMemo(
+    () => currentMonthCalendar.days.map((date) => getScheduleDaySummary(date)),
+    [currentMonthCalendar, getScheduleDaySummary]
+  );
+
+  // 4. Calculate Monthly Stats
+  const monthlyStats = useMemo(() => {
+    const totalCapacity = monthlyDaySummaries.reduce((total, day) => total + day.dailyTotal, 0);
+    const totalOrders = monthlyDaySummaries.reduce((total, day) => total + day.dailyUsed, 0);
     const occupancyRate = totalCapacity > 0 ? (totalOrders / totalCapacity) * 100 : 0;
 
     return { totalOrders, totalCapacity, occupancyRate };
-  }, [currentDate, activeTechnicians, currentMonthScheduleItems, technicianOffScheduleByKey, bookableOperatingSlots.length, getDisplayOperationalSlotTime]);
+  }, [monthlyDaySummaries]);
 
   // 5. Calculate Daily Stats (for List Daily View)
   const dailyStats = useMemo(() => {
@@ -1384,7 +1510,13 @@ export default function Schedule() {
   const canShowCsFilter = view !== 'availability' && isAdminManagementUser;
   const canShowTechFilter = view !== 'availability' && (isAdminManagementUser || isCsUser);
   const canShowAdvertiserFilter = view !== 'availability' && isAdminManagementUser;
-  const canShowMobileFilterToggle = view !== 'availability' && isAdminManagementUser;
+  const canShowLateSlotControl = !isAdvertiserUser;
+  const canShowMobileFilterToggle = view !== 'availability' && (
+    canShowCsFilter ||
+    canShowTechFilter ||
+    canShowAdvertiserFilter ||
+    canShowLateSlotControl
+  );
   const isMonthScopedView = view === 'month' || (view === 'list' && listDateMode === 'all');
   const availabilityDesktopLabel = availabilityRangeDisplayLabel;
   const availabilityMobileLabel = `${format(availabilityStartDate, 'd MMM', { locale: id })} - ${format(availabilityEndDate, 'd MMM', { locale: id })}`;
@@ -1405,6 +1537,12 @@ export default function Schedule() {
     ? 'Pilih salah satu hari untuk pindah ke bulan tersebut.'
     : 'Pilih tanggal untuk melihat timeline atau jadwal harian.';
 
+  const openDatePicker = () => {
+    setDatePickerMonth(currentDate);
+    setAvailabilityPickerMonth(availabilityResolvedRange.from || todayDate);
+    setIsDatePickerOpen(true);
+  };
+
   const handleOpenAvailabilityView = () => {
     setView('availability');
   };
@@ -1413,18 +1551,22 @@ export default function Schedule() {
     const nextRange = createAvailabilityPresetRange(presetKey, todayDate);
     setAvailabilityPreset(presetKey);
     setAvailabilityDateRange(nextRange);
+    setAvailabilityPickerMonth(nextRange.from || todayDate);
   };
 
   const handleSelectAvailabilityCalendar = (range?: DateRange) => {
     if (!range?.from && !range?.to) return;
 
+    if (range?.from) setAvailabilityPickerMonth(toCalendarDate(range.from));
     setAvailabilityDateRange(range);
     setAvailabilityPreset(matchAvailabilityPreset(range, todayDate));
   };
 
   const handleSelectCalendarDate = (date?: Date) => {
     if (!date) return;
-    setCurrentDate(toCalendarDate(date));
+    const normalizedDate = toCalendarDate(date);
+    setCurrentDate(normalizedDate);
+    setDatePickerMonth(normalizedDate);
     setIsDatePickerOpen(false);
   };
 
@@ -2130,6 +2272,8 @@ export default function Schedule() {
                          <input 
                              type="text" 
                              placeholder="Cari jadwal..." 
+                             value={scheduleSearch}
+                             onChange={(event) => setScheduleSearch(event.target.value)}
                              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
                          />
                     </div>
@@ -2180,25 +2324,14 @@ export default function Schedule() {
   };
 
   const renderMonthlyView = () => {
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(monthStart);
-    const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-    
-    // Add padding days for grid alignment
-    const startDayOfWeek = getDay(monthStart); // 0 (Sun) - 6 (Sat)
-    // Adjust for Monday start (Monday = 1, Sunday = 7 in ISO, but getDay gives Sun=0)
-    // Let's assume standard Calendar grid (Sun-Sat or Mon-Sun). Let's use Mon-Sun.
-    const paddingDays = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; 
-    const blanks = Array(paddingDays).fill(null);
-
-    const weekDays = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    const { blanks } = currentMonthCalendar;
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
             {/* Calendar Header (Desktop Only) */}
             {isDesktop && (
             <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
-                {weekDays.map(d => (
+                {SCHEDULE_WEEK_DAYS.map(d => (
                     <div key={d} className="py-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                         {d}
                     </div>
@@ -2212,70 +2345,12 @@ export default function Schedule() {
                 {!isDesktop ? (
                 <div className="space-y-3 pb-24">
                     {/* renderMobileStats moved to main layout */}
-                    {days.map((date) => {
-                        // Calculate stats for this day
-                        let dailyUsed = 0;
-                        let dailyTotal = 0;
-                        
-                        const stats = {
-                            scheduled: 0, 
-                            pending: 0,   
-                            done: 0,      
-                            cancelled: 0  
-                        };
-                        const performanceOrdersMap = new Map<string, ScheduleItem>();
-                        const branchCaps = selectedDisplayBranches.map((branch) => ({
-                            branch,
-                            capacity: getBranchDayCapacity(date, branch.id),
-                        }));
-
-                        branchCaps.forEach(({ capacity: caps }) => {
-                             dailyUsed += caps.used;
-                             dailyTotal += caps.total;
-                             
-                             caps.orders.forEach(item => {
-                                 if (!isInactiveScheduleItem(item)) {
-                                     performanceOrdersMap.set(item.id, item);
-                                 }
-                             });
-
-                             caps.orders.forEach(item => {
-                                 const bucket = getScheduleStatusMeta(item).bucket;
-                                 if (bucket === 'scheduled') stats.scheduled++;
-                                 else if (bucket === 'pending') stats.pending++;
-                                 else if (bucket === 'done') stats.done++;
-                                 else if (bucket === 'cancelled') stats.cancelled++;
-                             });
-                        });
-                        
-                        const csStats: Record<string, number> = {};
-                        const advStats: Record<string, number> = {};
-
-                        performanceOrdersMap.forEach(o => {
-                            if (o.csId) {
-                                const u = userById.get(o.csId);
-                                const name = u ? u.name : '??';
-                                csStats[name] = (csStats[name] || 0) + 1;
-                            }
-                            if (o.advertiserId) {
-                                const u = userById.get(o.advertiserId);
-                                const name = u ? u.name : '??';
-                                advStats[name] = (advStats[name] || 0) + 1;
-                            }
-                        });
-
-                        const sortedCsStats = Object.entries(csStats).sort((a, b) => b[1] - a[1]);
-                        const sortedAdvStats = Object.entries(advStats).sort((a, b) => b[1] - a[1]);
-                        const dailyConflictCount = Array.from(performanceOrdersMap.values()).filter((item) =>
-                            scheduleConflictByItemKey.has(getScheduleConflictItemKey(item.source, item.sourceId))
-                        ).length;
-
-                        // Skip days from other months if needed, or show them. Usually monthly view shows full month.
-                        if (!isSameMonth(date, currentDate)) return null;
+                    {monthlyDaySummaries.map((daySummary) => {
+                        const { date, branchCaps, dailyUsed, dailyTotal, stats, sortedCsStats, sortedAdvStats, dailyConflictCount } = daySummary;
 
                         return (
                             <div 
-                                key={date.toISOString()} 
+                                key={daySummary.dateKey}
                                 onClick={() => {
                                     if (!canOpenInteractiveSchedule) return;
                                     setCurrentDate(date);
@@ -2411,78 +2486,13 @@ export default function Schedule() {
                         <div key={`blank-${i}`} className="bg-transparent" />
                     ))}
                     
-                    {days.map((date) => {
-                        const isToday = isSameDay(date, new Date());
-                        
-                        // Hitung total harian dari cabang yang ditampilkan
-                        let dailyUsed = 0;
-                        let dailyTotal = 0;
-                        
-                        // Stats accumulator
-                        const stats = {
-                            scheduled: 0, // processing, waiting, reschedule
-                            pending: 0,   // pending
-                            done: 0,      // done
-                            cancelled: 0  // cancelled
-                        };
-                        
-                        const performanceOrdersMap = new Map<string, ScheduleItem>();
-                        const branchCaps = selectedDisplayBranches.map((branch) => ({
-                            branch,
-                            capacity: getBranchDayCapacity(date, branch.id),
-                        }));
-
-                        branchCaps.forEach(({ capacity: caps }) => {
-                             dailyUsed += caps.used;
-                             dailyTotal += caps.total;
-                             
-                             // Collect active orders for performance stats (exclude cancelled)
-                             // Deduplicate by ID to ensure strict uniqueness
-                             caps.orders.forEach(item => {
-                                 if (!isInactiveScheduleItem(item)) {
-                                     performanceOrdersMap.set(item.id, item);
-                                 }
-                             });
-
-                             // Aggregate statuses
-                             caps.orders.forEach(item => {
-                                 const bucket = getScheduleStatusMeta(item).bucket;
-                                 if (bucket === 'scheduled') stats.scheduled++;
-                                 else if (bucket === 'pending') stats.pending++;
-                                 else if (bucket === 'done') stats.done++;
-                                 else if (bucket === 'cancelled') stats.cancelled++;
-                             });
-                        });
-                        
-                        // Calculate Performance Stats (CS & Adv)
-                        const csStats: Record<string, number> = {};
-                        const advStats: Record<string, number> = {};
-
-                        performanceOrdersMap.forEach(o => {
-                            if (o.csId) {
-                                const u = userById.get(o.csId);
-                                const name = u ? u.name : '??';
-                                csStats[name] = (csStats[name] || 0) + 1;
-                            }
-                            if (o.advertiserId) {
-                                const u = userById.get(o.advertiserId);
-                                const name = u ? u.name : '??';
-                                advStats[name] = (advStats[name] || 0) + 1;
-                            }
-                        });
-
-                        // Sort stats by count descending
-                        const sortedCsStats = Object.entries(csStats).sort((a, b) => b[1] - a[1]);
-                        const sortedAdvStats = Object.entries(advStats).sort((a, b) => b[1] - a[1]);
-                        const dailyConflictCount = Array.from(performanceOrdersMap.values()).filter((item) =>
-                            scheduleConflictByItemKey.has(getScheduleConflictItemKey(item.source, item.sourceId))
-                        ).length;
-
-                        const dailyPercent = dailyTotal > 0 ? (dailyUsed / dailyTotal) * 100 : 0;
+                    {monthlyDaySummaries.map((daySummary) => {
+                        const { date, branchCaps, dailyUsed, dailyTotal, dailyPercent, stats, sortedCsStats, sortedAdvStats, dailyConflictCount } = daySummary;
+                        const isToday = isSameDay(date, todayDate);
                         
                         return (
                             <div 
-                                key={date.toISOString()} 
+                                key={daySummary.dateKey}
                                 onClick={() => {
                                     if (!canOpenInteractiveSchedule) return;
                                     setCurrentDate(date);
@@ -2973,7 +2983,7 @@ export default function Schedule() {
              <div className="scheduleToolbarInner flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 
                 {/* Row 1: Branch + Month Nav */}
-                <div className="flex items-center gap-2 justify-between">
+                <div className="scheduleToolbarTopRow flex items-center gap-2 justify-between">
                     {/* Branch Filter - Flexible Width */}
                     <div className="scheduleMobileBranchPicker flex-1 md:w-[180px] md:flex-none min-w-0">
                         <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
@@ -3003,9 +3013,9 @@ export default function Schedule() {
                             <ChevronLeft className="w-4 h-4" />
                          </button>
                          <button
-                            onClick={() => setIsDatePickerOpen(true)}
+                            onClick={openDatePicker}
                             className={cn(
-                              "h-7 min-w-[76px] px-2 flex items-center justify-center gap-1 rounded-lg text-slate-700 dark:text-slate-200",
+                            "h-7 min-w-[88px] px-2 flex items-center justify-center gap-1 rounded-lg text-slate-700 dark:text-slate-200",
                               "hover:bg-slate-50 dark:hover:bg-slate-700"
                             )}
                          >
@@ -3027,11 +3037,11 @@ export default function Schedule() {
                     {/* Desktop: View Toggle & Search Container (Hidden on Mobile) */}
                     <div className="hidden md:flex items-center gap-2">
                          {/* View Toggle */}
-                        <div className="scheduleViewSwitch flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
+                        <div className="scheduleViewSwitch masterDataTabs flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
                             <button 
                                 onClick={() => { setView('month'); setListDateMode('all'); }}
                                 className={cn(
-                                    "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                                    "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
                                     view === 'month' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                                 )}
                             >
@@ -3042,7 +3052,7 @@ export default function Schedule() {
                                 <button 
                                     onClick={handleOpenAvailabilityView}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
                                         view === 'availability' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
@@ -3054,7 +3064,7 @@ export default function Schedule() {
                                 <button 
                                     onClick={() => { setView('list'); setListDateMode('all'); }}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
                                         view === 'list' && listDateMode === 'all' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
@@ -3066,7 +3076,7 @@ export default function Schedule() {
                                 <button 
                                     onClick={() => { setView('list'); setListDateMode('daily'); }}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
                                         view === 'list' && listDateMode === 'daily' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
@@ -3078,7 +3088,7 @@ export default function Schedule() {
                                 <button 
                                     onClick={() => setView('day')}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
                                         view === 'day' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                                     )}
                                 >
@@ -3094,6 +3104,8 @@ export default function Schedule() {
                             <input 
                                 type="text"
                                 placeholder="Cari..." 
+                                value={scheduleSearch}
+                                onChange={(event) => setScheduleSearch(event.target.value)}
                                 className="h-9 pl-8 pr-3 w-[150px] lg:w-[200px] text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                             />
                         </div>
@@ -3108,6 +3120,8 @@ export default function Schedule() {
                              <input
                                 type="text"
                                 placeholder="Cari order, nama, no HP..."
+                                value={scheduleSearch}
+                                onChange={(event) => setScheduleSearch(event.target.value)}
                                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-3 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                              />
                         </div>
@@ -3128,23 +3142,6 @@ export default function Schedule() {
                             </button>
                         )}
 
-                        {!isAdvertiserUser && (
-                            <button
-                                type="button"
-                                onClick={() => setShowLateOperatingSlot((value) => !value)}
-                                aria-pressed={showLateOperatingSlot}
-                                aria-label="Tampilkan slot jam 19:00"
-                                className={cn(
-                                    "scheduleLateSlotToggle flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3 text-xs font-bold shadow-sm transition-all",
-                                    showLateOperatingSlot
-                                        ? "border-blue-200 bg-blue-50 text-blue-700"
-                                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                                )}
-                            >
-                                <Clock className="h-4 w-4 shrink-0" />
-                                <span>19:00</span>
-                            </button>
-                        )}
                     </div>
 
                     <div className="scheduleMobileViewTabs">
@@ -3211,8 +3208,8 @@ export default function Schedule() {
 
                 {/* Mobile Filter Drawer (Collapsible) */}
                 {view !== 'availability' && showMobileFilters && (
-                    <div className="md:hidden grid grid-cols-2 gap-2 pt-1 animate-in slide-in-from-top-2 duration-200">
-                         {isAdminManagementUser && (
+                    <div className="scheduleMobileFilterPanel md:hidden grid grid-cols-2 gap-2 pt-1 animate-in slide-in-from-top-2 duration-200">
+                         {canShowCsFilter && (
                             <div className="col-span-2 sm:col-span-1">
                                 <Select value={selectedCSId} onValueChange={setSelectedCSId}>
                                     <SelectTrigger className="bg-white border-slate-200 h-9 text-xs rounded-xl shadow-sm">
@@ -3227,7 +3224,7 @@ export default function Schedule() {
                                 </Select>
                             </div>
                          )}
-                         {(isAdminManagementUser || isCsUser) && (
+                         {canShowTechFilter && (
                             <div>
                                 <Select value={selectedTechId} onValueChange={setSelectedTechId}>
                                     <SelectTrigger className="bg-white border-slate-200 h-9 text-xs rounded-xl shadow-sm">
@@ -3242,7 +3239,7 @@ export default function Schedule() {
                                 </Select>
                             </div>
                          )}
-                         {isAdminManagementUser && (
+                         {canShowAdvertiserFilter && (
                             <div>
                                 <Select value={selectedAdvertiserId} onValueChange={setSelectedAdvertiserId}>
                                     <SelectTrigger className="bg-white border-slate-200 h-9 text-xs rounded-xl shadow-sm">
@@ -3254,9 +3251,22 @@ export default function Schedule() {
                                             <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                                         ))}
                                     </SelectContent>
-                                </Select>
+                                 </Select>
+                             </div>
+                          )}
+                          {canShowLateSlotControl && (
+                            <div className="scheduleMobileLateSlotField col-span-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800">Slot 19:00</p>
+                                <p className="text-[11px] font-medium text-slate-500">Tampilkan jadwal malam di timeline.</p>
+                              </div>
+                              <Switch
+                                checked={showLateOperatingSlot}
+                                onCheckedChange={setShowLateOperatingSlot}
+                                aria-label="Tampilkan slot jam 19:00"
+                              />
                             </div>
-                         )}
+                          )}
                     </div>
                 )}
                 
@@ -3275,7 +3285,7 @@ export default function Schedule() {
                         </button>
                         
                         <button
-                          onClick={() => setIsDatePickerOpen(true)}
+                          onClick={openDatePicker}
                           className={cn(
                             "flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors",
                             "hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -3491,7 +3501,7 @@ export default function Schedule() {
       <DialogContent
         className={cn(
           "scheduleDateDialog max-w-[calc(100%-1.5rem)] rounded-[28px] border border-slate-200 bg-white p-0 gap-0 overflow-hidden",
-          isAvailabilityView ? "sm:max-w-[760px]" : "sm:max-w-[360px]"
+          isAvailabilityView ? "scheduleDateDialog--range sm:max-w-[760px]" : "scheduleDateDialog--single sm:max-w-[360px]"
         )}
       >
         <div className="border-b border-slate-100 px-5 pt-5 pb-4">
@@ -3545,11 +3555,14 @@ export default function Schedule() {
               <Calendar
                 initialFocus
                 mode="range"
-                defaultMonth={availabilityDateRange?.from || availabilityStartDate}
+                month={availabilityPickerMonth}
+                onMonthChange={(month) => setAvailabilityPickerMonth(toCalendarDate(month))}
                 selected={availabilityDateRange}
                 onSelect={handleSelectAvailabilityCalendar}
                 numberOfMonths={isDesktop ? 2 : 1}
                 locale={id}
+                fixedWeeks
+                showOutsideDays
                 className="pointer-events-auto bg-white dark:bg-slate-900"
               />
             </div>
@@ -3559,7 +3572,8 @@ export default function Schedule() {
             <Calendar
               mode="single"
               selected={currentDate}
-              defaultMonth={currentDate}
+              month={datePickerMonth}
+              onMonthChange={(month) => setDatePickerMonth(toCalendarDate(month))}
               onSelect={handleSelectCalendarDate}
               locale={id}
               fixedWeeks
