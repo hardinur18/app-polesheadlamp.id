@@ -8,6 +8,32 @@ import {
 
 const VALID_PERMISSION_KEYS = new Set<string>(PERMISSIONS.map(permission => permission.key));
 const ALL_PERMISSION_KEYS = PERMISSIONS.map(permission => permission.key);
+const ROLE_RESTRICTED_PERMISSIONS: Partial<Record<Role, PermissionKey[]>> = {
+  CS: [
+    'monitoring.view',
+    'monitoring.activity_view',
+    'technician_schedule.view',
+    'technician_schedule.manage',
+    'map.view_global',
+    'teknisi.view_mobile',
+    'targets.manage',
+  ],
+  Teknisi: [
+    'schedule.view',
+    'monitoring.view',
+    'monitoring.activity_view',
+    'technician_schedule.view',
+    'technician_schedule.manage',
+    'map.view_global',
+    'targets.manage',
+  ],
+};
+
+export const getRoleRestrictedPermissions = (role: Role): PermissionKey[] =>
+  ROLE_RESTRICTED_PERMISSIONS[role] || [];
+
+export const isRolePermissionRestricted = (role: Role, permission: PermissionKey) =>
+  getRoleRestrictedPermissions(role).includes(permission);
 
 export const ensurePermission = (permissions: PermissionKey[], permission: PermissionKey) => {
   if (!permissions.includes(permission)) {
@@ -25,12 +51,20 @@ export const sanitizePermissionList = (permissions: unknown): PermissionKey[] =>
   return Array.from(new Set(normalized));
 };
 
+const applyRoleRestrictions = (role: Role, permissions: PermissionKey[]) => {
+  const restrictedPermissions = getRoleRestrictedPermissions(role);
+  if (!restrictedPermissions?.length) return permissions;
+
+  const restricted = new Set(restrictedPermissions);
+  return permissions.filter(permission => !restricted.has(permission));
+};
+
 export const normalizeStoredRolePermissions = (role: Role, permissions: unknown): PermissionKey[] => {
   if (role === 'Owner' || role === 'Super Admin') {
     return [...ALL_PERMISSION_KEYS];
   }
 
-  return sanitizePermissionList(permissions);
+  return backfillRolePermissions(role, applyRoleRestrictions(role, sanitizePermissionList(permissions)));
 };
 
 export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]) => {
@@ -63,6 +97,7 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
   if (
     updated.includes('whatsapp.chats.reply') ||
     updated.includes('whatsapp.templates.manage') ||
+    updated.includes('whatsapp.broadcast.manage') ||
     updated.includes('whatsapp.settings.manage')
   ) {
     ensurePermission(updated, 'whatsapp.view');
@@ -81,6 +116,16 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
 
   if (updated.includes('monitoring.activity_view') || updated.includes('finance.manage')) {
     ensurePermission(updated, 'targets.manage');
+  }
+
+  if (updated.includes('technician_schedule.manage')) {
+    ensurePermission(updated, 'technician_schedule.view');
+  }
+
+  if (role === 'Admin PIC' && updated.includes('monitoring.activity_view')) {
+    ensurePermission(updated, 'technician_schedule.view');
+    ensurePermission(updated, 'technician_schedule.manage');
+    ensurePermission(updated, 'map.view_global');
   }
 
   if (updated.includes('monitoring.marketing.view')) {

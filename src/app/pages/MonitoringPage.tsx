@@ -17,7 +17,6 @@ import {
 } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import { 
-  Calendar as CalendarIcon, 
   Clock, 
   MapPin, 
   Briefcase, 
@@ -33,19 +32,13 @@ import {
   Trash2,
   Target,
   BarChart,
-  Percent,
-  CalendarDays,
-  Settings,
-  MoreVertical,
-  Minus,
   Terminal
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { Calendar } from '../components/ui/calendar';
 import { cn } from '../components/ui/utils';
+import { FoundationDateRangePicker } from '@/app/components/ui/period-filter-picker';
 import {
   Select,
   SelectContent,
@@ -82,7 +75,7 @@ import { usePermissions } from '@/app/hooks/usePermissions';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { minutesToMs, useUsageControlSettings } from '@/app/services/usageControlSettings';
-import { isAdminManagementRole, isTechnicianRole } from '@/app/data/roleHelpers';
+import { isTechnicianRole } from '@/app/data/roleHelpers';
 
 import { TargetManager, TargetItem } from './monitoring/TargetManager';
 
@@ -101,7 +94,7 @@ export function MonitoringPage() {
   const { users, orders, currentRole } = useMasterData();
   const { hasPermission } = usePermissions();
   const canManageTargets = hasPermission('targets.manage');
-  const canManageAttendance = hasPermission('technician_schedule.manage') || isAdminManagementRole(currentRole);
+  const canManageAttendance = hasPermission('technician_schedule.manage');
   
   // Tabs State
   const [activeTab, setActiveTab] = useState<'daily' | 'period'>('daily');
@@ -423,50 +416,55 @@ export function MonitoringPage() {
       return `${format(dateRange.from, "d MMM")} - ${format(dateRange.to, "d MMM yyyy")}`;
   };
 
+  const dailyDateRange = useMemo<DateRange>(() => ({
+      from: selectedDate,
+      to: selectedDate,
+  }), [selectedDate]);
+
+  const setDailyDateRange = React.useCallback((range?: DateRange) => {
+      const nextDate = range?.from || range?.to;
+      if (nextDate) setSelectedDate(nextDate);
+  }, []);
+
+  const setPeriodDateRange = React.useCallback((range?: DateRange) => {
+      setDateRange(range);
+      setPeriodFilter('custom');
+  }, []);
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 pb-20 font-sans text-slate-800 dark:text-slate-200">
+    <div className="fieldActivityPage opsPageShell font-sans text-slate-800 dark:text-slate-200">
       
       {/* Top Header Section */}
-      <div className="flex flex-col gap-6">
-          <div className="flex items-start justify-between">
+      <div className="fieldActivityHeaderBlock">
+          <div className="fieldActivityTopbar">
             <div>
-                <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Aktivitas Teknisi</h1>
+                <div className="fieldActivityTitleRow">
+                    <h1>Aktivitas Teknisi</h1>
                     <span className="relative flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                     </span>
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-700/40">Live</span>
+                    <span className="fieldActivityLiveBadge">Live</span>
                 </div>
-                <p className="text-slate-500 dark:text-slate-400 mt-1">Monitor kinerja teknisi, absensi harian, dan rekapitulasi pekerjaan.</p>
+                <p>Monitor kinerja teknisi, absensi harian, dan rekapitulasi pekerjaan.</p>
             </div>
           </div>
 
           {/* Controls Bar */}
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="fieldActivityControlPanel surfacePanel filterPanel">
              
              {/* Tab Switcher (Segmented Control) */}
-             <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg self-start md:self-auto w-full md:w-auto">
+             <div className="fieldActivityTabs">
                 <button
                     onClick={() => setActiveTab('daily')}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 md:flex-none justify-center",
-                        activeTab === 'daily' 
-                            ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" 
-                            : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                    )}
+                    className={cn("fieldActivityTab", activeTab === 'daily' && "isActive")}
                 >
                     <List className="w-4 h-4" />
                     Harian
                 </button>
                 <button
                     onClick={() => setActiveTab('period')}
-                    className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 md:flex-none justify-center",
-                        activeTab === 'period' 
-                            ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm" 
-                            : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                    )}
+                    className={cn("fieldActivityTab", activeTab === 'period' && "isActive")}
                 >
                     <CalendarRange className="w-4 h-4" />
                     Periode
@@ -475,12 +473,7 @@ export function MonitoringPage() {
                 {canManageTargets && (
                     <button 
                         onClick={() => setIsTargetModalOpen(prev => !prev)}
-                        className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all flex-1 md:flex-none justify-center",
-                            isTargetModalOpen 
-                                ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm ring-1 ring-slate-900/10" 
-                                : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        )}
+                        className={cn("fieldActivityTab", isTargetModalOpen && "isActive")}
                     >
                         <Terminal className="w-4 h-4" />
                         Target Console
@@ -489,31 +482,22 @@ export function MonitoringPage() {
              </div>
 
              {/* Date Controls */}
-             <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+             <div className="fieldActivityDateControls">
                 
                 {activeTab === 'daily' ? (
                     // Daily View Controls
-                    <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md shadow-sm h-10">
-                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setSelectedDate(d => subDays(d, 1))}>
+                    <div className="fieldActivityDailyPicker">
+                        <Button variant="ghost" size="icon" className="fieldActivityDateNav" onClick={() => setSelectedDate(d => subDays(d, 1))}>
                             <ChevronRight className="w-4 h-4 rotate-180" />
                         </Button>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="ghost" className="h-9 px-3 text-sm font-medium min-w-[180px]">
-                                    <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                                    {format(selectedDate, "EEEE, d MMMM yyyy", { locale: localeId })}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="end">
-                                <Calendar
-                                    mode="single"
-                                    selected={selectedDate}
-                                    onSelect={(d) => d && setSelectedDate(d)}
-                                    initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
-                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setSelectedDate(d => addDays(d, 1))}>
+                        <FoundationDateRangePicker
+                            date={dailyDateRange}
+                            setDate={setDailyDateRange}
+                            numberOfMonths={1}
+                            className="fieldActivityDatePicker"
+                            contentClassName="fieldActivityDatePopover"
+                        />
+                        <Button variant="ghost" size="icon" className="fieldActivityDateNav" onClick={() => setSelectedDate(d => addDays(d, 1))}>
                             <ChevronRight className="w-4 h-4" />
                         </Button>
                     </div>
@@ -521,7 +505,7 @@ export function MonitoringPage() {
                     // Period View Controls
                     <>
                         <Select value={periodFilter} onValueChange={handlePeriodChange}>
-                            <SelectTrigger className="w-[160px] h-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                            <SelectTrigger className="fieldActivityPeriodSelect">
                                 <SelectValue placeholder="Pilih Periode" />
                             </SelectTrigger>
                             <SelectContent>
@@ -532,30 +516,12 @@ export function MonitoringPage() {
                             </SelectContent>
                         </Select>
 
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className={cn(
-                                    "h-10 justify-start text-left font-normal border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-w-[200px]",
-                                    !dateRange && "text-muted-foreground"
-                                )}>
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {formatRangeDisplay()}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="end">
-                                <Calendar
-                                    initialFocus
-                                    mode="range"
-                                    defaultMonth={dateRange?.from}
-                                    selected={dateRange}
-                                    onSelect={(range) => {
-                                        setDateRange(range);
-                                        setPeriodFilter('custom');
-                                    }}
-                                    numberOfMonths={2}
-                                />
-                            </PopoverContent>
-                        </Popover>
+                        <FoundationDateRangePicker
+                            date={dateRange}
+                            setDate={setPeriodDateRange}
+                            className="fieldActivityDatePicker"
+                            contentClassName="fieldActivityDatePopover"
+                        />
                     </>
                 )}
              </div>
@@ -564,7 +530,7 @@ export function MonitoringPage() {
 
       {/* Target Manager Console */}
       {canManageTargets && isTargetModalOpen && (
-          <div className="animate-in slide-in-from-top-4 duration-300">
+          <div className="fieldActivityTargetConsole animate-in slide-in-from-top-4 duration-300">
               <TargetManager 
                   month={selectedDate} 
                   onClose={() => setIsTargetModalOpen(false)} 
@@ -577,7 +543,7 @@ export function MonitoringPage() {
 
       {/* Target Progress Section (New) */}
       {monthlyTarget && (monthlyTarget.revenue > 0 || monthlyTarget.orders > 0) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="fieldActivityTargetGrid grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Revenue Target */}
               <Card className="border-blue-100 dark:border-blue-900/40 bg-gradient-to-br from-white to-blue-50/50 dark:from-slate-900 dark:to-blue-950/30 shadow-sm relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-3 opacity-10"><BarChart className="w-24 h-24 text-blue-600" /></div>
@@ -669,8 +635,8 @@ export function MonitoringPage() {
       )}
 
       {/* Summary Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden group hover:shadow-md transition-shadow">
+      <div className="fieldActivitySummaryGrid grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="fieldActivityMetricCard bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden group hover:shadow-md transition-shadow">
               <CardContent className="p-0 flex h-full">
                   <div className="w-1.5 bg-blue-500 h-full shrink-0 group-hover:w-2 transition-all"></div>
                   <div className="p-5 flex items-center gap-4 w-full">
@@ -690,7 +656,7 @@ export function MonitoringPage() {
               </CardContent>
           </Card>
           
-          <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden group hover:shadow-md transition-shadow">
+          <Card className="fieldActivityMetricCard bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden group hover:shadow-md transition-shadow">
               <CardContent className="p-0 flex h-full">
                   <div className="w-1.5 bg-emerald-500 h-full shrink-0 group-hover:w-2 transition-all"></div>
                   <div className="p-5 flex items-center gap-4 w-full">
@@ -705,7 +671,7 @@ export function MonitoringPage() {
               </CardContent>
           </Card>
 
-          <Card className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden group hover:shadow-md transition-shadow">
+          <Card className="fieldActivityMetricCard bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm rounded-xl overflow-hidden group hover:shadow-md transition-shadow">
               <CardContent className="p-0 flex h-full">
                   <div className="w-1.5 bg-amber-500 h-full shrink-0 group-hover:w-2 transition-all"></div>
                   <div className="p-5 flex items-center gap-4 w-full">
@@ -724,7 +690,7 @@ export function MonitoringPage() {
       </div>
 
       {/* Main Content List */}
-      <div className="space-y-4">
+      <div className="fieldActivityRoster space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
             <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
                 <Briefcase className="w-5 h-5 text-slate-500 dark:text-slate-400" />
@@ -744,7 +710,7 @@ export function MonitoringPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4">
                 {techStats.map(({ tech, shift, orders, metrics }) => (
-                    <Card key={tech.id} className="overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 rounded-xl transition-all hover:shadow-md">
+                    <Card key={tech.id} className="fieldActivityTechnicianCard overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 rounded-xl transition-all hover:shadow-md">
                         <div className="flex flex-col lg:flex-row">
                             
                             {/* Left: Profile & Info */}
@@ -1071,7 +1037,7 @@ function ShiftEditDialog({ tech, shift, date, onSave }: { tech: any, shift: any,
                     <Edit className="w-3 h-3" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 z-[9999]">
+            <DialogContent className="fieldActivityDialog masterDataFormDialogContent sm:max-w-[425px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 z-[9999]">
                 <DialogHeader>
                     <DialogTitle>Edit Absensi: {tech.name}</DialogTitle>
                     <DialogDescription>

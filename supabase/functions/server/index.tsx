@@ -1263,7 +1263,17 @@ function requesterCanViewOwnTechnicianSurface(
 function requesterCanManageTechnicianAttendance(
   requester: Awaited<ReturnType<typeof getRequesterAccessContext>> | null,
 ) {
-  return requesterHasAnyPermission(requester, ["monitoring.activity_view", "technician_schedule.manage"]);
+  return requesterHasAnyPermission(requester, ["technician_schedule.manage"]);
+}
+
+function requesterCanViewTechnicianAttendance(
+  requester: Awaited<ReturnType<typeof getRequesterAccessContext>> | null,
+) {
+  return requesterHasAnyPermission(requester, [
+    "monitoring.activity_view",
+    "technician_schedule.view",
+    "technician_schedule.manage",
+  ]);
 }
 
 function requesterCanReadShift(
@@ -1272,7 +1282,7 @@ function requesterCanReadShift(
 ) {
   return (
     requesterCanViewOwnTechnicianSurface(requester, userId) ||
-    requesterCanManageTechnicianAttendance(requester)
+    requesterCanViewTechnicianAttendance(requester)
   );
 }
 
@@ -1298,7 +1308,7 @@ function requesterCanReadTechnicianOrders(
 ) {
   return (
     requesterCanViewOwnTechnicianSurface(requester, userId) ||
-    requesterCanManageTechnicianAttendance(requester)
+    requesterCanViewTechnicianAttendance(requester)
   );
 }
 
@@ -2719,6 +2729,76 @@ app.post("/make-server-f781cd00/shifts", async (c) => {
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
+  }
+});
+
+// --- TECHNICIAN AVAILABILITY SCHEDULES ---
+
+const TECHNICIAN_SCHEDULE_TYPES = new Set(["Libur", "Sakit", "Cuti", "Izin"]);
+
+app.post("/make-server-f781cd00/technician-schedules", async (c) => {
+  const auth = await requireAuthorizedRequester(c, ["technician_schedule.manage"]);
+  if (auth.response) return auth.response;
+
+  try {
+    const body = await c.req.json();
+    const userId = typeof body.userId === "string" ? body.userId.trim() : String(body.user_id || "").trim();
+    const date = typeof body.date === "string" ? body.date.trim() : "";
+    const type = TECHNICIAN_SCHEDULE_TYPES.has(body.type) ? body.type : "Libur";
+    const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : type;
+
+    if (!userId || !date) {
+      return c.json({ error: "User teknisi dan tanggal wajib diisi." }, 400);
+    }
+
+    const { data, error } = await supabase
+      .from("technician_schedules")
+      .insert({
+        user_id: userId,
+        date,
+        type,
+        reason,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const actor = auth.requester?.actorName || "System";
+    await logActivity(actor, "Update Ketersediaan Teknisi", `Menambahkan status ${type} untuk teknisi ${userId} pada ${date}`, "System");
+
+    return c.json({ data });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menyimpan jadwal teknisi." }, 500);
+  }
+});
+
+app.delete("/make-server-f781cd00/technician-schedules/:userId/:date", async (c) => {
+  const auth = await requireAuthorizedRequester(c, ["technician_schedule.manage"]);
+  if (auth.response) return auth.response;
+
+  const userId = c.req.param("userId");
+  const date = c.req.param("date");
+
+  try {
+    if (!userId || !date) {
+      return c.json({ error: "User teknisi dan tanggal wajib diisi." }, 400);
+    }
+
+    const { error } = await supabase
+      .from("technician_schedules")
+      .delete()
+      .eq("user_id", userId)
+      .eq("date", date);
+
+    if (error) throw error;
+
+    const actor = auth.requester?.actorName || "System";
+    await logActivity(actor, "Update Ketersediaan Teknisi", `Menghapus jadwal libur teknisi ${userId} pada ${date}`, "System");
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menghapus jadwal teknisi." }, 500);
   }
 });
 

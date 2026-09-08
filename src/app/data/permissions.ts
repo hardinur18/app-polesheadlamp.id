@@ -54,6 +54,7 @@ export const PERMISSIONS = definePermissions([
   { key: 'whatsapp.view', label: 'Akses Modul WhatsApp', group: 'WhatsApp', description: 'Buka chats dan kontak WhatsApp' },
   { key: 'whatsapp.chats.reply', label: 'Balas Chat WhatsApp', group: 'WhatsApp', description: 'Kirim balasan teks dan lampiran dari inbox WhatsApp' },
   { key: 'whatsapp.templates.manage', label: 'Kelola Template WhatsApp', group: 'WhatsApp', description: 'Sync dan membuat template Kirimdev/Meta' },
+  { key: 'whatsapp.broadcast.manage', label: 'Kelola Broadcast WhatsApp', group: 'WhatsApp', description: 'Buat dan jalankan broadcast WhatsApp' },
   { key: 'whatsapp.settings.manage', label: 'Kelola Pengaturan WhatsApp', group: 'WhatsApp', description: 'Akses status provider, nomor WA, webhook, dan sync inbox WhatsApp' },
 
   // --- IKLAN & AFFILIATE ---
@@ -168,9 +169,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'leads.view', 'leads.create', 'leads.edit', 'leads.export',
     'proof_assets.view', 'proof_assets.create', 'proof_assets.edit', 'proof_assets.delete',
     'order.view', 'order.create', 'order.edit', 'order.assign_technician', 'order.view_details', 'order.status.edit', 'order.status.mark_done', 'order.payment.view', 'order.payment.edit_type', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
-    'schedule.view',
+    'schedule.view', 'technician_schedule.view', 'technician_schedule.manage',
     'audit_logs.view',
-    'monitoring.view', 'monitoring.activity_view', 'targets.manage',
+    'monitoring.view', 'monitoring.activity_view', 'map.view_global', 'targets.manage',
     'monitoring.marketing.view', 'cs_okr.view', 'cs_okr.manage',
     'daily_report.view', 'daily_report.create', 'daily_report.edit', 'daily_report.delete',
     'affiliate.view', 'affiliate.manage',
@@ -199,7 +200,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'proof_assets.view',
     'order.view', 'order.create', 'order.edit', 'order.view_details', 'order.status.edit', 'order.payment.view', 'order.payment.edit_type', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
     'schedule.view',
-    'monitoring.view',
     'monitoring.marketing.view', 'cs_okr.view'
   ],
 

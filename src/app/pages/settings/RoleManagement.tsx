@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { PERMISSIONS, PermissionKey } from '@/app/data/permissions';
+import { isRolePermissionRestricted } from '@/app/data/permissionBackfill';
 import { normalizeRole } from '@/app/data/roleHelpers';
 import { Role } from '../master-data/data';
 import { useMasterData } from '@/app/pages/master-data/context';
@@ -97,6 +98,10 @@ export const RoleManagement = () => {
 
   const handleToggle = (role: Role, key: PermissionKey) => {
     if (!canManageRolePermissions || role === 'Owner') return;
+    if (isRolePermissionRestricted(role, key)) {
+      toast.info(`${key} dikunci untuk role ${role}.`);
+      return;
+    }
     
     setLocalPermissions(prev => {
       const current = prev[role] || [];
@@ -109,12 +114,14 @@ export const RoleManagement = () => {
 
   const setRolePermissionKeys = (role: Role, keys: PermissionKey[], checked: boolean) => {
     if (!canManageRolePermissions || role === 'Owner') return;
+    const allowedKeys = keys.filter(key => !isRolePermissionRestricted(role, key));
+    if (allowedKeys.length === 0) return;
 
     setLocalPermissions(prev => {
       const current = prev[role] || [];
-      const keySet = new Set(keys);
+      const keySet = new Set(allowedKeys);
       const updated = checked
-        ? Array.from(new Set([...current, ...keys]))
+        ? Array.from(new Set([...current, ...allowedKeys]))
         : current.filter(permission => !keySet.has(permission));
 
       return { ...prev, [role]: updated };
@@ -574,10 +581,13 @@ export const RoleManagement = () => {
                         const groupPermissionKeys = Array.from(new Set(
                             features.flatMap(({ main, subs }) => [main.key, ...subs.map(sub => sub.key)]),
                         )) as PermissionKey[];
+                        const groupAllowedPermissionKeys = groupPermissionKeys.filter(
+                            permission => !isRolePermissionRestricted(selectedRole, permission),
+                        );
                         const selectedRolePermissions = localPermissions[selectedRole] || [];
                         const isGroupFullyChecked =
-                            groupPermissionKeys.length > 0 &&
-                            groupPermissionKeys.every(permission => selectedRolePermissions.includes(permission));
+                            groupAllowedPermissionKeys.length > 0 &&
+                            groupAllowedPermissionKeys.every(permission => selectedRolePermissions.includes(permission));
 
                         return (
                             <div key={group} className="rolePermissionCard">
@@ -593,23 +603,24 @@ export const RoleManagement = () => {
                                         )}
                                     </div>
                                     <div className="rolePermissionCheckboxSlot">
-                                       <Checkbox 
-                                            checked={isGroupFullyChecked}
-                                            disabled={isRoleReadOnly || isInteractionDisabled}
-                                            onCheckedChange={(checked) => setRolePermissionKeys(selectedRole, groupPermissionKeys, checked === true)}
-                                            className="rolePermissionCheckbox"
-                                       />
+                                        <Checkbox
+                                             checked={isGroupFullyChecked}
+                                             disabled={isRoleReadOnly || isInteractionDisabled || groupAllowedPermissionKeys.length === 0}
+                                             onCheckedChange={(checked) => setRolePermissionKeys(selectedRole, groupAllowedPermissionKeys, checked === true)}
+                                             className="rolePermissionCheckbox"
+                                        />
                                     </div>
                                 </div>
 
                                 {/* Card Body */}
                                 <div className="rolePermissionCardBody">
-                                    {features.map(({ main, subs }) => {
-                                        const isMainChecked = localPermissions[selectedRole]?.includes(main.key);
-                                        const isMenuToggle = main.key.endsWith('.view') || main.key.endsWith('.view_daily') || main.key.endsWith('.view_global');
-                                        
-                                        return (
-                                            <div key={main.key} className="rolePermissionFeature">
+                                     {features.map(({ main, subs }) => {
+                                         const isMainChecked = localPermissions[selectedRole]?.includes(main.key);
+                                         const isMenuToggle = main.key.endsWith('.view') || main.key.endsWith('.view_daily') || main.key.endsWith('.view_global');
+                                         const isMainRestricted = isRolePermissionRestricted(selectedRole, main.key);
+
+                                         return (
+                                             <div key={main.key} className="rolePermissionFeature">
                                                 {/* Main Row */}
                                                 <div className="rolePermissionFeatureMain">
                                                     <div className="rolePermissionFeatureText">
@@ -617,12 +628,17 @@ export const RoleManagement = () => {
                                                             <p>
                                                                 {main.label}
                                                             </p>
-                                                            {isMenuToggle && (
-                                                                <span className="rolePermissionMenuBadge">
-                                                                    <MenuSquare className="w-3 h-3" /> Menu
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                             {isMenuToggle && (
+                                                                 <span className="rolePermissionMenuBadge">
+                                                                     <MenuSquare className="w-3 h-3" /> Menu
+                                                                 </span>
+                                                             )}
+                                                             {isMainRestricted && (
+                                                                 <span className="rolePermissionMenuBadge">
+                                                                     <ShieldAlert className="w-3 h-3" /> Dikunci
+                                                                 </span>
+                                                             )}
+                                                         </div>
                                                         {main.description && (
                                                             <small>
                                                                 {main.description}
@@ -630,12 +646,12 @@ export const RoleManagement = () => {
                                                         )}
                                                     </div>
                                                     <div className="rolePermissionCheckboxSlot">
-                                                        <Checkbox 
-                                                            checked={isMainChecked}
-                                                            onCheckedChange={() => handleToggle(selectedRole, main.key)}
-                                                            disabled={isRoleReadOnly || isInteractionDisabled}
-                                                            className="rolePermissionCheckbox"
-                                                        />
+                                                         <Checkbox
+                                                             checked={isMainChecked}
+                                                             onCheckedChange={() => handleToggle(selectedRole, main.key)}
+                                                             disabled={isRoleReadOnly || isInteractionDisabled || isMainRestricted}
+                                                             className="rolePermissionCheckbox"
+                                                         />
                                                     </div>
                                                 </div>
 
@@ -647,32 +663,34 @@ export const RoleManagement = () => {
                                                     )}>
                                                         {subs.map(sub => {
                                                             const isSubChecked = localPermissions[selectedRole]?.includes(sub.key);
+                                                            const isSubRestricted = isRolePermissionRestricted(selectedRole, sub.key);
                                                             // Simplify label
                                                             let label = sub.label;
-                                                            if (sub.key.includes('create') || sub.key.includes('add')) label = 'Tambah';
-                                                            else if (sub.key.includes('edit')) label = 'Edit';
-                                                            else if (sub.key.includes('delete')) label = 'Hapus';
-                                                            else if (sub.key.includes('export')) label = 'Export';
-                                                            else if (sub.key.includes('detail')) label = 'Detail';
-                                                            else if (sub.key.includes('assign')) label = 'Ubah Teknisi';
-                                                            else if (sub.key.includes('manage')) label = 'Kelola Full';
-                                                            
-                                                            return (
+                                                             if (sub.key.includes('create') || sub.key.includes('add')) label = 'Tambah';
+                                                             else if (sub.key.includes('edit')) label = 'Edit';
+                                                             else if (sub.key.includes('delete')) label = 'Hapus';
+                                                             else if (sub.key.includes('export')) label = 'Export';
+                                                             else if (sub.key.includes('detail')) label = 'Detail';
+                                                             else if (sub.key.includes('assign')) label = 'Ubah Teknisi';
+                                                             else if (sub.key.includes('manage')) label = 'Kelola Full';
+
+                                                             return (
                                                                 <button
                                                                     key={sub.key}
                                                                     onClick={() => handleToggle(selectedRole, sub.key)}
-                                                                    disabled={isRoleReadOnly || isInteractionDisabled}
+                                                                    disabled={isRoleReadOnly || isInteractionDisabled || isSubRestricted}
                                                                     className={cn(
                                                                         "rolePermissionChip",
                                                                         isSubChecked
                                                                             ? "isActive"
-                                                                            : ""
+                                                                            : "",
+                                                                        isSubRestricted && "opacity-60 cursor-not-allowed"
                                                                     )}
                                                                 >
-                                                                    {isSubChecked && <Check className="w-3 h-3" />}
-                                                                    {label}
-                                                                </button>
-                                                            );
+                                                                     {isSubChecked && <Check className="w-3 h-3" />}
+                                                                     {label}
+                                                                 </button>
+                                                             );
                                                         })}
                                                     </div>
                                                 )}

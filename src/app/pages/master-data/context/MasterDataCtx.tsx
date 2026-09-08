@@ -81,7 +81,6 @@ import {
 import { mapProfileToUser, mapProfilesToUsers } from './internal/mappers/userMappers';
 import {
   mapScheduleFromDB,
-  mapScheduleToDB,
   mapWATemplateFromDB,
   mapWATemplateToDB,
   mapDailyAdFromDB,
@@ -1286,18 +1285,24 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       toast.info("Memperbarui data...");
   };
 
-  // -- TECHNICIAN SCHEDULES (Direct DB Table)
+  // -- TECHNICIAN SCHEDULES
   const addSchedule = async (schedule: TechnicianSchedule) => {
     try {
-        const payload = mapScheduleToDB(schedule);
-        const { data, error } = await supabase.from('technician_schedules').insert(payload).select().single();
+        const response = await fetch(buildMakeServerUrl('/technician-schedules'), {
+          method: 'POST',
+          headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+          body: JSON.stringify(schedule),
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(result.error || result.message || `HTTP ${response.status} ${response.statusText}`);
+        }
         
-        if (error) throw error;
-        
-        if (data) {
-             const newSchedule = mapScheduleFromDB(data);
-             setTechnicianSchedules(prev => [...prev.filter(item => item.id !== newSchedule.id), newSchedule]);
-             toast.success("Jadwal libur berhasil disimpan");
+        if (result.data) {
+          const newSchedule = mapScheduleFromDB(result.data);
+          setTechnicianSchedules(prev => [...prev.filter(item => item.id !== newSchedule.id), newSchedule]);
+          toast.success("Jadwal libur berhasil disimpan");
         }
     } catch (e: any) {
         console.error("Error adding schedule:", e);
@@ -1307,8 +1312,18 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
   const deleteSchedule = async (userId: string, date: string) => {
     try {
-        const { error } = await supabase.from('technician_schedules').delete().eq('user_id', userId).eq('date', date);
-        if (error) throw error;
+        const response = await fetch(
+          buildMakeServerUrl(`/technician-schedules/${encodeURIComponent(userId)}/${encodeURIComponent(date)}`),
+          {
+            method: 'DELETE',
+            headers: await getSessionBackedEdgeHeaders(),
+          },
+        );
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(result.error || result.message || `HTTP ${response.status} ${response.statusText}`);
+        }
         
         setTechnicianSchedules(prev => prev.filter(s => !(s.userId === userId && s.date === date)));
         toast.success("Jadwal libur dihapus");

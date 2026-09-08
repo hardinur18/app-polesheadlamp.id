@@ -23,6 +23,10 @@ type AuthSuccess = {
     supabase: ReturnType<typeof createAdminClient>;
 };
 type AuthResult = AuthError | AuthSuccess;
+type PayrollAuthGuardResult = {
+    auth: AuthSuccess | null;
+    response: { error: string; status: 401 | 403 } | null;
+};
 
 const isAuthError = (auth: AuthResult): auth is AuthError => "error" in auth;
 
@@ -44,7 +48,7 @@ const toAmount = (value: unknown) => Math.max(0, Math.round(Number(value) || 0))
 const toText = (value: unknown) => String(value || '').trim();
 const toBoolean = (value: unknown) => value === true;
 
-const requirePayrollManage = async (req: Request) => {
+const requirePayrollManage = async (req: Request): Promise<PayrollAuthGuardResult> => {
     const auth = await checkAuth(req);
     if (isAuthError(auth)) return { auth: null, response: { error: auth.error, status: 401 } };
     if (!hasEffectivePermission(auth.requester, "payroll.manage")) {

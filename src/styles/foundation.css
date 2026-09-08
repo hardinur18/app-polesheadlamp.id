@@ -19622,3 +19622,1762 @@ body {
     font-size: 1rem;
   }
 }
+
+/* Field operations foundation polish. */
+.fieldActivityPage.opsPageShell,
+.technicianSchedulePage.opsPageShell,
+.technicianDashboardPage.opsPageShell {
+  max-width: none;
+  overflow-x: hidden;
+  background: #ffffff;
+}
+
+.fieldActivityHeaderBlock,
+.technicianScheduleStack {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.fieldActivityTopbar,
+.technicianScheduleHeader.topbar {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.fieldActivityTitleRow {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fieldActivityTopbar h1,
+.technicianScheduleHeader h1 {
+  color: var(--ops-ink);
+  font-size: clamp(1.78rem, 2.2vw, 2.35rem);
+  font-weight: 830;
+  letter-spacing: 0;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.fieldActivityTopbar p,
+.technicianScheduleHeader p {
+  color: #64748b;
+  font-size: 0.94rem;
+  font-weight: 560;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.fieldActivityLiveBadge,
+.technicianScheduleReadonly {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 820;
+  letter-spacing: 0;
+  min-height: 24px;
+  padding: 0 9px;
+}
+
+.fieldActivityLiveBadge {
+  border: 1px solid #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.technicianScheduleReadonly {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.fieldActivityControlPanel.filterPanel,
+.technicianScheduleToolbar.filterPanel {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0;
+  overflow: visible;
+  padding: 12px;
+}
+
+.fieldActivityTabs,
+.mapSpreadViewSwitch {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  display: inline-flex;
+  gap: 4px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 4px;
+}
+
+.fieldActivityTab,
+.mapSpreadViewTab {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #64748b;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  min-height: 34px;
+  min-width: max-content;
+  padding: 0 14px;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  white-space: nowrap;
+}
+
+.fieldActivityTab:hover,
+.mapSpreadViewTab:hover {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.fieldActivityTab.isActive,
+.mapSpreadViewTab.active {
+  border-color: #d7e3f4;
+  background: #ffffff;
+  box-shadow: 0 12px 26px -22px rgba(15, 23, 42, 0.52);
+  color: #075bc7;
+}
+
+.fieldActivityDateControls,
+.fieldActivityDailyPicker {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fieldActivityDailyPicker {
+  width: min(100%, 420px);
+}
+
+.fieldActivityDateNav.uiButton {
+  height: 44px;
+  min-height: 44px;
+  width: 44px;
+  border-radius: 14px;
+  color: #475569;
+}
+
+.fieldActivityDatePicker.uiPeriodPicker,
+.technicianDashboardDatePicker.uiPeriodPicker,
+.fieldMonitorDatePicker.uiPeriodPicker {
+  height: 44px !important;
+  min-height: 44px !important;
+  min-width: 0;
+  justify-content: flex-start;
+  border-color: #dbe4ef;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px -21px rgba(15, 23, 42, 0.42);
+  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 780;
+}
+
+.fieldActivityDatePicker.uiPeriodPicker,
+.fieldActivityPeriodSelect,
+.technicianDashboardDatePicker.uiPeriodPicker {
+  width: 100%;
+}
+
+.fieldActivityPeriodSelect,
+.technicianDashboardSelect,
+.technicianScheduleSelect,
+.mapSpreadSelect {
+  height: 44px;
+  min-height: 44px;
+  border-color: #dbe4ef;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px -21px rgba(15, 23, 42, 0.42);
+  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 760;
+}
+
+.fieldActivityPeriodSelect {
+  min-width: 160px;
+}
+
+.fieldActivityDatePopover.periodPickerContent--foundation,
+.technicianDashboardDatePopover.periodPickerContent--foundation,
+.fieldMonitorDatePopover.periodPickerContent--foundation {
+  border-color: rgba(203, 213, 225, 0.92);
+  border-radius: 20px;
+  box-shadow: 0 28px 80px -46px rgba(15, 23, 42, 0.6);
+  max-width: min(calc(100vw - 32px), 760px);
+}
+
+.fieldActivityTargetConsole {
+  min-width: 0;
+}
+
+.fieldActivityTargetGrid > .surfacePanel,
+.fieldActivityMetricCard.surfacePanel,
+.fieldActivityTechnicianCard.surfacePanel,
+.technicianDashboardChartCard,
+.technicianDashboardTableCard {
+  border-color: rgba(226, 232, 240, 0.92) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.42) !important;
+}
+
+.fieldActivityMetricCard.surfacePanel {
+  min-height: 104px;
+}
+
+.fieldActivityTechnicianCard.surfacePanel {
+  overflow: hidden;
+}
+
+.fieldActivityRoster {
+  min-width: 0;
+}
+
+.fieldActivityDialog.masterDataFormDialogContent {
+  width: min(calc(100vw - 32px), 460px) !important;
+  max-height: min(86dvh, 620px) !important;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.technicianDashboardControls {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.technicianDashboardSelect,
+.technicianDashboardDatePicker.uiPeriodPicker {
+  width: 100%;
+}
+
+.technicianDashboardChartCard,
+.technicianDashboardTableCard {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.technicianDashboardTableScroll {
+  border-top: 1px solid #edf2f7;
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.technicianScheduleHeader .eyebrowLine svg {
+  height: 16px;
+  width: 16px;
+}
+
+.technicianScheduleMonthNav {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe4ef;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.45);
+  display: inline-flex;
+  gap: 4px;
+  min-height: 46px;
+  padding: 4px;
+}
+
+.technicianScheduleMonthNav span {
+  min-width: 150px;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 820;
+  text-align: center;
+}
+
+.technicianScheduleMonthButton.uiButton {
+  height: 36px;
+  min-height: 36px;
+  width: 36px;
+  border-radius: 12px;
+  color: #475569;
+}
+
+.technicianScheduleToolbar.filterPanel {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1fr) auto;
+}
+
+.technicianScheduleFilterControl,
+.technicianScheduleSummary,
+.technicianScheduleLegend {
+  min-width: 0;
+}
+
+.technicianScheduleSummary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.technicianScheduleSummary span {
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 780;
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.technicianScheduleLegend {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
+.technicianScheduleGridCard.tablePanel {
+  overflow: hidden;
+}
+
+.technicianScheduleScroller.uiDataTableScroller {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.technicianScheduleTable {
+  width: 100%;
+  min-width: 1260px;
+  border-collapse: collapse;
+}
+
+.technicianScheduleTable th {
+  background: #f4f7fd !important;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 860;
+  letter-spacing: 0;
+}
+
+.technicianScheduleTable td {
+  vertical-align: middle;
+}
+
+.technicianSchedulePerson {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.technicianScheduleDialog.masterDataFormDialogContent {
+  display: flex;
+  width: min(calc(100vw - 32px), 500px) !important;
+  max-height: min(86dvh, 620px) !important;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.technicianScheduleDialogBody.masterDataDialogBody {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 24px;
+}
+
+.technicianScheduleCurrentStatus {
+  margin: 18px 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.45;
+  padding: 14px;
+}
+
+.technicianScheduleDialogFooter.masterDataFormActions {
+  margin-top: 0;
+  padding: 16px 24px 20px;
+}
+
+.fieldMonitorPage {
+  height: calc(100dvh - var(--app-top-offset, 0px));
+  min-height: 520px;
+}
+
+.fieldMonitorFilters {
+  border-color: rgba(226, 232, 240, 0.92) !important;
+  box-shadow: 0 20px 44px -36px rgba(15, 23, 42, 0.5) !important;
+}
+
+.fieldMonitorFilters > div {
+  max-width: 1680px;
+  margin-inline: auto;
+}
+
+.fieldMonitorFilterInner,
+.fieldMonitorDesktopHeader,
+.fieldMonitorControlsRow,
+.fieldMonitorPrimaryControls,
+.fieldMonitorQuickFilters,
+.fieldMonitorDesktopActions,
+.fieldMonitorStatusRail,
+.fieldMonitorActiveFilters {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fieldMonitorDesktopHeader {
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+}
+
+.fieldMonitorTitleStats {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.fieldMonitorStatusRail {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fieldMonitorStatusRail::-webkit-scrollbar {
+  display: none;
+}
+
+.fieldMonitorStatusList {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  min-width: max-content;
+}
+
+.fieldMonitorStatusChip.uiButton {
+  flex: 0 0 auto;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 0 15px !important;
+  border: 1px solid #dbe4ef !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+  box-shadow: 0 10px 22px -20px rgba(15, 23, 42, 0.45) !important;
+  font-size: 0.75rem !important;
+  font-weight: 820 !important;
+  transform: none !important;
+}
+
+.fieldMonitorStatusChip.uiButton:hover:not(:disabled) {
+  border-color: #bfdbfe !important;
+  background: #f8fbff !important;
+  color: #075bc7 !important;
+  box-shadow: 0 10px 22px -20px rgba(37, 99, 235, 0.36) !important;
+  transform: none !important;
+}
+
+.fieldMonitorStatusChip.isActive.uiButton,
+.fieldMonitorStatusChip.isActive.uiButton:hover:not(:disabled) {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #0ea5e9, #075bc7) !important;
+  color: #ffffff !important;
+  box-shadow: 0 16px 30px -20px rgba(7, 91, 199, 0.76) !important;
+}
+
+.fieldMonitorCollapseButton {
+  flex: 0 0 auto;
+}
+
+.fieldMonitorModeToggle {
+  border-radius: 14px !important;
+}
+
+.fieldMonitorModeToggle button {
+  border: 0;
+  border-radius: 10px !important;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fieldMonitorModeToggle button:focus {
+  outline: none;
+}
+
+.fieldMonitorModeToggle button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+.fieldMonitorControlsRow {
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .fieldMonitorStatusRail--desktop {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    overflow: visible;
+  }
+
+  .fieldMonitorDesktopHeader .fieldMonitorCollapseButton {
+    align-self: start;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .fieldMonitorStatusRail--desktop .fieldMonitorStatusList {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .fieldMonitorControlsRow {
+    display: grid !important;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center !important;
+    gap: 12px;
+  }
+
+  .fieldMonitorDesktopSeparator {
+    display: none !important;
+  }
+
+  .fieldMonitorPrimaryControls {
+    width: auto !important;
+    flex: 0 0 auto;
+  }
+
+  .fieldMonitorQuickFilters {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(138px, 1fr)) minmax(250px, 1.35fr);
+    align-items: center;
+    gap: 10px;
+    margin: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .fieldMonitorSelectTrigger {
+    min-width: 0 !important;
+    width: 100% !important;
+    border-radius: 14px !important;
+  }
+
+  .fieldMonitorDesktopActions {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin: 0 !important;
+    min-width: 0;
+    border-left: 0 !important;
+    padding-left: 0 !important;
+  }
+
+  .fieldMonitorSearchBox {
+    min-width: 0;
+    width: 100% !important;
+  }
+
+  .fieldMonitorActiveFilters {
+    grid-column: 1 / -1;
+  }
+}
+
+.fieldMonitorDatePicker.uiPeriodPicker {
+  width: min(100%, 260px);
+}
+
+.fieldMonitorFilterSheet,
+.fieldMonitorRouteSheet {
+  border-color: rgba(226, 232, 240, 0.92) !important;
+  box-shadow: 0 28px 70px -42px rgba(15, 23, 42, 0.72) !important;
+}
+
+.fieldMonitorRouteSheet {
+  max-height: calc(100dvh - 40px);
+}
+
+.fieldMonitorFilterSheet {
+  overflow: hidden;
+}
+
+.fieldMonitorFilterSheet--desktop {
+  bottom: auto !important;
+  left: 50% !important;
+  right: auto !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  height: fit-content !important;
+  max-height: calc(100dvh - 48px) !important;
+  width: min(900px, calc(100vw - 48px)) !important;
+  border-radius: 22px !important;
+  border: 1px solid rgba(226, 232, 240, 0.96) !important;
+}
+
+.fieldMonitorFilterSheet--desktop .fieldMonitorFilterSheetHeader {
+  padding: 20px 24px !important;
+}
+
+.fieldMonitorFilterSheetHeader {
+  flex: 0 0 auto;
+}
+
+.fieldMonitorFilterSheetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 20px 24px;
+  flex: 0 1 auto !important;
+  min-height: 0;
+  padding: 20px 24px !important;
+}
+
+.fieldMonitorFilterSheetGrid.space-y-8 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0 !important;
+}
+
+.fieldMonitorFilterSheetGrid > * {
+  min-width: 0;
+}
+
+.fieldMonitorFilterSheetGrid > .space-y-4 > .grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.fieldMonitorFilterSheet--desktop .fieldMonitorFilterSheetGrid > .space-y-4:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.fieldMonitorFilterSheet--desktop .fieldMonitorFilterSheetGrid > .space-y-4:nth-child(3) > .grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+
+.fieldMonitorFilterSheetFooter {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 18px 24px !important;
+}
+
+.fieldMonitorFilterSheetFooter .uiButton {
+  width: min(100%, 220px);
+}
+
+.fieldMonitorPage .leaflet-container,
+.mapSpreadPage .leaflet-container,
+.technicianMobilePage .leaflet-container {
+  background: #eef4fb;
+}
+
+.mapSpreadPage {
+  height: calc(100dvh - 64px);
+  min-height: 520px;
+  overflow: hidden;
+}
+
+.mapSpreadHeader {
+  border-color: rgba(226, 232, 240, 0.92) !important;
+  box-shadow: 0 18px 42px -36px rgba(15, 23, 42, 0.5) !important;
+}
+
+.mapSpreadHeader h1 {
+  font-size: 1.25rem;
+  letter-spacing: 0;
+}
+
+.mapSpreadControls {
+  min-width: 0;
+}
+
+.mapSpreadViewSwitch {
+  width: auto;
+}
+
+.mapSpreadSelect {
+  min-width: 170px;
+}
+
+.mapSpreadCanvas {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mapSpreadLegend {
+  max-height: min(70dvh, 420px);
+  overflow: hidden;
+}
+
+.technicianMobilePage {
+  height: 100dvh;
+  min-height: 100dvh;
+  background: #f1f5f9;
+}
+
+.technicianMobileControlCard {
+  border-radius: 20px !important;
+  box-shadow: 0 18px 42px -30px rgba(15, 23, 42, 0.52) !important;
+}
+
+.technicianMobileMapFallback {
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(90deg, rgba(203, 213, 225, 0.42) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(203, 213, 225, 0.42) 1px, transparent 1px),
+    #eef4fb;
+  background-size: 28px 28px;
+}
+
+.technicianMobileVisitSheet {
+  height: min(86dvh, calc(100dvh - 96px)) !important;
+  max-height: calc(100dvh - 84px);
+  border-radius: 28px 28px 0 0 !important;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.technicianMobileSheetHandle,
+.technicianMobileSheetHeader {
+  flex: 0 0 auto;
+}
+
+.technicianMobileSheetBody {
+  min-height: 0;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.technicianMobileDetailSheet {
+  max-height: min(88dvh, calc(100dvh - 40px)) !important;
+  border-radius: 28px 28px 0 0 !important;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.technicianMobileDetailSheet > div:last-child {
+  min-height: 0;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.technicianMobileConfirmDialog {
+  width: min(calc(100vw - 28px), 520px) !important;
+  max-width: min(calc(100vw - 28px), 520px) !important;
+  border-radius: 22px !important;
+}
+
+.technicianMobilePhotoOverlay {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom)) !important;
+}
+
+@media (min-width: 640px) {
+  .technicianDashboardControls {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .technicianDashboardSelect {
+    width: 220px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .fieldActivityControlPanel.filterPanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fieldActivityTabs,
+  .fieldActivityDateControls {
+    width: 100%;
+  }
+
+  .fieldActivityTabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .fieldActivityTabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fieldActivityTab {
+    flex: 1 0 auto;
+  }
+
+  .fieldActivityDateControls {
+    justify-content: stretch;
+  }
+
+  .fieldActivityDateControls > * {
+    flex: 1 1 0;
+  }
+
+  .technicianScheduleToolbar.filterPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .technicianScheduleLegend {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 767px) {
+  .fieldActivityPage.opsPageShell,
+  .technicianSchedulePage.opsPageShell,
+  .technicianDashboardPage.opsPageShell {
+    padding: 16px 12px calc(106px + env(safe-area-inset-bottom)) !important;
+    background: linear-gradient(180deg, #f8fbff 0%, #f8fafc 46%, #ffffff 100%);
+  }
+
+  .fieldActivityTopbar,
+  .technicianScheduleHeader.topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .fieldActivityTopbar h1,
+  .technicianScheduleHeader h1 {
+    font-size: 1.48rem;
+    line-height: 1.12;
+  }
+
+  .fieldActivityTopbar p,
+  .technicianScheduleHeader p {
+    font-size: 0.8rem;
+    line-height: 1.36;
+  }
+
+  .fieldActivityControlPanel.filterPanel,
+  .technicianScheduleToolbar.filterPanel {
+    border-radius: 20px;
+    padding: 10px;
+  }
+
+  .fieldActivityTabs,
+  .mapSpreadViewSwitch {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .fieldActivityTabs::-webkit-scrollbar,
+  .mapSpreadViewSwitch::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fieldActivityTab,
+  .mapSpreadViewTab {
+    flex: 1 0 auto;
+    min-width: 112px;
+    padding-inline: 12px;
+  }
+
+  .fieldActivityDateControls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .fieldActivityDailyPicker {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    width: 100%;
+  }
+
+  .fieldActivityPeriodSelect,
+  .fieldActivityDatePicker.uiPeriodPicker {
+    min-width: 0;
+  }
+
+  .fieldActivityTargetGrid {
+    gap: 10px !important;
+  }
+
+  .fieldActivitySummaryGrid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .fieldActivityMetricCard.surfacePanel {
+    min-height: 88px;
+    border-radius: 18px !important;
+  }
+
+  .fieldActivityMetricCard .p-5 {
+    padding: 12px !important;
+  }
+
+  .fieldActivityTechnicianCard.surfacePanel {
+    border-radius: 20px !important;
+  }
+
+  .fieldActivityTechnicianCard > div {
+    min-width: 0;
+  }
+
+  .fieldActivityTechnicianCard .p-6 {
+    padding: 16px !important;
+  }
+
+  .fieldActivityTechnicianCard .grid-cols-2 {
+    gap: 8px !important;
+  }
+
+  .fieldActivityDialog.masterDataFormDialogContent {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+  }
+
+  .technicianDashboardControls {
+    width: 100%;
+  }
+
+  .technicianDashboardDatePicker.uiPeriodPicker {
+    width: 100%;
+  }
+
+  .technicianDashboardChartCard .h-\[300px\] {
+    height: 240px !important;
+  }
+
+  .technicianDashboardChartCard .h-\[250px\] {
+    height: 230px !important;
+  }
+
+  .technicianDashboardTableScroll {
+    margin-inline: -1px;
+  }
+
+  .technicianScheduleMonthNav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .technicianScheduleMonthNav span {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .technicianScheduleSummary,
+  .technicianScheduleLegend {
+    gap: 7px;
+  }
+
+  .technicianScheduleSummary span {
+    min-height: 28px;
+    font-size: 0.7rem;
+  }
+
+  .technicianScheduleScroller.uiDataTableScroller {
+    max-height: calc(100dvh - 330px);
+    min-height: 360px;
+  }
+
+  .technicianScheduleTable {
+    min-width: 1080px;
+  }
+
+  .technicianScheduleTable th:first-child,
+  .technicianScheduleTable td:first-child {
+    min-width: 154px !important;
+    max-width: 154px;
+  }
+
+  .technicianSchedulePerson {
+    gap: 8px;
+  }
+
+  .technicianSchedulePerson span {
+    max-width: 86px;
+  }
+
+  .technicianScheduleDialog.masterDataFormDialogContent {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+    border-radius: 22px !important;
+  }
+
+  .fieldMonitorPage {
+    height: 100dvh;
+    min-height: 100dvh;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .fieldMonitorFilters {
+    max-width: 100vw;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .fieldMonitorFilters > div {
+    padding: 10px 12px !important;
+  }
+
+  .fieldMonitorMobileHeader {
+    max-width: 100%;
+    overflow: visible;
+  }
+
+  .fieldMonitorStatusRail--mobile {
+    margin-inline: 0;
+    max-width: 100%;
+    padding-bottom: 2px;
+    padding-inline: 0;
+    touch-action: pan-x;
+    width: 100%;
+  }
+
+  .fieldMonitorStatusRail--mobile .fieldMonitorStatusList {
+    justify-content: flex-start;
+    min-width: max-content;
+    padding-right: 18px;
+  }
+
+  .fieldMonitorStatusChip.uiButton {
+    min-height: 34px !important;
+    height: 34px !important;
+    padding-inline: 12px !important;
+    font-size: 0.72rem !important;
+  }
+
+  .fieldMonitorControlsRow {
+    gap: 10px !important;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .fieldMonitorPrimaryControls {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .fieldMonitorDatePicker.uiPeriodPicker {
+    width: 100%;
+  }
+
+  .fieldMonitorMobileQuickGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .fieldMonitorFilterSheet {
+    height: min(86dvh, calc(100dvh - 26px)) !important;
+    border-radius: 24px 24px 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  .fieldMonitorFilterSheet--desktop,
+  .fieldMonitorFilterSheet--mobile {
+    inset-inline: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  .fieldMonitorFilterSheetGrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .fieldMonitorFilterSheetFooter .uiButton {
+    width: 100%;
+  }
+
+  .fieldMonitorRouteSheet {
+    height: min(78dvh, calc(100dvh - 96px)) !important;
+    max-height: calc(100dvh - 96px) !important;
+    border-radius: 24px 24px 0 0 !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  .fieldMonitorRouteSheet > div:last-child {
+    padding-bottom: calc(22px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .mapSpreadPage {
+    height: 100dvh;
+    min-height: 100dvh;
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .mapSpreadHeader {
+    padding: 12px !important;
+  }
+
+  .mapSpreadControls {
+    width: 100%;
+  }
+
+  .mapSpreadSelect {
+    width: 100% !important;
+  }
+
+  .mapSpreadCanvas {
+    min-height: 360px;
+  }
+
+  .mapSpreadLegend {
+    inset: 12px 12px auto !important;
+    max-height: min(52dvh, 360px);
+    border-radius: 20px !important;
+  }
+
+  .technicianMobilePage {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+
+  .technicianMobileFloatingControls {
+    top: calc(8px + env(safe-area-inset-top));
+    left: 10px;
+    right: 10px;
+  }
+
+  .technicianMobileControlCard {
+    max-width: 100% !important;
+  }
+
+  .technicianMobileVisitSheet {
+    height: min(84dvh, calc(100dvh - 104px)) !important;
+    max-height: calc(100dvh - 96px) !important;
+  }
+
+  .technicianMobileSheetHeader {
+    padding-inline: 18px !important;
+  }
+
+  .technicianMobileSheetBody {
+    padding-inline: 16px !important;
+  }
+
+  .technicianMobileDetailSheet {
+    max-height: calc(100dvh - 28px) !important;
+  }
+
+  .technicianMobileDetailSheet > div:last-child {
+    padding-inline: 18px !important;
+  }
+}
+
+/* Technician schedule corrective layout: this scheduler needs fixed calendar columns, not the generic data-table pattern. */
+.technicianSchedulePage {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 240px, #f8fafc 100%);
+  padding: 34px 36px 40px;
+}
+
+.technicianScheduleShell {
+  display: grid;
+  width: min(100%, 1600px);
+  margin-inline: auto;
+  gap: 18px;
+  min-width: 0;
+}
+
+.technicianScheduleHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+  min-width: 0;
+}
+
+.technicianScheduleTitleBlock {
+  min-width: 0;
+}
+
+.technicianScheduleTitleBlock .eyebrowLine {
+  margin-bottom: 8px;
+}
+
+.technicianScheduleTitleBlock .eyebrowLine svg {
+  height: 16px;
+  width: 16px;
+}
+
+.technicianScheduleTitleBlock h1 {
+  margin: 0;
+  color: var(--ops-ink);
+  font-size: clamp(1.75rem, 2.15vw, 2.3rem);
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.technicianScheduleTitleBlock p:not(.technicianScheduleReadonly) {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.technicianScheduleMonthNav {
+  align-items: center;
+  align-self: start;
+  background: #ffffff;
+  border: 1px solid #dbe4ef;
+  border-radius: 18px;
+  box-shadow: 0 14px 30px -24px rgba(15, 23, 42, 0.48);
+  display: inline-flex;
+  gap: 4px;
+  min-height: 48px;
+  padding: 4px;
+}
+
+.technicianScheduleMonthNav span {
+  min-width: 164px;
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 850;
+  text-align: center;
+}
+
+.technicianScheduleMonthButton.uiButton {
+  height: 38px;
+  min-height: 38px;
+  width: 38px;
+  border-color: transparent;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+  color: #475569;
+}
+
+.technicianScheduleMonthButton.uiButton:hover:not(:disabled),
+.technicianScheduleMonthButton.uiButton:focus-visible,
+.technicianScheduleMonthButton.uiButton:active:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: #075bc7;
+  transform: none;
+}
+
+.technicianScheduleToolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 264px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(219, 228, 239, 0.98);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.46);
+  padding: 14px 16px;
+}
+
+.technicianScheduleFilterControl,
+.technicianScheduleSummary,
+.technicianScheduleLegend {
+  min-width: 0;
+}
+
+.technicianScheduleSelect.uiSelectTrigger {
+  width: 100%;
+  height: 48px !important;
+  min-height: 48px !important;
+  border-color: #dbe4ef;
+  border-radius: 16px;
+  background: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 760;
+}
+
+.technicianScheduleSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.technicianScheduleSummary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 780;
+  padding: 0 10px;
+}
+
+.technicianScheduleLegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.technicianScheduleGridCard {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(219, 228, 239, 0.98);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 22px 52px -38px rgba(15, 23, 42, 0.42);
+}
+
+.technicianScheduleScroller {
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100dvh - 300px);
+  min-height: 480px;
+  overflow: auto;
+  background: #ffffff;
+  cursor: grab;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: none;
+  touch-action: auto;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+  -webkit-user-select: none;
+}
+
+.technicianScheduleScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.technicianScheduleScroller[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.technicianScheduleScroller[data-dragging="true"] * {
+  cursor: grabbing !important;
+}
+
+.technicianScheduleTable {
+  width: max-content;
+  min-width: max(100%, 1508px);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+  font-size: 0.84rem;
+}
+
+.technicianScheduleTable th,
+.technicianScheduleTable td {
+  border-right: 1px solid #edf2f7;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.technicianScheduleTable .technicianScheduleStickyHeader,
+.technicianScheduleTable .technicianScheduleStickyCell {
+  position: sticky;
+  left: 0;
+  width: 224px;
+  min-width: 224px;
+  max-width: 224px;
+}
+
+.technicianScheduleTable .technicianScheduleStickyHeader {
+  z-index: 16;
+  height: 54px;
+  padding: 0 16px;
+  background: #f4f7fd !important;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 860;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.technicianScheduleTable .technicianScheduleStickyCell {
+  z-index: 10;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.technicianScheduleTable tr:hover .technicianScheduleStickyCell {
+  background: #f8fafc;
+}
+
+.technicianScheduleTable .technicianScheduleDayHeader {
+  width: 42px;
+  min-width: 42px;
+  max-width: 42px;
+  height: 54px;
+  padding: 0 4px;
+  background: #f8fafc !important;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-align: center;
+}
+
+.technicianScheduleTable .technicianScheduleDayHeader.is-today {
+  background: #eff6ff !important;
+  box-shadow: inset 0 -2px 0 #2563eb;
+  color: #075bc7;
+}
+
+.technicianSchedulePerson {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.technicianSchedulePerson .technicianSchedulePersonName,
+.technicianSchedulePerson .technicianSchedulePersonBranch {
+  display: block;
+  max-width: 156px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.technicianSchedulePersonName {
+  color: #0f172a;
+  font-size: 0.85rem;
+  font-weight: 760;
+}
+
+.technicianSchedulePersonBranch {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 620;
+}
+
+.technicianScheduleTable .technicianScheduleDayCell {
+  position: relative;
+  width: 42px;
+  min-width: 42px;
+  max-width: 42px;
+  height: 58px;
+  padding: 4px;
+  background: #ffffff;
+  text-align: center;
+  vertical-align: middle;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.technicianScheduleTable .technicianScheduleDayCell.is-editable {
+  cursor: pointer;
+}
+
+.technicianScheduleTable .technicianScheduleDayCell.is-editable:hover {
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px #bfdbfe;
+}
+
+.technicianScheduleTable .technicianScheduleDayCell.is-weekend {
+  background: #f8fafc;
+}
+
+.technicianScheduleTable .technicianScheduleDayCell.is-off {
+  background: #fff1f2;
+}
+
+.technicianScheduleTable .technicianScheduleDayCell.is-off:hover {
+  background: #ffe4e6;
+}
+
+.technicianScheduleCellStatus {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.technicianScheduleStatusChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 22px;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  background: #ffe4e6;
+  color: #e11d48;
+  font-size: 0.58rem;
+  font-weight: 850;
+  line-height: 1;
+  padding: 0 6px;
+}
+
+.technicianScheduleStatusShort {
+  display: none;
+}
+
+.technicianScheduleStatusReason {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #f43f5e;
+  font-size: 0.5rem;
+  font-weight: 650;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .technicianSchedulePage {
+    min-height: calc(100dvh - 64px);
+    padding: 24px 20px calc(104px + env(safe-area-inset-bottom));
+  }
+
+  .technicianScheduleHeader {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .technicianScheduleMonthNav {
+    justify-self: start;
+  }
+
+  .technicianScheduleToolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .technicianScheduleLegend {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .technicianScheduleLegend::-webkit-scrollbar {
+    display: none;
+  }
+
+  .technicianScheduleScroller {
+    max-height: calc(100dvh - 340px);
+    min-height: 420px;
+  }
+
+  .technicianScheduleTable {
+    min-width: 1420px;
+  }
+
+  .technicianScheduleTable .technicianScheduleStickyHeader,
+  .technicianScheduleTable .technicianScheduleStickyCell {
+    width: 190px;
+    min-width: 190px;
+    max-width: 190px;
+  }
+
+  .technicianSchedulePerson .technicianSchedulePersonName,
+  .technicianSchedulePerson .technicianSchedulePersonBranch {
+    max-width: 122px;
+  }
+
+  .technicianScheduleTable .technicianScheduleDayHeader,
+  .technicianScheduleTable .technicianScheduleDayCell {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+  }
+}
+
+@media (max-width: 767px) {
+  .technicianSchedulePage {
+    min-height: calc(100dvh - 64px);
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 260px, #f8fafc 100%);
+    padding: 16px 12px calc(108px + env(safe-area-inset-bottom));
+  }
+
+  .technicianScheduleShell {
+    gap: 12px;
+  }
+
+  .technicianScheduleTitleBlock h1 {
+    font-size: 1.38rem;
+    line-height: 1.12;
+  }
+
+  .technicianScheduleTitleBlock p:not(.technicianScheduleReadonly) {
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .technicianScheduleMonthNav {
+    width: 100%;
+    min-height: 44px;
+    justify-content: space-between;
+    border-radius: 16px;
+  }
+
+  .technicianScheduleMonthNav span {
+    min-width: 0;
+    flex: 1 1 auto;
+    font-size: 0.88rem;
+  }
+
+  .technicianScheduleMonthButton.uiButton {
+    height: 36px;
+    min-height: 36px;
+    width: 36px;
+  }
+
+  .technicianScheduleToolbar {
+    border-radius: 18px;
+  }
+
+  .technicianScheduleSelect.uiSelectTrigger {
+    height: 46px !important;
+    min-height: 46px !important;
+    border-radius: 14px;
+  }
+
+  .technicianScheduleSummary {
+    gap: 7px;
+  }
+
+  .technicianScheduleSummary span {
+    min-height: 28px;
+    font-size: 0.68rem;
+    padding-inline: 9px;
+  }
+
+  .technicianScheduleGridCard {
+    border-radius: 18px;
+  }
+
+  .technicianScheduleScroller {
+    max-height: calc(100dvh - 360px);
+    min-height: 390px;
+  }
+
+  .technicianScheduleTable {
+    min-width: 1320px;
+  }
+
+  .technicianScheduleTable .technicianScheduleStickyHeader,
+  .technicianScheduleTable .technicianScheduleStickyCell {
+    width: 166px !important;
+    min-width: 166px !important;
+    max-width: 166px !important;
+  }
+
+  .technicianScheduleTable .technicianScheduleStickyHeader {
+    height: 48px;
+    padding-inline: 12px;
+    font-size: 0.68rem;
+  }
+
+  .technicianScheduleTable .technicianScheduleStickyCell {
+    padding: 9px 10px;
+  }
+
+  .technicianSchedulePerson {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .technicianSchedulePerson .technicianSchedulePersonName,
+  .technicianSchedulePerson .technicianSchedulePersonBranch {
+    max-width: 104px !important;
+  }
+
+  .technicianSchedulePerson .technicianSchedulePersonName {
+    font-size: 0.78rem;
+  }
+
+  .technicianScheduleTable .technicianScheduleDayHeader,
+  .technicianScheduleTable .technicianScheduleDayCell {
+    width: 38px;
+    min-width: 38px;
+    max-width: 38px;
+  }
+
+  .technicianScheduleTable .technicianScheduleDayHeader {
+    height: 48px;
+    font-size: 0.68rem;
+  }
+
+  .technicianScheduleTable .technicianScheduleDayCell {
+    height: 54px;
+    padding: 3px;
+  }
+
+  .technicianScheduleStatusChip {
+    width: 27px;
+    min-height: 22px;
+    border-radius: 8px;
+    font-size: 0.55rem;
+    padding: 0;
+  }
+
+  .technicianScheduleStatusFull {
+    display: none;
+  }
+
+  .technicianScheduleStatusShort {
+    display: inline;
+  }
+
+  .technicianScheduleStatusReason {
+    display: none;
+  }
+}

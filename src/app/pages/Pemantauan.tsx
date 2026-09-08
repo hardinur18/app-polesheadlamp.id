@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   MapPin, Clock, User, CheckCircle2,
   ChevronDown, ChevronUp, Calendar, Filter, Truck, ArrowRight,
-  Search, Banknote, Layers, Shield
+  Search, Banknote, Layers, Shield, X
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -11,7 +11,7 @@ import { Input } from '../components/ui/input';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "../components/ui/select";
-import { DatePickerWithRange } from '../components/ui/date-range-picker';
+import { FoundationDateRangePicker } from '@/app/components/ui/period-filter-picker';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { startOfDay, endOfDay, isSameDay, isWithinInterval, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
@@ -20,6 +20,23 @@ import { DateRange } from 'react-day-picker';
 import { Order } from './master-data/data';
 import { Label } from '../components/ui/label';
 import { isAdvertiserRole, isCsRole, isTechnicianRole } from '@/app/data/roleHelpers';
+
+const FIELD_MONITOR_STATUS_OPTIONS = [
+  { id: 'pending', label: 'Terjadwal' },
+  { id: 'otw', label: 'OTW' },
+  { id: 'working', label: 'Kerja' },
+  { id: 'qc', label: 'QC' },
+  { id: 'processing', label: 'Proses' },
+  { id: 'done', label: 'Selesai' },
+  { id: 'reschedule', label: 'Jadwal Ulang' },
+  { id: 'cancelled', label: 'Cancel' },
+];
+
+const fieldMonitorPlainIconButton =
+  'inline-flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent p-0 text-slate-500 shadow-none transition-colors hover:bg-transparent hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25 dark:text-slate-400 dark:hover:text-blue-300';
+
+const getFieldMonitorStatusKey = (status?: string | null) =>
+  status === 'teknisi_completed' ? 'qc' : status || 'pending';
 
 export function Pemantauan() {
   const { 
@@ -39,8 +56,8 @@ export function Pemantauan() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'routes' | 'capacity'>('routes');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [isFiltersOpen, setIsFiltersOpen] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
   const [showRadius, setShowRadius] = useState(true);
   const [viewMode, setViewMode] = useState<'calendar' | 'list' | 'history'>('calendar');
   
@@ -70,6 +87,7 @@ export function Pemantauan() {
   
   // Mobile Detection
   const [isMobile, setIsMobile] = useState(false);
+  const hasAppliedMobileDefaults = React.useRef(false);
   
   React.useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -77,6 +95,13 @@ export function Pemantauan() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  React.useEffect(() => {
+    if (!isMobile || hasAppliedMobileDefaults.current) return;
+    setIsFiltersOpen(false);
+    setIsSidebarOpen(false);
+    hasAppliedMobileDefaults.current = true;
+  }, [isMobile]);
 
   // Lists for Filters
   const csUsers = users.filter(u => isCsRole(u.role) && u.status === 'active');
@@ -89,7 +114,10 @@ export function Pemantauan() {
     otw: 'OTW',
     working: 'Kerja',
     qc: 'QC',
+    processing: 'Proses',
     done: 'Selesai',
+    reschedule: 'Jadwal Ulang',
+    cancelled: 'Cancel',
   };
 
   const resolveNameById = (
@@ -97,6 +125,9 @@ export function Pemantauan() {
     value: string,
     fallback: string,
   ) => items.find((item) => item.id === value)?.name || fallback;
+
+  const getStatusBadgeLabel = (status: string) =>
+    statusFilterLabels[getFieldMonitorStatusKey(status)] || status;
 
   const truncateFilterValue = (value: string, maxLength = 28) =>
     value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
@@ -169,8 +200,7 @@ export function Pemantauan() {
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     filteredOrdersBase.forEach(o => {
-       let status = o.status || 'pending';
-       if (status === 'teknisi_completed') status = 'qc';
+       const status = getFieldMonitorStatusKey(o.status);
        counts[status] = (counts[status] || 0) + 1;
     });
     return counts;
@@ -180,8 +210,7 @@ export function Pemantauan() {
   const filteredOrders = useMemo(() => {
     return filteredOrdersBase.filter(order => 
       statusFilter === 'all' || 
-      order.status === statusFilter || 
-      (statusFilter === 'qc' && order.status === 'teknisi_completed')
+      getFieldMonitorStatusKey(order.status) === statusFilter
     );
   }, [filteredOrdersBase, statusFilter]);
 
@@ -313,7 +342,7 @@ export function Pemantauan() {
                                         </div>
                                     </div>
                                     <Badge className={`text-[10px] px-2 h-6 flex items-center justify-center font-bold tracking-wide rounded-md ml-2 shrink-0 ${getStatusBadgeVariant(point.status)}`}>
-                                        {point.status === 'pending' ? 'WAIT' : point.status.toUpperCase()}
+                                        {getStatusBadgeLabel(point.status)}
                                     </Badge>
                                 </div>
                                 
@@ -532,10 +561,10 @@ export function Pemantauan() {
     const activeTechs = routeGroups.length;
     
     // Determine waiting (pending) orders
-    const waiting = filteredOrders.filter(o => o.status === 'pending').length;
+    const waiting = filteredOrders.filter(o => getFieldMonitorStatusKey(o.status) === 'pending').length;
     
     // Done today
-    const doneToday = filteredOrders.filter(o => o.status === 'done').length;
+    const doneToday = filteredOrders.filter(o => getFieldMonitorStatusKey(o.status) === 'done').length;
     
     return { activeTechs, waiting, doneToday };
   }, [routeGroups, filteredOrders]);
@@ -699,27 +728,31 @@ export function Pemantauan() {
   const hiddenActiveFilterCount = Math.max(activeFilterCount - visibleActiveFilters.length, 0);
 
   const getStatusBadgeVariant = (status: string) => {
-     switch (status) {
+     switch (getFieldMonitorStatusKey(status)) {
        case 'pending': return "bg-yellow-100 text-yellow-700 border-yellow-200";
+       case 'otw': return "bg-sky-100 text-sky-700 border-sky-200 animate-pulse";
+       case 'working': return "bg-blue-100 text-blue-700 border-blue-200 animate-pulse";
+       case 'qc': return "bg-purple-100 text-purple-700 border-purple-200";
        case 'processing': return "bg-blue-100 text-blue-700 border-blue-200 animate-pulse";
        case 'done': return "bg-emerald-100 text-emerald-700 border-emerald-200";
        case 'cancelled': return "bg-red-100 text-red-700 border-red-200";
-       case 'waiting': return "bg-orange-100 text-orange-700 border-orange-200";
+       case 'reschedule': return "bg-orange-100 text-orange-700 border-orange-200";
+       case 'waiting': return "bg-yellow-100 text-yellow-700 border-yellow-200";
        default: return "bg-slate-100 text-slate-700";
      }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 dark:bg-slate-900 overflow-hidden">
+    <div className="fieldMonitorPage flex flex-col h-screen bg-slate-100 dark:bg-slate-900 overflow-hidden">
         
         {/* --- 1. TOP FILTER CONTAINER (Static Layout) --- */}
         {isFiltersOpen && (
-            <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm z-30 animate-in slide-in-from-top-5 duration-300 relative">
-                 <div className="w-full px-4 py-3 space-y-3">
+            <div className="fieldMonitorFilters shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm z-30 animate-in slide-in-from-top-5 duration-300 relative">
+                 <div className="fieldMonitorFilterInner w-full px-4 py-3 space-y-3">
                     
                     {/* Desktop Header Layout */}
-                    <div className="hidden md:flex flex-row justify-between items-center gap-3">
-                        <div className="flex items-center gap-3">
+                    <div className="fieldMonitorDesktopHeader hidden md:grid">
+                        <div className="fieldMonitorTitleStats flex items-center gap-3">
                             <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">Pemantauan</h1>
                             <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
                             
@@ -737,29 +770,23 @@ export function Pemantauan() {
                         </div>
 
                         {/* Status Filter Tabs (Horizontal Scroll) */}
-                        <div className="flex-1 w-auto overflow-x-auto no-scrollbar mx-4">
-                            <div className="flex items-center gap-1.5 justify-center">
+                        <div className="fieldMonitorStatusRail fieldMonitorStatusRail--desktop">
+                            <div className="fieldMonitorStatusList">
                                 <Button 
-                                    variant={statusFilter === 'all' ? 'default' : 'ghost'} 
+                                    variant="ghost"
                                     size="sm" 
                                     onClick={() => setStatusFilter('all')}
-                                    className={statusFilter === 'all' ? "bg-slate-900 dark:bg-blue-600 h-7 text-[10px] px-3 rounded-full" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 h-7 text-[10px] px-3 hover:bg-slate-100 rounded-full"}
+                                    className={`fieldMonitorStatusChip ${statusFilter === 'all' ? 'isActive' : ''}`}
                                 >
-                                    Semua ({orders.length})
+                                    Semua ({filteredOrdersBase.length})
                                 </Button>
-                                {[
-                                    { id: 'pending', label: 'Terjadwal' },
-                                    { id: 'otw', label: 'OTW' },
-                                    { id: 'working', label: 'Kerja' },
-                                    { id: 'qc', label: 'QC' },
-                                    { id: 'done', label: 'Selesai' },
-                                ].map(option => (
+                                {FIELD_MONITOR_STATUS_OPTIONS.map(option => (
                                     <Button 
                                         key={option.id}
-                                        variant={statusFilter === option.id ? 'default' : 'ghost'} 
+                                        variant="ghost"
                                         size="sm" 
                                         onClick={() => setStatusFilter(option.id)}
-                                        className={statusFilter === option.id ? "bg-slate-900 dark:bg-blue-600 h-7 text-[10px] px-3 rounded-full" : "text-slate-500 hover:text-slate-900 dark:text-slate-400 h-7 text-[10px] px-3 hover:bg-slate-100 rounded-full"}
+                                        className={`fieldMonitorStatusChip ${statusFilter === option.id ? 'isActive' : ''}`}
                                     >
                                         {option.label} ({statusCounts[option.id] || 0})
                                     </Button>
@@ -768,20 +795,20 @@ export function Pemantauan() {
                         </div>
 
                         {/* Collapse Button */}
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
+                        <button
+                            type="button"
                             onClick={() => setIsFiltersOpen(false)}
-                            className="h-8 w-8 p-0 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 shrink-0"
+                            className={`${fieldMonitorPlainIconButton} fieldMonitorCollapseButton`}
                             title="Tutup Filter"
+                            aria-label="Tutup filter"
                         >
                             <ChevronUp className="w-5 h-5" />
-                        </Button>
+                        </button>
                     </div>
 
                     {/* Mobile Header Layout (Minimalist PWA Mode) */}
-                    <div className="md:hidden space-y-3">
-                         <div className="flex justify-between items-center">
+                    <div className="fieldMonitorMobileHeader md:hidden space-y-3">
+                         <div className="flex justify-between items-center gap-3">
                             <div className="flex items-center gap-3">
                                 <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">Pemantauan</h1>
                                 <div className="flex gap-2">
@@ -795,62 +822,65 @@ export function Pemantauan() {
                                     </div>
                                 </div>
                             </div>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
+                            <button
+                                type="button"
                                 onClick={() => setIsFiltersOpen(false)}
-                                className="h-8 w-8 p-0 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 shrink-0"
+                                className={`${fieldMonitorPlainIconButton} fieldMonitorCollapseButton shrink-0`}
+                                aria-label="Tutup filter"
                             >
                                 <ChevronUp className="w-5 h-5" />
-                            </Button>
+                            </button>
                         </div>
                         
                         {/* Status Pills Mobile */}
-                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar -mx-4 px-4">
+                        <div className="fieldMonitorStatusRail fieldMonitorStatusRail--mobile">
+                            <div className="fieldMonitorStatusList">
                                 <Button 
-                                    variant={statusFilter === 'all' ? 'default' : 'outline'} 
+                                    variant="ghost"
                                     size="sm" 
                                     onClick={() => setStatusFilter('all')}
-                                    className={statusFilter === 'all' ? "bg-slate-900 dark:bg-blue-600 h-8 text-xs px-4 rounded-full border-0 shadow-sm" : "text-slate-600 border-0 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 h-8 text-xs px-4 rounded-full"}
+                                    className={`fieldMonitorStatusChip ${statusFilter === 'all' ? 'isActive' : ''}`}
                                 >
-                                    Semua ({orders.length})
+                                    Semua ({filteredOrdersBase.length})
                                 </Button>
-                                {[
-                                    { id: 'pending', label: 'Terjadwal' },
-                                    { id: 'otw', label: 'OTW' },
-                                    { id: 'working', label: 'Kerja' },
-                                    { id: 'qc', label: 'QC' },
-                                    { id: 'done', label: 'Selesai' },
-                                ].map(option => (
+                                {FIELD_MONITOR_STATUS_OPTIONS.map(option => (
                                     <Button 
                                         key={option.id}
-                                        variant={statusFilter === option.id ? 'default' : 'outline'} 
+                                        variant="ghost"
                                         size="sm" 
                                         onClick={() => setStatusFilter(option.id)}
-                                        className={statusFilter === option.id ? "bg-slate-900 dark:bg-blue-600 h-8 text-xs px-4 rounded-full border-0 shadow-sm" : "text-slate-600 border-0 bg-slate-100 dark:bg-slate-800 dark:text-slate-300 h-8 text-xs px-4 rounded-full"}
+                                        className={`fieldMonitorStatusChip ${statusFilter === option.id ? 'isActive' : ''}`}
                                     >
                                         {option.label} ({statusCounts[option.id] || 0})
                                     </Button>
                                 ))}
+                            </div>
                         </div>
                     </div>
 
                     {/* Controls Row (Shared/Responsive) */}
-                    <div className="flex flex-col xl:flex-row gap-3 items-start xl:items-center pt-1 md:pt-0">
+                    <div className="fieldMonitorControlsRow flex flex-col xl:flex-row gap-3 items-start xl:items-center pt-1 md:pt-0">
                         
                         {/* Group 1: Date & View Mode */}
-                        <div className="flex items-center gap-3 w-full sm:w-auto">
-                            <DatePickerWithRange date={dateRange} setDate={setDateRange} className="flex-1 sm:w-[240px] shadow-sm" />
+                        <div className="fieldMonitorPrimaryControls flex items-center gap-3 w-full sm:w-auto">
+                            <FoundationDateRangePicker
+                              date={dateRange}
+                              setDate={setDateRange}
+                              className="fieldMonitorDatePicker flex-1 sm:w-[240px] shadow-sm"
+                              contentClassName="fieldMonitorDatePopover"
+                            />
                             
                             {/* Desktop Toggle */}
-                            <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700 h-10 shrink-0">
+                            <div className="fieldMonitorModeToggle hidden md:flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700 h-10 shrink-0">
                                 <button 
+                                    type="button"
                                     onClick={() => setGroupingMode('technician')}
                                     className={`px-4 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${groupingMode === 'technician' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
                                 >
                                     Teknisi
                                 </button>
                                 <button 
+                                    type="button"
                                     onClick={() => setGroupingMode('cs')}
                                     className={`px-4 h-full flex items-center justify-center text-xs font-bold rounded-md transition-all ${groupingMode === 'cs' ? 'bg-white dark:bg-slate-600 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}
                                 >
@@ -879,15 +909,20 @@ export function Pemantauan() {
                                             )}
                                         </Button>
                                     </SheetTrigger>
-                                    <SheetContent side="bottom" className="h-[90vh] w-full rounded-t-2xl p-0 flex flex-col bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-[150]">
-                                        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-2xl">
+                                    <SheetContent side="bottom" showClose={false} className="fieldMonitorFilterSheet fieldMonitorFilterSheet--mobile h-[90vh] w-full rounded-t-2xl p-0 flex flex-col bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-[150]">
+                                        <div className="fieldMonitorFilterSheetHeader p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-2xl">
                                             <div className="w-12 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto mb-4" />
-                                            <SheetHeader className="text-left">
-                                                <SheetTitle>Filter Pesanan</SheetTitle>
-                                                <SheetDescription className="text-xs text-slate-500">
-                                                    Sesuaikan filter pencarian
-                                                </SheetDescription>
-                                            </SheetHeader>
+                                            <div className="flex items-start justify-between gap-3">
+                                                <SheetHeader className="text-left">
+                                                    <SheetTitle>Filter Pesanan</SheetTitle>
+                                                    <SheetDescription className="text-xs text-slate-500">
+                                                        Sesuaikan filter pencarian
+                                                    </SheetDescription>
+                                                </SheetHeader>
+                                                <SheetClose className={fieldMonitorPlainIconButton} aria-label="Tutup filter">
+                                                    <X className="h-5 w-5" />
+                                                </SheetClose>
+                                            </div>
                                         </div>
                                         <div className="flex-1 overflow-y-auto p-4 space-y-6">
                                             {/* Mobile Specific Controls */}
@@ -896,11 +931,11 @@ export function Pemantauan() {
                                                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                                                     <Input placeholder="Cari pesanan..." className="pl-9 bg-white h-10" value={search} onChange={(e) => setSearch(e.target.value)} />
                                                 </div>
-                                                <div className="grid grid-cols-2 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
-                                                    <button onClick={() => setGroupingMode('technician')} className={`py-2 text-xs font-bold rounded-md ${groupingMode === 'technician' ? 'bg-white shadow-sm' : ''}`}>Teknisi</button>
-                                                    <button onClick={() => setGroupingMode('cs')} className={`py-2 text-xs font-bold rounded-md ${groupingMode === 'cs' ? 'bg-white shadow-sm' : ''}`}>CS</button>
+                                                <div className="fieldMonitorModeToggle grid grid-cols-2 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
+                                                    <button type="button" onClick={() => setGroupingMode('technician')} className={`py-2 text-xs font-bold rounded-md ${groupingMode === 'technician' ? 'bg-white shadow-sm' : ''}`}>Teknisi</button>
+                                                    <button type="button" onClick={() => setGroupingMode('cs')} className={`py-2 text-xs font-bold rounded-md ${groupingMode === 'cs' ? 'bg-white shadow-sm' : ''}`}>CS</button>
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="fieldMonitorMobileQuickGrid grid grid-cols-2 gap-3">
                                                     <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
                                                         <SelectTrigger className="bg-white h-10 text-xs"><SelectValue placeholder="Teknisi" /></SelectTrigger>
                                                         <SelectContent className="z-[200]"><SelectItem value="all">Semua Teknisi</SelectItem>{technicians.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}</SelectContent>
@@ -1046,27 +1081,27 @@ export function Pemantauan() {
                             </div>
                         </div>
 
-                        <div className="hidden xl:block w-px h-8 bg-slate-200 dark:bg-slate-700 mx-2"></div>
+                        <div className="fieldMonitorDesktopSeparator hidden xl:block w-px h-8 bg-slate-200 dark:bg-slate-700 mx-2"></div>
 
                         {/* Group 2: Dropdowns (Desktop) */}
-                        <div className="hidden md:flex items-center gap-3 w-full overflow-x-auto pb-1 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+                        <div className="fieldMonitorQuickFilters hidden md:flex items-center gap-3 w-full overflow-x-auto pb-1 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
                              <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                                <SelectTrigger className="min-w-[140px] bg-white dark:bg-slate-800 h-10 text-xs border-slate-200 dark:border-slate-700 shadow-sm"><SelectValue placeholder="Teknisi" /></SelectTrigger>
+                                <SelectTrigger className="fieldMonitorSelectTrigger min-w-[140px] bg-white dark:bg-slate-800 h-10 text-xs border-slate-200 dark:border-slate-700 shadow-sm"><SelectValue placeholder="Teknisi" /></SelectTrigger>
                                 <SelectContent>{technicians.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}<SelectItem value="all">Semua Teknisi</SelectItem></SelectContent>
                              </Select>
 
                              <Select value={branchFilter} onValueChange={setBranchFilter}>
-                                <SelectTrigger className="min-w-[140px] bg-white dark:bg-slate-800 h-10 text-xs border-slate-200 dark:border-slate-700 shadow-sm"><SelectValue placeholder="Cabang" /></SelectTrigger>
+                                <SelectTrigger className="fieldMonitorSelectTrigger min-w-[140px] bg-white dark:bg-slate-800 h-10 text-xs border-slate-200 dark:border-slate-700 shadow-sm"><SelectValue placeholder="Cabang" /></SelectTrigger>
                                 <SelectContent>{branches.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}<SelectItem value="all">Semua Cabang</SelectItem></SelectContent>
                              </Select>
 
                              <Select value={serviceFilter} onValueChange={setServiceFilter}>
-                                <SelectTrigger className="min-w-[140px] bg-white dark:bg-slate-800 h-10 text-xs border-slate-200 dark:border-slate-700 shadow-sm"><SelectValue placeholder="Layanan" /></SelectTrigger>
+                                <SelectTrigger className="fieldMonitorSelectTrigger min-w-[140px] bg-white dark:bg-slate-800 h-10 text-xs border-slate-200 dark:border-slate-700 shadow-sm"><SelectValue placeholder="Layanan" /></SelectTrigger>
                                 <SelectContent>{activeServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}<SelectItem value="all">Semua Layanan</SelectItem></SelectContent>
                              </Select>
                              
-                             <div className="ml-auto hidden md:flex items-center gap-3 pl-2 border-l border-slate-200 dark:border-slate-700">
-                                <div className="relative w-40 sm:w-64">
+                             <div className="fieldMonitorDesktopActions ml-auto hidden md:flex items-center gap-3 pl-2 border-l border-slate-200 dark:border-slate-700">
+                                <div className="fieldMonitorSearchBox relative w-40 sm:w-64">
                                     <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                                     <Input placeholder="Cari nama, ID, no hp..." className="pl-9 h-10 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-sm rounded-lg" value={search} onChange={(e) => setSearch(e.target.value)} />
                                 </div>
@@ -1090,17 +1125,22 @@ export function Pemantauan() {
                                         )}
                                         </Button>
                                     </SheetTrigger>
-                                    <SheetContent className="w-[400px] sm:w-[540px] z-[150] flex flex-col h-full p-0 gap-0 bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800">
-                                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                                            <SheetHeader className="text-left">
-                                                <SheetTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Filter Pesanan Lengkap</SheetTitle>
-                                                <SheetDescription className="text-slate-500 dark:text-slate-400 mt-1">
-                                                    Sesuaikan filter di bawah ini untuk menemukan data pesanan yang spesifik.
-                                                </SheetDescription>
-                                            </SheetHeader>
+                                    <SheetContent side="bottom" showClose={false} className="fieldMonitorFilterSheet fieldMonitorFilterSheet--desktop z-[150] flex flex-col h-full p-0 gap-0 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                                        <div className="fieldMonitorFilterSheetHeader p-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                                            <div className="flex items-start justify-between gap-4">
+                                                <SheetHeader className="text-left">
+                                                    <SheetTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Filter Pesanan Lengkap</SheetTitle>
+                                                    <SheetDescription className="text-slate-500 dark:text-slate-400 mt-1">
+                                                        Sesuaikan filter di bawah ini untuk menemukan data pesanan yang spesifik.
+                                                    </SheetDescription>
+                                                </SheetHeader>
+                                                <SheetClose className={fieldMonitorPlainIconButton} aria-label="Tutup filter">
+                                                    <X className="h-5 w-5" />
+                                                </SheetClose>
+                                            </div>
                                         </div>
 
-                                        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                                        <div className="fieldMonitorFilterSheetGrid flex-1 overflow-y-auto p-6 space-y-8">
                                             {/* Section 1: Layanan & Kendaraan */}
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-700">
@@ -1244,7 +1284,7 @@ export function Pemantauan() {
                                             </div>
                                         </div>
 
-                                        <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row gap-3">
+                                        <div className="fieldMonitorFilterSheetFooter p-6 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row gap-3">
                                             <Button 
                                                 variant="outline" 
                                                 onClick={resetSheetFilters}
@@ -1262,7 +1302,7 @@ export function Pemantauan() {
                         </div>
 
                         {activeFilterCount > 0 && (
-                          <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/80">
+                          <div className="fieldMonitorActiveFilters flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/80">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Filter Aktif
@@ -1312,25 +1352,20 @@ export function Pemantauan() {
              {/* FLOATING CONTROLS (Top Right - Inside Map) */}
              <div className="absolute top-4 right-4 z-[60] flex flex-col gap-3 pointer-events-none">
                   {/* Toggle Filter (Only show if filter is CLOSED) */}
-                  {!isFiltersOpen && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsFiltersOpen(true)}
-                        className="pointer-events-auto h-auto min-h-10 justify-start gap-2 rounded-xl border-slate-200 bg-white/95 px-3 py-2 text-left text-slate-700 shadow-md backdrop-blur-sm hover:bg-slate-50 dark:bg-slate-800/95 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700 animate-in zoom-in duration-200"
-                        title="Tampilkan Filter"
-                      >
-                        <ChevronDown className="h-4 w-4 shrink-0" />
-                        <div className="hidden md:block">
-                          <div className="text-xs font-bold">Tampilkan Filter</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {activeFilterCount > 0 ? `${activeFilterCount} filter aktif tetap tersimpan` : 'Buka lagi panel filter utama'}
-                          </div>
-                        </div>
-                        {activeFilterCount > 0 && (
-                          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                            {activeFilterCount}
-                          </span>
-                        )}
+                   {!isFiltersOpen && (
+                       <Button
+                         variant="outline"
+                         size="icon"
+                         onClick={() => setIsFiltersOpen(true)}
+                         className="pointer-events-auto h-10 w-10 rounded-xl border-slate-200 bg-white/95 p-0 text-slate-700 shadow-md backdrop-blur-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/95 dark:text-slate-200 dark:hover:bg-slate-700 animate-in zoom-in duration-200"
+                         title="Tampilkan Filter"
+                       >
+                         <ChevronDown className="h-5 w-5" />
+                         {activeFilterCount > 0 && (
+                           <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white shadow-sm">
+                             {activeFilterCount}
+                           </span>
+                         )}
                       </Button>
                   )}
 
@@ -1371,6 +1406,7 @@ export function Pemantauan() {
                     side={isMobile ? "bottom" : "right"}
                     showOverlay={isMobile}
                     className={`
+                        fieldMonitorRouteSheet
                         p-0 bg-slate-50 dark:bg-slate-900/95 backdrop-blur-sm shadow-2xl flex flex-col overflow-hidden transition-all duration-300
                         ${isMobile 
                             ? 'h-[85vh] w-full rounded-t-2xl border-t border-slate-200 dark:border-slate-800' 

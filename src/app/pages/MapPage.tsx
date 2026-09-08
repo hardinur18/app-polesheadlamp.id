@@ -305,9 +305,9 @@ export const MapPage = () => {
   }, [mapPoints]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-900">
+    <div className="mapSpreadPage flex flex-col h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-900">
       {/* Header Controls */}
-      <div className="flex-none p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10 shadow-sm flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
+      <div className="mapSpreadHeader flex-none p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10 shadow-sm flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
         <div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-blue-600" />
@@ -319,14 +319,14 @@ export const MapPage = () => {
             </p>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+        <div className="mapSpreadControls flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
             {/* View Mode Toggle */}
-            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex items-center border border-slate-200 dark:border-slate-700">
+            <div className="mapSpreadViewSwitch bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex items-center border border-slate-200 dark:border-slate-700">
                 <button
                     onClick={() => setViewMode('technician')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2 ${
+                    className={`mapSpreadViewTab px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2 ${
                         viewMode === 'technician' 
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' 
+                        ? 'active bg-white dark:bg-slate-700 text-blue-600 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
@@ -335,9 +335,9 @@ export const MapPage = () => {
                 </button>
                 <button
                     onClick={() => setViewMode('cs')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2 ${
+                    className={`mapSpreadViewTab px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2 ${
                         viewMode === 'cs' 
-                        ? 'bg-white dark:bg-slate-700 text-pink-600 shadow-sm' 
+                        ? 'active bg-white dark:bg-slate-700 text-pink-600 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                     }`}
                 >
@@ -347,7 +347,7 @@ export const MapPage = () => {
             </div>
 
             <Select value={filterBranch} onValueChange={setFilterBranch}>
-                <SelectTrigger className="w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                <SelectTrigger className="mapSpreadSelect w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <SelectValue placeholder="Filter Cabang" />
                 </SelectTrigger>
                 <SelectContent>
@@ -361,7 +361,7 @@ export const MapPage = () => {
       </div>
 
       {/* Map Content */}
-      <div className="flex-1 relative bg-slate-100 dark:bg-slate-950">
+      <div className="mapSpreadCanvas flex-1 relative bg-slate-100 dark:bg-slate-950">
          <MapCard 
             branches={mapPoints.branches}
             groups={mapPoints.groups}
@@ -376,7 +376,7 @@ export const MapPage = () => {
          
          {/* Custom Legend */}
          {isLegendOpen && (
-            <div className="absolute top-6 left-4 right-4 md:left-6 md:w-auto md:max-w-xs bg-white/90 dark:bg-slate-900/90 backdrop-blur p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg z-[400] flex flex-col gap-3">
+            <div className="mapSpreadLegend absolute top-6 left-4 right-4 md:left-6 md:w-auto md:max-w-xs bg-white/90 dark:bg-slate-900/90 backdrop-blur p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg z-[400] flex flex-col gap-3">
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex justify-between items-center">
                     <div className="flex items-center gap-2">
                         <span>Keterangan</span>

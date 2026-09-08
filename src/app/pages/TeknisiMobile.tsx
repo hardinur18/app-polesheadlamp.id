@@ -35,7 +35,6 @@ import {
 } from 'lucide-react';
 import { motion, useAnimation, PanInfo, AnimatePresence, useDragControls } from 'motion/react';
 import SignatureCanvas from 'react-signature-canvas';
-import { MapCard } from '../components/ui/MapCard';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -61,6 +60,13 @@ import { getDistance } from '../../utils/mapUtils';
 import { isTechnicianRole } from '@/app/data/roleHelpers';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
+
+const LazyMapCard = React.lazy(() =>
+  import('../components/ui/MapCard').then((module) => ({ default: module.MapCard }))
+);
+
+const mobileIconPlainButton =
+  'inline-flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent p-0 text-slate-500 shadow-none transition-colors hover:bg-transparent hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/25 dark:text-slate-400 dark:hover:text-blue-300';
 
 // Leaflet icons fix removed - handled by MapCard custom icons
 // This avoids import errors with Vite in some environments
@@ -93,8 +99,8 @@ export function TeknisiMobile() {
   const controls = useAnimation();
   const dragControls = useDragControls();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const SHEET_HEIGHT = '90%'; 
-  const SHEET_MINIMIZED_OFFSET = 'calc(100% - 80px)'; // Semakin ringkas, pas di header
+  const SHEET_HEIGHT = 'min(86dvh, calc(100dvh - 96px))';
+  const SHEET_MINIMIZED_OFFSET = 'calc(100% - 88px)'; // Semakin ringkas, pas di header
   
   // Data Logic
   const technicians = useMemo(() => users.filter(u => isTechnicianRole(u.role)), [users]);
@@ -498,13 +504,14 @@ export function TeknisiMobile() {
   };
 
   return (
-    <div className="relative w-full h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans">
+    <div className="technicianMobilePage relative w-full h-full flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-950 font-sans">
       
       {/* 1. Map Background */}
-      <div className="absolute inset-0 z-0 bg-slate-100 dark:bg-slate-950">
+      <div className="technicianMobileMapLayer absolute inset-0 z-0 bg-slate-100 dark:bg-slate-950">
          {showMap ? (
              isMounted && (
-                 <MapCard 
+                 <React.Suspense fallback={<div className="technicianMobileMapFallback" />}>
+                 <LazyMapCard
                     routes={mapRoutes}
                     hideControls={true}
                     showLegend={false}
@@ -513,6 +520,7 @@ export function TeknisiMobile() {
                     height="100%"
                     className="w-full h-full"
                  />
+                 </React.Suspense>
              )
          ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center opacity-40 select-none">
@@ -528,13 +536,18 @@ export function TeknisiMobile() {
       </div>
 
       {/* 2. Top Floating Controls */}
-      <div className="absolute top-2 left-2 right-2 z-10 flex flex-col items-center pointer-events-none">
-          <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 pointer-events-auto overflow-hidden w-full max-w-[340px]">
+      <div className="technicianMobileFloatingControls absolute top-2 left-2 right-2 z-10 flex flex-col items-center pointer-events-none">
+          <div className="technicianMobileControlCard bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 pointer-events-auto overflow-hidden w-full max-w-[340px]">
               
-              <div className="flex items-center justify-between px-1 py-1 border-b border-slate-100">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-400 hover:text-slate-900" onClick={handlePrevDay}>
+              <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100">
+                  <button
+                      type="button"
+                      className={`${mobileIconPlainButton} h-8 w-8`}
+                      onClick={handlePrevDay}
+                      aria-label="Hari sebelumnya"
+                  >
                       <ChevronLeft className="w-4 h-4" />
-                  </Button>
+                  </button>
                   
                   <div className="text-center flex flex-col items-center">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">Jadwal Kunjungan</span>
@@ -546,9 +559,14 @@ export function TeknisiMobile() {
                       </h2>
                   </div>
                   
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-400 hover:text-slate-900" onClick={handleNextDay}>
+                  <button
+                      type="button"
+                      className={`${mobileIconPlainButton} h-8 w-8`}
+                      onClick={handleNextDay}
+                      aria-label="Hari berikutnya"
+                  >
                       <ChevronRight className="w-4 h-4" />
-                  </Button>
+                  </button>
               </div>
 
               <div className="px-3 py-2 border-b border-slate-50">
@@ -597,17 +615,17 @@ export function TeknisiMobile() {
         animate={controls}
         initial={{ y: SHEET_MINIMIZED_OFFSET }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="absolute bottom-0 left-0 right-0 z-20 bg-white dark:bg-slate-900 rounded-t-[32px] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] flex flex-col border-t border-slate-100 dark:border-slate-800"
+        className="technicianMobileVisitSheet absolute bottom-0 left-0 right-0 z-20 bg-white dark:bg-slate-900 rounded-t-[32px] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] flex flex-col border-t border-slate-100 dark:border-slate-800"
         style={{ height: SHEET_HEIGHT }}
       >
         <div 
             onPointerDown={(e) => dragControls.start(e)}
-            className="w-full flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none z-30 bg-white dark:bg-slate-900 rounded-t-[32px]"
+            className="technicianMobileSheetHandle w-full flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none z-30 bg-white dark:bg-slate-900 rounded-t-[32px]"
         >
              <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
         </div>
 
-        <div className="px-6 pb-4 flex items-center justify-between bg-white dark:bg-slate-900 z-20">
+        <div className="technicianMobileSheetHeader px-6 pb-4 flex items-center justify-between bg-white dark:bg-slate-900 z-20">
              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Daftar Kunjungan</h2>
              <div className="flex items-center gap-1">
                 <div className="flex items-center gap-2">
@@ -615,10 +633,9 @@ export function TeknisiMobile() {
                     <span className="w-1 h-1 rounded-full bg-slate-300" />
                     <span className="text-xs font-medium text-slate-500">{stats.distance} km</span>
                 </div>
-                <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className={`h-9 w-9 rounded-full -mr-2 transition-all duration-200 ${isSheetOpen ? 'bg-slate-100 text-slate-500' : 'bg-transparent text-blue-600'}`}
+                <button
+                    type="button"
+                    className={`${mobileIconPlainButton} -mr-2 ${isSheetOpen ? 'text-slate-500 dark:text-slate-400' : 'text-blue-600 dark:text-blue-300'}`}
                     onClick={() => {
                         if (isSheetOpen) {
                             controls.start({ y: SHEET_MINIMIZED_OFFSET });
@@ -628,13 +645,14 @@ export function TeknisiMobile() {
                             setIsSheetOpen(true);
                         }
                     }}
+                    aria-label={isSheetOpen ? 'Tutup daftar kunjungan' : 'Buka daftar kunjungan'}
                 >
                     {isSheetOpen ? <X className="w-5 h-5" /> : <ChevronUp className="w-6 h-6 animate-bounce" />}
-                </Button>
+                </button>
              </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-y-none px-5 py-2 space-y-4 bg-white dark:bg-slate-900">
+        <div className="technicianMobileSheetBody flex-1 overflow-y-auto overscroll-y-none px-5 py-2 space-y-4 bg-white dark:bg-slate-900">
              
              <Card className="border border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 overflow-hidden rounded-xl">
                  <CardContent className="p-3">
@@ -928,7 +946,7 @@ export function TeknisiMobile() {
       </motion.div>
 
       <AlertDialog open={confirmState.isOpen} onOpenChange={(open) => setConfirmState(prev => ({ ...prev, isOpen: open }))}>
-        <AlertDialogContent className="bg-white dark:bg-slate-900 border-none shadow-xl max-w-[90%] rounded-2xl w-[90%] sm:max-w-lg p-6">
+        <AlertDialogContent className="technicianMobileConfirmDialog bg-white dark:bg-slate-900 border-none shadow-xl max-w-[90%] rounded-2xl w-[90%] sm:max-w-lg p-6">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-slate-900 dark:text-slate-100 text-lg font-bold">{confirmState.title}</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-500 text-sm">
@@ -1409,7 +1427,7 @@ function JobDetailSheet({
                         animate={{ y: 0 }}
                         exit={{ y: '100%' }}
                         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                        className="absolute bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 rounded-t-[32px] shadow-2xl flex flex-col max-h-[90%] border-t border-slate-100 dark:border-slate-800"
+                        className="technicianMobileDetailSheet absolute bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 rounded-t-[32px] shadow-2xl flex flex-col max-h-[90%] border-t border-slate-100 dark:border-slate-800"
                         onClick={(e) => e.stopPropagation()}
                     >
                          <div className="w-full flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none z-30 bg-white dark:bg-slate-900 rounded-t-[32px]">
@@ -1475,9 +1493,14 @@ function JobDetailSheet({
 
                                      <p className="text-sm text-slate-500 line-clamp-2">{order.address}</p>
                                  </div>
-                                 <Button variant="ghost" size="icon" onClick={handleClose} className="rounded-full -mr-2 flex-shrink-0 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                 <button
+                                     type="button"
+                                     onClick={handleClose}
+                                     className={`${mobileIconPlainButton} -mr-2 flex-shrink-0`}
+                                     aria-label="Tutup detail pekerjaan"
+                                 >
                                      <X className="w-5 h-5 text-slate-500" />
-                                 </Button>
+                                 </button>
                              </div>
 
                              {/* Status Timeline */}
@@ -1776,13 +1799,18 @@ function JobDetailSheet({
 
             {/* Signature Modal */}
             {showSignaturePad && (
-                <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="technicianMobilePhotoOverlay fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl">
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <h3 className="font-bold text-slate-900">Tanda Tangan</h3>
-                            <Button variant="ghost" size="icon" onClick={() => setShowSignaturePad(false)}>
+                            <button
+                                type="button"
+                                className={mobileIconPlainButton}
+                                onClick={() => setShowSignaturePad(false)}
+                                aria-label="Tutup tanda tangan"
+                            >
                                 <X className="w-5 h-5" />
-                            </Button>
+                            </button>
                         </div>
                         <div className="h-64 bg-white relative">
                             <SignatureCanvas 
@@ -1817,7 +1845,7 @@ function JobDetailSheet({
 
             {/* Issue Modal */}
             <AlertDialog open={isIssueModalOpen} onOpenChange={setIsIssueModalOpen}>
-                <AlertDialogContent className="bg-white dark:bg-slate-900 border-none shadow-xl max-w-[90%] rounded-2xl p-6 z-[70]">
+                <AlertDialogContent className="technicianMobileConfirmDialog bg-white dark:bg-slate-900 border-none shadow-xl max-w-[90%] rounded-2xl p-6 z-[70]">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-red-600 flex items-center gap-2">
                             <AlertTriangle className="w-5 h-5" />
@@ -1861,7 +1889,7 @@ function JobDetailSheet({
 
             {/* Close Confirmation Modal */}
             <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
-                <AlertDialogContent className="bg-white dark:bg-slate-900 border-none shadow-xl max-w-[80%] rounded-2xl p-6 z-[70]">
+                <AlertDialogContent className="technicianMobileConfirmDialog bg-white dark:bg-slate-900 border-none shadow-xl max-w-[80%] rounded-2xl p-6 z-[70]">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-slate-900 font-bold">Batalkan Proses?</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-500">

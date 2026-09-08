@@ -11,6 +11,7 @@ import { Role, MOCK_ROLES } from '../data';
 import { toast } from 'sonner';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, PermissionKey } from '@/app/data/permissions';
+import { isRolePermissionRestricted } from '@/app/data/permissionBackfill';
 
 interface RolesTabProps {
   currentRole: Role;
@@ -36,6 +37,10 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
   // Helper to toggle permission
   const togglePermission = (roleName: string, permissionKey: PermissionKey) => {
     if (roleName === 'Owner') return; // Owner is immutable
+    if (isRolePermissionRestricted(roleName as Role, permissionKey)) {
+      toast.info(`${permissionKey} dikunci untuk role ${roleName}.`);
+      return;
+    }
 
     setLocalPermissions(prev => {
       const current = prev[roleName as Role] || [];
@@ -184,6 +189,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
                                 const currentList = localPermissions[selectedMobileRole as Role] || [];
                                 const isChecked = currentList.includes(perm.key);
                                 const isOwner = selectedMobileRole === 'Owner';
+                                const isRestricted = isRolePermissionRestricted(selectedMobileRole as Role, perm.key);
                                 
                                 return (
                                     <div key={perm.key} className="p-4 flex items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
@@ -200,7 +206,7 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
                                         <div className="shrink-0">
                                             <Switch 
                                                 checked={isChecked}
-                                                disabled={isOwner || !canEdit}
+                                                disabled={isOwner || !canEdit || isRestricted}
                                                 onCheckedChange={() => togglePermission(selectedMobileRole, perm.key)}
                                                 className="data-[state=checked]:bg-primary scale-90"
                                             />
@@ -265,15 +271,16 @@ export const RolesTab: React.FC<RolesTabProps> = ({ currentRole }) => {
                         const currentList = localPermissions[role.name as Role] || [];
                         const isChecked = currentList.includes(perm.key);
                         const isOwner = role.name === 'Owner';
+                        const isRestricted = isRolePermissionRestricted(role.name as Role, perm.key);
                         
                         return (
                           <td key={role.id} className="text-center">
                             <div className="flex justify-center">
                               <Checkbox 
                                 checked={isChecked}
-                                disabled={isOwner || !canEdit}
+                                disabled={isOwner || !canEdit || isRestricted}
                                 onCheckedChange={() => togglePermission(role.name, perm.key)}
-                                className={isOwner ? "data-[state=checked]:bg-slate-300 data-[state=checked]:border-slate-300 cursor-not-allowed opacity-70" : "data-[state=checked]:bg-primary data-[state=checked]:border-primary"}
+                                className={isOwner || isRestricted ? "data-[state=checked]:bg-slate-300 data-[state=checked]:border-slate-300 cursor-not-allowed opacity-70" : "data-[state=checked]:bg-primary data-[state=checked]:border-primary"}
                               />
                             </div>
                           </td>

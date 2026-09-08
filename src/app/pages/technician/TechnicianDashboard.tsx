@@ -35,8 +35,8 @@ import {
   startOfMonth,
 } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { DatePickerWithRange } from '../../components/ui/date-range-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
+import { FoundationDateRangePicker } from '@/app/components/ui/period-filter-picker';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { isTechnicianRole } from '@/app/data/roleHelpers';
 import {
@@ -200,17 +200,17 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
   );
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="technicianDashboardPage">
       <OperationalPageHeader
         eyebrow="Dashboard"
         icon={Wrench}
         title="Teknisi View"
         subtitle={`Halo, ${currentUser?.name || 'Teknisi'}. Berikut ringkasan aktivitas teknisi.`}
         actions={(
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="technicianDashboardControls">
             {isOwner && (
               <Select value={selectedTechId} onValueChange={setSelectedTechId}>
-                <SelectTrigger className="h-9 w-full bg-white text-sm dark:bg-slate-900 sm:w-[220px]">
+                <SelectTrigger className="technicianDashboardSelect">
                   <SelectValue placeholder="Pilih Teknisi" />
                 </SelectTrigger>
                 <SelectContent className="bg-white dark:bg-slate-800">
@@ -223,7 +223,12 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
                 </SelectContent>
               </Select>
             )}
-            <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+            <FoundationDateRangePicker
+              date={dateRange}
+              setDate={setDateRange}
+              className="technicianDashboardDatePicker"
+              contentClassName="technicianDashboardDatePopover"
+            />
           </div>
         )}
       />
@@ -266,7 +271,7 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
       </OperationalKpiGrid>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <OperationalTableCard className="lg:col-span-2">
+        <OperationalTableCard className="technicianDashboardChartCard lg:col-span-2">
           <div className="border-b border-slate-100 p-4">
             <h2 className="text-base font-semibold text-slate-900">Grafik Status Harian</h2>
             <p className="mt-1 text-xs text-slate-500">Aktivitas pekerjaan berdasarkan status.</p>
@@ -325,7 +330,7 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
           </div>
         </OperationalTableCard>
 
-        <OperationalTableCard>
+        <OperationalTableCard className="technicianDashboardChartCard">
           <div className="border-b border-slate-100 p-4">
             <h2 className="text-base font-semibold text-slate-900">Distribusi Status</h2>
             <p className="mt-1 text-xs text-slate-500">Komposisi status pesanan.</p>
@@ -362,12 +367,12 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
         </OperationalTableCard>
       </div>
 
-      <OperationalTableCard>
+      <OperationalTableCard className="technicianDashboardTableCard">
         <div className="border-b border-slate-100 p-4">
           <h2 className="text-base font-semibold text-slate-900">Laporan Harian Detail</h2>
           <p className="mt-1 text-xs text-slate-500">Ringkasan status pekerjaan per tanggal.</p>
         </div>
-        <div className="overflow-x-auto">
+        <div className="technicianDashboardTableScroll overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-[10px] font-medium uppercase tracking-wide text-slate-500">
               <tr>
