@@ -27,6 +27,7 @@ import { isClosedOrderLike } from './openclaw-foundation';
 import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
 import { isAdvertiserRole, isCsRole, isTechnicianRole } from '@/app/data/roleHelpers';
+import { resolveAdAccountAttribution } from './adAccountAttribution';
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
@@ -46,8 +47,10 @@ export function MarketingMonitoringPage() {
       branches = [], 
       platforms = [], 
       dailyAds = [],
+      adAccounts = [],
+      adAccountAssignments = [],
+      adAccountOwnerAssignments = [],
       currentUser,
-      advertiserConfigs = []
   } = useMasterData();
 
   const { hasPermission } = usePermissions();
@@ -143,26 +146,47 @@ export function MarketingMonitoringPage() {
     let visibleBranchIds: string[] | null = null;
     let visibleTechnicianIds: string[] | null = null;
     let scopedOrders = orders;
-    let scopedDailyAds = dailyAds;
+    const resolvedDailyAds = dailyAds.map((ad) => {
+        const account = adAccounts.find((item) => item.id === ad.adAccountId);
+        if (!account) return ad;
+
+        const resolved = resolveAdAccountAttribution({
+            account,
+            date: ad.date,
+            ownerAssignments: adAccountOwnerAssignments,
+            csAssignments: adAccountAssignments,
+            preferredCsId: isCS && currentUser ? currentUser.id : ad.csId,
+            fallbackToLatestCsAssignment: true,
+        });
+
+        return {
+            ...ad,
+            advertiserId: resolved.advertiserId || ad.advertiserId,
+            platformId: resolved.platformId || ad.platformId,
+            subChannelId: resolved.subChannelId || ad.subChannelId,
+            csId: resolved.csId || ad.csId,
+        };
+    });
+    let scopedDailyAds = resolvedDailyAds;
     let scopeLabel = 'Global';
     
     if (isAdv && currentUser) {
         scopedOrders = orders.filter(o => o.advertiserId === currentUser.id);
-        scopedDailyAds = dailyAds.filter(ad => ad.advertiserId === currentUser.id);
+        scopedDailyAds = resolvedDailyAds.filter(ad => ad.advertiserId === currentUser.id);
         visibleAdvIds = [currentUser.id];
-        const configCS = advertiserConfigs.find(c => c.advertiserId === currentUser.id)?.csIds || [];
         const orderCS = Array.from(new Set(scopedOrders.map(o => o.csId).filter(Boolean)));
-        visibleCsIds = Array.from(new Set([...configCS, ...orderCS]));
+        const adsCS = Array.from(new Set(scopedDailyAds.map(ad => ad.csId).filter(Boolean)));
+        visibleCsIds = Array.from(new Set([...adsCS, ...orderCS]));
         visibleBranchIds = Array.from(new Set(scopedOrders.map(o => o.branchId).filter(Boolean)));
         visibleTechnicianIds = [];
         scopeLabel = 'Advertiser';
     } else if (isCS && currentUser) {
         scopedOrders = orders.filter(o => o.csId === currentUser.id);
         visibleCsIds = [currentUser.id];
-        const configAdvs = advertiserConfigs.filter(c => c.csIds.includes(currentUser.id)).map(c => c.advertiserId);
         const orderAdvs = Array.from(new Set(scopedOrders.map(o => o.advertiserId).filter(Boolean)));
-        visibleAdvIds = Array.from(new Set([...configAdvs, ...orderAdvs]));
-        scopedDailyAds = dailyAds.filter(ad => visibleAdvIds?.includes(ad.advertiserId));
+        scopedDailyAds = resolvedDailyAds.filter(ad => ad.csId === currentUser.id);
+        const adsAdvs = Array.from(new Set(scopedDailyAds.map(ad => ad.advertiserId).filter(Boolean)));
+        visibleAdvIds = Array.from(new Set([...adsAdvs, ...orderAdvs]));
         visibleBranchIds = Array.from(new Set(scopedOrders.map(o => o.branchId).filter(Boolean)));
         visibleTechnicianIds = [];
         scopeLabel = 'CS';
@@ -195,7 +219,16 @@ export function MarketingMonitoringPage() {
       isRestrictedScope,
       scopeLabel,
     };
-  }, [orders, dailyAds, dbTargets, currentRole, currentUser, advertiserConfigs]);
+  }, [
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    adAccounts,
+    orders,
+    dailyAds,
+    dbTargets,
+    currentRole,
+    currentUser,
+  ]);
 
   // --- SUMMARY METRICS CALCULATION ---
   const summaryMetrics = useMemo(() => {
@@ -753,7 +786,7 @@ export function MarketingMonitoringPage() {
   // --- PERMISSION CHECK ---
   if (!hasPermission('monitoring.marketing.view')) {
     return (
-        <OperationalPageShell>
+        <OperationalPageShell className="marketingMonitoringPage">
             <OperationalEmptyState
                 icon={Lock}
                 title="Akses Dibatasi"
@@ -764,7 +797,7 @@ export function MarketingMonitoringPage() {
   }
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="marketingMonitoringPage">
       <div className="flex flex-col space-y-4 pb-20">
       <OperationalPageHeader
         eyebrow="Operasional"
@@ -773,7 +806,7 @@ export function MarketingMonitoringPage() {
         subtitle="Pantau target vs realisasi harian untuk advertiser, CS, platform, dan cabang."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" className="h-9" onClick={() => setIsSummaryOpen(!isSummaryOpen)}>
+            <Button variant="ghost" className="marketingMonitoringHeaderButton h-9" onClick={() => setIsSummaryOpen(!isSummaryOpen)}>
                 {isSummaryOpen ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
                 <span className="hidden sm:inline">{isSummaryOpen ? 'Sembunyikan Ringkasan' : 'Lihat Ringkasan'}</span>
             </Button>
@@ -782,7 +815,7 @@ export function MarketingMonitoringPage() {
                 <Button
                     variant="outline"
                     className={cn(
-                       "h-9 gap-2",
+                       "marketingMonitoringHeaderButton h-9 gap-2",
                        isTargetConsoleOpen ? "bg-blue-50 text-blue-600 border-blue-200" : ""
                     )}
                     onClick={() => setIsTargetConsoleOpen(!isTargetConsoleOpen)}
@@ -792,7 +825,7 @@ export function MarketingMonitoringPage() {
                 </Button>
             )}
 
-            <Button size="sm" className="hidden h-9 bg-blue-600 px-3 hover:bg-blue-700 md:flex">
+            <Button size="sm" className="marketingMonitoringHeaderButton hidden h-9 bg-blue-600 px-3 hover:bg-blue-700 md:flex">
               <Download className="w-4 h-4 mr-2" />
               <span>Download Report</span>
             </Button>
@@ -800,19 +833,19 @@ export function MarketingMonitoringPage() {
         }
       />
 
-      <OperationalFilterPanel className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+      <OperationalFilterPanel className="marketingMonitoringPeriodPanel flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="marketingMonitoringPeriodLabel flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
           <CalendarDays className="h-4 w-4 text-slate-400" />
           Periode Monitoring
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-           <Button variant="outline" size="icon" onClick={handlePrevMonth}>
+        <div className="marketingMonitoringMonthControl flex w-full items-center gap-2 sm:w-auto">
+           <Button variant="outline" size="icon" className="marketingMonitoringMonthArrow" onClick={handlePrevMonth}>
              <ChevronDown className="w-4 h-4 rotate-90" />
            </Button>
-           <div className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-4 py-2 text-center text-sm font-medium dark:border-slate-800 dark:bg-slate-900 sm:min-w-[160px]">
+           <div className="marketingMonitoringMonthValue min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-4 py-2 text-center text-sm font-medium dark:border-slate-800 dark:bg-slate-900 sm:min-w-[160px]">
               {format(selectedMonth, 'MMMM yyyy', { locale: id })}
            </div>
-           <Button variant="outline" size="icon" onClick={handleNextMonth}>
+           <Button variant="outline" size="icon" className="marketingMonitoringMonthArrow" onClick={handleNextMonth}>
              <ChevronDown className="w-4 h-4 -rotate-90" />
            </Button>
         </div>
@@ -832,7 +865,7 @@ export function MarketingMonitoringPage() {
                   month={selectedMonth} 
                   onClose={() => setIsTargetConsoleOpen(false)} 
                   onUpdate={() => setTargetRefresh(prev => prev + 1)} 
-                  className="h-auto min-h-[500px] border-slate-200 shadow-md mb-2"
+                  className="marketingMonitoringTargetManager h-auto min-h-[500px] border-slate-200 shadow-md mb-2"
                   defaultShowPrompt={true}
               />
           </div>
@@ -840,10 +873,10 @@ export function MarketingMonitoringPage() {
 
       {/* SUMMARY PANEL (HEADER SUMMARY) */}
       {isSummaryOpen && (
-        <div className="animate-in slide-in-from-top-2 duration-300">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="marketingMonitoringSummaryShell animate-in slide-in-from-top-2 duration-300">
+            <div className="marketingMonitoringSummaryGrid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* 1. Global Stats */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex flex-col justify-between">
+                <div className="marketingMonitoringSummaryCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex flex-col justify-between">
                     <div>
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Total Bulan Ini</h3>
                         <div className="grid grid-cols-2 gap-4">
@@ -894,7 +927,7 @@ export function MarketingMonitoringPage() {
                 </div>
 
                 {/* 2. Top Advertisers */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm overflow-hidden flex flex-col">
+                <div className="marketingMonitoringSummaryCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm overflow-hidden flex flex-col">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
                         <span>Top Advertiser</span>
                         <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">By Order</span>
@@ -931,7 +964,7 @@ export function MarketingMonitoringPage() {
                 </div>
 
                 {/* 3. Top CS */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm overflow-hidden flex flex-col">
+                <div className="marketingMonitoringSummaryCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm overflow-hidden flex flex-col">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
                         <span>Top CS</span>
                         <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">By Selesai</span>
@@ -962,7 +995,7 @@ export function MarketingMonitoringPage() {
                 </div>
 
                 {/* 4. Top Platform */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm overflow-hidden flex flex-col">
+                <div className="marketingMonitoringSummaryCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm overflow-hidden flex flex-col">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
                         <span>Top Platform</span>
                         <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">By Order</span>
@@ -996,7 +1029,7 @@ export function MarketingMonitoringPage() {
       )}
 
       {/* Main Grid List */}
-      <OperationalTableCard className="p-4">
+      <OperationalTableCard className="marketingMonitoringListCard p-4">
         {monitoringData.length === 0 ? (
           <OperationalEmptyState
             icon={TrendingUp}
@@ -1004,7 +1037,7 @@ export function MarketingMonitoringPage() {
             description="Data target dan realisasi akan muncul setelah ada order atau target pada periode ini."
           />
         ) : (
-          <div className="space-y-3">
+          <div className="marketingMonitoringDayList space-y-3">
           {visibleMonitoringData.map((day, idx) => {
           const isExpanded = expandedDates.includes(day.dateKey);
           // Achievement based on Total Real (Order) / Total Target (Sisa Slot/Capacity)
@@ -1013,16 +1046,16 @@ export function MarketingMonitoringPage() {
           
           return (
             <div key={idx} className={cn(
-              "border rounded-xl bg-white dark:bg-slate-900 overflow-hidden transition-all duration-200",
+              "marketingMonitoringDayCard border rounded-xl bg-white dark:bg-slate-900 overflow-hidden transition-all duration-200",
               isExpanded ? "ring-2 ring-blue-100 dark:ring-blue-900 border-blue-200 dark:border-blue-800 shadow-md" : "border-slate-200 dark:border-slate-800 hover:border-blue-300"
             )}>
               {/* Row Header (Summary Harian) */}
               <div 
                 onClick={() => toggleDate(day.dateKey)}
-                className="flex flex-col md:flex-row items-stretch md:items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                className="marketingMonitoringDayHeader flex flex-col md:flex-row items-stretch md:items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
               >
                 {/* 1. Date Section (Fixed Width) */}
-                <div className="flex items-center gap-4 w-full md:w-[240px] shrink-0">
+                <div className="marketingMonitoringDateCell flex items-center gap-4 w-full md:w-[240px] shrink-0">
                   <div className={cn(
                     "w-10 h-10 rounded-xl flex items-center justify-center transition-transform duration-200 shadow-sm border",
                     isExpanded ? "bg-blue-600 text-white border-blue-600 rotate-90" : "bg-white text-slate-400 border-slate-200"
@@ -1042,7 +1075,7 @@ export function MarketingMonitoringPage() {
                 </div>
 
                 {/* 2. Metrics Grid (Flexible) */}
-                <div className="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-y-4 gap-x-6 items-center border-t md:border-t-0 border-slate-100 pt-4 md:pt-0">
+                <div className="marketingMonitoringMetricsGrid flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-y-4 gap-x-6 items-center border-t md:border-t-0 border-slate-100 pt-4 md:pt-0">
                    
                    {/* Target vs Real */}
                    <div className="flex flex-col">
@@ -1092,12 +1125,12 @@ export function MarketingMonitoringPage() {
 
               {/* EXPANDED DETAILS */}
               {isExpanded && (
-                <div className="border-t border-slate-100 bg-white p-4 md:p-6 space-y-6 dark:border-slate-800 dark:bg-slate-900">
+                <div className="marketingMonitoringExpanded border-t border-slate-100 bg-white p-4 md:p-6 space-y-6 dark:border-slate-800 dark:bg-slate-900">
                   
                   {/* DAILY TEAM PERFORMANCE SUMMARY */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="marketingMonitoringExpandedSummary grid grid-cols-1 lg:grid-cols-3 gap-6">
                       {/* Left: Top Advertisers Today */}
-                       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                       <div className="marketingMonitoringMiniCard rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                           <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center justify-between">
                               <span className="flex items-center gap-2">
                                 <Target className="w-4 h-4 text-amber-500" />
@@ -1129,7 +1162,7 @@ export function MarketingMonitoringPage() {
                       </div>
 
                       {/* Middle: Top CS Today */}
-                       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                       <div className="marketingMonitoringMiniCard rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                           <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center justify-between">
                               <span className="flex items-center gap-2">
                                 <MessageCircle className="w-4 h-4 text-emerald-500" />
@@ -1162,7 +1195,7 @@ export function MarketingMonitoringPage() {
                       </div>
 
                       {/* Right: Top Platform Today */}
-                       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                       <div className="marketingMonitoringMiniCard rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                           <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center justify-between">
                               <span className="flex items-center gap-2">
                                 <Globe className="w-4 h-4 text-blue-500" />
@@ -1212,14 +1245,14 @@ export function MarketingMonitoringPage() {
                     const isTechFull = techUsage >= 90;
 
                     return (
-                      <Card key={bIdx} className="p-4 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 transition-all duration-200">
+                      <Card key={bIdx} className="marketingMonitoringBranchCard p-4 border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 transition-all duration-200">
                         {/* Branch Header */}
-                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                        <div className="marketingMonitoringBranchHeader flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                           <div className="flex items-center gap-3 flex-1">
                             <button 
                                 onClick={() => toggleBranch(branchKey)}
                                 className={cn(
-                                    "w-6 h-6 rounded-full flex items-center justify-center transition-transform duration-200 hover:bg-slate-100 dark:hover:bg-slate-700",
+                                    "marketingMonitoringBranchToggle w-6 h-6 rounded-full flex items-center justify-center transition-transform duration-200 hover:bg-slate-100 dark:hover:bg-slate-700",
                                     !isHidden ? "rotate-90 text-blue-600 bg-blue-50" : "text-slate-400 bg-white"
                                 )}
                             >
@@ -1239,7 +1272,7 @@ export function MarketingMonitoringPage() {
                           
                           {/* Technician Capacity & List Widget */}
                           <div className="w-full xl:w-auto flex flex-col gap-2">
-                              <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                              <div className="marketingMonitoringCapacityCard flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                                   <div className="flex items-center gap-3">
                                       <div className={cn("p-2 rounded-full", isTechFull ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-600")}>
                                           <Wrench className="w-4 h-4" />
@@ -1267,9 +1300,9 @@ export function MarketingMonitoringPage() {
 
                         {/* Collapsible Content */}
                         {!isHidden && (
-                            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="marketingMonitoringBranchBody mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-1 duration-200">
                                 {branch.techStatusMap && branch.techStatusMap.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 justify-end mb-4 -mt-2">
+                                    <div className="marketingMonitoringTechPills flex flex-wrap gap-2 justify-end mb-4 -mt-2">
                                         {branch.techStatusMap.map((t: any) => (
                                             <div key={t.id} className={cn(
                                                 "text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1.5 transition-colors",
@@ -1292,7 +1325,7 @@ export function MarketingMonitoringPage() {
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                <div className="marketingMonitoringBreakdownGrid grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {/* KIRI: ADVERTISERS */}
                             <div>
                                 <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
@@ -1300,11 +1333,11 @@ export function MarketingMonitoringPage() {
                                 </h4>
                                 <div className="space-y-2">
                                     {branch.advertisers.length === 0 ? (
-                                        <div className="text-[10px] text-slate-400 italic p-2 border border-dashed rounded bg-white">Belum ada data advertiser aktif.</div>
+                                        <div className="marketingMonitoringInlineEmpty text-[10px] text-slate-400 italic p-2 border border-dashed rounded bg-white">Belum ada data advertiser aktif.</div>
                                     ) : branch.advertisers.map((adv, aIdx) => {
                                         const advAch = adv.target > 0 ? Math.round((adv.real / adv.target) * 100) : 0;
                                         return (
-                                            <div key={aIdx} className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-200 transition-colors">
+                                            <div key={aIdx} className="marketingMonitoringBreakdownItem flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-200 transition-colors">
                                                 <div className="flex items-center gap-2.5">
                                                     <div className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shadow-sm">
                                                         {adv.name.charAt(0)}
@@ -1344,10 +1377,10 @@ export function MarketingMonitoringPage() {
                                 </h4>
                                 <div className="grid grid-cols-1 gap-2">
                                     {branch.cs.length === 0 ? (
-                                        <div className="text-[10px] text-slate-400 italic p-2 border border-dashed rounded bg-white">Belum ada CS aktif.</div>
+                                        <div className="marketingMonitoringInlineEmpty text-[10px] text-slate-400 italic p-2 border border-dashed rounded bg-white">Belum ada CS aktif.</div>
                                     ) : branch.cs.map((cs, cIdx) => {
                                         return (
-                                        <div key={cIdx} className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-200 transition-colors">
+                                        <div key={cIdx} className="marketingMonitoringBreakdownItem flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-200 transition-colors">
                                             <div className="flex items-center gap-2.5">
                                                  <div className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shadow-sm">
                                                         {cs.name.charAt(0)}
@@ -1382,7 +1415,7 @@ export function MarketingMonitoringPage() {
                                 </h4>
                                 <div className="space-y-2">
                                     {branch.platforms.map((p, pIdx) => (
-                                        <div key={pIdx} className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                                        <div key={pIdx} className="marketingMonitoringBreakdownItem flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                                             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{p.name}</span>
                                             <div className="flex items-center gap-2 text-xs">
                                                 <span className="font-bold text-slate-700 dark:text-slate-200">{p.leads}</span>
@@ -1407,7 +1440,7 @@ export function MarketingMonitoringPage() {
             <div className="flex justify-center pt-2">
               <Button
                 variant="outline"
-                className="bg-white"
+                className="marketingMonitoringLoadMore bg-white"
                 onClick={() => setVisibleDayLimit((limit) => Math.min(limit + 8, totalDaysInSelectedMonth))}
               >
                 Tampilkan Hari Lainnya

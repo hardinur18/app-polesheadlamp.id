@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
-  Plus, Edit, Trash2, Download, TrendingUp, Users, ShoppingCart, DollarSign,
+  Edit, Trash2, Download, TrendingUp, Users, ShoppingCart, DollarSign,
   Calendar as CalendarIcon, Filter, Search, Loader2, ArrowUpDown, Upload, FileSpreadsheet, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '../components/ui/dialog';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetTrigger, SheetClose
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter
 } from '../components/ui/sheet';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -39,7 +39,7 @@ import {
 } from '@/app/data/roleHelpers';
 import { DailyAd, Platform, AdAccount } from '@/app/pages/master-data/data';
 import { toast } from 'sonner';
-import { DatePickerWithRange } from '../components/ui/date-range-picker';
+import { FoundationDateRangePicker } from '../components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { isWithinInterval, startOfDay, endOfDay, format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -61,6 +61,11 @@ import {
   type TikTokAdsIntegrationConfig,
   type TikTokAdsSnapshotRow,
 } from '@/app/services/tiktokAdsLiveService';
+import {
+  getScopedAdAccountAttributionsForDate,
+  resolveAdAccountAttribution,
+  type ResolvedAdAccountAttribution,
+} from '@/app/pages/ads/adAccountAttribution';
 
 const loadSpreadsheet = () => import('xlsx');
 
@@ -99,6 +104,48 @@ const normalizeFlexibleAdAccountLookupKey = (value: unknown) =>
 
 const getTrailingNumberKey = (value: unknown) =>
   String(value || '').match(/(\d+)\s*$/)?.[1] || '';
+
+type AdsProviderKey = 'meta' | 'google' | 'tiktok';
+
+type ApiRecapProviderStatus = {
+  key: AdsProviderKey;
+  label: string;
+  state: 'success' | 'empty' | 'error';
+  count: number;
+  message: string;
+};
+
+const adsProviderLabels: Record<AdsProviderKey, string> = {
+  meta: 'Meta',
+  google: 'Google Ads',
+  tiktok: 'TikTok Ads',
+};
+
+const normalizeAdsProviderName = (value: unknown) =>
+  String(value || '').toLowerCase().replace(/\s+/g, '');
+
+const getAdsProviderKeyByPlatformName = (name: unknown): AdsProviderKey | null => {
+  const normalized = normalizeAdsProviderName(name);
+  if (normalized.includes('google')) return 'google';
+  if (normalized.includes('tiktok')) return 'tiktok';
+  if (normalized.includes('meta') || normalized.includes('facebook') || normalized.includes('instagram')) return 'meta';
+  return null;
+};
+
+const getApiRecapErrorMessage = (provider: AdsProviderKey, reason: unknown) => {
+  const rawMessage = reason instanceof Error ? reason.message : String(reason || 'Sinkronisasi API gagal.');
+  if (provider === 'google' && /invalid_grant/i.test(rawMessage)) {
+    return 'Token OAuth Google Ads ditolak. Reconnect Google Ads di Master Data Akun Iklan.';
+  }
+  return rawMessage;
+};
+
+const getEmptyApiRecapMessage = (provider: AdsProviderKey, enabledConfigCount: number) => {
+  if (enabledConfigCount === 0) {
+    return `Belum ada akun ${adsProviderLabels[provider]} aktif yang dipetakan ke Master Data Akun Iklan.`;
+  }
+  return `${enabledConfigCount} akun terpetakan, tetapi tidak ada snapshot pada periode/filter ini.`;
+};
 
 const buildFlexibleAdAccountLookupKeys = (value: unknown) => {
   const rawValue = String(value || '');
@@ -143,6 +190,31 @@ type ApiRecapPreviewRow = {
     existing?: DailyAd;
 };
 
+type DailyAdFormData = {
+    date: string;
+    advertiserId: string;
+    platformId: string;
+    subChannelId: string;
+    adAccountId: string;
+    csId: string;
+    amountSpent: string;
+    leadsDashboard: string;
+    editCount: number;
+};
+
+type StagedDailyAdRow = {
+    id: string;
+    date: string;
+    advertiserId: string;
+    platformId: string;
+    subChannelId: string;
+    adAccountId: string;
+    csId: string;
+    amountSpent: string | number;
+    leadsDashboard: string | number;
+    _rawAccount?: string;
+};
+
 const normalizeMetricPart = (value: unknown) => {
     if (value === undefined || value === null) return 'empty';
     const normalized = String(value).trim();
@@ -184,7 +256,6 @@ export function IklanHarian() {
   const { 
     dailyAds, platforms, subChannels, adAccounts, adAccountAssignments, adAccountOwnerAssignments, users, currentUser, currentRole,
     addDailyAd, updateDailyAd, deleteDailyAd, leads, orders,
-    advertiserConfigs
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const isAdminManagementUser = isAdminManagementRole(currentRole);
@@ -212,6 +283,7 @@ export function IklanHarian() {
   const [apiRecapCsId, setApiRecapCsId] = useState('all');
   const [apiRecapRows, setApiRecapRows] = useState<ApiRecapPreviewRow[]>([]);
   const [apiRecapErrors, setApiRecapErrors] = useState<string[]>([]);
+  const [apiRecapProviderStatuses, setApiRecapProviderStatuses] = useState<ApiRecapProviderStatus[]>([]);
   const [isApiRecapLoading, setIsApiRecapLoading] = useState(false);
   const [isApiRecapSaving, setIsApiRecapSaving] = useState(false);
   const apiRecapIntegrationConfigsRef = useRef<{
@@ -220,7 +292,6 @@ export function IklanHarian() {
     tiktok: TikTokAdsIntegrationConfig[];
   }>({ meta: [], google: [], tiktok: [] });
   const [importStep, setImportStep] = useState<'upload' | 'review'>('upload');
-  const [importSource, setImportSource] = useState<'excel' | 'manual'>('excel');
   
   const [confirmDialog, setConfirmDialog] = useState<{
       isOpen: boolean;
@@ -235,7 +306,7 @@ export function IklanHarian() {
       description: '',
       onConfirm: () => {}
   });
-  const [stagedData, setStagedData] = useState<any[]>([]);
+  const [stagedData, setStagedData] = useState<StagedDailyAdRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -244,17 +315,7 @@ export function IklanHarian() {
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   // Form State
-  const [formData, setFormData] = useState<{
-    date: string;
-    advertiserId: string;
-    platformId: string;
-    subChannelId: string;
-    adAccountId: string;
-    csId: string;
-    amountSpent: string;
-    leadsDashboard: string;
-    editCount: number;
-  }>({
+  const [formData, setFormData] = useState<DailyAdFormData>({
     date: new Date().toISOString().split('T')[0],
     advertiserId: '',
     platformId: '',
@@ -276,142 +337,9 @@ export function IklanHarian() {
   const [advertiserFilter, setAdvertiserFilter] = useState<string>('all'); // Added Advertiser Filter
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [csFilter, setCsFilter] = useState<string>('all');
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [visibleRowLimit, setVisibleRowLimit] = useState(INITIAL_AD_ROW_LIMIT);
-
-  // Derived Data for Filters (Old, redundant code removed)
-  const activePlatforms = useMemo(() => platforms.filter(p => p.status === 'active'), [platforms]);
-
-  // Filtered Lists for Form
-  const advertisers = useMemo(() => {
-      const all = users.filter((u) => isAdvertiserRole(u.role) && u.status === 'active');
-      // Filter for CS
-      if (isCsUser && currentUser) {
-          const myConfigs = advertiserConfigs.filter(c => c.csIds?.includes(currentUser.id));
-          // If CS has assignments, only show those advertisers
-          if (myConfigs.length > 0) {
-              const myAdvIds = myConfigs.map(c => c.advertiserId);
-              return all.filter(a => myAdvIds.includes(a.id));
-          }
-      }
-      return all;
-  }, [advertiserConfigs, currentUser, isCsUser, users]);
-
-  const csUsers = useMemo(() => users.filter((u) => isCsRole(u.role) && u.status === 'active'), [users]);
-  
-  const availableSubChannels = useMemo(() => {
-    if (!formData.platformId) return [];
-    return subChannels.filter(sc => sc.platformId === formData.platformId && sc.status === 'active');
-  }, [formData.platformId, subChannels]);
-
-  const availableAdAccounts = useMemo(() => {
-    if (!formData.platformId || !formData.advertiserId) return [];
-    return adAccounts.filter(acc => acc.platformId === formData.platformId && acc.advertiserId === formData.advertiserId && acc.status === 'active');
-  }, [formData.platformId, formData.advertiserId, adAccounts]);
-
-  // --- CONFIG BASED FILTERING (NEW & STRICT) ---
-  const activeConfig = useMemo(() => {
-    // Priority 1: Form Selection (If Admin/CS selects an advertiser)
-    if (formData.advertiserId) {
-        return advertiserConfigs.find(c => c.advertiserId === formData.advertiserId);
-    }
-    // Priority 2: Current User (If Advertiser logged in)
-    if (isAdvertiserUser && currentUser) {
-        return advertiserConfigs.find(c => c.advertiserId === currentUser.id);
-    }
-    return null;
-  }, [advertiserConfigs, currentUser, formData.advertiserId, isAdvertiserUser]);
-
-  const filteredPlatforms = useMemo(() => {
-     // RULE 1: Owner/Super Admin/Admin PIC sees ALL
-     if (isAdminManagementUser) {
-         return activePlatforms;
-     }
-
-     // RULE 2: Advertiser
-     if (isAdvertiserUser) {
-         // If config exists, use it
-         if (activeConfig) {
-             const allowedIds = activeConfig.platformIds || [];
-             // Strict filter based on config
-             return platforms.filter(p => allowedIds.includes(p.id) && p.status === 'active');
-         }
-         // FALLBACK: If NO config found, allow ALL active platforms (Safety net)
-         return activePlatforms;
-     }
-
-     // RULE 3: CS Logic
-     if (isCsUser && currentUser) {
-         if (activeConfig) {
-             const allowedIds = activeConfig.platformIds || [];
-             return platforms.filter(p => allowedIds.includes(p.id) && p.status === 'active');
-         }
-         
-         const myConfigs = advertiserConfigs.filter(cfg => cfg.csIds?.includes(currentUser.id));
-         if (myConfigs.length > 0) {
-             const allowedIds = new Set<string>();
-             myConfigs.forEach(cfg => cfg.platformIds?.forEach(id => allowedIds.add(id)));
-             return platforms.filter(p => allowedIds.has(p.id) && p.status === 'active');
-         }
-         
-         // Fallback for CS with no assignments: Show All (or Empty? Better Show All to avoid confusion)
-         return activePlatforms;
-     }
-     
-     return activePlatforms; 
-  }, [activeConfig, activePlatforms, advertiserConfigs, currentUser, isAdminManagementUser, isAdvertiserUser, isCsUser, platforms]);
-
-  const filteredSubChannels = useMemo(() => {
-      let scs = availableSubChannels; // Filtered by Platform ID first
-      
-      // Strict Check for Config availability
-      if (isAdminManagementUser) {
-          // Pass through
-      } else if (activeConfig) {
-          // If config exists, apply strict filter
-          // BUT if subChannelIds is empty/undefined, we might want to allow ALL?
-          // Usually empty array in config means "Selected None". 
-          // Let's assume if it has data, filter it. If null/undefined, pass through.
-          if (activeConfig.subChannelIds && activeConfig.subChannelIds.length > 0) {
-              scs = scs.filter(s => activeConfig.subChannelIds!.includes(s.id));
-          }
-      } 
-      // If no config, pass through (Show All)
-
-      return scs;
-  }, [activeConfig, availableSubChannels, isAdminManagementUser]);
-
-  const filteredCs = useMemo(() => {
-      // RULE 1: Owner/Admins see ALL
-      if (isAdminManagementUser) {
-          return csUsers;
-      }
-
-      // RULE 2: Advertiser
-      if (isAdvertiserUser) {
-          if (activeConfig) {
-              // If config has CS defined, filter.
-              if (activeConfig.csIds && activeConfig.csIds.length > 0) {
-                  return csUsers.filter(c => activeConfig.csIds!.includes(c.id));
-              }
-              // If config exists but CS list is empty -> Assume NO CS assigned (Empty)
-              // This is distinct from "No Config".
-              return []; 
-          }
-          // Fallback: If no config, show ALL CS (Safety net)
-          return csUsers; 
-      }
-
-      // RULE 3: CS sees...
-      if (isCsUser && currentUser) {
-          if (activeConfig && activeConfig.csIds && activeConfig.csIds.length > 0) {
-             return csUsers.filter(c => activeConfig.csIds!.includes(c.id));
-          }
-          return csUsers.filter(c => c.id === currentUser.id);
-      }
-
-      return csUsers;
-  }, [activeConfig, csUsers, currentUser, isAdminManagementUser, isAdvertiserUser, isCsUser]);
 
   const lookupMaps = useMemo(() => ({
       platformNameById: new Map(platforms.map(platform => [platform.id, platform.name])),
@@ -419,6 +347,158 @@ export function IklanHarian() {
       accountNameById: new Map(adAccounts.map(account => [account.id, account.accountName])),
       userNameById: new Map(users.map(user => [user.id, user.name])),
   }), [adAccounts, platforms, subChannels, users]);
+
+  const resolveAccountAttribution = useCallback((
+    adAccountId: string,
+    date: string,
+    preferredCsId?: string,
+  ): ResolvedAdAccountAttribution | null => {
+    const account = adAccounts.find((item) => item.id === adAccountId);
+    if (!account || !date) return null;
+
+    return resolveAdAccountAttribution({
+      account,
+      date,
+      ownerAssignments: adAccountOwnerAssignments,
+      csAssignments: adAccountAssignments,
+      preferredCsId,
+      fallbackToLatestCsAssignment: true,
+    });
+  }, [adAccountAssignments, adAccountOwnerAssignments, adAccounts]);
+
+  const resolveDailyAdAttribution = useCallback((item: DailyAd) => {
+    const resolved = resolveAccountAttribution(item.adAccountId, item.date, item.csId);
+    return {
+      advertiserId: resolved?.advertiserId || item.advertiserId,
+      platformId: resolved?.platformId || item.platformId,
+      subChannelId: resolved?.subChannelId || item.subChannelId,
+      csId: resolved?.csId || item.csId,
+    };
+  }, [resolveAccountAttribution]);
+
+  const resolveOwnerForDate = useCallback((adAccountId: string, date: string, fallbackAdvertiserId: string) =>
+    resolveAccountAttribution(adAccountId, date)?.advertiserId || fallbackAdvertiserId,
+  [resolveAccountAttribution]);
+
+  const resolveCsAssignmentForDate = useCallback((adAccountId: string, date: string) => {
+    const resolved = resolveAccountAttribution(adAccountId, date);
+    return resolved?.csId
+      ? {
+          adAccountId,
+          csId: resolved.csId,
+          subChannelId: resolved.subChannelId,
+          startDate: date,
+          status: 'active' as const,
+        }
+      : undefined;
+  }, [resolveAccountAttribution]);
+
+  const getScopedAdAccountOptionsForDate = useCallback((date: string) =>
+    getScopedAdAccountAttributionsForDate({
+      date,
+      adAccounts,
+      ownerAssignments: adAccountOwnerAssignments,
+      csAssignments: adAccountAssignments,
+      currentUserId: currentUser?.id,
+      isAdminManagementUser,
+      isAdvertiserUser,
+      isCsUser,
+      fallbackToLatestCsAssignment: true,
+    }), [
+      adAccountAssignments,
+      adAccountOwnerAssignments,
+      adAccounts,
+      currentUser?.id,
+      isAdminManagementUser,
+      isAdvertiserUser,
+      isCsUser,
+    ]);
+
+  const getAdAccountOptionsForDate = useCallback((date: string, selectedAccountId?: string) => {
+    const options = getScopedAdAccountOptionsForDate(date);
+
+    if (selectedAccountId && !options.some((option) => option.account.id === selectedAccountId)) {
+      const selectedAccount = adAccounts.find((account) => account.id === selectedAccountId);
+      if (selectedAccount) {
+        options.push(
+          resolveAdAccountAttribution({
+            account: selectedAccount,
+            date,
+            ownerAssignments: adAccountOwnerAssignments,
+            csAssignments: adAccountAssignments,
+            preferredCsId: isCsUser ? currentUser?.id : undefined,
+            fallbackToLatestCsAssignment: true,
+          }),
+        );
+      }
+    }
+
+    return options.sort((left, right) => left.account.accountName.localeCompare(right.account.accountName));
+  }, [
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    adAccounts,
+    currentUser?.id,
+    getScopedAdAccountOptionsForDate,
+    isCsUser,
+  ]);
+
+  const formAdAccountOptions = useMemo(
+    () => getAdAccountOptionsForDate(formData.date, formData.adAccountId),
+    [
+      getAdAccountOptionsForDate,
+      formData.adAccountId,
+      formData.date,
+    ],
+  );
+
+  const selectedFormAttribution = useMemo(
+    () => (formData.adAccountId ? resolveAccountAttribution(formData.adAccountId, formData.date, formData.csId) : null),
+    [
+      formData.adAccountId,
+      formData.csId,
+      formData.date,
+      resolveAccountAttribution,
+    ],
+  );
+  const editingLegacyAdvertiserId = useMemo(() => {
+    if (!editingId || !formData.advertiserId) return '';
+    const originalRow = dailyAds.find((item) => item.id === editingId);
+    if (!originalRow?.advertiserId || originalRow.advertiserId === formData.advertiserId) return '';
+    return originalRow.advertiserId;
+  }, [dailyAds, editingId, formData.advertiserId]);
+
+  const isAdAccountAllowedForDate = useCallback((adAccountId: string, date: string) =>
+    getScopedAdAccountOptionsForDate(date).some((option) => option.account.id === adAccountId),
+  [getScopedAdAccountOptionsForDate]);
+
+  const hydrateAdFormData = useCallback((draft: DailyAdFormData): DailyAdFormData => {
+    const resolved = draft.adAccountId
+      ? resolveAccountAttribution(draft.adAccountId, draft.date, isCsUser ? currentUser?.id : draft.csId)
+      : null;
+
+    return {
+      ...draft,
+      advertiserId: resolved?.advertiserId || '',
+      platformId: resolved?.platformId || '',
+      subChannelId: resolved?.subChannelId || '',
+      csId: resolved?.csId || '',
+    };
+  }, [currentUser?.id, isCsUser, resolveAccountAttribution]);
+
+  const hydrateStagedAdRow = useCallback((row: StagedDailyAdRow): StagedDailyAdRow => {
+    const resolved = row.adAccountId
+      ? resolveAccountAttribution(row.adAccountId, row.date, isCsUser ? currentUser?.id : row.csId)
+      : null;
+
+    return {
+      ...row,
+      advertiserId: resolved?.advertiserId || '',
+      platformId: resolved?.platformId || '',
+      subChannelId: resolved?.subChannelId || '',
+      csId: resolved?.csId || '',
+    };
+  }, [currentUser?.id, isCsUser, resolveAccountAttribution]);
 
   const activeDateBounds = useMemo(() => {
       if (!dateRange?.from) return null;
@@ -444,11 +524,15 @@ export function IklanHarian() {
 
       // Role Filter (Always apply this base security filter)
       if (isAdvertiserUser && currentUser) {
-        data = data.filter(d => d.advertiserId === currentUser.id);
+        data = data.filter(d => resolveDailyAdAttribution(d).advertiserId === currentUser.id);
+      }
+
+      if (isCsUser && currentUser) {
+        data = data.filter(d => resolveDailyAdAttribution(d).csId === currentUser.id);
       }
 
       return data;
-  }, [activeDateBounds, currentUser, dailyAds, isAdvertiserUser]);
+  }, [activeDateBounds, currentUser, dailyAds, isAdvertiserUser, isCsUser, resolveDailyAdAttribution]);
 
   // 1.5 Index lead/order metrics once, then every daily ad row becomes O(1) lookup.
   const adMetricIndexes = useMemo(() => {
@@ -516,35 +600,50 @@ export function IklanHarian() {
   // 2. Enrich visible-period rows with real metrics.
   const dateFilteredData = useMemo(() => {
       return baseDailyAds.map(item => {
+          const attribution = resolveDailyAdAttribution(item);
+          const legacyAdvertiserId =
+            item.advertiserId && item.advertiserId !== attribution.advertiserId
+              ? item.advertiserId
+              : undefined;
+          const normalizedItem = {
+              ...item,
+              advertiserId: attribution.advertiserId,
+              platformId: attribution.platformId,
+              subChannelId: attribution.subChannelId,
+              csId: attribution.csId,
+              legacyAdvertiserId,
+          };
           const key = buildAdMetricKey(
-              item.date,
-              item.advertiserId,
-              item.platformId,
-              item.subChannelId,
-              item.csId,
+              normalizedItem.date,
+              normalizedItem.advertiserId,
+              normalizedItem.platformId,
+              normalizedItem.subChannelId,
+              normalizedItem.csId,
           );
           const fallbackKey = buildAdMetricFallbackKey(
-              item.date,
-              item.advertiserId,
-              item.platformId,
-              item.csId,
+              normalizedItem.date,
+              normalizedItem.advertiserId,
+              normalizedItem.platformId,
+              normalizedItem.csId,
           );
 
           return {
-              ...item,
+              ...normalizedItem,
               realLeads: adMetricIndexes.realLeadsByKey.get(key) || adMetricIndexes.realLeadsByKey.get(fallbackKey) || 0,
               realOrders: adMetricIndexes.realOrdersByKey.get(key) || adMetricIndexes.realOrdersByKey.get(fallbackKey) || 0,
               realOrdersDone: adMetricIndexes.realOrdersDoneByKey.get(key) || adMetricIndexes.realOrdersDoneByKey.get(fallbackKey) || 0,
           };
       });
-  }, [adMetricIndexes, baseDailyAds]);
+  }, [adMetricIndexes, baseDailyAds, resolveDailyAdAttribution]);
 
   // 3. Filter Enriched Data (Final Table Data)
   const filteredData = useMemo(() => {
     let data = dateFilteredData;
 
     // Dropdown Filters
-    if (advertiserFilter !== 'all') data = data.filter(item => item.advertiserId === advertiserFilter);
+    if (advertiserFilter !== 'all') {
+      data = data.filter(item => item.advertiserId === advertiserFilter || item.legacyAdvertiserId === advertiserFilter);
+    }
     if (platformFilter !== 'all') data = data.filter(item => item.platformId === platformFilter);
     if (subChannelFilter !== 'all') data = data.filter(item => item.subChannelId === subChannelFilter);
     if (accountFilter !== 'all') data = data.filter(item => item.adAccountId === accountFilter);
@@ -556,6 +655,7 @@ export function IklanHarian() {
         data = data.filter(d => 
           d.date.includes(lower) ||
           lookupMaps.userNameById.get(d.advertiserId)?.toLowerCase().includes(lower) ||
+          lookupMaps.userNameById.get(d.legacyAdvertiserId || '')?.toLowerCase().includes(lower) ||
           lookupMaps.accountNameById.get(d.adAccountId)?.toLowerCase().includes(lower)
         );
     }
@@ -606,7 +706,11 @@ export function IklanHarian() {
 
   // 2.5 Dynamic Filter Options (Based on dateFilteredData)
   const optAdvertisers = useMemo(() => {
-    const ids = new Set(dateFilteredData.map(d => d.advertiserId).filter(Boolean) as string[]);
+    const ids = new Set(
+      dateFilteredData
+        .flatMap(d => [d.advertiserId, d.legacyAdvertiserId])
+        .filter(Boolean) as string[],
+    );
     return users.filter(u => ids.has(u.id));
   }, [dateFilteredData, users]);
 
@@ -665,8 +769,28 @@ export function IklanHarian() {
   const avgCpr = totals.orders > 0 ? totals.spend / totals.orders : 0;
   const avgCprDone = totals.ordersDone > 0 ? totals.spend / totals.ordersDone : 0; // Cost / Done Orders
   const canDeleteAdItem = isAdminManagementUser;
-  const canManageAdItem = (advertiserId?: string) =>
-    hasPermission('ads.manage') || (isAdvertiserUser && advertiserId === currentUser?.id);
+  const canManageAdItem = (item?: DailyAd) =>
+    hasPermission('ads.manage') ||
+    (isAdvertiserUser && item && resolveDailyAdAttribution(item).advertiserId === currentUser?.id);
+  const activeFilterCount = useMemo(
+    () =>
+      [
+        isAdminManagementUser && advertiserFilter !== 'all',
+        platformFilter !== 'all',
+        subChannelFilter !== 'all',
+        accountFilter !== 'all',
+        csFilter !== 'all',
+      ].filter(Boolean).length,
+    [accountFilter, advertiserFilter, csFilter, isAdminManagementUser, platformFilter, subChannelFilter],
+  );
+  const hasActiveFilters = activeFilterCount > 0;
+  const resetAdvancedFilters = useCallback(() => {
+    setAdvertiserFilter('all');
+    setPlatformFilter('all');
+    setSubChannelFilter('all');
+    setAccountFilter('all');
+    setCsFilter('all');
+  }, []);
 
   const selectedRecapRange = useMemo(() => {
     return {
@@ -749,6 +873,7 @@ export function IklanHarian() {
   const resetApiRecapPreview = () => {
     setApiRecapRows([]);
     setApiRecapErrors([]);
+    setApiRecapProviderStatuses([]);
   };
 
   const loadApiRecapIntegrationConfigs = async () => {
@@ -778,35 +903,13 @@ export function IklanHarian() {
     setApiRecapCsId(csFilter);
     setApiRecapRows([]);
     setApiRecapErrors([]);
+    setApiRecapProviderStatuses([]);
     setIsApiRecapOpen(true);
     void loadApiRecapIntegrationConfigs();
   };
 
-  const resolveOwnerForDate = (adAccountId: string, date: string, fallbackAdvertiserId: string) => {
-    const owner = adAccountOwnerAssignments
-      .filter((assignment) =>
-        assignment.adAccountId === adAccountId &&
-        assignment.status === 'active' &&
-        assignment.startDate <= date &&
-        (!assignment.endDate || assignment.endDate >= date)
-      )
-      .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
-
-    return owner?.advertiserId || fallbackAdvertiserId;
-  };
-
-  const resolveCsAssignmentForDate = (adAccountId: string, date: string) =>
-    adAccountAssignments
-      .filter((assignment) =>
-        assignment.adAccountId === adAccountId &&
-        assignment.status === 'active' &&
-        assignment.startDate <= date &&
-        (!assignment.endDate || assignment.endDate >= date)
-      )
-      .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
-
-  const buildExistingDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId' | 'platformId'>) =>
-    `${row.date}|${row.adAccountId}|${row.platformId}`;
+  const buildExistingDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId'>) =>
+    `${row.date}|${row.adAccountId}`;
 
   const findFallbackAdAccountForSnapshot = (
     snapshot: MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow,
@@ -858,7 +961,7 @@ export function IklanHarian() {
     }
 
     const platformCandidates = platforms
-      .filter((platform) => platform.name.toLowerCase().includes(platformKey))
+      .filter((platform) => getAdsProviderKeyByPlatformName(platform.name) === platformKey)
       .map((platform) => platform.id);
     const accountNameKey = normalizeAdAccountLookupKey(snapshot.externalAccountName);
     const accountIdKey = normalizeAdAccountLookupKey(snapshot.externalAccountId);
@@ -928,11 +1031,10 @@ export function IklanHarian() {
       const existing = existingByKey.get(buildExistingDailyAdKey({
         date: snapshot.snapshotDate,
         adAccountId: account.id,
-        platformId: account.platformId,
       }));
 
       let status: ApiRecapPreviewRow['status'] = existing ? 'skip' : 'new';
-      let reason = existing ? 'Sudah ada di laporan manual.' : 'Siap ditambahkan.';
+      let reason = existing ? 'Sudah ada di laporan harian.' : 'Siap ditambahkan.';
 
       if (apiRecapAdvertiserId !== 'all' && advertiserId !== apiRecapAdvertiserId) {
         status = 'skip';
@@ -947,7 +1049,7 @@ export function IklanHarian() {
       if (existing && apiRecapMode === 'update-existing') {
         if (apiRecapPreserveEdited && (existing.editCount || 0) > 0) {
           status = 'skip';
-          reason = 'Data manual pernah diedit, tidak ditimpa.';
+          reason = 'Data pernah dikoreksi, tidak ditimpa.';
         } else {
           status = 'update';
           reason = 'Akan update data yang sudah ada.';
@@ -999,13 +1101,13 @@ export function IklanHarian() {
 
         if (apiRecapMode === 'update-existing') {
           if (apiRecapPreserveEdited && (existing.editCount || 0) > 0) {
-            return { ...row, existing, status: 'skip', reason: 'Data manual pernah diedit, tidak ditimpa.' };
+            return { ...row, existing, status: 'skip', reason: 'Data pernah dikoreksi, tidak ditimpa.' };
           }
 
           return { ...row, existing, status: 'update', reason: 'Akan update data yang sudah ada.' };
         }
 
-        return { ...row, existing, status: 'skip', reason: 'Sudah ada di laporan manual.' };
+        return { ...row, existing, status: 'skip', reason: 'Sudah ada di laporan harian.' };
       });
     });
   }, [apiRecapAdvertiserId, apiRecapCsId, apiRecapMode, apiRecapPreserveEdited, dailyAds]);
@@ -1024,67 +1126,126 @@ export function IklanHarian() {
     setIsApiRecapOpen(true);
     setApiRecapRows([]);
     setApiRecapErrors([]);
+    setApiRecapProviderStatuses([]);
     setIsApiRecapLoading(true);
 
-    await loadApiRecapIntegrationConfigs();
+    const configs = await loadApiRecapIntegrationConfigs();
 
     const platformNameById = new Map(platforms.map((platform) => [platform.id, platform.name.toLowerCase()]));
-    const shouldLoadPlatform = (needle: string) =>
-      apiRecapPlatformId === 'all' || platformNameById.get(apiRecapPlatformId)?.includes(needle);
+    const selectedProviderKey =
+      apiRecapPlatformId === 'all'
+        ? null
+        : getAdsProviderKeyByPlatformName(platformNameById.get(apiRecapPlatformId));
+    const shouldLoadProvider = (provider: AdsProviderKey) =>
+      apiRecapPlatformId === 'all' || selectedProviderKey === provider;
+    const getEnabledConfigCount = (provider: AdsProviderKey) => {
+      if (provider === 'meta') {
+        return configs.meta.filter((config) => config.enabled && config.liveMetaAccountId).length;
+      }
+      if (provider === 'google') {
+        return configs.google.filter((config) => config.enabled && config.liveGoogleCustomerId).length;
+      }
+      return configs.tiktok.filter((config) => config.enabled && config.liveTikTokAdvertiserId).length;
+    };
 
-    const tasks: Array<Promise<{ label: string; rows: ApiRecapPreviewRow[] }>> = [];
+    const tasks: Array<{
+      key: AdsProviderKey;
+      label: string;
+      enabledConfigCount: number;
+      request: Promise<ApiRecapPreviewRow[]>;
+    }> = [];
 
-    if (shouldLoadPlatform('meta')) {
+    if (shouldLoadProvider('meta')) {
       tasks.push(
-        syncMetaSnapshotDataset({
-          from: selectedRecapRange.from,
-          to: selectedRecapRange.to,
-          force: true,
-          minFreshMinutes: 0,
-        }).then((payload) => ({ label: 'Meta', rows: buildApiRecapRows(payload.rows || [], 'Meta') })),
+        {
+          key: 'meta',
+          label: adsProviderLabels.meta,
+          enabledConfigCount: getEnabledConfigCount('meta'),
+          request: syncMetaSnapshotDataset({
+            from: selectedRecapRange.from,
+            to: selectedRecapRange.to,
+            force: true,
+            minFreshMinutes: 0,
+          }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.meta)),
+        },
       );
     }
 
-    if (shouldLoadPlatform('google')) {
+    if (shouldLoadProvider('google')) {
       tasks.push(
-        syncGoogleAdsSnapshotDataset({
-          from: selectedRecapRange.from,
-          to: selectedRecapRange.to,
-          force: true,
-          minFreshMinutes: 0,
-        }).then((payload) => ({ label: 'Google Ads', rows: buildApiRecapRows(payload.rows || [], 'Google Ads') })),
+        {
+          key: 'google',
+          label: adsProviderLabels.google,
+          enabledConfigCount: getEnabledConfigCount('google'),
+          request: syncGoogleAdsSnapshotDataset({
+            from: selectedRecapRange.from,
+            to: selectedRecapRange.to,
+            force: true,
+            minFreshMinutes: 0,
+          }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.google)),
+        },
       );
     }
 
-    if (shouldLoadPlatform('tiktok')) {
+    if (shouldLoadProvider('tiktok')) {
       tasks.push(
-        syncTikTokAdsSnapshotDataset({
-          from: selectedRecapRange.from,
-          to: selectedRecapRange.to,
-          force: true,
-          minFreshMinutes: 0,
-        }).then((payload) => ({ label: 'TikTok Ads', rows: buildApiRecapRows(payload.rows || [], 'TikTok Ads') })),
+        {
+          key: 'tiktok',
+          label: adsProviderLabels.tiktok,
+          enabledConfigCount: getEnabledConfigCount('tiktok'),
+          request: syncTikTokAdsSnapshotDataset({
+            from: selectedRecapRange.from,
+            to: selectedRecapRange.to,
+            force: true,
+            minFreshMinutes: 0,
+          }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.tiktok)),
+        },
       );
     }
 
     try {
-      const results = await Promise.allSettled(tasks);
+      if (tasks.length === 0) {
+        toast.info('Platform ini belum punya konektor API laporan iklan.');
+        return;
+      }
+
+      const results = await Promise.allSettled(tasks.map((task) => task.request));
       const rows: ApiRecapPreviewRow[] = [];
       const errors: string[] = [];
+      const providerStatuses: ApiRecapProviderStatus[] = [];
 
-      for (const result of results) {
+      results.forEach((result, index) => {
+        const task = tasks[index];
         if (result.status === 'fulfilled') {
-          rows.push(...result.value.rows);
+          rows.push(...result.value);
+          providerStatuses.push({
+            key: task.key,
+            label: task.label,
+            state: result.value.length > 0 ? 'success' : 'empty',
+            count: result.value.length,
+            message: result.value.length > 0
+              ? `${result.value.length} snapshot terbaca.`
+              : getEmptyApiRecapMessage(task.key, task.enabledConfigCount),
+          });
         } else {
-          errors.push(result.reason instanceof Error ? result.reason.message : 'Sinkronisasi API gagal.');
+          const message = getApiRecapErrorMessage(task.key, result.reason);
+          errors.push(`${task.label}: ${message}`);
+          providerStatuses.push({
+            key: task.key,
+            label: task.label,
+            state: 'error',
+            count: 0,
+            message,
+          });
         }
-      }
+      });
 
       setApiRecapRows(rows.sort((left, right) => {
         if (left.date !== right.date) return left.date.localeCompare(right.date);
         return left.accountName.localeCompare(right.accountName);
       }));
       setApiRecapErrors(errors);
+      setApiRecapProviderStatuses(providerStatuses);
 
       if (rows.length === 0 && errors.length === 0) {
         toast.info('Tidak ada snapshot API untuk periode ini.');
@@ -1157,6 +1318,7 @@ export function IklanHarian() {
     const exportData = filteredData.map(item => ({
         'Tanggal Lead': item.date,
         Advertiser: getAdvertiserName(item.advertiserId),
+        'Advertiser Lama': item.legacyAdvertiserId ? getAdvertiserName(item.legacyAdvertiserId) : '',
         Platform: getPlatformName(item.platformId),
         Account: getAccountName(item.adAccountId),
         SubChannel: getSubChannelName(item.subChannelId || ''),
@@ -1177,15 +1339,46 @@ export function IklanHarian() {
     spreadsheet.writeFile(wb, `Laporan_Iklan_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
+  const normalizeImportDate = (value: unknown) => {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return format(value, 'yyyy-MM-dd');
+    }
+
+    if (typeof value === 'number') {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const parsedDate = new Date(excelEpoch.getTime() + value * 86400000);
+      if (!Number.isNaN(parsedDate.getTime())) return format(parsedDate, 'yyyy-MM-dd');
+    }
+
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return format(new Date(), 'yyyy-MM-dd');
+
+    const parsedDate = new Date(rawValue);
+    if (!Number.isNaN(parsedDate.getTime())) return format(parsedDate, 'yyyy-MM-dd');
+
+    return rawValue;
+  };
+
+  const findAdAccountByImportValue = (value: unknown) => {
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return undefined;
+
+    const normalized = normalizeAdAccountLookupKey(rawValue);
+    const flexibleKeys = buildFlexibleAdAccountLookupKeys(rawValue);
+
+    return adAccounts.find((account) => {
+      if (account.id === rawValue) return true;
+      if (normalizeAdAccountLookupKey(account.accountName) === normalized) return true;
+      const accountKeys = buildFlexibleAdAccountLookupKeys(account.accountName);
+      return accountKeys.some((key) => flexibleKeys.includes(key));
+    });
+  };
+
   const handleDownloadTemplate = async () => {
     const templateData = [
         {
             Date: '2024-01-01',
-            Advertiser: 'Nama Advertiser (Opsional)',
-            Platform: 'Meta Ads',
-            'Sub Channel': 'Instagram (Opsional)',
-            Account: 'Akun Utama',
-            CS: 'Budi (Opsional)',
+            Account: 'Nama Akun Iklan di Master Data',
             Spending: 1000000,
             Leads: 50
         }
@@ -1195,42 +1388,6 @@ export function IklanHarian() {
     const wb = spreadsheet.utils.book_new();
     spreadsheet.utils.book_append_sheet(wb, ws, "Template");
     spreadsheet.writeFile(wb, "Template_Import_Iklan.xlsx");
-  };
-
-  const handleOpenBulkInput = () => {
-      const initialRows = Array(3).fill(null).map(() => ({
-          id: crypto.randomUUID(),
-          date: new Date().toISOString().split('T')[0],
-          platformId: '',
-          subChannelId: '',
-          adAccountId: '',
-          csId: '',
-          amountSpent: '',
-          leadsDashboard: '',
-          advertiserId: isAdvertiserUser && currentUser ? currentUser.id : ''
-      }));
-      
-      setStagedData(initialRows);
-      setImportSource('manual');
-      setImportStep('review');
-      setIsImportModalOpen(true);
-  };
-
-  const handleAddStagedRow = () => {
-      setStagedData(prev => [
-          ...prev,
-          {
-              id: crypto.randomUUID(),
-              date: new Date().toISOString().split('T')[0],
-              platformId: '',
-              subChannelId: '',
-              adAccountId: '',
-              csId: '',
-              amountSpent: '',
-              leadsDashboard: '',
-              advertiserId: isAdvertiserUser && currentUser ? currentUser.id : ''
-          }
-      ]);
   };
 
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1248,62 +1405,33 @@ export function IklanHarian() {
             const data = spreadsheet.utils.sheet_to_json(ws);
             
             const staged = data.map((row: any) => {
-                 // Essential Fields Mapping (Case Insensitive Keys)
-                 const dateStr = row['Date'] || row['Tanggal'] || row['date'] || format(new Date(), 'yyyy-MM-dd');
-                 const platformName = row['Platform'] || row['platform'];
-                 const accountName = row['Account'] || row['Akun'] || row['account'];
+                 const dateStr = normalizeImportDate(row['Date'] || row['Tanggal'] || row['date']);
+                 const accountValue =
+                   row['Account'] ||
+                   row['Akun'] ||
+                   row['Akun Iklan'] ||
+                   row['Ad Account'] ||
+                   row['adAccountId'] ||
+                   row['account'];
+                 const account = findAdAccountByImportValue(accountValue);
                  const spending = row['Spending'] || row['spending'] || row['Amount Spent'] || 0;
                  const leads = row['Leads'] || row['leads'] || row['Leads Dashboard'] || 0;
 
-                 // Optional Fields
-                 const subChannelName = row['Sub Channel'] || row['SubChannel'] || row['sub channel'];
-                 const csName = row['CS'] || row['cs'] || row['Customer Service'];
-                 const advName = row['Advertiser'] || row['advertiser'];
-
-                 // Find IDs (Best Effort)
-                 const platform = platforms.find(p => p.name.toLowerCase() === String(platformName || '').trim().toLowerCase());
-                 const account = adAccounts.find(a => a.accountName.toLowerCase() === String(accountName || '').trim().toLowerCase());
-                 
-                 let subChannelId = '';
-                 if (subChannelName && platform) {
-                     const sub = subChannels.find(s => 
-                         s.name.toLowerCase() === String(subChannelName).trim().toLowerCase() && 
-                         s.platformId === platform.id
-                     );
-                     if (sub) subChannelId = sub.id;
-                 }
-
-                 let csId = '';
-                 if (csName) {
-                     const cs = users.find(u => u.name.toLowerCase() === String(csName).trim().toLowerCase());
-                     if (cs) csId = cs.id;
-                 }
-                 
-                 let advertiserId = '';
-                 if (account) {
-                     advertiserId = account.advertiserId;
-                 } else if (isAdvertiserUser && currentUser) {
-                     advertiserId = currentUser.id;
-                 } else if (advName) {
-                     const adv = users.find(u => u.name.toLowerCase() === String(advName).trim().toLowerCase());
-                     if (adv) advertiserId = adv.id;
-                 }
-
-                 return {
+                 return hydrateStagedAdRow({
                      id: crypto.randomUUID(),
-                     date: dateStr, 
-                     advertiserId,
-                     platformId: platform?.id || '',
-                     subChannelId, 
+                     date: dateStr,
+                     advertiserId: '',
+                     platformId: '',
+                     subChannelId: '',
                      adAccountId: account?.id || '',
-                     csId, 
+                     csId: '',
                      amountSpent: spending,
-                     leadsDashboard: leads
-                 };
+                     leadsDashboard: leads,
+                     _rawAccount: accountValue ? String(accountValue) : undefined,
+                 });
             });
 
             setStagedData(staged);
-            setImportSource('excel');
             setImportStep('review');
             if (fileInputRef.current) fileInputRef.current.value = '';
 
@@ -1318,42 +1446,8 @@ export function IklanHarian() {
   const handleStagedChange = (id: string, field: string, value: any) => {
       setStagedData(prev => prev.map(item => {
           if (item.id !== id) return item;
-          
-          const updates: any = { [field]: value };
-          
-          // Cascading Logic
-          if (field === 'platformId') {
-              updates.subChannelId = ''; // Reset sub
-              updates.adAccountId = ''; // Reset account
-          }
-          
-          // Auto-fill Advertiser if Account Changes
-          if (field === 'adAccountId') {
-              const acc = adAccounts.find(a => a.id === value);
-              if (acc) updates.advertiserId = acc.advertiserId;
-          }
 
-          return { ...item, ...updates };
-      }));
-  };
-
-  const handleBulkUpdate = (field: string, value: any) => {
-      setStagedData(prev => prev.map(item => {
-          const updates: any = { [field]: value };
-          
-          // Cascading Logic
-          if (field === 'platformId') {
-              updates.subChannelId = ''; // Reset sub
-              updates.adAccountId = ''; // Reset account
-          }
-          
-          // Auto-fill Advertiser if Account Changes
-          if (field === 'adAccountId') {
-              const acc = adAccounts.find(a => a.id === value);
-              if (acc) updates.advertiserId = acc.advertiserId;
-          }
-
-          return { ...item, ...updates };
+          return hydrateStagedAdRow({ ...item, [field]: value });
       }));
   };
 
@@ -1362,10 +1456,17 @@ export function IklanHarian() {
   };
 
   const handleCommitImport = async () => {
+      const hydratedRows = stagedData.map(hydrateStagedAdRow);
       // Validate
-      const invalidItems = stagedData.filter(d => !d.date || !d.platformId || !d.adAccountId || !d.advertiserId);
+      const invalidItems = hydratedRows.filter(d =>
+        !d.date ||
+        !d.platformId ||
+        !d.adAccountId ||
+        !d.advertiserId ||
+        !isAdAccountAllowedForDate(d.adAccountId, d.date)
+      );
       if (invalidItems.length > 0) {
-          toast.error(`Masih ada ${invalidItems.length} baris data yang belum lengkap (merah).`);
+          toast.error(`Masih ada ${invalidItems.length} baris yang belum cocok dengan Master Data Akun Iklan.`);
           return;
       }
 
@@ -1373,20 +1474,31 @@ export function IklanHarian() {
       let successCount = 0;
       let dupCount = 0;
 
-      for (const item of stagedData) {
+      setStagedData(hydratedRows);
+
+      for (const item of hydratedRows) {
            // Check Duplicate in DB
-           const exists = dailyAds.some(d => d.date === item.date && d.adAccountId === item.adAccountId && d.platformId === item.platformId);
+           const exists = dailyAds.some(d => d.date === item.date && d.adAccountId === item.adAccountId);
            if (!exists) {
                const account = adAccounts.find(a => a.id === item.adAccountId);
                const ppnRate = account?.ppn || 0;
                const feeRate = account?.fee || 0;
                const spendVal = Number(item.amountSpent) || 0;
 
-               addDailyAd({
-                   ...item,
+               await Promise.resolve(addDailyAd({
+                   id: crypto.randomUUID(),
+                   date: item.date,
+                   advertiserId: item.advertiserId,
+                   platformId: item.platformId,
+                   subChannelId: item.subChannelId || undefined,
+                   adAccountId: item.adAccountId,
+                   csId: item.csId || undefined,
+                   amountSpent: spendVal,
+                   leadsDashboard: Number(item.leadsDashboard) || 0,
                    ppnAmount: Math.round(spendVal * (ppnRate/100)),
-                   feeAmount: Math.round(spendVal * (feeRate/100))
-               });
+                   feeAmount: Math.round(spendVal * (feeRate/100)),
+                   editCount: 0,
+               }));
                successCount++;
            } else {
                dupCount++;
@@ -1402,23 +1514,24 @@ export function IklanHarian() {
 
   const handleOpenModal = (item?: DailyAd) => {
     if (item) {
+      const attribution = resolveDailyAdAttribution(item);
       setEditingId(item.id);
       setFormData({
         date: item.date,
-        advertiserId: item.advertiserId,
-        platformId: item.platformId,
-        subChannelId: item.subChannelId || '',
+        advertiserId: attribution.advertiserId,
+        platformId: attribution.platformId,
+        subChannelId: attribution.subChannelId || '',
         adAccountId: item.adAccountId,
-        csId: item.csId || '',
+        csId: attribution.csId || '',
         amountSpent: String(item.amountSpent),
         leadsDashboard: String(item.leadsDashboard),
         editCount: item.editCount || 0
       });
     } else {
       setEditingId(null);
-      setFormData({
+      setFormData(hydrateAdFormData({
         date: new Date().toISOString().split('T')[0],
-        advertiserId: isAdvertiserUser && currentUser ? currentUser.id : '',
+        advertiserId: '',
         platformId: '',
         subChannelId: '',
         adAccountId: '',
@@ -1426,7 +1539,7 @@ export function IklanHarian() {
         amountSpent: '',
         leadsDashboard: '',
         editCount: 0
-      });
+      }));
     }
     setIsModalOpen(true);
   };
@@ -1435,15 +1548,11 @@ export function IklanHarian() {
       let isDirty = false;
       if (editingId) {
           isDirty = true;
-      } else {
+          } else {
           isDirty = (
-              !!formData.platformId || 
-              !!formData.subChannelId || 
               !!formData.adAccountId || 
-              !!formData.csId || 
               !!formData.amountSpent || 
-              !!formData.leadsDashboard || 
-              (!isAdvertiserUser && !!formData.advertiserId)
+              !!formData.leadsDashboard
           );
       }
 
@@ -1478,35 +1587,17 @@ export function IklanHarian() {
   };
 
   const handleImportCloseAttempt = () => {
-      if (importSource === 'manual') {
-           const hasData = stagedData.some(row => 
-               row.platformId || row.adAccountId || row.amountSpent || row.leadsDashboard || row.subChannelId || row.csId
-           );
-           if (hasData) {
-               setConfirmDialog({
-                   isOpen: true,
-                   title: "Batalkan Input Massal?",
-                   description: "Data yang Anda masukkan belum disimpan. Apakah Anda yakin ingin membatalkan?",
-                   confirmLabel: "Ya, Batalkan",
-                   variant: 'destructive',
-                   onConfirm: () => proceedCloseImport()
-               });
-           } else {
-               proceedCloseImport();
-           }
+      if (importStep === 'review') {
+           setConfirmDialog({
+              isOpen: true,
+              title: "Batalkan Import?",
+              description: "Proses review belum selesai. Apakah Anda yakin ingin membatalkan import ini?",
+              confirmLabel: "Batalkan Import",
+              variant: 'destructive',
+              onConfirm: () => proceedCloseImport()
+          });
       } else {
-           if (importStep === 'review') {
-                setConfirmDialog({
-                   isOpen: true,
-                   title: "Batalkan Import?",
-                   description: "Proses review belum selesai. Apakah Anda yakin ingin membatalkan import ini?",
-                   confirmLabel: "Batalkan Import",
-                   variant: 'destructive',
-                   onConfirm: () => proceedCloseImport()
-               });
-           } else {
-               proceedCloseImport();
-           }
+          proceedCloseImport();
       }
   };
 
@@ -1519,8 +1610,37 @@ export function IklanHarian() {
   };
 
   const handleSave = async () => {
-    if (!formData.date || !formData.advertiserId || !formData.platformId || !formData.adAccountId || !formData.amountSpent || !formData.leadsDashboard) {
-      toast.error('Mohon lengkapi semua field bertanda *');
+    if (!editingId) {
+      toast.error('Input langsung dinonaktifkan. Gunakan Sinkronkan API atau Import Laporan.');
+      return;
+    }
+
+    const hydratedFormData = hydrateAdFormData(formData);
+    const selectedAttribution = hydratedFormData.adAccountId
+      ? resolveAccountAttribution(
+          hydratedFormData.adAccountId,
+          hydratedFormData.date,
+          isCsUser ? currentUser?.id : hydratedFormData.csId,
+        )
+      : null;
+
+    if (
+      !hydratedFormData.date ||
+      !hydratedFormData.adAccountId ||
+      !hydratedFormData.platformId ||
+      !hydratedFormData.advertiserId ||
+      !hydratedFormData.amountSpent ||
+      !hydratedFormData.leadsDashboard ||
+      !selectedAttribution
+    ) {
+      toast.error('Mohon lengkapi tanggal, akun iklan, spending, dan leads.');
+      setFormData(hydratedFormData);
+      return;
+    }
+
+    if (!isAdAccountAllowedForDate(hydratedFormData.adAccountId, hydratedFormData.date)) {
+      toast.error('Akun iklan ini tidak sesuai akses atau assignment aktif user.');
+      setFormData(hydratedFormData);
       return;
     }
 
@@ -1528,11 +1648,11 @@ export function IklanHarian() {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Duplicate Check
-    if (!editingId) {
+    if (editingId) {
         const exists = dailyAds.some(d => 
-            d.date === formData.date && 
-            d.adAccountId === formData.adAccountId && 
-            d.platformId === formData.platformId
+            d.id !== editingId &&
+            d.date === hydratedFormData.date &&
+            d.adAccountId === hydratedFormData.adAccountId
         );
         if (exists) {
             toast.error('Data untuk Tanggal & Akun ini sudah ada! Mohon edit data yang ada.');
@@ -1541,49 +1661,38 @@ export function IklanHarian() {
         }
     }
 
-    const selectedAccount = adAccounts.find(a => a.id === formData.adAccountId);
+    const selectedAccount = selectedAttribution.account;
     const ppnRate = selectedAccount?.ppn || 0;
     const feeRate = selectedAccount?.fee || 0;
-    const spendingVal = Number(parseNumber(formData.amountSpent));
+    const spendingVal = Number(parseNumber(hydratedFormData.amountSpent));
     
     const ppnAmount = Math.round(spendingVal * (ppnRate / 100));
     const feeAmount = Math.round(spendingVal * (feeRate / 100));
 
     const payload: DailyAd = {
         id: editingId || crypto.randomUUID(), 
-        date: formData.date,
-        advertiserId: formData.advertiserId,
-        platformId: formData.platformId,
-        subChannelId: formData.subChannelId || undefined,
-        adAccountId: formData.adAccountId,
-        csId: formData.csId || undefined,
+        date: hydratedFormData.date,
+        advertiserId: hydratedFormData.advertiserId,
+        platformId: hydratedFormData.platformId,
+        subChannelId: hydratedFormData.subChannelId || undefined,
+        adAccountId: hydratedFormData.adAccountId,
+        csId: hydratedFormData.csId || undefined,
         amountSpent: spendingVal,
-        leadsDashboard: Number(formData.leadsDashboard),
+        leadsDashboard: Number(hydratedFormData.leadsDashboard),
         ppnAmount: ppnAmount,
         feeAmount: feeAmount,
-        editCount: editingId ? (formData.editCount + 1) : 0
+        editCount: hydratedFormData.editCount + 1
     };
 
     if (editingId) {
       updateDailyAd(payload);
-      toast.success('Data diperbarui');
+      toast.success('Koreksi laporan disimpan');
       if (currentUser) {
         logActivity(
           { id: currentUser.id, name: currentUser.name, role: currentUser.role },
           'UPDATE', 'Iklan Harian',
-          `Memperbarui data iklan harian (spend: Rp ${spendingVal.toLocaleString('id-ID')})`,
+          `Mengoreksi laporan iklan harian (spend: Rp ${spendingVal.toLocaleString('id-ID')})`,
           editingId
-        );
-      }
-    } else {
-      addDailyAd(payload);
-      toast.success('Data ditambahkan');
-      if (currentUser) {
-        logActivity(
-          { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-          'CREATE', 'Iklan Harian',
-          `Menambahkan data iklan harian (spend: Rp ${spendingVal.toLocaleString('id-ID')})`,
-          ''
         );
       }
     }
@@ -1619,7 +1728,6 @@ export function IklanHarian() {
   const getAdvertiserName = (id: string) => lookupMaps.userNameById.get(id) || '-';
   const getCsName = (id: string) => lookupMaps.userNameById.get(id) || '-';
 
-  const isAdvertiserLogin = isAdvertiserUser;
   const apiRecapSummary = useMemo(() => ({
     newRows: apiRecapRows.filter((row) => row.status === 'new').length,
     updateRows: apiRecapRows.filter((row) => row.status === 'update').length,
@@ -1629,9 +1737,107 @@ export function IklanHarian() {
       .filter((row) => row.status === 'new' || row.status === 'update')
       .reduce((sum, row) => sum + row.amountSpent, 0),
   }), [apiRecapRows]);
+  const apiRecapActionableCount = apiRecapSummary.newRows + apiRecapSummary.updateRows;
+  const apiRecapSaveDisabledReason = useMemo(() => {
+    if (isApiRecapLoading) return 'Preview sedang dimuat.';
+    if (apiRecapRows.length === 0) return 'Refresh preview dulu untuk melihat data yang bisa disimpan.';
+    if (apiRecapActionableCount > 0) return '';
+
+    const allRowsAlreadyExist = apiRecapRows.every((row) => row.status === 'skip' && row.reason === 'Sudah ada di laporan harian.');
+    if (apiRecapMode === 'insert-missing' && allRowsAlreadyExist) {
+      return 'Semua snapshot sudah ada di laporan harian. Ubah Mode Simpan ke Update existing untuk sinkron ulang.';
+    }
+
+    if (apiRecapRows.every((row) => row.status === 'unmapped')) {
+      return 'Belum ada akun yang bisa disimpan. Lengkapi mapping akun iklan di Master Data Akun Iklan.';
+    }
+
+    return 'Tidak ada perubahan yang perlu disimpan dari preview ini.';
+  }, [apiRecapActionableCount, apiRecapMode, apiRecapRows, isApiRecapLoading]);
+
+  const renderAdvancedFilters = () => (
+    <div className="dailyAdsAdvancedFilterGrid">
+      {isAdminManagementUser && (
+        <div className="dailyAdsFilterField">
+          <Label>Advertiser</Label>
+          <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
+            <SelectTrigger className="dailyAdsFilterControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
+              <SelectValue placeholder="Advertiser" />
+            </SelectTrigger>
+            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+              <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Advertiser</SelectItem>
+              {optAdvertisers.map(user => (
+                <SelectItem key={user.id} value={user.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{user.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="dailyAdsFilterField">
+        <Label>Platform</Label>
+        <Select value={platformFilter} onValueChange={setPlatformFilter}>
+          <SelectTrigger className="dailyAdsFilterControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
+            <SelectValue placeholder="Platform" />
+          </SelectTrigger>
+          <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Platform</SelectItem>
+            {optPlatforms.map(p => (
+              <SelectItem key={p.id} value={p.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="dailyAdsFilterField">
+        <Label>Sub Channel</Label>
+        <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
+          <SelectTrigger className="dailyAdsFilterControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
+            <SelectValue placeholder="Sub Channel" />
+          </SelectTrigger>
+          <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Sub</SelectItem>
+            {optSubChannels.map(s => (
+              <SelectItem key={s.id} value={s.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="dailyAdsFilterField">
+        <Label>Akun Iklan</Label>
+        <Select value={accountFilter} onValueChange={setAccountFilter}>
+          <SelectTrigger className="dailyAdsFilterControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
+            <SelectValue placeholder="Akun Iklan" />
+          </SelectTrigger>
+          <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Akun</SelectItem>
+            {optAccounts.map(a => (
+              <SelectItem key={a.id} value={a.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{a.accountName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="dailyAdsFilterField">
+        <Label>Customer Service</Label>
+        <Select value={csFilter} onValueChange={setCsFilter}>
+          <SelectTrigger className="dailyAdsFilterControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
+            <SelectValue placeholder="Customer Service" />
+          </SelectTrigger>
+          <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+            <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua CS</SelectItem>
+            {optCs.map(cs => (
+              <SelectItem key={cs.id} value={cs.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{cs.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="dailyAdsPage">
       <div className="flex flex-col space-y-4">
         <OperationalPageHeader
           eyebrow="Operasional"
@@ -1640,22 +1846,16 @@ export function IklanHarian() {
           icon={CalendarIcon}
           actions={(
             <>
-            <Button variant="outline" onClick={handleExport} className="h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
-               <Download className="w-4 h-4 mr-2" /> Export
+            <Button variant="outline" onClick={handleExport} className="dailyAdsHeaderButton h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700" aria-label="Export laporan iklan">
+               <Download className="w-4 h-4" /> <span className="dailyAdsHeaderButtonText">Export</span>
             </Button>
             {hasPermission('ads.manage') && (
             <>
-            <Button variant="outline" onClick={openApiRecapModal} className="h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
-               <RefreshCw className="w-4 h-4 mr-2" /> Rekap API
+            <Button variant="outline" onClick={openApiRecapModal} className="dailyAdsHeaderButton h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700" aria-label="Sinkronkan laporan iklan">
+               <RefreshCw className="w-4 h-4" /> <span className="dailyAdsHeaderButtonText">Sinkronkan</span>
             </Button>
-            <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
-               <Upload className="w-4 h-4 mr-2" /> Import
-            </Button>
-            <Button variant="outline" onClick={handleOpenBulkInput} className="h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
-               <FileSpreadsheet className="w-4 h-4 mr-2" /> Bulk Input
-            </Button>
-            <Button onClick={() => handleOpenModal()} className="hidden h-9 bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 md:inline-flex">
-               <Plus className="w-4 h-4 mr-2" /> Input Data
+            <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="dailyAdsHeaderButton h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700" aria-label="Import laporan iklan">
+               <Upload className="w-4 h-4" /> <span className="dailyAdsHeaderButtonText">Import Laporan</span>
             </Button>
             </>
             )}
@@ -1663,7 +1863,7 @@ export function IklanHarian() {
           )}
         />
 
-        <OperationalKpiGrid>
+        <OperationalKpiGrid className="dailyAdsKpiGrid">
           <OperationalKpiCard
             label="Total Spending"
             value={(
@@ -1715,211 +1915,76 @@ export function IklanHarian() {
         </OperationalKpiGrid>
 
         {/* Filters & Content */}
-        <OperationalFilterPanel className="flex flex-col gap-4">
-                 {/* Mobile View */}
-                 <div className="md:hidden flex flex-col gap-3">
-                    <DatePickerWithRange date={dateRange} setDate={setDateRange} className="w-full" />
-                    <div className="flex gap-2">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-                            <Input 
-                                placeholder="Cari..." 
-                                className="pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                        </div>
-                        <Sheet>
-                            <SheetTrigger asChild>
-                                <Button variant="outline" size="icon" className="shrink-0 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600">
-                                    <Filter className="w-4 h-4 dark:text-slate-200" />
-                                </Button>
-                            </SheetTrigger>
-                            <SheetContent side="bottom" className="h-[85vh] overflow-y-auto rounded-t-xl">
-                                <SheetHeader className="mb-4">
-                                    <SheetTitle>Filter Data</SheetTitle>
-                                    <SheetDescription>Sesuaikan filter data yang ingin ditampilkan</SheetDescription>
-                                </SheetHeader>
-                                <div className="flex flex-col gap-4">
-                                     {isAdminManagementUser && (
-                                       <div className="space-y-1">
-                                           <Label>Advertiser</Label>
-                                           <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
-                                              <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                                  <SelectValue placeholder="Advertiser" />
-                                              </SelectTrigger>
-                                              <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                                  <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Advertiser</SelectItem>
-                                                  {optAdvertisers.map(user => (
-                                                      <SelectItem key={user.id} value={user.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{user.name}</SelectItem>
-                                                  ))}
-                                              </SelectContent>
-                                          </Select>
-                                       </div>
-                                     )}
-                                     <div className="space-y-1">
-                                         <Label>Platform</Label>
-                                         <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                                            <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                                <SelectValue placeholder="Platform" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Platform</SelectItem>
-                                                {optPlatforms.map(p => (
-                                                    <SelectItem key={p.id} value={p.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{p.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                     </div>
-                                     <div className="space-y-1">
-                                         <Label>Sub Channel</Label>
-                                         <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
-                                            <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                                <SelectValue placeholder="Sub Channel" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Sub</SelectItem>
-                                                {optSubChannels.map(s => (
-                                                    <SelectItem key={s.id} value={s.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{s.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                     </div>
-                                     <div className="space-y-1">
-                                         <Label>Akun Iklan</Label>
-                                         <Select value={accountFilter} onValueChange={setAccountFilter}>
-                                            <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                                <SelectValue placeholder="Akun Iklan" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Akun</SelectItem>
-                                                {optAccounts.map(a => (
-                                                    <SelectItem key={a.id} value={a.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{a.accountName}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                     </div>
-                                     <div className="space-y-1">
-                                         <Label>Customer Service</Label>
-                                         <Select value={csFilter} onValueChange={setCsFilter}>
-                                            <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                                <SelectValue placeholder="Customer Service" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua CS</SelectItem>
-                                                {optCs.map(cs => (
-                                                    <SelectItem key={cs.id} value={cs.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{cs.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                     </div>
-                                </div>
-                                <SheetFooter className="mt-6">
-                                     <SheetClose asChild>
-                                        <Button className="w-full">Tutup Filter</Button>
-                                     </SheetClose>
-                                </SheetFooter>
-                            </SheetContent>
-                        </Sheet>
-                    </div>
-                     {(platformFilter !== 'all' || subChannelFilter !== 'all' || accountFilter !== 'all' || csFilter !== 'all') && (
-                         <div className="flex flex-wrap gap-1">
-                             <Badge variant="secondary" className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">Filter Aktif:</Badge>
-                             {platformFilter !== 'all' && <Badge variant="outline" className="text-[10px] h-5">{getPlatformName(platformFilter)}</Badge>}
-                             {subChannelFilter !== 'all' && <Badge variant="outline" className="text-[10px] h-5">{getSubChannelName(subChannelFilter)}</Badge>}
-                             {accountFilter !== 'all' && <Badge variant="outline" className="text-[10px] h-5">{getAccountName(accountFilter)}</Badge>}
-                             {csFilter !== 'all' && <Badge variant="outline" className="text-[10px] h-5">{getCsName(csFilter)}</Badge>}
-                         </div>
-                     )}
-                 </div>
+        <OperationalFilterPanel className="dailyAdsFilterPanel">
+          <div className="dailyAdsFilterBar">
+            <FoundationDateRangePicker
+              date={dateRange}
+              setDate={setDateRange}
+              className="dailyAdsDateRange"
+              contentClassName="dailyAdsDatePopover"
+              numberOfMonths={isMobile ? 1 : 2}
+              triggerLabelMode={isMobile ? 'compact' : 'full'}
+            />
 
-                 {/* Desktop View */}
-                 <div className="hidden md:flex flex-col md:flex-row gap-3 w-full justify-between items-start md:items-center">
-                    <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                        <DatePickerWithRange date={dateRange} setDate={setDateRange} className="w-full sm:w-auto" />
-                        
-                        {/* Advertiser Filter */}
-                        {isAdminManagementUser && (
-                           <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
-                              <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                  <SelectValue placeholder="Advertiser" />
-                              </SelectTrigger>
-                              <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                  <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Advertiser</SelectItem>
-                                  {optAdvertisers.map(user => (
-                                      <SelectItem key={user.id} value={user.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{user.name}</SelectItem>
-                                  ))}
-                              </SelectContent>
-                          </Select>
-                        )}
-                        
-                        {/* Platform Filter */}
-                        <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                            <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                <SelectValue placeholder="Platform" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Platform</SelectItem>
-                                {optPlatforms.map(p => (
-                                    <SelectItem key={p.id} value={p.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{p.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+            <div className="dailyAdsSearchBox relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+              <Input
+                placeholder="Cari tanggal, advertiser, atau akun iklan..."
+                className="dailyAdsSearchInput pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 focus:ring-1 focus:ring-blue-500"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-                         {/* SubChannel Filter */}
-                         <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
-                            <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                <SelectValue placeholder="Sub Channel" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Sub</SelectItem>
-                                {optSubChannels.map(s => (
-                                    <SelectItem key={s.id} value={s.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{s.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+            <Button
+              type="button"
+              variant="outline"
+              className={`dailyAdsFilterButton ${hasActiveFilters ? 'isActive' : ''}`}
+              onClick={() => setIsFilterDialogOpen(true)}
+            >
+              <Filter className="h-4 w-4" />
+              <span className="dailyAdsFilterButtonText">Filter</span>
+              {activeFilterCount > 0 && <span className="dailyAdsFilterCount">{activeFilterCount}</span>}
+            </Button>
+          </div>
 
-                        {/* Account Filter */}
-                         <Select value={accountFilter} onValueChange={setAccountFilter}>
-                            <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                <SelectValue placeholder="Akun Iklan" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua Akun</SelectItem>
-                                {optAccounts.map(a => (
-                                    <SelectItem key={a.id} value={a.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{a.accountName}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+          {hasActiveFilters && (
+            <div className="dailyAdsActiveFilterRow">
+              <span className="dailyAdsActiveFilterLabel">Filter aktif</span>
+              {isAdminManagementUser && advertiserFilter !== 'all' && <Badge variant="outline">{getAdvertiserName(advertiserFilter)}</Badge>}
+              {platformFilter !== 'all' && <Badge variant="outline">{getPlatformName(platformFilter)}</Badge>}
+              {subChannelFilter !== 'all' && <Badge variant="outline">{getSubChannelName(subChannelFilter)}</Badge>}
+              {accountFilter !== 'all' && <Badge variant="outline">{getAccountName(accountFilter)}</Badge>}
+              {csFilter !== 'all' && <Badge variant="outline">{getCsName(csFilter)}</Badge>}
+              <Button type="button" variant="ghost" size="sm" className="dailyAdsResetInline" onClick={resetAdvancedFilters}>
+                Reset
+              </Button>
+            </div>
+          )}
 
-                        {/* CS Filter */}
-                         <Select value={csFilter} onValueChange={setCsFilter}>
-                            <SelectTrigger className="w-full sm:w-[160px] bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200">
-                                <SelectValue placeholder="Customer Service" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                <SelectItem value="all" className="dark:text-slate-200 dark:focus:bg-slate-700">Semua CS</SelectItem>
-                                {optCs.map(cs => (
-                                    <SelectItem key={cs.id} value={cs.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{cs.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="relative w-full md:w-64">
-                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
-                        <Input 
-                            placeholder="Cari..." 
-                            className="pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 focus:ring-1 focus:ring-blue-500"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                 </div>
+          <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+            <DialogContent className="dailyAdsFilterDialog bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+              <DialogHeader className="dailyAdsFilterDialogHeader">
+                <DialogTitle>Filter Iklan Harian</DialogTitle>
+                <DialogDescription>Filter laporan berdasarkan atribusi aktif dari Master Data Akun Iklan.</DialogDescription>
+              </DialogHeader>
+              <div className="dailyAdsFilterDialogBody">
+                {renderAdvancedFilters()}
+              </div>
+              <DialogFooter className="dailyAdsFilterDialogFooter">
+                <Button type="button" variant="outline" onClick={resetAdvancedFilters}>
+                  Reset Filter
+                </Button>
+                <Button type="button" onClick={() => setIsFilterDialogOpen(false)}>
+                  Terapkan Filter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </OperationalFilterPanel>
 
-        <OperationalTableCard className="overflow-hidden p-0">
-             <div className="hidden md:block overflow-x-auto">
+        <OperationalTableCard className="dailyAdsTableCard overflow-hidden p-0">
+             <div className="dailyAdsDesktopTable hidden md:block overflow-x-auto">
              <Table>
                  <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                      <TableRow className="border-b border-slate-100 dark:border-slate-700">
@@ -1971,6 +2036,9 @@ export function IklanHarian() {
                             const cprDeal = item.realOrders > 0 ? (Number(item.amountSpent) / item.realOrders) : 0;
                             const cprDone = item.realOrdersDone > 0 ? (Number(item.amountSpent) / item.realOrdersDone) : 0;
                             const burn = Number(item.amountSpent) + (item.ppnAmount || 0) + (item.feeAmount || 0);
+                            const legacyAdvertiserName = item.legacyAdvertiserId
+                              ? getAdvertiserName(item.legacyAdvertiserId)
+                              : '';
 
                             return (
                                 <TableRow key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
@@ -1987,6 +2055,11 @@ export function IklanHarian() {
                                     <TableCell className="py-4 align-top">
                                         <div className="flex flex-col gap-1">
                                             <span className="font-medium text-slate-700 dark:text-slate-300">{getAdvertiserName(item.advertiserId)}</span>
+                                            {legacyAdvertiserName && (
+                                                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-300">
+                                                    Lama: {legacyAdvertiserName}
+                                                </span>
+                                            )}
                                             <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                                                 <Users className="w-3 h-3" />
                                                 <span>{item.csId ? getCsName(item.csId) : '-'}</span>
@@ -2085,7 +2158,7 @@ export function IklanHarian() {
                                     <TableCell className="text-right py-4 pr-6 align-top">
                                         <div className="flex justify-end gap-1">
                                             {/* Edit Button */}
-                                            {canManageAdItem(item.advertiserId) && (
+                                            {canManageAdItem(item) && (
                                                 <Button 
                                                     variant="ghost" 
                                                     size="icon" 
@@ -2169,7 +2242,7 @@ export function IklanHarian() {
              </div>
              
                {/* Mobile Card List */}
-             <div className="md:hidden space-y-3 p-4">
+              <div className="dailyAdsMobileList md:hidden space-y-3 p-4">
                 {filteredData.length === 0 ? (
                     <OperationalEmptyState
                       icon={FileSpreadsheet}
@@ -2181,20 +2254,36 @@ export function IklanHarian() {
                         const burn = Number(item.amountSpent) + (item.ppnAmount || 0) + (item.feeAmount || 0);
                         const cprDeal = item.realOrders > 0 ? (Number(item.amountSpent) / item.realOrders) : 0;
                         const cprDone = item.realOrdersDone > 0 ? (Number(item.amountSpent) / item.realOrdersDone) : 0;
+                        const legacyAdvertiserName = item.legacyAdvertiserId
+                          ? getAdvertiserName(item.legacyAdvertiserId)
+                          : '';
                         
                         return (
-                            <div key={item.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
+                            <div key={item.id} className="dailyAdsMobileCard bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
                                 <div className="flex justify-between items-start gap-2 mb-3">
                                     <div className="flex flex-col min-w-0 flex-1">
                                         <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                                             {format(new Date(item.date), 'dd MMM yyyy', { locale: idLocale })}
                                         </span>
                                         <span className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5 mb-2">
-                                            {getPlatformName(item.platformId)} • {getAccountName(item.adAccountId)}
+                                            {getPlatformName(item.platformId)} - {getAccountName(item.adAccountId)}
                                         </span>
+                                        <div className="mb-2 flex min-w-0 flex-col gap-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                            <span className="truncate font-semibold text-slate-700 dark:text-slate-300">
+                                                {getAdvertiserName(item.advertiserId)}
+                                            </span>
+                                            {legacyAdvertiserName && (
+                                                <span className="truncate font-medium text-amber-600 dark:text-amber-300">
+                                                    Lama: {legacyAdvertiserName}
+                                                </span>
+                                            )}
+                                            <span className="truncate">
+                                                CS: {item.csId ? getCsName(item.csId) : '-'}
+                                            </span>
+                                        </div>
                                         
                                         {/* Actions Inline */}
-                                        {canManageAdItem(item.advertiserId) && (
+                                        {canManageAdItem(item) && (
                                             <div className="flex gap-2">
                                                 <button 
                                                     onClick={() => handleOpenModal(item)} 
@@ -2268,148 +2357,88 @@ export function IklanHarian() {
         </OperationalTableCard>
       </div>
 
-      {hasPermission('ads.manage') && (
-        <div className="md:hidden fixed bottom-24 right-6 z-40">
-            <Button 
-                size="icon" 
-                className="h-14 w-14 rounded-full bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-600/30"
-                onClick={() => handleOpenModal()}
-            >
-                <Plus className="h-6 w-6 text-white" />
-            </Button>
-        </div>
-      )}
-
       {/* Input Modal */}
       <Sheet open={isModalOpen} onOpenChange={handleInputOpenChange}>
         <SheetContent 
             side={isMobile ? "bottom" : "right"}
             onInteractOutside={(e) => e.preventDefault()}
-            className={isMobile ? "flex h-[90vh] flex-col rounded-t-[20px] border-t border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950" : "z-[150] flex h-full w-full flex-col gap-0 border-l border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950 sm:w-[560px] sm:max-w-[560px]"}
+            className={isMobile ? "dailyAdsFormSheet flex h-[90vh] flex-col rounded-t-[20px] border-t border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950" : "dailyAdsFormSheet z-[150] flex h-full w-full flex-col gap-0 border-l border-slate-200 bg-slate-50 p-0 dark:border-slate-800 dark:bg-slate-950 sm:w-[560px] sm:max-w-[560px]"}
         >
           <div className="flex h-full flex-col">
           <SheetHeader className="sticky top-0 z-10 shrink-0 border-b border-slate-200 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
-            <SheetTitle className="text-slate-900 dark:text-slate-100">{editingId ? 'Edit Data Iklan' : 'Input Data Iklan'}</SheetTitle>
-            <SheetDescription className="text-slate-500 dark:text-slate-400">Masukkan performa iklan harian dari dashboard iklan.</SheetDescription>
+            <SheetTitle className="text-slate-900 dark:text-slate-100">Koreksi Laporan Iklan</SheetTitle>
+            <SheetDescription className="text-slate-500 dark:text-slate-400">Attribution mengikuti Master Data Akun Iklan. Koreksi hanya untuk angka laporan.</SheetDescription>
           </SheetHeader>
           
           <div className="flex-1 overflow-y-auto bg-slate-50 px-6 py-4 space-y-4 dark:bg-slate-950">
-            {/* Row 1: Date & Advertiser */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                     <RequiredLabel>Tanggal</RequiredLabel>
                     <Input 
                         type="date" 
                         value={formData.date}
-                        onChange={(e) => setFormData({...formData, date: e.target.value})}
+                        onChange={(e) => setFormData(prev => hydrateAdFormData({...prev, date: e.target.value}))}
                         className="bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                     />
                 </div>
                 <div className="space-y-2">
-                    <RequiredLabel>Advertiser</RequiredLabel>
-                    {isAdvertiserLogin ? (
-                        <Input value={currentUser.name} readOnly disabled className="bg-slate-100 dark:bg-slate-900 dark:text-slate-500" />
-                    ) : (
-                        <Select 
-                            value={formData.advertiserId} 
-                            onValueChange={(val) => setFormData({...formData, advertiserId: val, platformId: '', subChannelId: '', adAccountId: '', csId: ''})}
-                        >
-                            <SelectTrigger className="bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200">
-                                <SelectValue placeholder="Pilih Advertiser" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                {advertisers.map(u => (
-                                    <SelectItem key={u.id} value={u.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{u.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                </div>
-            </div>
-
-            {/* Row 2: Platform & Sub Channel */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                    <RequiredLabel>Platform</RequiredLabel>
-                    <Select 
-                        value={formData.platformId} 
-                        onValueChange={(val) => setFormData({...formData, platformId: val, subChannelId: '', adAccountId: ''})}
-                    >
-                        <SelectTrigger className="bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200">
-                            <SelectValue placeholder="Pilih Platform" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            {filteredPlatforms
-                                .filter(p => {
-                                    if (isAdvertiserUser) {
-                                        const n = p.name.toLowerCase();
-                                        return n !== 'repeat order' && n !== 'organik';
-                                    }
-                                    return true;
-                                })
-                                .map(p => (
-                                <SelectItem key={p.id} value={p.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{p.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="space-y-2">
-                    <Label className="dark:text-slate-300">Sub Channel</Label>
-                    <Select 
-                        value={formData.subChannelId} 
-                        onValueChange={(val) => setFormData({...formData, subChannelId: val})}
-                        disabled={filteredSubChannels.length === 0}
-                    >
-                        <SelectTrigger className="bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200">
-                            <SelectValue placeholder="Pilih Sub Channel" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            {filteredSubChannels.map(s => (
-                                <SelectItem key={s.id} value={s.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{s.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-
-            {/* Row 3: Akun Iklan & CS */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
                     <RequiredLabel>Akun Iklan</RequiredLabel>
                     <Select 
-                        value={formData.adAccountId} 
-                        onValueChange={(val) => setFormData({...formData, adAccountId: val})}
-                        disabled={availableAdAccounts.length === 0}
+                        value={formData.adAccountId}
+                        onValueChange={(val) => setFormData(prev => hydrateAdFormData({...prev, adAccountId: val}))}
+                        disabled={formAdAccountOptions.length === 0}
                     >
                         <SelectTrigger className="bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200">
-                            <SelectValue placeholder="Pilih Akun" />
+                            <SelectValue placeholder="Pilih Akun Iklan" />
                         </SelectTrigger>
                         <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            {availableAdAccounts.map(a => (
-                                <SelectItem key={a.id} value={a.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{a.accountName}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="space-y-2">
-                    <Label className="dark:text-slate-300">CS Handle (Opsional)</Label>
-                    <Select 
-                        value={formData.csId} 
-                        onValueChange={(val) => setFormData({...formData, csId: val})}
-                    >
-                        <SelectTrigger className="bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200">
-                            <SelectValue placeholder="Pilih CS" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                            {filteredCs.map(u => (
-                                <SelectItem key={u.id} value={u.id} className="dark:text-slate-200 dark:focus:bg-slate-700">{u.name}</SelectItem>
+                            {formAdAccountOptions.map(option => (
+                                <SelectItem key={option.account.id} value={option.account.id} className="dark:text-slate-200 dark:focus:bg-slate-700">
+                                    {option.account.accountName}
+                                </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
                 </div>
             </div>
 
-            {/* Row 4: Spending & Leads */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-bold uppercase text-blue-600 dark:text-blue-300">Master Akun Iklan</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">Field di bawah otomatis dari assignment aktif.</p>
+                    </div>
+                    {selectedFormAttribution?.isComplete ? (
+                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300">Valid</Badge>
+                    ) : (
+                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">Perlu dicek</Badge>
+                    )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                        <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Advertiser</span>
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{getAdvertiserName(formData.advertiserId)}</p>
+                        {editingLegacyAdvertiserId && (
+                            <p className="mt-1 truncate text-xs font-medium text-amber-600 dark:text-amber-300">
+                                Lama: {getAdvertiserName(editingLegacyAdvertiserId)}
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Platform</span>
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{getPlatformName(formData.platformId)}</p>
+                    </div>
+                    <div>
+                        <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Sub Channel</span>
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{formData.subChannelId ? getSubChannelName(formData.subChannelId) : 'Tanpa sub channel'}</p>
+                    </div>
+                    <div>
+                        <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Customer Service</span>
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{formData.csId ? getCsName(formData.csId) : 'Belum ada assignment'}</p>
+                    </div>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                     <RequiredLabel>Amount Spent</RequiredLabel>
@@ -2445,7 +2474,7 @@ export function IklanHarian() {
                     <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Estimasi Perhitungan</h4>
                     
                     {(() => {
-                        const selectedAccount = adAccounts.find(a => a.id === formData.adAccountId);
+                        const selectedAccount = selectedFormAttribution?.account;
                         const ppnRate = selectedAccount?.ppn || 0;
                         const feeRate = selectedAccount?.fee || 0;
                         const spendingVal = Number(parseNumber(formData.amountSpent));
@@ -2504,16 +2533,16 @@ export function IklanHarian() {
       <Dialog open={isApiRecapOpen} onOpenChange={(open) => {
         if (!isApiRecapSaving) setIsApiRecapOpen(open);
       }}>
-        <DialogContent className="max-w-[95vw] h-[86vh] w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogContent className="dailyAdsWideDialog dailyAdsRecapDialog max-w-[95vw] w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl flex flex-col p-0 gap-0 overflow-hidden">
           <DialogHeader className="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
             <DialogTitle className="text-slate-900 dark:text-slate-100">Rekap API ke Laporan Harian</DialogTitle>
             <DialogDescription>
-              Preview snapshot API periode {selectedRecapRange.from} s/d {selectedRecapRange.to}. Data manual yang sudah diedit bisa dilindungi.
+              Preview snapshot API periode {selectedRecapRange.from} s/d {selectedRecapRange.to}. Data yang sudah dikoreksi bisa dilindungi.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+            <div className="dailyAdsRecapControlGrid">
               <div className="space-y-1">
                 <Label className="text-xs text-slate-500 dark:text-slate-400">Dari Tanggal</Label>
                 <Input
@@ -2553,7 +2582,7 @@ export function IklanHarian() {
                   </SelectTrigger>
                   <SelectContent className="bg-white dark:bg-slate-900">
                     <SelectItem value="all">Semua Platform</SelectItem>
-                    {activePlatforms.map((platform) => (
+                    {platforms.filter((platform) => platform.status === 'active').map((platform) => (
                       <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -2613,7 +2642,7 @@ export function IklanHarian() {
                 </Select>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-slate-50 px-4 py-2.5 dark:bg-slate-900/50">
+            <div className="dailyAdsRecapSummaryBar">
               <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 shrink-0">
                 <input
                   type="checkbox"
@@ -2621,7 +2650,7 @@ export function IklanHarian() {
                   onChange={(event) => setApiRecapPreserveEdited(event.target.checked)}
                   className="h-4 w-4 rounded"
                 />
-                Jangan timpa data manual yang pernah diedit
+                Jangan timpa data yang pernah dikoreksi
               </label>
               <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 hidden lg:block" />
               <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -2652,9 +2681,25 @@ export function IklanHarian() {
                 </div>
               </div>
             </div>
+            {apiRecapProviderStatuses.length > 0 && (
+              <div className="dailyAdsApiProviderStatusGrid">
+                {apiRecapProviderStatuses.map((provider) => (
+                  <div
+                    key={provider.key}
+                    className={`dailyAdsApiProviderStatus is-${provider.state}`}
+                  >
+                    <div>
+                      <span>{provider.label}</span>
+                      <strong>{provider.state === 'error' ? 'Error' : `${provider.count} row`}</strong>
+                    </div>
+                    <small>{provider.message}</small>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {apiRecapErrors.length > 0 && (
+          {apiRecapErrors.length > 0 && apiRecapProviderStatuses.length === 0 && (
             <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
               {apiRecapErrors.map((error, index) => (
                 <div key={`${error}-${index}`}>{error}</div>
@@ -2662,15 +2707,25 @@ export function IklanHarian() {
             </div>
           )}
 
-          <div className="flex-1 overflow-auto px-6 py-2">
+          <div className="dailyAdsRecapTableViewport px-6 py-3">
             {isApiRecapLoading ? (
               <div className="flex h-full items-center justify-center text-slate-500">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 Menarik snapshot API...
               </div>
             ) : (
-              <div className="overflow-hidden">
-                <Table>
+              <div className="dailyAdsRecapTableWrap">
+                <Table className="dailyAdsRecapTable">
+                  <colgroup>
+                    <col className="dailyAdsRecapColDate" />
+                    <col className="dailyAdsRecapColSource" />
+                    <col className="dailyAdsRecapColAccount" />
+                    <col className="dailyAdsRecapColAdvertiser" />
+                    <col className="dailyAdsRecapColCs" />
+                    <col className="dailyAdsRecapColSpend" />
+                    <col className="dailyAdsRecapColLeads" />
+                    <col className="dailyAdsRecapColStatus" />
+                  </colgroup>
                   <TableHeader className="sticky top-0 bg-slate-50 dark:bg-slate-900">
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Tanggal</TableHead>
@@ -2694,13 +2749,13 @@ export function IklanHarian() {
                       <TableRow key={row.id}>
                         <TableCell className="whitespace-nowrap">{row.date}</TableCell>
                         <TableCell className="whitespace-nowrap">{row.sourceLabel}</TableCell>
-                        <TableCell>{row.accountName}</TableCell>
-                        <TableCell>{row.advertiserName}</TableCell>
-                        <TableCell className="whitespace-nowrap">{row.csId ? getCsName(row.csId) : '-'}</TableCell>
+                        <TableCell><span className="dailyAdsRecapText">{row.accountName}</span></TableCell>
+                        <TableCell><span className="dailyAdsRecapText">{row.advertiserName}</span></TableCell>
+                        <TableCell><span className="dailyAdsRecapText">{row.csId ? getCsName(row.csId) : '-'}</span></TableCell>
                         <TableCell className="whitespace-nowrap text-right">Rp {row.amountSpent.toLocaleString('id-ID')}</TableCell>
                         <TableCell className="whitespace-nowrap text-right">{row.leadsDashboard.toLocaleString('id-ID')}</TableCell>
                         <TableCell>
-                          <div className="flex flex-col">
+                          <div className="dailyAdsRecapStatusCell">
                             <Badge
                               variant="outline"
                               className={
@@ -2726,7 +2781,12 @@ export function IklanHarian() {
             )}
           </div>
 
-          <DialogFooter className="border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+          <DialogFooter className="dailyAdsRecapFooter border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+            {apiRecapSaveDisabledReason && (
+              <div className="dailyAdsRecapFooterNote">
+                {apiRecapSaveDisabledReason}
+              </div>
+            )}
             <Button variant="outline" onClick={() => setIsApiRecapOpen(false)} disabled={isApiRecapSaving}>
               Batal
             </Button>
@@ -2740,8 +2800,9 @@ export function IklanHarian() {
             </Button>
             <Button
               onClick={handleCommitApiRecap}
-              disabled={isApiRecapLoading || isApiRecapSaving || apiRecapSummary.newRows + apiRecapSummary.updateRows === 0}
+              disabled={isApiRecapLoading || isApiRecapSaving || apiRecapActionableCount === 0}
               className="bg-blue-600 text-white hover:bg-blue-700"
+              title={apiRecapSaveDisabledReason || undefined}
             >
               {isApiRecapSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Simpan Rekap
@@ -2754,7 +2815,7 @@ export function IklanHarian() {
       <Dialog open={isImportModalOpen} onOpenChange={handleImportOpenChange}>
         <DialogContent 
             onInteractOutside={(e) => e.preventDefault()}
-            className={`${importStep === 'review' ? 'max-w-[95vw] h-[90vh]' : 'sm:max-w-[500px]'} w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl flex flex-col p-0 gap-0 overflow-hidden`}
+            className={`dailyAdsImportDialog ${importStep === 'review' ? 'max-w-[95vw] h-[90vh]' : 'sm:max-w-[500px]'} w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-xl flex flex-col p-0 gap-0 overflow-hidden`}
         >
           
           {importStep === 'upload' ? (
@@ -2762,13 +2823,13 @@ export function IklanHarian() {
             <DialogHeader className="p-6 pb-2">
                 <DialogTitle className="text-slate-900 dark:text-slate-100 flex items-center gap-2">
                     <FileSpreadsheet className="w-5 h-5 text-green-600" />
-                    Import Excel
+                    Import Laporan Iklan
                 </DialogTitle>
                 <div className="flex flex-col gap-2">
                     <DialogDescription className="text-slate-500 dark:text-slate-400">
-                        Upload file Excel (.xlsx) untuk import data massal.
+                        Upload file Excel (.xlsx) untuk import laporan iklan.
                         <br/>
-                        Pastikan kolom header: <b>Date, Platform, Sub Channel, Account, CS, Spending, Leads</b>.
+                        Pastikan kolom header: <b>Date, Account, Spending, Leads</b>.
                     </DialogDescription>
                     <Button 
                         variant="link" 
@@ -2805,31 +2866,27 @@ export function IklanHarian() {
              <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800">
                 <div className="flex flex-col gap-1">
                     <DialogTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                        {importSource === 'manual' ? 'Input Data Massal' : `Konfirmasi Import Data (${stagedData.length} Baris)`}
+                        {`Konfirmasi Import Laporan (${stagedData.length} Baris)`}
                     </DialogTitle>
                     <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
-                        {importSource === 'manual' ? 'Masukkan data iklan harian sekaligus.' : 'Periksa dan perbaiki data sebelum disimpan. Kolom merah wajib diisi.'}
+                        Periksa akun iklan dan angka laporan sebelum disimpan. Attribution otomatis dari Master Data Akun Iklan.
                     </DialogDescription>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => {
-                        if (importSource === 'manual') {
-                            handleImportCloseAttempt();
-                        } else {
-                            setConfirmDialog({
-                                isOpen: true,
-                                title: "Ulangi Upload?",
-                                description: "Data review saat ini akan dihapus. Anda harus mengupload ulang file.",
-                                confirmLabel: "Ulangi Upload",
-                                variant: 'default',
-                                onConfirm: () => {
-                                    setImportStep('upload');
-                                    setStagedData([]);
-                                }
-                            });
-                        }
+                        setConfirmDialog({
+                            isOpen: true,
+                            title: "Ulangi Upload?",
+                            description: "Data review saat ini akan dihapus. Anda harus mengupload ulang file.",
+                            confirmLabel: "Ulangi Upload",
+                            variant: 'default',
+                            onConfirm: () => {
+                                setImportStep('upload');
+                                setStagedData([]);
+                            }
+                        });
                     }} className="dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
-                        {importSource === 'manual' ? 'Batal' : 'Ulangi Upload'}
+                        Ulangi Upload
                     </Button>
                     <Button onClick={handleCommitImport} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700 text-white">
                         {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Edit className="w-4 h-4 mr-2" />}
@@ -2838,139 +2895,31 @@ export function IklanHarian() {
                 </div>
              </div>
 
-             <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900/50 p-4">
-                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden min-w-[1200px]">
+             <div className="flex-1 overflow-auto bg-slate-100 p-4 dark:bg-slate-900/50">
+                <div className="min-w-[980px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
                     <Table>
                         <TableHeader className="bg-slate-50 dark:bg-slate-700">
                             <TableRow>
                                 <TableHead className="w-[50px] text-center">No</TableHead>
-                                <TableHead className="w-[140px]">Tanggal</TableHead>
-                                <TableHead className="min-w-[180px]">
-                                    <div className="flex flex-col gap-1 py-2">
-                                        <span className="text-xs font-semibold">Advertiser (All)</span>
-                                        <select 
-                                            className="h-7 w-full rounded border border-slate-300 text-xs px-1 dark:bg-slate-800 dark:border-slate-600"
-                                            onChange={(e) => {
-                                                if (e.target.value) handleBulkUpdate('advertiserId', e.target.value);
-                                            }}
-                                            defaultValue=""
-                                            disabled={isAdvertiserUser}
-                                        >
-                                            <option value="">- Pilih Semua -</option>
-                                            {advertisers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                        </select>
-                                    </div>
-                                </TableHead>
-                                <TableHead className="min-w-[180px]">
-                                    <div className="flex flex-col gap-1 py-2">
-                                        <span className="text-xs font-semibold">Platform (All)</span>
-                                        <select 
-                                            className="h-7 w-full rounded border border-slate-300 text-xs px-1 dark:bg-slate-800 dark:border-slate-600"
-                                            onChange={(e) => {
-                                                if (e.target.value) handleBulkUpdate('platformId', e.target.value);
-                                            }}
-                                            defaultValue=""
-                                        >
-                                            <option value="">- Pilih Semua -</option>
-                                            {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
-                                    </div>
-                                </TableHead>
-                                <TableHead className="min-w-[180px]">
-                                    <div className="flex flex-col gap-1 py-2">
-                                        <span className="text-xs font-semibold">Sub Channel (All)</span>
-                                        <select 
-                                            className="h-7 w-full rounded border border-slate-300 text-xs px-1 dark:bg-slate-800 dark:border-slate-600"
-                                            onChange={(e) => {
-                                                if (e.target.value) handleBulkUpdate('subChannelId', e.target.value);
-                                            }}
-                                            defaultValue=""
-                                        >
-                                            <option value="">- Pilih Semua -</option>
-                                            {/* Show all subchannels roughly grouped or just list all unique names */}
-                                            {subChannels.filter((s, i, self) => self.findIndex(t => t.name === s.name) === i).map(s => (
-                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </TableHead>
-                                <TableHead className="min-w-[220px]">
-                                    <div className="flex flex-col gap-1 py-2">
-                                        <span className="text-xs font-semibold">Akun Iklan (All)</span>
-                                        <select 
-                                            className="h-7 w-full rounded border border-slate-300 text-xs px-1 dark:bg-slate-800 dark:border-slate-600"
-                                            onChange={(e) => {
-                                                if (e.target.value) handleBulkUpdate('adAccountId', e.target.value);
-                                            }}
-                                            defaultValue=""
-                                        >
-                                            <option value="">- Pilih Semua -</option>
-                                            {adAccounts.map(a => <option key={a.id} value={a.id}>{a.accountName}</option>)}
-                                        </select>
-                                    </div>
-                                </TableHead>
-                                <TableHead className="min-w-[160px]">
-                                    <div className="flex flex-col gap-1 py-2">
-                                        <span className="text-xs font-semibold">CS (All)</span>
-                                        <select 
-                                            className="h-7 w-full rounded border border-slate-300 text-xs px-1 dark:bg-slate-800 dark:border-slate-600"
-                                            onChange={(e) => {
-                                                if (e.target.value) handleBulkUpdate('csId', e.target.value);
-                                            }}
-                                            defaultValue=""
-                                        >
-                                            <option value="">- Pilih Semua -</option>
-                                            {csUsers.map(cs => (
-                                                <option key={cs.id} value={cs.id}>{cs.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </TableHead>
-                                <TableHead className="w-[140px]">Spending</TableHead>
-                                <TableHead className="w-[100px]">Leads</TableHead>
+                                <TableHead className="w-[150px]">Tanggal</TableHead>
+                                <TableHead className="min-w-[260px]">Akun Iklan</TableHead>
+                                <TableHead className="min-w-[320px]">Attribution Master</TableHead>
+                                <TableHead className="w-[150px] text-right">Spending</TableHead>
+                                <TableHead className="w-[110px] text-right">Leads</TableHead>
+                                <TableHead className="w-[130px]">Status</TableHead>
                                 <TableHead className="w-[50px]"></TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {stagedData.map((row, idx) => {
-                                const isValid = row.date && row.platformId && row.adAccountId && row.advertiserId;
-                                const isDup = dailyAds.some(d => d.date === row.date && d.adAccountId === row.adAccountId && d.platformId === row.platformId);
-                                
-                                // --- ROW LEVEL FILTERING ---
-                                const rowConfig = row.advertiserId ? advertiserConfigs.find(c => c.advertiserId === row.advertiserId) : null;
-                                
-                                // Platforms
-                                let rowPlatforms = platforms.filter(p => p.status === 'active');
-                                if (rowConfig) {
-                                    if (!rowConfig.platformIds || rowConfig.platformIds.length === 0) rowPlatforms = [];
-                                    else rowPlatforms = rowPlatforms.filter(p => rowConfig.platformIds.includes(p.id));
-                                } else if (isCsUser && currentUser && !row.advertiserId) {
-                                     // Union for CS if no advertiser selected
-                                     const myConfigs = advertiserConfigs.filter(cfg => cfg.csIds?.includes(currentUser.id));
-                                     if (myConfigs.length > 0) {
-                                         const allowedIds = new Set<string>();
-                                         myConfigs.forEach(cfg => cfg.platformIds?.forEach(id => allowedIds.add(id)));
-                                         rowPlatforms = rowPlatforms.filter(p => allowedIds.has(p.id));
-                                     }
-                                }
-
-                                // SubChannels
-                                let rowSubChannels = subChannels.filter(s => s.platformId === row.platformId && s.status === 'active');
-                                if (rowConfig && rowConfig.subChannelIds && rowConfig.subChannelIds.length > 0) {
-                                    rowSubChannels = rowSubChannels.filter(s => rowConfig.subChannelIds.includes(s.id));
-                                }
-
-                                // CS
-                                let rowCsUsers = users.filter((u) => isCsRole(u.role) && u.status === 'active');
-                                if (rowConfig && rowConfig.csIds && rowConfig.csIds.length > 0) {
-                                    rowCsUsers = rowCsUsers.filter(c => rowConfig.csIds.includes(c.id));
-                                }
-                                
-                                // Accounts
-                                let rowAccounts = adAccounts.filter(a => a.platformId === row.platformId && a.status === 'active');
-                                if (row.advertiserId) {
-                                    rowAccounts = rowAccounts.filter(a => a.advertiserId === row.advertiserId);
-                                }
+                                const rowOptions = getAdAccountOptionsForDate(row.date, row.adAccountId);
+                                const rowAttribution = row.adAccountId
+                                  ? resolveAccountAttribution(row.adAccountId, row.date, row.csId)
+                                  : null;
+                                const isAllowed = row.adAccountId ? isAdAccountAllowedForDate(row.adAccountId, row.date) : false;
+                                const isValid = Boolean(row.date && row.platformId && row.adAccountId && row.advertiserId && isAllowed);
+                                const isDup = dailyAds.some(d => d.date === row.date && d.adAccountId === row.adAccountId);
+                                const rowStatus = !isValid ? 'Perlu dicek' : isDup ? 'Duplikat' : 'Siap simpan';
 
                                 return (
                                     <TableRow key={row.id} className={`${!isValid ? 'bg-red-50 dark:bg-red-900/20' : ''} ${isDup ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''}`}>
@@ -2984,75 +2933,48 @@ export function IklanHarian() {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            {isAdvertiserUser ? (
-                                                <div className="h-9 flex items-center px-3 text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-md border border-slate-200 dark:border-slate-700">
-                                                    {currentUser.name}
-                                                </div>
-                                            ) : (
-                                                <select 
-                                                    className={`flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 ${!row.advertiserId ? 'border-red-500' : ''}`}
-                                                    value={row.advertiserId}
-                                                    onChange={(e) => handleStagedChange(row.id, 'advertiserId', e.target.value)}
-                                                >
-                                                    <option value="">Pilih Advertiser...</option>
-                                                    {advertisers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                                </select>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <select 
-                                                className={`flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 ${!row.platformId ? 'border-red-500' : ''}`}
-                                                value={row.platformId}
-                                                onChange={(e) => handleStagedChange(row.id, 'platformId', e.target.value)}
-                                            >
-                                                <option value="">Pilih Platform...</option>
-                                                {rowPlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                            </select>
-                                        </TableCell>
-                                        <TableCell>
-                                            <select 
-                                                className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                                value={row.subChannelId}
-                                                onChange={(e) => handleStagedChange(row.id, 'subChannelId', e.target.value)}
-                                                disabled={!row.platformId}
-                                            >
-                                                <option value="">-</option>
-                                                {rowSubChannels.map(s => (
-                                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                                ))}
-                                            </select>
-                                        </TableCell>
-                                        <TableCell>
                                             <div className="flex flex-col">
                                                 <select 
-                                                    className={`flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 ${!row.adAccountId ? 'border-red-500' : ''}`}
+                                                    className={`flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600 ${!row.adAccountId || !isAllowed ? 'border-red-500' : ''}`}
                                                     value={row.adAccountId}
                                                     onChange={(e) => handleStagedChange(row.id, 'adAccountId', e.target.value)}
-                                                    disabled={!row.platformId}
                                                 >
-                                                    <option value="">Pilih Akun...</option>
-                                                    {rowAccounts.map(a => (
-                                                        <option key={a.id} value={a.id}>{a.accountName}</option>
+                                                    <option value="">Pilih Akun Iklan...</option>
+                                                    {rowOptions.map(option => (
+                                                        <option key={option.account.id} value={option.account.id}>{option.account.accountName}</option>
                                                     ))}
                                                 </select>
                                                 {!row.adAccountId && row._rawAccount && (
-                                                    <span className="text-[10px] text-red-500 mt-1 truncate max-w-[200px]" title={row._rawAccount}>
-                                                        Match: {row._rawAccount}
+                                                    <span className="mt-1 max-w-[240px] truncate text-[10px] text-red-500" title={row._rawAccount}>
+                                                        Tidak ketemu: {row._rawAccount}
                                                     </span>
                                                 )}
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <select 
-                                                className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-600"
-                                                value={row.csId}
-                                                onChange={(e) => handleStagedChange(row.id, 'csId', e.target.value)}
-                                            >
-                                                <option value="">-</option>
-                                                {rowCsUsers.map(cs => (
-                                                    <option key={cs.id} value={cs.id}>{cs.name}</option>
-                                                ))}
-                                            </select>
+                                            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                                                <div className="truncate">
+                                                    <span className="text-slate-400">Adv: </span>
+                                                    <span className="font-medium text-slate-700 dark:text-slate-200">{getAdvertiserName(row.advertiserId)}</span>
+                                                </div>
+                                                <div className="truncate">
+                                                    <span className="text-slate-400">Platform: </span>
+                                                    <span className="font-medium text-slate-700 dark:text-slate-200">{getPlatformName(row.platformId)}</span>
+                                                </div>
+                                                <div className="truncate">
+                                                    <span className="text-slate-400">Sub: </span>
+                                                    <span className="font-medium text-slate-700 dark:text-slate-200">{row.subChannelId ? getSubChannelName(row.subChannelId) : 'Tanpa sub'}</span>
+                                                </div>
+                                                <div className="truncate">
+                                                    <span className="text-slate-400">CS: </span>
+                                                    <span className="font-medium text-slate-700 dark:text-slate-200">{row.csId ? getCsName(row.csId) : 'Belum assigned'}</span>
+                                                </div>
+                                                {rowAttribution && !rowAttribution.isComplete && (
+                                                    <div className="col-span-2 text-[11px] font-medium text-amber-600 dark:text-amber-300">
+                                                        Lengkapi {rowAttribution.missingFields.join(', ')} di Master Data Akun Iklan.
+                                                    </div>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell>
                                             <Input 
@@ -3072,6 +2994,20 @@ export function IklanHarian() {
                                             />
                                         </TableCell>
                                         <TableCell>
+                                            <Badge
+                                                variant={isValid && !isDup ? 'default' : 'outline'}
+                                                className={
+                                                  isValid && !isDup
+                                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                    : isDup
+                                                      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300'
+                                                      : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300'
+                                                }
+                                            >
+                                                {rowStatus}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
                                             <Button variant="ghost" size="sm" onClick={() => handleRemoveStagedRow(row.id)} className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50">
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
@@ -3082,13 +3018,6 @@ export function IklanHarian() {
                         </TableBody>
                     </Table>
                 </div>
-                {importSource === 'manual' && (
-                    <div className="mt-4 flex justify-center">
-                        <Button variant="outline" onClick={handleAddStagedRow} className="border-dashed border-slate-400 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 w-full">
-                            <Plus className="w-4 h-4 mr-2" /> Tambah Baris
-                        </Button>
-                    </div>
-                )}
              </div>
             </>
           )}

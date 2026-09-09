@@ -78,7 +78,7 @@ export function IntegrasiIklanTable({
 
     if (row.leadSource === 'dashboard') {
       return {
-        label: 'manual',
+        label: 'laporan',
         className: 'text-amber-600 dark:text-amber-400',
       };
     }
@@ -196,7 +196,7 @@ export function IntegrasiIklanTable({
                         : row.leadSource === 'order-share'
                           ? `Leads otomatis dari order masuk berdasarkan created_at. Sebagian order dibagi proporsional per akun dalam advertiser/platform yang sama. Order terakhir: ${row.lastOrderFallbackDate || '-'}`
                           : row.leadSource === 'dashboard'
-                            ? `Order akun ini belum terbaca dengan aman, jadi sementara memakai leads dashboard manual. Input terakhir: ${row.lastLeadInputDate || '-'}`
+                            ? `Order akun ini belum terbaca dengan aman, jadi sementara memakai angka laporan harian. Laporan terakhir: ${row.lastLeadInputDate || '-'}`
                           : undefined
                     }
                   >
@@ -224,7 +224,7 @@ export function IntegrasiIklanTable({
                             : row.leadSource === 'order-share'
                               ? `CPL ini dihitung dari order masuk berdasarkan created_at. Sebagian order dibagi proporsional per akun dalam advertiser/platform yang sama. Order terakhir: ${row.lastOrderFallbackDate || '-'}`
                               : row.leadSource === 'dashboard'
-                                ? `CPL ini sementara memakai leads dashboard manual. Input terakhir: ${row.lastLeadInputDate || '-'}`
+                                ? `CPL ini sementara memakai angka laporan harian. Laporan terakhir: ${row.lastLeadInputDate || '-'}`
                               : undefined
                         }
                       >
@@ -233,7 +233,7 @@ export function IntegrasiIklanTable({
                     ) : row.leadInputStatus === 'missing-in-range' ? (
                       <span
                         className="text-amber-600 dark:text-amber-400"
-                        title={`Leads dashboard untuk akun ini belum diinput pada rentang yang dipilih. Input terakhir: ${row.lastLeadInputDate || '-'}`}
+                        title={`Angka laporan untuk akun ini belum tersedia pada rentang yang dipilih. Laporan terakhir: ${row.lastLeadInputDate || '-'}`}
                       >
                         Belum input
                       </span>

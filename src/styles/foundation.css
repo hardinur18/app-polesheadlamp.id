@@ -11636,6 +11636,1472 @@ body {
   text-align: right;
 }
 
+.marketingMonitoringPage,
+.csOkrPage,
+.affiliatePage {
+  padding-bottom: 7rem;
+}
+
+.marketingMonitoringPage .topbar,
+.csOkrPage .topbar,
+.affiliatePage .topbar {
+  margin-bottom: 18px;
+}
+
+.marketingMonitoringPage .topbarActions,
+.csOkrPage .topbarActions,
+.affiliatePage .topbarActions {
+  gap: 8px;
+}
+
+.marketingMonitoringPage .topbarActions > div {
+  width: 100%;
+}
+
+.marketingMonitoringHeaderButton.uiButton,
+.csOkrHeaderButton.uiButton,
+.affiliateHeaderButton.uiButton {
+  min-height: 40px;
+  padding-inline: 14px;
+  border-radius: 12px;
+}
+
+.marketingMonitoringPeriodPanel.filterPanel,
+.csOkrFilterPanel.filterPanel,
+.affiliateFilterPanel.filterPanel {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.055);
+  backdrop-filter: none;
+}
+
+.marketingMonitoringPeriodLabel {
+  min-height: 44px;
+}
+
+.marketingMonitoringMonthControl {
+  min-width: 0;
+}
+
+.marketingMonitoringMonthArrow.iconButton {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.marketingMonitoringMonthArrow.iconButton:hover {
+  background: rgba(239, 246, 255, 0.86);
+}
+
+.marketingMonitoringMonthValue {
+  min-height: 42px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.marketingMonitoringTargetManager {
+  overflow: hidden;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.06) !important;
+}
+
+.marketingMonitoringSummaryGrid {
+  gap: 14px;
+}
+
+.marketingMonitoringSummaryCard {
+  min-height: 168px;
+  border-radius: 18px !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.055) !important;
+}
+
+.marketingMonitoringSummaryCard h3 {
+  letter-spacing: 0;
+}
+
+.marketingMonitoringListCard.tablePanel,
+.csOkrTableCard.tablePanel,
+.affiliateTableCard.tablePanel {
+  min-height: 0;
+  border-radius: 18px;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06);
+}
+
+.marketingMonitoringDayList {
+  display: grid;
+  gap: 12px;
+}
+
+.marketingMonitoringDayCard {
+  border-radius: 18px !important;
+}
+
+.marketingMonitoringDayHeader {
+  min-height: 92px;
+}
+
+.marketingMonitoringDateCell {
+  min-width: 0;
+}
+
+.marketingMonitoringMetricsGrid {
+  min-width: 0;
+}
+
+.marketingMonitoringExpanded {
+  border-radius: 0 0 18px 18px;
+}
+
+.marketingMonitoringExpandedSummary,
+.marketingMonitoringExpanded .grid {
+  min-width: 0;
+}
+
+.marketingMonitoringMiniCard {
+  min-height: 186px;
+  border-radius: 16px !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.045) !important;
+}
+
+.marketingMonitoringMiniCard h4 {
+  letter-spacing: 0;
+}
+
+.marketingMonitoringBranchCard {
+  border-radius: 16px !important;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.05) !important;
+}
+
+.marketingMonitoringBranchHeader {
+  min-width: 0;
+}
+
+.marketingMonitoringBranchToggle {
+  border: 0;
+  box-shadow: none;
+}
+
+.marketingMonitoringCapacityCard {
+  min-width: min(100%, 340px);
+  border-radius: 14px !important;
+  box-shadow: none;
+}
+
+.marketingMonitoringBranchBody {
+  min-width: 0;
+}
+
+.marketingMonitoringTechPills {
+  row-gap: 8px;
+}
+
+.marketingMonitoringBreakdownGrid {
+  min-width: 0;
+  gap: 12px;
+}
+
+.marketingMonitoringBreakdownGrid h4 {
+  letter-spacing: 0;
+}
+
+.marketingMonitoringBreakdownItem,
+.marketingMonitoringInlineEmpty {
+  border-radius: 12px !important;
+}
+
+.marketingMonitoringLoadMore.uiButton {
+  min-height: 42px;
+  border-radius: 12px;
+  padding-inline: 18px;
+}
+
+.csOkrTargetDialog {
+  width: min(1100px, calc(100vw - 32px)) !important;
+  max-height: min(88vh, 860px) !important;
+  border-radius: 18px !important;
+}
+
+.csOkrTargetTable {
+  border-radius: 14px;
+}
+
+.csOkrTargetControl.uiInput,
+.csOkrTargetControl.uiSelectTrigger {
+  min-height: 38px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.csOkrFilterGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)) !important;
+  align-items: end;
+}
+
+.csOkrFilterControl.uiInput,
+.csOkrFilterControl.uiSelectTrigger {
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.csOkrTableCard.tablePanel {
+  overflow-x: auto;
+}
+
+.csOkrTableCard table {
+  min-width: 760px;
+}
+
+.csOkrTableCard thead th {
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.affiliateSearchBox {
+  width: min(100%, 420px) !important;
+}
+
+.affiliateSearchInput.uiInput {
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.affiliateTableCard.tablePanel {
+  overflow: hidden;
+}
+
+.affiliateDesktopTable table {
+  min-width: 1040px;
+}
+
+.affiliateDesktopTable thead th {
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.affiliateTableRow {
+  background: #ffffff;
+}
+
+.affiliateMobileList {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.affiliateMobileCard {
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.affiliateFormSheet .uiInput,
+.affiliateFormSheet .uiSelectTrigger {
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.affiliateFormSheet .uiButton {
+  border-radius: 12px;
+}
+
+.dark .marketingMonitoringPeriodPanel.filterPanel,
+.dark .marketingMonitoringSummaryCard,
+.dark .marketingMonitoringMiniCard,
+.dark .csOkrFilterPanel.filterPanel,
+.dark .affiliateFilterPanel.filterPanel,
+.dark .affiliateTableRow {
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.dark .marketingMonitoringMonthValue,
+.dark .csOkrTargetControl.uiInput,
+.dark .csOkrTargetControl.uiSelectTrigger,
+.dark .csOkrFilterControl.uiInput,
+.dark .csOkrFilterControl.uiSelectTrigger,
+.dark .affiliateSearchInput.uiInput,
+.dark .affiliateFormSheet .uiInput,
+.dark .affiliateFormSheet .uiSelectTrigger {
+  background: #0f172a;
+}
+
+@media (max-width: 1180px) {
+  .marketingMonitoringSummaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .marketingMonitoringExpandedSummary {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .marketingMonitoringPage,
+  .csOkrPage,
+  .affiliatePage {
+    padding: 22px 14px 7rem;
+  }
+
+  .marketingMonitoringPage .topbar,
+  .csOkrPage .topbar,
+  .affiliatePage .topbar {
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .marketingMonitoringPage .topbarActions,
+  .csOkrPage .topbarActions,
+  .affiliatePage .topbarActions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketingMonitoringPage .topbarActions > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .marketingMonitoringHeaderButton.uiButton,
+  .csOkrHeaderButton.uiButton,
+  .affiliateHeaderButton.uiButton {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .marketingMonitoringPeriodPanel.filterPanel,
+  .csOkrFilterPanel.filterPanel,
+  .affiliateFilterPanel.filterPanel {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .marketingMonitoringMonthControl {
+    width: 100%;
+  }
+
+  .marketingMonitoringMonthValue {
+    min-width: 0 !important;
+  }
+
+  .marketingMonitoringSummaryGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .marketingMonitoringSummaryCard {
+    min-height: 0;
+    border-radius: 16px !important;
+  }
+
+  .marketingMonitoringListCard.tablePanel {
+    padding: 12px !important;
+    border-radius: 16px;
+  }
+
+  .marketingMonitoringDayHeader {
+    min-height: 0;
+    padding: 14px !important;
+  }
+
+  .marketingMonitoringMetricsGrid {
+    gap: 14px !important;
+  }
+
+  .marketingMonitoringExpanded {
+    padding: 14px !important;
+  }
+
+  .marketingMonitoringMiniCard {
+    min-height: 0;
+    border-radius: 14px !important;
+  }
+
+  .marketingMonitoringBranchCard {
+    padding: 14px !important;
+    border-radius: 14px !important;
+  }
+
+  .marketingMonitoringCapacityCard {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .marketingMonitoringTechPills {
+    justify-content: flex-start !important;
+    margin-top: 0 !important;
+  }
+
+  .marketingMonitoringBreakdownGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .csOkrTargetDialog {
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    border-radius: 16px !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .csOkrTableCard.tablePanel {
+    border-radius: 16px;
+  }
+
+  .affiliateSearchBox {
+    width: 100% !important;
+  }
+
+  .affiliateMobileList {
+    padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .affiliateFormSheet {
+    height: min(88vh, 720px) !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+}
+
+.dailyAdsPage {
+  padding-bottom: 7rem;
+}
+
+.dailyAdsPage .topbar {
+  margin-bottom: 18px;
+}
+
+.dailyAdsPage .topbarActions {
+  gap: 8px;
+}
+
+.dailyAdsHeaderButton.uiButton {
+  min-height: 40px;
+  padding-inline: 14px;
+  border-radius: 12px;
+}
+
+.dailyAdsFilterPanel.filterPanel {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.055);
+  backdrop-filter: none;
+}
+
+.dailyAdsDesktopFilters {
+  align-items: stretch;
+  gap: 12px;
+}
+
+.dailyAdsFilterControls {
+  display: grid !important;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(230px, 280px) repeat(auto-fit, minmax(152px, 1fr));
+  align-items: center;
+  gap: 10px;
+}
+
+.dailyAdsDateRange,
+.dailyAdsSearchBox {
+  min-width: 0;
+}
+
+.dailyAdsSearchBox {
+  flex: 0 1 420px;
+  max-width: 420px;
+}
+
+.dailyAdsDateRange.uiPeriodPicker,
+.dailyAdsDateRange .filterDateButton,
+.dailyAdsFilterControl.uiSelectTrigger,
+.dailyAdsSearchInput.uiInput {
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.dailyAdsDateRange.uiPeriodPicker,
+.dailyAdsDateRange .filterDateButton {
+  width: 100%;
+  min-width: 0;
+}
+
+.dailyAdsFilterControl.uiSelectTrigger {
+  width: 100% !important;
+}
+
+.dailyAdsMobileFilterButton.iconButton {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.dailyAdsTableCard.tablePanel {
+  min-height: 0;
+  border-radius: 18px;
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.06);
+}
+
+.dailyAdsDesktopTable table {
+  min-width: 1180px;
+}
+
+.dailyAdsDesktopTable thead th {
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.dailyAdsDesktopTable tbody tr {
+  background: #ffffff;
+}
+
+.dailyAdsDesktopTable tbody tr:hover {
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.dark .dailyAdsFilterPanel.filterPanel,
+.dark .dailyAdsDesktopTable tbody tr {
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.dark .dailyAdsDateRange .filterDateButton,
+.dark .dailyAdsFilterControl.uiSelectTrigger,
+.dark .dailyAdsSearchInput.uiInput,
+.dark .dailyAdsFormSheet .uiInput,
+.dark .dailyAdsFormSheet .uiSelectTrigger {
+  background: #0f172a;
+}
+
+.dark .dailyAdsDesktopTable tbody tr:hover {
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.dailyAdsDesktopTable .uiButton.iconButton {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border-radius: 10px;
+}
+
+.dailyAdsMobileList {
+  padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+
+.dailyAdsMobileCard {
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.dailyAdsFormSheet .uiInput,
+.dailyAdsFormSheet .uiSelectTrigger {
+  min-height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.dailyAdsFormSheet .uiButton {
+  border-radius: 12px;
+}
+
+.dailyAdsWideDialog,
+.dailyAdsImportDialog {
+  max-height: calc(100vh - 28px) !important;
+  border-radius: 18px !important;
+}
+
+.dailyAdsWideDialog {
+  height: min(86vh, 900px) !important;
+}
+
+.dailyAdsRecapDialog {
+  width: min(calc(100vw - 40px), 1280px) !important;
+  max-width: min(calc(100vw - 40px), 1280px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: min(86dvh, 840px) !important;
+}
+
+.dailyAdsRecapDialog > button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dailyAdsRecapControlGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.dailyAdsRecapControlGrid > div {
+  min-width: 0;
+}
+
+.dailyAdsRecapControlGrid .uiInput,
+.dailyAdsRecapControlGrid .uiSelectTrigger {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.dailyAdsRecapSummaryBar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 14px;
+}
+
+.dailyAdsRecapSummaryBar label {
+  min-width: 0;
+}
+
+.dailyAdsRecapSummaryBar > div:last-child {
+  min-width: 0;
+}
+
+.dailyAdsApiProviderStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.dailyAdsApiProviderStatus {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.dailyAdsApiProviderStatus div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dailyAdsApiProviderStatus span,
+.dailyAdsApiProviderStatus strong {
+  color: #0f172a;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.dailyAdsApiProviderStatus small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dailyAdsApiProviderStatus.is-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.dailyAdsApiProviderStatus.is-empty {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+.dailyAdsApiProviderStatus.is-error {
+  border-color: #fed7aa;
+  background: #fff7ed;
+}
+
+.dailyAdsApiProviderStatus.is-success strong {
+  color: #047857;
+}
+
+.dailyAdsApiProviderStatus.is-empty strong {
+  color: #64748b;
+}
+
+.dailyAdsApiProviderStatus.is-error strong {
+  color: #c2410c;
+}
+
+.dailyAdsRecapTableViewport {
+  min-height: 180px;
+  max-height: min(46dvh, 460px);
+  overflow: auto;
+}
+
+.dailyAdsRecapTableWrap {
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.dailyAdsRecapTableWrap .tableScroller {
+  width: 100%;
+  max-height: inherit;
+  overflow: auto;
+  cursor: default;
+  scrollbar-gutter: auto;
+  touch-action: pan-x pan-y;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.dailyAdsRecapTableWrap .uiDataTableScroller > table.dailyAdsRecapTable {
+  width: 1228px;
+  min-width: 1228px;
+  max-width: 1228px;
+  table-layout: fixed;
+}
+
+.dailyAdsRecapColDate {
+  width: 118px;
+}
+
+.dailyAdsRecapColSource {
+  width: 92px;
+}
+
+.dailyAdsRecapColAccount {
+  width: 190px;
+}
+
+.dailyAdsRecapColAdvertiser {
+  width: 212px;
+}
+
+.dailyAdsRecapColCs {
+  width: 180px;
+}
+
+.dailyAdsRecapColSpend {
+  width: 150px;
+}
+
+.dailyAdsRecapColLeads {
+  width: 96px;
+}
+
+.dailyAdsRecapColStatus {
+  width: 190px;
+}
+
+.dailyAdsRecapTable th,
+.dailyAdsRecapTable td {
+  padding: 13px 14px;
+  vertical-align: middle;
+}
+
+.dailyAdsRecapTableWrap .dailyAdsRecapTable th:nth-child(6),
+.dailyAdsRecapTableWrap .dailyAdsRecapTable td:nth-child(6),
+.dailyAdsRecapTableWrap .dailyAdsRecapTable th:nth-child(7),
+.dailyAdsRecapTableWrap .dailyAdsRecapTable td:nth-child(7) {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.dailyAdsRecapTable th {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dailyAdsRecapTable td {
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 620;
+}
+
+.dailyAdsRecapText {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dailyAdsRecapStatusCell {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 4px;
+}
+
+.dailyAdsRecapStatusCell [data-slot="badge"] {
+  border-radius: 8px;
+  text-transform: capitalize;
+}
+
+.dailyAdsRecapStatusCell span:last-child {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 620;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dailyAdsRecapFooter {
+  align-items: center;
+  gap: 10px;
+}
+
+.dailyAdsRecapFooterNote {
+  min-width: 220px;
+  flex: 1 1 auto;
+  padding-right: 10px;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.dailyAdsImportDialog {
+  height: auto;
+}
+
+.dailyAdsImportDialog[class*="h-"] {
+  height: min(90vh, 920px) !important;
+}
+
+@media (max-width: 1180px) {
+  .dailyAdsRecapDialog {
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px) !important;
+  }
+
+  .dailyAdsRecapControlGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dailyAdsDesktopFilters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dailyAdsSearchBox {
+    width: 100% !important;
+    max-width: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .dailyAdsPage {
+    padding: 22px 14px 7rem;
+  }
+
+  .dailyAdsPage .topbar {
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .dailyAdsPage .topbarActions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dailyAdsHeaderButton.uiButton {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .dailyAdsFilterPanel.filterPanel {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+.dailyAdsDateRange.uiPeriodPicker,
+.dailyAdsDateRange .filterDateButton,
+.dailyAdsSearchInput.uiInput {
+    min-height: 42px;
+  }
+
+  .dailyAdsFilterSheet {
+    height: min(82vh, 680px) !important;
+    border-radius: 18px 18px 0 0 !important;
+  }
+
+  .dailyAdsTableCard.tablePanel {
+    border-radius: 16px;
+  }
+
+  .dailyAdsMobileList {
+    padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .dailyAdsFormSheet {
+    height: min(88vh, 720px) !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+
+  .dailyAdsWideDialog,
+  .dailyAdsImportDialog {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
+    border-radius: 16px !important;
+  }
+
+  .dailyAdsRecapDialog {
+    width: calc(100vw - 18px) !important;
+    max-width: calc(100vw - 18px) !important;
+  }
+
+  .dailyAdsRecapControlGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dailyAdsRecapSummaryBar {
+    gap: 9px 12px;
+    padding: 10px 12px;
+  }
+
+  .dailyAdsApiProviderStatusGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dailyAdsApiProviderStatus small {
+    white-space: normal;
+  }
+
+  .dailyAdsRecapTableViewport {
+    min-height: 220px;
+    max-height: min(52dvh, 520px);
+    padding: 12px !important;
+  }
+
+  .dailyAdsRecapTableWrap .uiDataTableScroller > table.dailyAdsRecapTable {
+    width: 1080px;
+    min-width: 1080px;
+    max-width: 1080px;
+  }
+
+  .dailyAdsRecapFooter {
+    align-items: stretch;
+    flex-direction: column !important;
+  }
+
+  .dailyAdsRecapFooterNote {
+    min-width: 0;
+    padding-right: 0;
+  }
+
+  .dailyAdsRecapColDate {
+    width: 112px;
+  }
+
+  .dailyAdsRecapColSource {
+    width: 82px;
+  }
+
+  .dailyAdsRecapColAccount {
+    width: 160px;
+  }
+
+  .dailyAdsRecapColAdvertiser {
+    width: 180px;
+  }
+
+  .dailyAdsRecapColCs {
+    width: 160px;
+  }
+
+  .dailyAdsRecapColSpend {
+    width: 128px;
+  }
+
+  .dailyAdsRecapColLeads {
+    width: 88px;
+  }
+
+  .dailyAdsRecapColStatus {
+    width: 170px;
+  }
+}
+
+/* Iklan Harian final UI/UX guard */
+.dailyAdsHeaderButton.uiButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dailyAdsKpiGrid.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dailyAdsKpiGrid.metricGrid > .metricCard {
+  min-height: 104px;
+  padding: 18px;
+}
+
+.dailyAdsKpiGrid.metricGrid .metricValue {
+  font-size: clamp(1.05rem, 4cqi, 1.34rem);
+}
+
+.dailyAdsFilterPanel.filterPanel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.dailyAdsFilterBar {
+  display: grid;
+  grid-template-columns: minmax(230px, 290px) minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.dailyAdsFilterBar > * {
+  min-width: 0;
+}
+
+.dailyAdsDateRange,
+.dailyAdsSearchBox {
+  width: 100%;
+  max-width: none;
+}
+
+.dailyAdsFilterButton.uiButton {
+  position: relative;
+  min-height: 44px;
+  min-width: 112px;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
+.dailyAdsFilterButton.uiButton.isActive {
+  border-color: #bfdbfe;
+  color: #075bb5;
+  background: #eff6ff;
+}
+
+.dailyAdsFilterCount {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  background: #0b63ce;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.dailyAdsActiveFilterRow {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.dailyAdsActiveFilterLabel {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dailyAdsActiveFilterRow [data-slot="badge"] {
+  max-width: 220px;
+  height: 24px;
+  border-color: #dbe4ef;
+  border-radius: 999px;
+  color: #334155;
+  background: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+}
+
+.dailyAdsResetInline.uiButton {
+  min-height: 28px !important;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 999px;
+  color: #075bb5;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.72rem;
+}
+
+.dailyAdsFilterDialog {
+  display: flex !important;
+  width: min(calc(100vw - 32px), 900px) !important;
+  max-width: min(calc(100vw - 32px), 900px) !important;
+  max-height: min(84dvh, 720px) !important;
+  flex-direction: column;
+  gap: 0 !important;
+  overflow: hidden;
+  padding: 0 !important;
+  border-radius: 22px !important;
+  box-shadow: 0 30px 80px -46px rgba(15, 23, 42, 0.62);
+}
+
+.dailyAdsFilterDialog > button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dailyAdsFilterDialogHeader {
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dailyAdsFilterDialogHeader h2 {
+  color: #0f172a;
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.dailyAdsFilterDialogHeader p {
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.dailyAdsFilterDialogBody {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 28px 24px;
+  background: #f8fafc;
+}
+
+.dailyAdsAdvancedFilterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dailyAdsFilterField {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.dailyAdsFilterField label {
+  color: #526179;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.dailyAdsFilterDialogFooter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 28px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+
+.dailyAdsFilterDialogFooter .uiButton {
+  width: 100%;
+  min-height: 46px;
+  margin: 0 !important;
+  border-radius: 13px;
+}
+
+.dailyAdsMobileCard {
+  overflow: hidden;
+}
+
+@media (max-width: 1180px) {
+  .dailyAdsKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dailyAdsFilterBar {
+    grid-template-columns: minmax(220px, 280px) minmax(240px, 1fr) auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .dailyAdsPage.opsPageShell {
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 12px calc(108px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+    background: linear-gradient(180deg, #f8fbff 0%, #f8fafc 36%, #ffffff 100%);
+  }
+
+  .dailyAdsPage.opsPageShell > .flex {
+    gap: 13px !important;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dailyAdsPage .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start;
+    gap: 10px 12px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .dailyAdsPage .eyebrowLine {
+    margin-bottom: 7px;
+    font-size: 0.68rem;
+    font-weight: 820;
+    line-height: 1.2;
+  }
+
+  .dailyAdsPage .topbar h1 {
+    margin: 0;
+    font-size: 1.42rem;
+    line-height: 1.12;
+  }
+
+  .dailyAdsPage .topbar p {
+    margin-top: 6px;
+    max-width: 26rem;
+    font-size: 0.8rem;
+    font-weight: 560;
+    line-height: 1.36;
+  }
+
+  .dailyAdsPage .topbarActions {
+    display: flex !important;
+    width: auto !important;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .dailyAdsHeaderButton.uiButton {
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 !important;
+    border-radius: 13px;
+  }
+
+  .dailyAdsHeaderButtonText {
+    display: none;
+  }
+
+  .dailyAdsKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .dailyAdsKpiGrid.metricGrid > .metricCard {
+    min-height: 78px;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 9px;
+    padding: 12px !important;
+    border-radius: 18px;
+    box-shadow: 0 14px 28px -24px rgba(15, 23, 42, 0.42);
+    transform: none !important;
+  }
+
+  .dailyAdsKpiGrid.metricGrid > .metricCard:hover {
+    transform: none !important;
+  }
+
+  .dailyAdsKpiGrid.metricGrid .metricIcon {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 12px !important;
+  }
+
+  .dailyAdsKpiGrid.metricGrid .metricIcon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .dailyAdsKpiGrid.metricGrid .metricCard small {
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.16;
+  }
+
+  .dailyAdsKpiGrid.metricGrid .metricValue {
+    margin-top: 3px;
+    font-size: 1.05rem;
+    line-height: 1.1;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .dailyAdsKpiGrid.metricGrid .metricValue > div {
+    min-width: 0;
+  }
+
+  .dailyAdsKpiGrid.metricGrid .metricValue .text-xs {
+    font-size: 0.62rem;
+    line-height: 1.18;
+  }
+
+  .dailyAdsFilterPanel.filterPanel {
+    gap: 10px;
+    padding: 12px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 16px 34px -30px rgba(15, 23, 42, 0.4) !important;
+  }
+
+  .dailyAdsFilterBar {
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 9px;
+  }
+
+  .dailyAdsDateRange {
+    grid-column: 1 / -1;
+  }
+
+  .dailyAdsDateRange.uiPeriodPicker,
+  .dailyAdsDateRange .filterDateButton,
+  .dailyAdsSearchInput.uiInput,
+  .dailyAdsFilterButton.uiButton {
+    min-height: 40px !important;
+    height: 40px !important;
+    border-radius: 13px !important;
+    font-size: 0.78rem;
+  }
+
+  .dailyAdsFilterButton.uiButton {
+    width: 42px;
+    min-width: 42px;
+    padding: 0;
+  }
+
+  .dailyAdsFilterButtonText {
+    display: none;
+  }
+
+  .dailyAdsFilterCount {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    min-width: 17px;
+    height: 17px;
+    font-size: 0.62rem;
+  }
+
+  .dailyAdsActiveFilterRow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dailyAdsActiveFilterRow::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dailyAdsActiveFilterRow [data-slot="badge"] {
+    max-width: 170px;
+  }
+
+  .dailyAdsFilterDialog {
+    width: calc(100vw - 18px) !important;
+    max-width: calc(100vw - 18px) !important;
+    max-height: min(86dvh, 680px) !important;
+    border-radius: 22px !important;
+  }
+
+  .dailyAdsFilterDialogHeader {
+    padding: 20px 20px 16px;
+  }
+
+  .dailyAdsFilterDialogBody {
+    padding: 18px 20px 20px;
+  }
+
+  .dailyAdsAdvancedFilterGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 13px;
+  }
+
+  .dailyAdsFilterDialogFooter {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 20px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .dailyAdsMobileList {
+    padding: 12px 12px calc(100px + env(safe-area-inset-bottom));
+  }
+
+  .dailyAdsMobileCard {
+    border-radius: 18px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .dailyAdsPage .topbar {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dailyAdsPage .topbarActions {
+    justify-content: flex-start;
+  }
+
+  .dailyAdsKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 .waTemplatePage {
   padding-bottom: 8rem;
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.54), rgba(255, 255, 255, 0));
@@ -12066,6 +13532,162 @@ body {
 
   .waTemplateMessageLabelRow {
     align-items: flex-start;
+  }
+}
+
+.whatsappModuleFrame {
+  padding-bottom: 7rem;
+}
+
+.whatsappModuleHero.surfacePanel,
+.whatsappModuleNav.surfacePanel,
+.waSettingsCard.surfacePanel,
+.waSettingsStatusCard.surfacePanel,
+.waSettingsSecretNote.surfacePanel {
+  border-radius: 18px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.055);
+  backdrop-filter: none;
+}
+
+.whatsappModuleHero.surfacePanel,
+.whatsappModuleNav.surfacePanel,
+.waSettingsCard.surfacePanel,
+.waSettingsStatusCard.surfacePanel,
+.waSettingsSecretNote.surfacePanel {
+  overflow: hidden;
+}
+
+.whatsappModuleHero.surfacePanel {
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.72), rgba(255, 255, 255, 0) 44%),
+    #ffffff;
+}
+
+.dark .whatsappModuleHero.surfacePanel {
+  background:
+    linear-gradient(135deg, rgba(30, 64, 175, 0.18), rgba(15, 23, 42, 0) 44%),
+    #0f172a;
+}
+
+.whatsappModuleNav.surfacePanel,
+.waSettingsCard.surfacePanel,
+.waSettingsStatusCard.surfacePanel,
+.waSettingsSecretNote.surfacePanel {
+  padding: 0;
+}
+
+.whatsappModuleTabs {
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.whatsappModuleTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.whatsappModuleTab {
+  flex: 0 0 auto;
+}
+
+.whatsappModuleTab.isActive {
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
+.whatsappModuleStat.rounded-2xl {
+  min-height: 86px;
+  border-radius: 14px;
+}
+
+.waSettingsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.waSettingsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.waSettingsSideStack {
+  display: grid;
+  gap: 16px;
+}
+
+.waSettingsCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+}
+
+.waSettingsCardBody {
+  padding: 18px;
+}
+
+.waSettingsStatusCard > div,
+.waSettingsSecretNote > div {
+  padding: 18px;
+}
+
+.waSettingsConfigRow,
+.waSettingsAccountRow,
+.waSettingsNote {
+  min-width: 0;
+  border-radius: 12px;
+}
+
+@media (max-width: 1023px) {
+  .whatsappModuleFrame {
+    gap: 14px;
+  }
+
+  .whatsappModuleStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .waSettingsGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .whatsappModuleHero.surfacePanel,
+  .whatsappModuleNav.surfacePanel,
+  .waSettingsCard.surfacePanel,
+  .waSettingsStatusCard.surfacePanel,
+  .waSettingsSecretNote.surfacePanel {
+    border-radius: 16px;
+  }
+
+  .whatsappModuleTabs {
+    flex-wrap: nowrap;
+  }
+
+  .whatsappModuleTab {
+    min-height: 38px;
+    padding-inline: 12px;
+    font-size: 0.8125rem;
+  }
+
+  .whatsappModuleStat.rounded-2xl {
+    min-height: 76px;
+    padding: 12px;
+  }
+
+  .waSettingsCardHeader,
+  .waSettingsCardBody,
+  .waSettingsStatusCard > div,
+  .waSettingsSecretNote > div {
+    padding: 14px;
+  }
+
+  .waSettingsConfigRow > .flex {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

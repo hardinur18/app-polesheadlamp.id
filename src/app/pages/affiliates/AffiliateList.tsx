@@ -127,7 +127,7 @@ export const AffiliateList: React.FC = () => {
   // Access Control
   if (!hasPermission('affiliate.view')) {
     return (
-      <OperationalPageShell>
+      <OperationalPageShell className="affiliatePage">
         <OperationalEmptyState
           icon={UserX}
           title="Akses Ditolak"
@@ -404,7 +404,7 @@ export const AffiliateList: React.FC = () => {
   };
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="affiliatePage">
       <div className="flex flex-col space-y-4">
         <OperationalPageHeader
           eyebrow="Operasional"
@@ -414,7 +414,7 @@ export const AffiliateList: React.FC = () => {
           actions={
             hasPermission('affiliate.manage') ? (
               <Button
-                className="h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                className="affiliateHeaderButton h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                 onClick={() => setIsAddDialogOpen(true)}
               >
                 <Plus className="mr-2 h-4 w-4" /> Tambah Affiliate
@@ -430,22 +430,22 @@ export const AffiliateList: React.FC = () => {
           <OperationalKpiCard label="Total Komisi" value={formatCurrency(totalCommission)} icon={WalletCards} tone="blue" />
         </OperationalKpiGrid>
 
-        <OperationalFilterPanel>
-             <div className="relative w-full sm:w-72">
+        <OperationalFilterPanel className="affiliateFilterPanel">
+             <div className="affiliateSearchBox relative w-full sm:w-72">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <Input
                   placeholder="Cari nama, whatsapp, atau profesi..."
-                  className="pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 transition-all w-full shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                  className="affiliateSearchInput pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 focus:ring-1 focus:ring-blue-500 transition-all w-full shadow-sm placeholder:text-slate-400 dark:placeholder:text-slate-500"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
              </div>
         </OperationalFilterPanel>
 
-        <OperationalTableCard>
+        <OperationalTableCard className="affiliateTableCard">
 
           {/* Table (Desktop) */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="affiliateDesktopTable hidden md:block overflow-x-auto">
             <Table>
               <TableHeader className="bg-slate-50/50 dark:bg-slate-800/50">
                 <TableRow className="border-b border-slate-100 dark:border-slate-700">
@@ -482,7 +482,7 @@ export const AffiliateList: React.FC = () => {
                    </TableRow>
                 ) : (
                   filteredAffiliates.map((affiliate) => (
-                    <TableRow key={affiliate.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
+                    <TableRow key={affiliate.id} className="affiliateTableRow hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
                       <TableCell className="py-4 pl-6 align-middle">
                         <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
                            #{affiliate.id}
@@ -591,7 +591,7 @@ export const AffiliateList: React.FC = () => {
           </div>
 
           {/* Mobile Card View */}
-          <div className="md:hidden p-4 space-y-4">
+          <div className="affiliateMobileList md:hidden p-4 space-y-4">
              {loading ? (
                  <div className="text-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-2" />
@@ -605,7 +605,7 @@ export const AffiliateList: React.FC = () => {
                   />
              ) : (
                  filteredAffiliates.map((affiliate) => (
-                    <div key={affiliate.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4">
+                    <div key={affiliate.id} className="affiliateMobileCard bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4">
                         <div className="flex justify-between items-start mb-4">
                            <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm border border-blue-200 dark:border-blue-800">
@@ -681,7 +681,7 @@ export const AffiliateList: React.FC = () => {
 
         {/* Add Sheet */}
         <Sheet open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <SheetContent side="right" className="z-[150] flex h-full w-full flex-col gap-0 overflow-hidden border-l border-slate-200 bg-slate-50 p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-950 sm:w-[560px] sm:max-w-[560px]">
+          <SheetContent side="right" className="affiliateFormSheet z-[150] flex h-full w-full flex-col gap-0 overflow-hidden border-l border-slate-200 bg-slate-50 p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-950 sm:w-[560px] sm:max-w-[560px]">
             <SheetHeader className="sticky top-0 z-10 shrink-0 border-b border-slate-200 bg-white px-6 py-4 text-left dark:border-slate-800 dark:bg-slate-900">
               <SheetTitle className="text-slate-900 dark:text-slate-100">Tambah Affiliate Baru</SheetTitle>
               <SheetDescription className="text-slate-500 dark:text-slate-400">
@@ -695,7 +695,7 @@ export const AffiliateList: React.FC = () => {
                   id="name"
                   value={formData.nama_lengkap}
                   onChange={(e) => setFormData({ ...formData, nama_lengkap: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   placeholder="Nama Lengkap"
                 />
               </div>
@@ -705,7 +705,7 @@ export const AffiliateList: React.FC = () => {
                   id="wa"
                   value={formData.no_whatsapp}
                   onChange={(e) => setFormData({ ...formData, no_whatsapp: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   placeholder="08xxxxxxxxxx"
                   type="tel"
                 />
@@ -716,7 +716,7 @@ export const AffiliateList: React.FC = () => {
                   id="profesi"
                   value={formData.profesi}
                   onChange={(e) => setFormData({ ...formData, profesi: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   placeholder="Contoh: Bengkel, Sales"
                 />
               </div>
@@ -726,7 +726,7 @@ export const AffiliateList: React.FC = () => {
                   id="social_media"
                   value={formData.social_media}
                   onChange={(e) => setFormData({ ...formData, social_media: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   placeholder="Link atau Username"
                 />
               </div>
@@ -737,7 +737,7 @@ export const AffiliateList: React.FC = () => {
                   type="text"
                   value={formData.komisi ? formatNumber(formData.komisi) : ''}
                   onChange={handleKomisiChange}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   placeholder="0"
                 />
               </div>
@@ -747,7 +747,7 @@ export const AffiliateList: React.FC = () => {
                   value={formData.status} 
                   onValueChange={(val) => setFormData({ ...formData, status: val as 'Active' | 'Inactive' })}
                 >
-                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
+                  <SelectTrigger className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
                     <SelectValue placeholder="Pilih Status" />
                   </SelectTrigger>
                   <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
@@ -770,7 +770,7 @@ export const AffiliateList: React.FC = () => {
 
         {/* Edit Sheet */}
         <Sheet open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <SheetContent side="right" className="z-[150] flex h-full w-full flex-col gap-0 overflow-hidden border-l border-slate-200 bg-slate-50 p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-950 sm:w-[560px] sm:max-w-[560px]">
+          <SheetContent side="right" className="affiliateFormSheet z-[150] flex h-full w-full flex-col gap-0 overflow-hidden border-l border-slate-200 bg-slate-50 p-0 shadow-2xl dark:border-slate-800 dark:bg-slate-950 sm:w-[560px] sm:max-w-[560px]">
             <SheetHeader className="sticky top-0 z-10 shrink-0 border-b border-slate-200 bg-white px-6 py-4 text-left dark:border-slate-800 dark:bg-slate-900">
               <SheetTitle className="text-slate-900 dark:text-slate-100">Edit Affiliate</SheetTitle>
               <SheetDescription className="text-slate-500 dark:text-slate-400">
@@ -785,7 +785,7 @@ export const AffiliateList: React.FC = () => {
                   id="edit-name"
                   value={formData.nama_lengkap}
                   onChange={(e) => setFormData({ ...formData, nama_lengkap: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                 />
               </div>
               <div className="grid gap-2">
@@ -794,7 +794,7 @@ export const AffiliateList: React.FC = () => {
                   id="edit-wa"
                   value={formData.no_whatsapp}
                   onChange={(e) => setFormData({ ...formData, no_whatsapp: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   type="tel"
                 />
               </div>
@@ -804,7 +804,7 @@ export const AffiliateList: React.FC = () => {
                   id="edit-profesi"
                   value={formData.profesi}
                   onChange={(e) => setFormData({ ...formData, profesi: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                 />
               </div>
               <div className="grid gap-2">
@@ -813,7 +813,7 @@ export const AffiliateList: React.FC = () => {
                   id="edit-social-media"
                   value={formData.social_media}
                   onChange={(e) => setFormData({ ...formData, social_media: e.target.value })}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                   placeholder="Link atau Username"
                 />
               </div>
@@ -824,7 +824,7 @@ export const AffiliateList: React.FC = () => {
                   type="text"
                   value={formData.komisi ? formatNumber(formData.komisi) : ''}
                   onChange={handleKomisiChange}
-                  className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
+                  className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100"
                 />
               </div>
               <div className="grid gap-2">
@@ -833,7 +833,7 @@ export const AffiliateList: React.FC = () => {
                   value={formData.status} 
                   onValueChange={(val) => setFormData({ ...formData, status: val as 'Active' | 'Inactive' })}
                 >
-                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
+                  <SelectTrigger className="affiliateFormControl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">
                     <SelectValue placeholder="Pilih Status" />
                   </SelectTrigger>
                   <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">

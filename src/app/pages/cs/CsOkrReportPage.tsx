@@ -905,7 +905,7 @@ function CsOkrReportPage() {
   }, [fromDate, report, selectedCsLabel, selectedPlatformLabel, toDate]);
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="csOkrPage">
       <OperationalPageHeader
         eyebrow="Laporan CS"
         icon={Target}
@@ -914,7 +914,7 @@ function CsOkrReportPage() {
         actions={(
           <>
             {canManageTargets && (
-              <Button type="button" variant="outline" onClick={openTargetDialog}>
+              <Button type="button" variant="outline" className="csOkrHeaderButton" onClick={openTargetDialog}>
                 <Target className="mr-2 h-4 w-4" />
                 Atur Target
               </Button>
@@ -922,6 +922,7 @@ function CsOkrReportPage() {
             <Button
               type="button"
               variant="outline"
+              className="csOkrHeaderButton"
               onClick={() => {
                 fetchTargets();
                 fetchPerformance(true);
@@ -935,7 +936,7 @@ function CsOkrReportPage() {
               )}
               Refresh
             </Button>
-            <Button type="button" onClick={handleExportPdf}>
+            <Button type="button" className="csOkrHeaderButton" onClick={handleExportPdf}>
               <Download className="mr-2 h-4 w-4" />
               Export PDF
             </Button>
@@ -944,7 +945,7 @@ function CsOkrReportPage() {
       />
 
       <Dialog open={targetDialogOpen} onOpenChange={setTargetDialogOpen}>
-        <DialogContent className="max-h-[88vh] max-w-6xl overflow-y-auto">
+        <DialogContent className="csOkrTargetDialog max-h-[88vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Target OKR CS</DialogTitle>
             <DialogDescription>
@@ -972,7 +973,7 @@ function CsOkrReportPage() {
             </Button>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="csOkrTargetTable overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
             <Table className="min-w-[1120px]">
               <TableHeader>
                 <TableRow className={OKR_TABLE_HEADER_ROW_CLASS}>
@@ -1007,7 +1008,7 @@ function CsOkrReportPage() {
                         value={target.csId || csUsers[0]?.id || ''}
                         onValueChange={(value) => updateTargetDraft(target.id, 'csId', value)}
                       >
-                        <SelectTrigger className="h-8">
+                        <SelectTrigger className="csOkrTargetControl h-8">
                           <SelectValue placeholder="CS" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1022,7 +1023,7 @@ function CsOkrReportPage() {
                         value={target.platformId || ALL_VALUE}
                         onValueChange={(value) => updateTargetDraft(target.id, 'platformId', value === ALL_VALUE ? null : value)}
                       >
-                        <SelectTrigger className="h-8">
+                        <SelectTrigger className="csOkrTargetControl h-8">
                           <SelectValue placeholder="Platform" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1035,6 +1036,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={0}
                         value={target.leadsTarget}
@@ -1043,6 +1045,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={0}
                         value={target.orderTarget}
@@ -1051,6 +1054,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={0}
                         step={1000}
@@ -1060,6 +1064,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={0}
                         max={100}
@@ -1069,6 +1074,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={1}
                         value={Math.round(target.responseTargetSeconds / 60)}
@@ -1077,6 +1083,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={0}
                         max={100}
@@ -1086,6 +1093,7 @@ function CsOkrReportPage() {
                     </TableCell>
                     <TableCell className={OKR_TABLE_CELL_CLASS}>
                       <Input
+                        className="csOkrTargetControl"
                         type="number"
                         min={0}
                         max={100}
@@ -1122,11 +1130,12 @@ function CsOkrReportPage() {
         </DialogContent>
       </Dialog>
 
-      <OperationalFilterPanel>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <OperationalFilterPanel className="csOkrFilterPanel">
+        <div className="csOkrFilterGrid grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1.5">
             <Label htmlFor="okr-from-date">Dari</Label>
             <Input
+              className="csOkrFilterControl"
               id="okr-from-date"
               type="date"
               value={fromDate}
@@ -1136,6 +1145,7 @@ function CsOkrReportPage() {
           <div className="space-y-1.5">
             <Label htmlFor="okr-to-date">Sampai</Label>
             <Input
+              className="csOkrFilterControl"
               id="okr-to-date"
               type="date"
               value={toDate}
@@ -1145,7 +1155,7 @@ function CsOkrReportPage() {
           <div className="space-y-1.5">
             <Label>CS</Label>
             <Select value={selectedCsId} onValueChange={setSelectedCsId} disabled={!canViewAllCs}>
-              <SelectTrigger>
+              <SelectTrigger className="csOkrFilterControl">
                 <SelectValue placeholder="Pilih CS" />
               </SelectTrigger>
               <SelectContent>
@@ -1159,7 +1169,7 @@ function CsOkrReportPage() {
           <div className="space-y-1.5">
             <Label>Platform</Label>
             <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
-              <SelectTrigger>
+              <SelectTrigger className="csOkrFilterControl">
                 <SelectValue placeholder="Pilih Platform" />
               </SelectTrigger>
               <SelectContent>
@@ -1220,7 +1230,7 @@ function CsOkrReportPage() {
       </OperationalKpiGrid>
 
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-        <OperationalTableCard>
+        <OperationalTableCard className="csOkrTableCard">
           <div className="flex items-center justify-between border-b border-slate-100 p-4 dark:border-slate-800">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Progress OKR</h2>
@@ -1287,7 +1297,7 @@ function CsOkrReportPage() {
           </Table>
         </OperationalTableCard>
 
-        <OperationalTableCard>
+        <OperationalTableCard className="csOkrTableCard">
           <div className="flex items-center justify-between border-b border-slate-100 p-4 dark:border-slate-800">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ringkasan Per CS</h2>

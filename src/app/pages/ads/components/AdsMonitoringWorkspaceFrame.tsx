@@ -204,7 +204,7 @@ export function AdsMonitoringWorkspaceFrame({
                     <SelectValue placeholder="Pilih mode" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="manual">Audit</SelectItem>
                     <SelectItem value="assisted">Assisted</SelectItem>
                     <SelectItem value="semi-auto">Semi Auto</SelectItem>
                   </SelectContent>

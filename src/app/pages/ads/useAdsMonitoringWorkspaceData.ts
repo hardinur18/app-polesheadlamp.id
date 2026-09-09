@@ -12,6 +12,7 @@ import {
 import { useMasterData } from '@/app/pages/master-data/context';
 import { isAdvertiserRole } from '@/app/data/roleHelpers';
 import { useAdsMonitoringFoundation } from './openclaw-foundation';
+import { resolveAdAccountAttribution } from './adAccountAttribution';
 
 export type AdsMonitoringWorkspaceOption = {
   id: string;
@@ -66,7 +67,16 @@ const createPreviousRange = (range: { from: string; to: string }) => {
 };
 
 export const useAdsMonitoringWorkspaceData = () => {
-  const { orders, dailyAds, adAccounts, platforms, subChannels, users } = useMasterData();
+  const {
+    orders,
+    dailyAds,
+    adAccounts,
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    platforms,
+    subChannels,
+    users,
+  } = useMasterData();
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(() => ({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
@@ -81,6 +91,22 @@ export const useAdsMonitoringWorkspaceData = () => {
   );
 
   const range = React.useMemo(() => toDateRangeParams(dateRange), [dateRange]);
+  const getAccountAdvertiserIdForRange = React.useCallback(
+    (account: { id: string; advertiserId: string }) => {
+      const owner = [...adAccountOwnerAssignments]
+        .filter(
+          (assignment) =>
+            assignment.adAccountId === account.id &&
+            assignment.status === 'active' &&
+            (!assignment.startDate || assignment.startDate <= range.to) &&
+            (!assignment.endDate || assignment.endDate >= range.from),
+        )
+        .sort((left, right) => (right.startDate || '').localeCompare(left.startDate || ''))[0];
+
+      return owner?.advertiserId || account.advertiserId;
+    },
+    [adAccountOwnerAssignments, range.from, range.to],
+  );
   const advertiserOptions = React.useMemo<AdsMonitoringWorkspaceOption[]>(
     () =>
       users
@@ -101,14 +127,42 @@ export const useAdsMonitoringWorkspaceData = () => {
     () =>
       adAccounts.filter((account) => {
         if (selectedPlatformId !== 'all' && account.platformId !== selectedPlatformId) return false;
-        if (selectedAdvertiserId !== 'all' && account.advertiserId !== selectedAdvertiserId) return false;
+        if (selectedAdvertiserId !== 'all' && getAccountAdvertiserIdForRange(account) !== selectedAdvertiserId) return false;
         return true;
       }),
-    [adAccounts, selectedAdvertiserId, selectedPlatformId],
+    [adAccounts, getAccountAdvertiserIdForRange, selectedAdvertiserId, selectedPlatformId],
   );
   const filteredAccountIds = React.useMemo(
     () => new Set(filteredAdAccounts.map((account) => account.id)),
     [filteredAdAccounts],
+  );
+  const adAccountById = React.useMemo(
+    () => new Map(adAccounts.map((account) => [account.id, account])),
+    [adAccounts],
+  );
+  const resolveDailyAdRow = React.useCallback(
+    (row: typeof dailyAds[number]) => {
+      const account = adAccountById.get(row.adAccountId);
+      if (!account) return row;
+
+      const attribution = resolveAdAccountAttribution({
+        account,
+        date: row.date,
+        ownerAssignments: adAccountOwnerAssignments,
+        csAssignments: adAccountAssignments,
+        preferredCsId: row.csId,
+        fallbackToLatestCsAssignment: true,
+      });
+
+      return {
+        ...row,
+        advertiserId: attribution.advertiserId || row.advertiserId,
+        platformId: attribution.platformId || row.platformId,
+        subChannelId: attribution.subChannelId || row.subChannelId,
+        csId: attribution.csId || row.csId,
+      };
+    },
+    [adAccountAssignments, adAccountById, adAccountOwnerAssignments],
   );
   const filteredOrders = React.useMemo(
     () =>
@@ -121,15 +175,13 @@ export const useAdsMonitoringWorkspaceData = () => {
   );
   const filteredDailyAds = React.useMemo(
     () =>
-      dailyAds.filter((row) => {
-        if (filteredAccountIds.size > 0) {
-          return filteredAccountIds.has(row.adAccountId);
-        }
+      dailyAds.map(resolveDailyAdRow).filter((row) => {
+        if (filteredAccountIds.size > 0 && !filteredAccountIds.has(row.adAccountId)) return false;
         if (selectedPlatformId !== 'all' && row.platformId !== selectedPlatformId) return false;
         if (selectedAdvertiserId !== 'all' && row.advertiserId !== selectedAdvertiserId) return false;
-        return selectedPlatformId === 'all' && selectedAdvertiserId === 'all';
+        return true;
       }),
-    [dailyAds, filteredAccountIds, selectedAdvertiserId, selectedPlatformId],
+    [dailyAds, filteredAccountIds, resolveDailyAdRow, selectedAdvertiserId, selectedPlatformId],
   );
   const compareRange = React.useMemo(() => createPreviousRange(range), [range]);
   const foundation = useAdsMonitoringFoundation({

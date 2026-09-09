@@ -85,9 +85,9 @@ export function WhatsAppModuleFrame({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-0">
-      <Card className="border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-5 p-6">
+    <div className="whatsappModuleFrame mx-auto flex w-full max-w-[1600px] flex-col gap-5 p-0">
+      <Card className="whatsappModuleHero border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-5 p-5 sm:p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -102,7 +102,7 @@ export function WhatsAppModuleFrame({
                 ))}
               </div>
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                <h1 className="text-2xl font-semibold tracking-[0] text-slate-900 dark:text-slate-100">
                   {workspace?.title ?? 'Live Chat'}
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -117,16 +117,18 @@ export function WhatsAppModuleFrame({
           </div>
 
           {stats.length > 0 ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="whatsappModuleStats grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {stats.map((stat) => (
                 <div
                   key={stat.label}
                   className={cn(
-                    'border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/40',
+                    'whatsappModuleStat border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/40',
                     ui.r.field,
                   )}
                 >
-                  <div className={ui.text.label}>{stat.label}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0] text-slate-500 dark:text-slate-400">
+                    {stat.label}
+                  </div>
                   <div className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                     {stat.value}
                   </div>
@@ -143,8 +145,8 @@ export function WhatsAppModuleFrame({
       </Card>
 
       {/* In-module section navigation */}
-      <Card className="border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900">
-        <nav className="flex flex-wrap gap-3 p-3" aria-label="Navigasi live chat">
+      <Card className="whatsappModuleNav border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.05)] dark:border-slate-800 dark:bg-slate-900">
+        <nav className="whatsappModuleTabs flex flex-wrap gap-2 p-2" aria-label="Navigasi live chat">
           {visibleWorkspaces.map((item) => {
             const Icon = getWorkspaceIcon(item.iconKey);
             const isActive = item.id === activeId;
@@ -158,9 +160,9 @@ export function WhatsAppModuleFrame({
                 onClick={(event) => handleNavigate(item.id, href, event)}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'inline-flex min-h-11 items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-medium transition-colors',
+                  'whatsappModuleTab inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-colors',
                   isActive
-                    ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
+                    ? 'isActive border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
                     : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-950/40',
                 )}
               >
@@ -169,7 +171,7 @@ export function WhatsAppModuleFrame({
                 {isComingSoon ? (
                   <span
                     className={cn(
-                      'ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                      'ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0]',
                       isActive
                         ? 'bg-white/20 text-white'
                         : 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300',

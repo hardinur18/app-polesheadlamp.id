@@ -17,7 +17,7 @@ export const createAdsMonitoringRecommendations = (
           confidence: 0.89,
           risk: 'low',
           approvalRequired: false,
-          rollbackPlan: 'Kembalikan view ke fallback manual jika hasil mapping baru menurunkan coverage.',
+          rollbackPlan: 'Kembalikan view ke fallback laporan harian jika hasil mapping baru menurunkan coverage.',
           relatedDiagnosticIds: [diagnostic.id],
         };
       case 'spend-without-order':
@@ -31,7 +31,7 @@ export const createAdsMonitoringRecommendations = (
           confidence: 0.92,
           risk: 'medium',
           approvalRequired: true,
-          rollbackPlan: 'Batalkan rekomendasi dan tandai akun sebagai watch-only jika data manual belum lengkap.',
+          rollbackPlan: 'Batalkan rekomendasi dan tandai akun sebagai watch-only jika data laporan belum lengkap.',
           relatedDiagnosticIds: [diagnostic.id],
         };
       case 'burn-risk':

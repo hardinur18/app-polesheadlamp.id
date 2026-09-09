@@ -42,7 +42,7 @@ export const integrasiIklanCopy = {
     leads: {
       label: 'Order Terbaca',
       description:
-        'Prioritas pertama memakai order masuk harian berdasarkan created_at agar sama dengan Monitoring Perf. Jika satu akun belum punya atribusi order, sistem baru memakai leads dashboard manual sebagai cadangan.',
+        'Prioritas pertama memakai order masuk harian berdasarkan created_at agar sama dengan Monitoring Perf. Jika satu akun belum punya atribusi order, sistem memakai angka laporan harian sebagai cadangan.',
     },
     clicks: {
       label: 'Clicks',
@@ -56,9 +56,9 @@ export const integrasiIklanCopy = {
       description: 'Spend, clicks, CTR, dan metrik media dibaca langsung dari Meta atau Google.',
     },
     {
-      label: 'Dashboard Manual',
+      label: 'Laporan Harian',
       tone: 'amber',
-      description: 'Dipakai hanya sebagai cadangan jika order akun tersebut belum berhasil terbaca dari mapping operasional.',
+      description: 'Dipakai sebagai cadangan dari hasil sinkron/import jika order akun tersebut belum berhasil terbaca dari mapping operasional.',
     },
     {
       label: 'order',
@@ -104,7 +104,7 @@ export const integrasiIklanCopy = {
       leads: {
         label: 'Order',
         description:
-          'Jumlah order masuk yang terbaca untuk akun tersebut. Jika akun belum punya mapping order yang aman, sistem memakai leads dashboard manual sebagai cadangan.',
+          'Jumlah order masuk yang terbaca untuk akun tersebut. Jika akun belum punya mapping order yang aman, sistem memakai angka laporan harian sebagai cadangan.',
       },
       clicks: {
         label: 'Clicks',
@@ -117,7 +117,7 @@ export const integrasiIklanCopy = {
       cpl: {
         label: 'CPL',
         description:
-          'Spend dibagi leads/order terbaca. Jika tidak ada input atau fallback, nilai tidak ditampilkan.',
+          'Spend dibagi leads/order terbaca. Jika tidak ada data laporan atau fallback, nilai tidak ditampilkan.',
       },
     },
   },
@@ -141,7 +141,7 @@ export const integrasiIklanGlossary = [
   {
     term: 'Order Terbaca',
     description:
-      'Nilai utama fitur ini. Prioritas pertama memakai order masuk harian berdasarkan created_at. Jika belum ada mapping order yang aman, sistem memakai leads dashboard sebagai cadangan.',
+      'Nilai utama fitur ini. Prioritas pertama memakai order masuk harian berdasarkan created_at. Jika belum ada mapping order yang aman, sistem memakai angka laporan harian sebagai cadangan.',
   },
   {
     term: 'order',
