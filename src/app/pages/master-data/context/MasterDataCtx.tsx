@@ -112,13 +112,6 @@ import {
 import { createMasterDataFetchCatalog } from './internal/masterDataFetchCatalog';
 import { saveOrderToCrmContact } from '@/app/services/crmContactsService';
 
-export interface AdvertiserAccessConfig {
-  advertiserId: string;
-  platformIds: string[];
-  subChannelIds: string[];
-  csIds: string[];
-}
-
 export interface TechnicianSchedule {
   id: string;
   userId: string;
@@ -181,7 +174,6 @@ interface MasterDataContextType {
   orders: Order[];
   dailyAds: DailyAd[];
   notifications: Notification[]; // New
-  advertiserConfigs: AdvertiserAccessConfig[];
   affiliates: Affiliate[];
   vendors: Vendor[];
   cancelReasons: CancelReason[];
@@ -345,7 +337,6 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const [dailyAds, setDailyAds] = useState<DailyAd[]>([]);
   const [leadSpamDailyInputs, setLeadSpamDailyInputs] = useState<LeadSpamDailyInput[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [advertiserConfigs, setAdvertiserConfigs] = useState<AdvertiserAccessConfig[]>([]);
   const [technicianSchedules, setTechnicianSchedules] = useState<TechnicianSchedule[]>([]);
   
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -356,6 +347,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   
   // Global Refresh Trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [realtimeRetryKey, setRealtimeRetryKey] = useState(0);
   const leadSocialContactsRef = React.useRef<Record<string, LeadSocialFields>>({});
   const leadSpamDailyInputsUseFallbackRef = React.useRef(false);
 
@@ -1921,34 +1913,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     };
     fetchUsers();
 
-    // 3. Fetch Configs (Advertiser Access) - FETCH FROM SERVER (KV STORE)
-    const fetchConfigs = async () => {
-        try {
-            const headers = await getSessionBackedEdgeHeaders();
-            // NOTE: Using 'access-configs' instead of 'advertiser-configs' to avoid AdBlockers
-            const response = await fetch(buildMakeServerUrl('/access-configs'), {
-                headers,
-            });
-            if (response.ok) {
-                const data = await response.json();
-                if (Array.isArray(data)) {
-                     // KV store usually returns array of values. 
-                     // Ensure structure matches what we expect
-                     setAdvertiserConfigs(data.map((d: any) => ({
-                        advertiserId: d.advertiserId || d.advertiser_id, // Handle both cases just in case
-                        platformIds: d.platformIds || d.platform_ids || [],
-                        subChannelIds: d.subChannelIds || d.sub_channel_ids || [],
-                        csIds: d.csIds || d.cs_ids || []
-                    })));
-                }
-            }
-        } catch (e) {
-            console.error("Failed to fetch advertiser configs from server:", e);
-        }
-    };
-    fetchConfigs();
-
-    // 4. Defer heavy operational data so the app shell and admin pages render first.
+    // 3. Defer heavy operational data so the app shell and admin pages render first.
     // Orders, leads, ads, and audit logs can be large; pulling them during boot slows every route.
     let isCancelled = false;
     const deferredTimers: number[] = [];
@@ -1997,8 +1962,36 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
   // --- REALTIME SUBSCRIPTIONS ---
   useEffect(() => {
+    let isRealtimeDisposed = false;
+    let recoveryRefreshTimer: number | undefined;
+    let recoveryResubscribeTimer: number | undefined;
+
+    const scheduleRealtimeRecovery = (status: string) => {
+      if (isRealtimeDisposed) return;
+
+      console.warn(`[MasterData] realtime channel ${status}; refreshing data and resubscribing`);
+
+      if (recoveryRefreshTimer !== undefined) {
+        window.clearTimeout(recoveryRefreshTimer);
+      }
+
+      recoveryRefreshTimer = window.setTimeout(() => {
+        if (!isRealtimeDisposed) {
+          setRefreshTrigger((prev) => prev + 1);
+        }
+      }, 1200);
+
+      if (recoveryResubscribeTimer !== undefined) return;
+
+      recoveryResubscribeTimer = window.setTimeout(() => {
+        if (!isRealtimeDisposed) {
+          setRealtimeRetryKey((prev) => prev + 1);
+        }
+      }, 5000);
+    };
+
     // Channel for high-frequency updates (Orders, Leads, Profiles)
-    const channel = supabase.channel('realtime_master_data')
+    const channel = supabase.channel(`realtime_master_data_${realtimeRetryKey}`)
       .on(
         'postgres_changes', 
         { event: '*', schema: 'public', table: 'orders' }, 
@@ -2142,19 +2135,28 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       .subscribe((status) => {
          if (status === 'SUBSCRIBED') {
              console.log("Realtime Master Data Connected");
+         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+             scheduleRealtimeRecovery(status);
          }
       });
 
     return () => {
+      isRealtimeDisposed = true;
+      if (recoveryRefreshTimer !== undefined) {
+        window.clearTimeout(recoveryRefreshTimer);
+      }
+      if (recoveryResubscribeTimer !== undefined) {
+        window.clearTimeout(recoveryResubscribeTimer);
+      }
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [realtimeRetryKey]);
 
   // Use useMemo to prevent unnecessary re-renders
   const value = React.useMemo(() => ({
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
-    leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, advertiserConfigs, affiliates, vendors, cancelReasons,
+    leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules, addSchedule, deleteSchedule,
     auditLogs,
 
@@ -2190,7 +2192,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
-    leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, advertiserConfigs, affiliates, vendors, cancelReasons,
+    leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules,
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger
   ]);

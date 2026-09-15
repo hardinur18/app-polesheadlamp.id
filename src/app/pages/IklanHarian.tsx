@@ -245,7 +245,8 @@ const buildAdMetricKey = (
     normalizeMetricPart(csId),
 ].join('|');
 
-const buildAdMetricFallbackKey = (
+// Supports historical leads/orders that were saved before sub-channel was required.
+const buildAdMetricCompatibilityKey = (
     date: string,
     advertiserId?: string,
     platformId?: string,
@@ -461,13 +462,6 @@ export function IklanHarian() {
       resolveAccountAttribution,
     ],
   );
-  const editingLegacyAdvertiserId = useMemo(() => {
-    if (!editingId || !formData.advertiserId) return '';
-    const originalRow = dailyAds.find((item) => item.id === editingId);
-    if (!originalRow?.advertiserId || originalRow.advertiserId === formData.advertiserId) return '';
-    return originalRow.advertiserId;
-  }, [dailyAds, editingId, formData.advertiserId]);
-
   const isAdAccountAllowedForDate = useCallback((adAccountId: string, date: string) =>
     getScopedAdAccountOptionsForDate(date).some((option) => option.account.id === adAccountId),
   [getScopedAdAccountOptionsForDate]);
@@ -556,7 +550,7 @@ export function IklanHarian() {
               (lead as any).subChannelId,
               (lead as any).csId,
           );
-          const fallbackKey = buildAdMetricFallbackKey(
+          const fallbackKey = buildAdMetricCompatibilityKey(
               leadDate,
               (lead as any).advertiserId,
               (lead as any).platformId,
@@ -579,7 +573,7 @@ export function IklanHarian() {
               (order as any).subChannelId,
               (order as any).csId,
           );
-          const fallbackKey = buildAdMetricFallbackKey(
+          const fallbackKey = buildAdMetricCompatibilityKey(
               orderLeadDate,
               (order as any).advertiserId,
               (order as any).platformId,
@@ -601,17 +595,12 @@ export function IklanHarian() {
   const dateFilteredData = useMemo(() => {
       return baseDailyAds.map(item => {
           const attribution = resolveDailyAdAttribution(item);
-          const legacyAdvertiserId =
-            item.advertiserId && item.advertiserId !== attribution.advertiserId
-              ? item.advertiserId
-              : undefined;
           const normalizedItem = {
               ...item,
               advertiserId: attribution.advertiserId,
               platformId: attribution.platformId,
               subChannelId: attribution.subChannelId,
               csId: attribution.csId,
-              legacyAdvertiserId,
           };
           const key = buildAdMetricKey(
               normalizedItem.date,
@@ -620,7 +609,7 @@ export function IklanHarian() {
               normalizedItem.subChannelId,
               normalizedItem.csId,
           );
-          const fallbackKey = buildAdMetricFallbackKey(
+          const fallbackKey = buildAdMetricCompatibilityKey(
               normalizedItem.date,
               normalizedItem.advertiserId,
               normalizedItem.platformId,
@@ -642,7 +631,7 @@ export function IklanHarian() {
 
     // Dropdown Filters
     if (advertiserFilter !== 'all') {
-      data = data.filter(item => item.advertiserId === advertiserFilter || item.legacyAdvertiserId === advertiserFilter);
+      data = data.filter(item => item.advertiserId === advertiserFilter);
     }
     if (platformFilter !== 'all') data = data.filter(item => item.platformId === platformFilter);
     if (subChannelFilter !== 'all') data = data.filter(item => item.subChannelId === subChannelFilter);
@@ -655,7 +644,6 @@ export function IklanHarian() {
         data = data.filter(d => 
           d.date.includes(lower) ||
           lookupMaps.userNameById.get(d.advertiserId)?.toLowerCase().includes(lower) ||
-          lookupMaps.userNameById.get(d.legacyAdvertiserId || '')?.toLowerCase().includes(lower) ||
           lookupMaps.accountNameById.get(d.adAccountId)?.toLowerCase().includes(lower)
         );
     }
@@ -708,7 +696,7 @@ export function IklanHarian() {
   const optAdvertisers = useMemo(() => {
     const ids = new Set(
       dateFilteredData
-        .flatMap(d => [d.advertiserId, d.legacyAdvertiserId])
+        .map(d => d.advertiserId)
         .filter(Boolean) as string[],
     );
     return users.filter(u => ids.has(u.id));
@@ -911,7 +899,7 @@ export function IklanHarian() {
   const buildExistingDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId'>) =>
     `${row.date}|${row.adAccountId}`;
 
-  const findFallbackAdAccountForSnapshot = (
+  const resolveAdAccountForSnapshot = (
     snapshot: MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow,
   ) => {
     if (snapshot.internalAdAccountId) {
@@ -1002,7 +990,7 @@ export function IklanHarian() {
     const existingByKey = new Map(dailyAds.map((row) => [buildExistingDailyAdKey(row), row]));
 
     return snapshotRows.map<ApiRecapPreviewRow>((snapshot) => {
-      const account = findFallbackAdAccountForSnapshot(snapshot);
+      const account = resolveAdAccountForSnapshot(snapshot);
 
       if (!account) {
         return {
@@ -1318,7 +1306,6 @@ export function IklanHarian() {
     const exportData = filteredData.map(item => ({
         'Tanggal Lead': item.date,
         Advertiser: getAdvertiserName(item.advertiserId),
-        'Advertiser Lama': item.legacyAdvertiserId ? getAdvertiserName(item.legacyAdvertiserId) : '',
         Platform: getPlatformName(item.platformId),
         Account: getAccountName(item.adAccountId),
         SubChannel: getSubChannelName(item.subChannelId || ''),
@@ -2036,9 +2023,6 @@ export function IklanHarian() {
                             const cprDeal = item.realOrders > 0 ? (Number(item.amountSpent) / item.realOrders) : 0;
                             const cprDone = item.realOrdersDone > 0 ? (Number(item.amountSpent) / item.realOrdersDone) : 0;
                             const burn = Number(item.amountSpent) + (item.ppnAmount || 0) + (item.feeAmount || 0);
-                            const legacyAdvertiserName = item.legacyAdvertiserId
-                              ? getAdvertiserName(item.legacyAdvertiserId)
-                              : '';
 
                             return (
                                 <TableRow key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors">
@@ -2055,11 +2039,6 @@ export function IklanHarian() {
                                     <TableCell className="py-4 align-top">
                                         <div className="flex flex-col gap-1">
                                             <span className="font-medium text-slate-700 dark:text-slate-300">{getAdvertiserName(item.advertiserId)}</span>
-                                            {legacyAdvertiserName && (
-                                                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-300">
-                                                    Lama: {legacyAdvertiserName}
-                                                </span>
-                                            )}
                                             <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                                                 <Users className="w-3 h-3" />
                                                 <span>{item.csId ? getCsName(item.csId) : '-'}</span>
@@ -2254,9 +2233,6 @@ export function IklanHarian() {
                         const burn = Number(item.amountSpent) + (item.ppnAmount || 0) + (item.feeAmount || 0);
                         const cprDeal = item.realOrders > 0 ? (Number(item.amountSpent) / item.realOrders) : 0;
                         const cprDone = item.realOrdersDone > 0 ? (Number(item.amountSpent) / item.realOrdersDone) : 0;
-                        const legacyAdvertiserName = item.legacyAdvertiserId
-                          ? getAdvertiserName(item.legacyAdvertiserId)
-                          : '';
                         
                         return (
                             <div key={item.id} className="dailyAdsMobileCard bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 shadow-sm">
@@ -2272,11 +2248,6 @@ export function IklanHarian() {
                                             <span className="truncate font-semibold text-slate-700 dark:text-slate-300">
                                                 {getAdvertiserName(item.advertiserId)}
                                             </span>
-                                            {legacyAdvertiserName && (
-                                                <span className="truncate font-medium text-amber-600 dark:text-amber-300">
-                                                    Lama: {legacyAdvertiserName}
-                                                </span>
-                                            )}
                                             <span className="truncate">
                                                 CS: {item.csId ? getCsName(item.csId) : '-'}
                                             </span>
@@ -2418,11 +2389,6 @@ export function IklanHarian() {
                     <div>
                         <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Advertiser</span>
                         <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{getAdvertiserName(formData.advertiserId)}</p>
-                        {editingLegacyAdvertiserId && (
-                            <p className="mt-1 truncate text-xs font-medium text-amber-600 dark:text-amber-300">
-                                Lama: {getAdvertiserName(editingLegacyAdvertiserId)}
-                            </p>
-                        )}
                     </div>
                     <div>
                         <span className="text-[11px] font-semibold uppercase text-slate-500 dark:text-slate-400">Platform</span>

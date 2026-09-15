@@ -3105,59 +3105,6 @@ app.delete("/make-server-f781cd00/permissions/user/:userId", async (c) => {
     }
 });
 
-// --- ADVERTISER ACCESS CONFIG API ---
-
-// Get Advertiser Config (KV Version)
-// Renamed to 'access-config' to avoid AdBlockers blocking 'advertiser' keyword
-app.get("/make-server-f781cd00/access-config/:id", async (c) => {
-  const id = c.req.param("id");
-  const auth = await requireAuthorizedRequester(c);
-  if (auth.response) return auth.response;
-  try {
-    const config = await kv.get(`advertiser_config:${id}`);
-    if (!config) {
-        return c.json({ platformIds: [], subChannelIds: [], csIds: [] });
-    }
-    return c.json(config);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
-
-// Save Advertiser Config (KV Version)
-app.post("/make-server-f781cd00/access-config/:id", async (c) => {
-  const id = c.req.param("id");
-  const auth = await requireAuthorizedRequester(c, ["users.edit", "master_data.edit"]);
-  if (auth.response) return auth.response;
-  try {
-    const { platformIds, subChannelIds, csIds } = await c.req.json();
-    
-    // Save to KV
-    // Store ID inside value for easier retrieval
-    const key = `advertiser_config:${id}`;
-    await kv.set(key, { advertiserId: id, platformIds, subChannelIds, csIds });
-    
-    const actor = auth.requester?.actorName || "System";
-    await logActivity(actor, "Update Advertiser Config", `Updated access config for ${id}`, "System");
-
-    return c.json({ success: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
-
-// Get ALL Advertiser Configs (For Context Loading)
-app.get("/make-server-f781cd00/access-configs", async (c) => {
-    const auth = await requireAuthorizedRequester(c);
-    if (auth.response) return auth.response;
-    try {
-        const configs = await kv.getByPrefix("advertiser_config:");
-        return c.json(configs);
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500);
-    }
-});
-
 // --- OPERASIONAL TEKNISI (REPORTS) API ---
 
 // Get Reports (Optional Date Filter)
