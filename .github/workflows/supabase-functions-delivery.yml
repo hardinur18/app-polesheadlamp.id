@@ -83,7 +83,7 @@ jobs:
         with:
           ref: main
 
-      - name: Require Supabase access token
+      - name: Check deployment secrets
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           KIRIMDEV_API_KEY: ${{ secrets.KIRIMDEV_API_KEY }}
@@ -95,8 +95,10 @@ jobs:
             exit 1
           fi
           if [ -z "$KIRIMDEV_API_KEY" ] || [ -z "$KIRIMDEV_PHONE_NUMBER_ID" ] || [ -z "$KIRIMDEV_WEBHOOK_SECRET" ]; then
-            echo "::error title=Missing Kirimdev secret::Add KIRIMDEV_API_KEY, KIRIMDEV_PHONE_NUMBER_ID, and KIRIMDEV_WEBHOOK_SECRET before deploying."
-            exit 1
+            echo "::notice title=Kirimdev deploy skipped::Add KIRIMDEV_API_KEY, KIRIMDEV_PHONE_NUMBER_ID, and KIRIMDEV_WEBHOOK_SECRET to deploy the Kirimdev webhook."
+            echo "HAS_KIRIMDEV_SECRETS=false" >> "$GITHUB_ENV"
+          else
+            echo "HAS_KIRIMDEV_SECRETS=true" >> "$GITHUB_ENV"
           fi
 
       - name: Set up Supabase CLI
@@ -105,6 +107,7 @@ jobs:
           version: latest
 
       - name: Set Kirimdev runtime secrets
+        if: env.HAS_KIRIMDEV_SECRETS == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           KIRIMDEV_API_KEY: ${{ secrets.KIRIMDEV_API_KEY }}
@@ -129,6 +132,7 @@ jobs:
         run: supabase functions deploy "${SUPABASE_FUNCTION_NAME}" --project-ref "${SUPABASE_PROJECT_REF}" --use-api
 
       - name: Deploy Kirimdev webhook function
+        if: env.HAS_KIRIMDEV_SECRETS == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy "${SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME}" --project-ref "${SUPABASE_PROJECT_REF}" --no-verify-jwt --use-api
@@ -138,5 +142,9 @@ jobs:
           echo "### Supabase production deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "- Project ref: \`${{ env.SUPABASE_PROJECT_REF }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Function: \`${{ env.SUPABASE_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Kirimdev webhook: \`${{ env.SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${HAS_KIRIMDEV_SECRETS}" = "true" ]; then
+            echo "- Kirimdev webhook: \`${{ env.SUPABASE_KIRIMDEV_WEBHOOK_FUNCTION_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Kirimdev webhook: skipped, secrets not configured." >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "- Trigger: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
