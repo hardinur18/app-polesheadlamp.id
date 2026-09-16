@@ -433,7 +433,7 @@ export const CONVERSATION_APP_ROUTES: AppRouteDefinition[] = [
     path: '/conversations',
     title: 'Pusat Percakapan',
     access: 'permission',
-    permission: 'leads.view',
+    permission: 'whatsapp.view',
     canonicalPath: '/conversations/inbox',
   },
   {
@@ -442,7 +442,7 @@ export const CONVERSATION_APP_ROUTES: AppRouteDefinition[] = [
     path: '/conversations/inbox',
     title: 'Pusat Percakapan / Kotak Masuk Live',
     access: 'permission',
-    permission: 'leads.view',
+    permission: 'whatsapp.view',
   },
   {
     id: 'conversation-channel-settings',
@@ -450,7 +450,7 @@ export const CONVERSATION_APP_ROUTES: AppRouteDefinition[] = [
     path: '/conversations/channel-settings',
     title: 'Pusat Percakapan / Pengaturan Channel',
     access: 'permission',
-    permission: 'leads.view',
+    permission: 'whatsapp.view',
   },
   {
     id: 'conversation-automation',
@@ -458,7 +458,7 @@ export const CONVERSATION_APP_ROUTES: AppRouteDefinition[] = [
     path: '/conversations/automation',
     title: 'Pusat Percakapan / Bot & Automasi',
     access: 'permission',
-    permission: 'leads.view',
+    permission: 'whatsapp.view',
   },
   {
     id: 'conversation-routing',
@@ -466,7 +466,7 @@ export const CONVERSATION_APP_ROUTES: AppRouteDefinition[] = [
     path: '/conversations/routing',
     title: 'Pusat Percakapan / Routing CS',
     access: 'permission',
-    permission: 'leads.view',
+    permission: 'whatsapp.view',
   },
   {
     id: 'conversation-history',
@@ -474,7 +474,7 @@ export const CONVERSATION_APP_ROUTES: AppRouteDefinition[] = [
     path: '/conversations/history',
     title: 'Pusat Percakapan / Riwayat Percakapan',
     access: 'permission',
-    permission: 'leads.view',
+    permission: 'whatsapp.view',
   },
 ];
 

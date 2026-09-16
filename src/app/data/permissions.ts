@@ -182,7 +182,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
 
   'Finance': [
     'dashboard.view', 'dashboard.view_owner', 'dashboard.view_advertiser', 'dashboard.view_financial',
-    'audit_logs.view',
     'leads.view',
     'order.view', 'order.view_details', 'order.payment.view', 'order.payment.edit_status', 'order.payment.edit_type', 'order.status.edit', 'order.status.mark_done', 'map.view_route', 'customer.contact.view', 'staff.contact.view',
     'daily_report.view',
@@ -195,7 +194,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
 
   'CS': [
     'dashboard.view', 'dashboard.view_cs',
-    'audit_logs.view',
     'leads.view', 'leads.create', 'leads.edit',
     'proof_assets.view',
     'order.view', 'order.create', 'order.edit', 'order.view_details', 'order.status.edit', 'order.payment.view', 'order.payment.edit_type', 'customer.contact.view', 'staff.contact.view', 'map.view_route',
@@ -205,7 +203,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
 
   'Teknisi': [
     'dashboard.view', 'dashboard.view_teknisi',
-    'audit_logs.view',
     'teknisi.view_mobile',
     'order.view', 'order.view_details',
     'customer.contact.view', 'map.view_route'
@@ -213,7 +210,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
 
   'Advertiser': [
     'dashboard.view', 'dashboard.view_advertiser',
-    'audit_logs.view',
     'ads.view_daily', 'ads.view_analytics', 'ads.manage',
     'order.view', 'order.view_details',
     'leads.view', 'leads.create', 'leads.edit',

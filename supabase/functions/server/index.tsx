@@ -34,6 +34,32 @@ import {
 
 const app = new Hono();
 const CS_ASSIGNMENT_STATUSES = new Set(["available", "busy", "offline"]);
+const DEFAULT_ALLOWED_CORS_ORIGINS = [
+  "https://polesheadlamp.id",
+  "https://www.polesheadlamp.id",
+  "https://polesheadlamp-id.pages.dev",
+  "http://localhost:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:4173",
+];
+
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/+$/, "");
+
+const configuredAllowedCorsOrigins = (Deno.env.get("APP_ALLOWED_ORIGINS") || Deno.env.get("CORS_ALLOWED_ORIGINS") || "")
+  .split(",")
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+const allowedCorsOrigins = new Set([
+  ...DEFAULT_ALLOWED_CORS_ORIGINS,
+  ...configuredAllowedCorsOrigins,
+]);
+
+const resolveCorsOrigin = (origin: string) => {
+  const normalizedOrigin = normalizeOrigin(origin || "");
+  return allowedCorsOrigins.has(normalizedOrigin) ? normalizedOrigin : "";
+};
 
 const normalizeCsAssignmentStatusValue = (value: unknown) => {
   if (typeof value !== "string") return "available";
@@ -54,13 +80,20 @@ app.use('*', logger(console.log));
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: resolveCorsOrigin,
     allowHeaders: ["Content-Type", "Authorization", "x-client-token", "X-Client-Token"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
   }),
 );
+
+app.use("/*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  c.header("Permissions-Policy", "camera=(), microphone=(), payment=(), usb=()");
+});
 
 app.route("/make-server-f781cd00/permissions", permissionsRoute);
 app.route("/make-server-f781cd00/payroll", payrollRoute);
@@ -426,10 +459,15 @@ app.delete("/make-server-f781cd00/finance/operational-expenses/:id", async (c) =
 });
 
 // Initialize Supabase Admin Client
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey);
+const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() || "";
+const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")?.trim() || "";
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error("SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY wajib dikonfigurasi untuk server API.");
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const authSupabase = createClient(supabaseUrl, supabaseAnonKey || supabaseServiceKey);
 
 // Ensure Storage Bucket Exists
@@ -586,6 +624,255 @@ const MASTER_DATA_VIEW_PERMISSION: PermissionKey = "master_data.view";
 const MASTER_DATA_CREATE_PERMISSION: PermissionKey = "master_data.create";
 const MASTER_DATA_EDIT_PERMISSION: PermissionKey = "master_data.edit";
 const MASTER_DATA_DELETE_PERMISSION: PermissionKey = "master_data.delete";
+const ADS_MANAGE_PERMISSION: PermissionKey = "ads.manage";
+const MARKETING_MONITORING_VIEW_PERMISSION: PermissionKey = "monitoring.marketing.view";
+const CS_OKR_VIEW_PERMISSION: PermissionKey = "cs_okr.view";
+const CS_OKR_MANAGE_PERMISSION: PermissionKey = "cs_okr.manage";
+const DAILY_REPORT_VIEW_PERMISSION: PermissionKey = "daily_report.view";
+const DAILY_REPORT_CREATE_PERMISSION: PermissionKey = "daily_report.create";
+const DAILY_REPORT_EDIT_PERMISSION: PermissionKey = "daily_report.edit";
+const DAILY_REPORT_DELETE_PERMISSION: PermissionKey = "daily_report.delete";
+const ORDER_READ_PERMISSIONS: PermissionKey[] = ["order.view", "order.view_details", "teknisi.view_mobile"];
+const OPERATIONAL_REFERENCE_READ_PERMISSIONS: PermissionKey[] = [
+  "master_data.view",
+  "order.view",
+  "order.create",
+  "order.edit",
+  "leads.view",
+  "leads.create",
+  "schedule.view",
+  "technician_schedule.view",
+  "monitoring.view",
+  "monitoring.activity_view",
+  "teknisi.view_mobile",
+  DAILY_REPORT_VIEW_PERMISSION,
+  "finance_report.view",
+  OPERATIONAL_EXPENSE_VIEW_PERMISSION,
+  "payroll.view",
+];
+const ADS_REFERENCE_READ_PERMISSIONS: PermissionKey[] = [
+  "master_data.view",
+  "ads.view_daily",
+  "ads.view_analytics",
+  ADS_MANAGE_PERMISSION,
+  MARKETING_MONITORING_VIEW_PERMISSION,
+  CS_OKR_VIEW_PERMISSION,
+  "leads.view",
+  "leads.create",
+  "order.view",
+  "dashboard.view_advertiser",
+  "dashboard.view_cs",
+  "dashboard.view_owner",
+];
+const USER_REFERENCE_READ_PERMISSIONS: PermissionKey[] = [
+  "users.view",
+  "role_permissions.view",
+  "master_data.view",
+  "order.view",
+  "order.create",
+  "leads.view",
+  "schedule.view",
+  "technician_schedule.view",
+  "monitoring.view",
+  "monitoring.activity_view",
+  "payroll.view",
+  DAILY_REPORT_VIEW_PERMISSION,
+  "finance_report.view",
+  MARKETING_MONITORING_VIEW_PERMISSION,
+  CS_OKR_VIEW_PERMISSION,
+  "whatsapp.view",
+];
+const MAP_EXPAND_URL_PERMISSIONS: PermissionKey[] = [
+  "map.view_route",
+  "map.view_global",
+  "order.view_details",
+  "order.create",
+  "order.edit",
+  "schedule.view",
+  "monitoring.activity_view",
+  "teknisi.view_mobile",
+];
+
+type AppDataAccessConfig = {
+  table: string;
+  read: PermissionKey[];
+  create?: PermissionKey[];
+  edit?: PermissionKey[];
+  delete?: PermissionKey[];
+  orderBy?: string;
+  ascending?: boolean;
+  maxLimit?: number;
+};
+
+const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
+  branches: {
+    table: "branches",
+    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  areas: {
+    table: "areas",
+    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  services: {
+    table: "services",
+    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  vehicle_types: {
+    table: "vehicle_types",
+    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  payment_methods: {
+    table: "payment_methods",
+    read: [...OPERATIONAL_REFERENCE_READ_PERMISSIONS, "order.payment.view"],
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  cancel_reasons: {
+    table: "cancel_reasons",
+    read: ORDER_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  ad_platforms: {
+    table: "ad_platforms",
+    read: ADS_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  ad_sub_channels: {
+    table: "ad_sub_channels",
+    read: ADS_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  ad_accounts: {
+    table: "ad_accounts",
+    read: ADS_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  ad_account_assignments: {
+    table: "ad_account_assignments",
+    read: ADS_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  ad_account_owner_assignments: {
+    table: "ad_account_owner_assignments",
+    read: ADS_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  ad_sources: {
+    table: "ad_sources",
+    read: ADS_REFERENCE_READ_PERMISSIONS,
+    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  roles: {
+    table: "roles",
+    read: ["role_permissions.view", "users.view", MASTER_DATA_VIEW_PERMISSION, "payroll.view"],
+    create: [MASTER_DATA_CREATE_PERMISSION],
+    edit: [MASTER_DATA_EDIT_PERMISSION],
+    delete: [MASTER_DATA_DELETE_PERMISSION],
+  },
+  profiles: {
+    table: "profiles",
+    read: USER_REFERENCE_READ_PERMISSIONS,
+    edit: ["users.edit"],
+    delete: ["users.delete"],
+  },
+  affiliates: {
+    table: "affiliates",
+    read: ["affiliate.view", "affiliate.manage", "order.view", "order.create", "leads.view", MASTER_DATA_VIEW_PERMISSION],
+    create: ["affiliate.manage", MASTER_DATA_CREATE_PERMISSION],
+    edit: ["affiliate.manage", MASTER_DATA_EDIT_PERMISSION],
+    delete: ["affiliate.manage", MASTER_DATA_DELETE_PERMISSION],
+  },
+  vendors: {
+    table: "vendors",
+    read: ["finance.view", "finance.manage", "debts.view", OPERATIONAL_EXPENSE_VIEW_PERMISSION, MASTER_DATA_VIEW_PERMISSION],
+    create: [MASTER_DATA_CREATE_PERMISSION, "finance.manage"],
+    edit: [MASTER_DATA_EDIT_PERMISSION, "finance.manage"],
+    delete: [MASTER_DATA_DELETE_PERMISSION, "finance.manage"],
+  },
+  leads: {
+    table: "leads",
+    read: ["leads.view"],
+    create: ["leads.create"],
+    edit: ["leads.edit"],
+    delete: ["leads.delete"],
+    orderBy: "created_at",
+  },
+  prospect_bookings: {
+    table: "prospect_bookings",
+    read: ["leads.view", "schedule.view", "order.view"],
+    create: ["leads.create", "leads.edit"],
+    edit: ["leads.edit", "order.edit"],
+    delete: ["leads.delete"],
+  },
+  orders: {
+    table: "orders",
+    read: ORDER_READ_PERMISSIONS,
+    create: ["order.create"],
+    edit: ["order.edit", "order.status.edit", "order.payment.edit_status", "order.payment.edit_type", "order.assign_technician"],
+    delete: ["order.delete"],
+    orderBy: "created_at",
+  },
+  wa_templates: {
+    table: "wa_templates",
+    read: ["wa_template.view", "whatsapp.templates.manage", "leads.view", "order.view"],
+    create: ["wa_template.create", "whatsapp.templates.manage"],
+    edit: ["wa_template.edit", "whatsapp.templates.manage"],
+    delete: ["wa_template.delete", "whatsapp.templates.manage"],
+  },
+  daily_ads: {
+    table: "daily_ads",
+    read: ["ads.view_daily", MARKETING_MONITORING_VIEW_PERMISSION, CS_OKR_VIEW_PERMISSION, "dashboard.view_advertiser", "dashboard.view_cs"],
+    create: [ADS_MANAGE_PERMISSION],
+    edit: [ADS_MANAGE_PERMISSION],
+    delete: [ADS_MANAGE_PERMISSION],
+  },
+  lead_spam_daily_inputs: {
+    table: "lead_spam_daily_inputs",
+    read: [MARKETING_MONITORING_VIEW_PERMISSION, CS_OKR_VIEW_PERMISSION, "dashboard.view_advertiser", "dashboard.view_cs"],
+    create: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
+    edit: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
+    delete: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  technician_schedules: {
+    table: "technician_schedules",
+    read: ["technician_schedule.view", "technician_schedule.manage", "schedule.view", "order.view", "teknisi.view_mobile"],
+    create: ["technician_schedule.manage"],
+    edit: ["technician_schedule.manage"],
+    delete: ["technician_schedule.manage"],
+  },
+  audit_logs: {
+    table: "audit_logs",
+    read: ["audit_logs.view"],
+    maxLimit: 5000,
+  },
+};
 
 function normalizeOperationalExpenseText(value: unknown) {
   return String(value || "").trim();
@@ -1489,10 +1776,8 @@ app.get("/make-server-f781cd00/health", (c) => {
 
 app.get("/make-server-f781cd00/meta/live-breakdown", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    if (auth.response) return auth.response;
 
     if (!META_ACCESS_TOKEN && !META_DM_USER_TOKEN) {
       return c.json({ error: "META_ACCESS_TOKEN atau META_DM_USER_TOKEN belum diatur di server." }, 503);
@@ -1651,10 +1936,8 @@ app.get("/make-server-f781cd00/meta/live-breakdown", async (c) => {
 
 app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    if (auth.response) return auth.response;
 
     const from = c.req.query("from");
     const to = c.req.query("to");
@@ -1739,10 +2022,8 @@ app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
 
 app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    if (auth.response) return auth.response;
 
     if (!META_ACCESS_TOKEN && !META_DM_USER_TOKEN) {
       return c.json({ error: "META_ACCESS_TOKEN atau META_DM_USER_TOKEN belum diatur di server." }, 503);
@@ -1813,10 +2094,8 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
 
 app.get("/make-server-f781cd00/meta/token-health", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION, ADS_MANAGE_PERMISSION]);
+    if (auth.response) return auth.response;
 
     const debugPayload = await debugMetaToken();
     const tokenData = debugPayload?.data || {};
@@ -1846,10 +2125,8 @@ app.get("/make-server-f781cd00/meta/token-health", async (c) => {
 
 app.get("/make-server-f781cd00/meta/integration-configs", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    if (auth.response) return auth.response;
 
     const configs = await kv.getByPrefix("meta_integration_config:");
     return c.json({ configs });
@@ -1861,10 +2138,8 @@ app.get("/make-server-f781cd00/meta/integration-configs", async (c) => {
 
 app.post("/make-server-f781cd00/meta/integration-configs/:adAccountId", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const auth = await requireAuthorizedRequester(c, [ADS_MANAGE_PERMISSION]);
+    if (auth.response) return auth.response;
 
     const adAccountId = c.req.param("adAccountId");
     const body = await c.req.json();
@@ -1894,7 +2169,7 @@ app.post("/make-server-f781cd00/meta/integration-configs/:adAccountId", async (c
       liveMetaAccountId,
       liveMetaAccountName,
       updatedAt: new Date().toISOString(),
-      updatedBy: user.id,
+      updatedBy: auth.requester?.authUser.id,
     };
 
     await kv.set(`meta_integration_config:${adAccountId}`, config);
@@ -2511,23 +2786,49 @@ app.get("/make-server-f781cd00/logs", async (c) => {
 app.post("/make-server-f781cd00/expand-url", async (c) => {
   let url = "";
   try {
+    const auth = await requireAuthorizedRequester(c, MAP_EXPAND_URL_PERMISSIONS);
+    if (auth.response) return auth.response;
+
     ({ url } = await c.req.json());
     if (!url) return c.json({ error: "URL is required" }, 400);
 
-    // Filter basic security
-    const allowedDomains = ['goo.gl', 'bit.ly', 'maps.app.goo.gl', 'g.co', 'google.com', 'google.co.id'];
-    const isAllowed = allowedDomains.some(d => url.includes(d));
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return c.json({ error: "URL tidak valid." }, 400);
+    }
+
+    if (!["https:", "http:"].includes(parsedUrl.protocol)) {
+      return c.json({ error: "URL harus memakai HTTP atau HTTPS." }, 400);
+    }
+
+    const allowedHosts = new Set([
+      "goo.gl",
+      "bit.ly",
+      "maps.app.goo.gl",
+      "g.co",
+      "google.com",
+      "www.google.com",
+      "google.co.id",
+      "www.google.co.id",
+      "maps.google.com",
+    ]);
+    const normalizedHost = parsedUrl.hostname.toLowerCase();
+    const isAllowed = allowedHosts.has(normalizedHost);
     
     if (!isAllowed) {
        // If it's just a raw google maps link that isn't short, just return it
-       if (url.includes('/maps')) return c.json({ expandedUrl: url });
+       if (normalizedHost.endsWith(".google.com") && parsedUrl.pathname.includes('/maps')) {
+         return c.json({ expandedUrl: url });
+       }
        // Otherwise reject generic URLs to prevent abuse
        return c.json({ error: "Only Google Maps URLs are supported" }, 400);
     }
 
     // Optimization: If it's already a full maps URL, return immediately without fetching
     // This prevents connection errors on long URLs and saves resources
-    if (url.includes('/maps/')) {
+    if (parsedUrl.pathname.includes('/maps/')) {
         return c.json({ expandedUrl: url });
     }
 
@@ -2547,6 +2848,14 @@ app.post("/make-server-f781cd00/expand-url", async (c) => {
         
         // If successful, return the final destination URL
         if (resp.url && resp.url !== url) {
+             const finalUrl = new URL(resp.url);
+             const finalHost = finalUrl.hostname.toLowerCase();
+             const isFinalGoogleMapsUrl =
+               allowedHosts.has(finalHost) ||
+               (finalHost.endsWith(".google.com") && finalUrl.pathname.includes("/maps"));
+             if (!isFinalGoogleMapsUrl) {
+               return c.json({ error: "Redirect URL tidak diizinkan." }, 400);
+             }
              return c.json({ expandedUrl: resp.url });
         }
 
@@ -2829,6 +3138,839 @@ const handleProofAssetUpload = async (c: any) => {
 app.post("/make-server-f781cd00/upload-image", handleProofAssetUpload);
 app.post("/upload-image", handleProofAssetUpload);
 
+// --- GUARDED APP DATA API (Postgres-backed) ---
+
+function getAppDataAccessConfig(type: string) {
+  return APP_DATA_ACCESS[type] || null;
+}
+
+function getAppDataRange(c: any, config: AppDataAccessConfig) {
+  const rawFrom = Number(c.req.query("from") || 0);
+  const rawTo = Number(c.req.query("to") || 999);
+  const from = Number.isFinite(rawFrom) && rawFrom >= 0 ? Math.floor(rawFrom) : 0;
+  const requestedTo = Number.isFinite(rawTo) && rawTo >= from ? Math.floor(rawTo) : from + 999;
+  const maxLimit = config.maxLimit || 1000;
+  const to = Math.min(requestedTo, from + maxLimit - 1);
+  return { from, to };
+}
+
+function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
+  const text = String(error?.message || "").toLowerCase();
+  return (
+    (config.table === "ad_account_assignments" || config.table === "ad_account_owner_assignments") &&
+    text.includes("notes") &&
+    text.includes("schema cache")
+  );
+}
+
+function withoutAppDataDraftColumns(config: AppDataAccessConfig, payload: Record<string, unknown>) {
+  if (!isAppDataSchemaRetryable(config, { message: "notes schema cache" })) return payload;
+  const { notes: _notes, ...rest } = payload;
+  return rest;
+}
+
+async function requireAppDataAccess(c: any, config: AppDataAccessConfig, action: "read" | "create" | "edit" | "delete") {
+  const permissions = action === "read"
+    ? config.read
+    : action === "create"
+      ? config.create
+      : action === "edit"
+        ? config.edit
+        : config.delete;
+
+  if (!permissions?.length) {
+    return { requester: null, response: c.json({ error: "Forbidden" }, 403) };
+  }
+
+  return requireAuthorizedRequester(c, permissions);
+}
+
+app.get("/make-server-f781cd00/app-data/:type", async (c) => {
+  const type = c.req.param("type");
+  const config = getAppDataAccessConfig(type);
+  if (!config) return c.json({ error: "Unknown app data type" }, 404);
+
+  const auth = await requireAppDataAccess(c, config, "read");
+  if (auth.response) return auth.response;
+
+  try {
+    const { from, to } = getAppDataRange(c, config);
+    const orderBy = c.req.query("orderBy") || config.orderBy || "created_at";
+    const ascending = parseBooleanFlag(c.req.query("ascending"), Boolean(config.ascending));
+
+    let query = supabase
+      .from(config.table)
+      .select("*")
+      .order(orderBy, { ascending })
+      .range(from, to);
+
+    let { data, error } = await query;
+
+    if (error && error.code === "42703") {
+      const retry = await supabase
+        .from(config.table)
+        .select("*")
+        .range(from, to);
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) throw error;
+
+    return c.json({
+      rows: data || [],
+      range: { from, to },
+      rowCount: data?.length || 0,
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal memuat app data." }, 500);
+  }
+});
+
+app.post("/make-server-f781cd00/app-data/:type", async (c) => {
+  const type = c.req.param("type");
+  const config = getAppDataAccessConfig(type);
+  if (!config) return c.json({ error: "Unknown app data type" }, 404);
+
+  const auth = await requireAppDataAccess(c, config, "create");
+  if (auth.response) return auth.response;
+
+  try {
+    const payload = await c.req.json();
+    let { data, error } = await supabase
+      .from(config.table)
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error && isAppDataSchemaRetryable(config, error)) {
+      const retry = await supabase
+        .from(config.table)
+        .insert(withoutAppDataDraftColumns(config, payload))
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) throw error;
+
+    const actor = auth.requester?.actorName || "System";
+    await logActivity(actor, `Create ${type}`, `Created ${type} ${(payload as any)?.id || ""}`, "System");
+
+    return c.json({ row: data }, 201);
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menyimpan app data." }, 500);
+  }
+});
+
+app.put("/make-server-f781cd00/app-data/:type/:id", async (c) => {
+  const type = c.req.param("type");
+  const id = c.req.param("id");
+  const config = getAppDataAccessConfig(type);
+  if (!config) return c.json({ error: "Unknown app data type" }, 404);
+
+  const auth = await requireAppDataAccess(c, config, "edit");
+  if (auth.response) return auth.response;
+
+  try {
+    const payload = await c.req.json();
+    let { data, error } = await supabase
+      .from(config.table)
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error && isAppDataSchemaRetryable(config, error)) {
+      const retry = await supabase
+        .from(config.table)
+        .update(withoutAppDataDraftColumns(config, payload))
+        .eq("id", id)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) throw error;
+
+    const actor = auth.requester?.actorName || "System";
+    await logActivity(actor, `Update ${type}`, `Updated ${type} ${id}`, "System");
+
+    return c.json({ row: data });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal memperbarui app data." }, 500);
+  }
+});
+
+app.delete("/make-server-f781cd00/app-data/:type/:id", async (c) => {
+  const type = c.req.param("type");
+  const id = c.req.param("id");
+  const config = getAppDataAccessConfig(type);
+  if (!config) return c.json({ error: "Unknown app data type" }, 404);
+
+  const auth = await requireAppDataAccess(c, config, "delete");
+  if (auth.response) return auth.response;
+
+  try {
+    const { error } = await supabase
+      .from(config.table)
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+
+    const actor = auth.requester?.actorName || "System";
+    await logActivity(actor, `Delete ${type}`, `Deleted ${type} ${id}`, "System");
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menghapus app data." }, 500);
+  }
+});
+
+// --- EMBED LEAD FORMS API ---
+
+const EMBED_LEAD_FORM_MASTER_TYPE = "embed_lead_form";
+const EMBED_LEAD_SUBMISSION_MASTER_TYPE = "embed_lead_form_submission";
+
+function cleanEmbedRecord(value: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => typeof entryValue !== "undefined"),
+  );
+}
+
+function normalizeEmbedAnswer(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function createEmbedClientId() {
+  return crypto.randomUUID();
+}
+
+function createEmbedLeadShortId() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let index = 0; index < 7; index += 1) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+function isMissingEmbedSchemaError(error: any) {
+  const text = [
+    error?.code,
+    error?.message,
+    error?.details,
+    error?.hint,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return (
+    text.includes("pgrst205") ||
+    text.includes("42p01") ||
+    text.includes("schema cache") ||
+    text.includes("could not find the table") ||
+    text.includes("embed_lead_forms") ||
+    text.includes("embed_lead_form_fields") ||
+    text.includes("embed_lead_form_cs_routes") ||
+    text.includes("embed_lead_form_submissions")
+  );
+}
+
+function isEmbedLeadSchemaError(error: any) {
+  const text = [
+    error?.code,
+    error?.message,
+    error?.details,
+    error?.hint,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return (
+    text.includes("pgrst204") ||
+    text.includes("42703") ||
+    text.includes("schema cache") ||
+    text.includes("could not find") ||
+    text.includes("embed_form") ||
+    text.includes("service_id") ||
+    text.includes("affiliate_id") ||
+    text.includes("origin") ||
+    text.includes("landing_page_url") ||
+    text.includes("utm_")
+  );
+}
+
+async function loadEmbedLeadFormBundleRows(identifier: string, activeOnly: boolean) {
+  const normalizedIdentifier = identifier.trim();
+  if (!normalizedIdentifier) return null;
+
+  let query = supabase
+    .from("embed_lead_forms")
+    .select("*")
+    .eq("slug", normalizedIdentifier);
+  if (activeOnly) query = query.eq("status", "active");
+
+  let { data: form, error } = await query.maybeSingle();
+  if (error) throw error;
+
+  if (!form) {
+    let tokenQuery = supabase
+      .from("embed_lead_forms")
+      .select("*")
+      .eq("public_token", normalizedIdentifier);
+    if (activeOnly) tokenQuery = tokenQuery.eq("status", "active");
+
+    const tokenResult = await tokenQuery.maybeSingle();
+    if (tokenResult.error) throw tokenResult.error;
+    form = tokenResult.data;
+  }
+
+  if (!form) return null;
+
+  const [fieldsResult, routesResult] = await Promise.all([
+    supabase
+      .from("embed_lead_form_fields")
+      .select("*")
+      .eq("form_id", form.id)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("embed_lead_form_cs_routes")
+      .select("*")
+      .eq("form_id", form.id)
+      .order("sort_order", { ascending: true }),
+  ]);
+
+  if (fieldsResult.error) throw fieldsResult.error;
+  if (routesResult.error) throw routesResult.error;
+
+  return {
+    form,
+    fields: fieldsResult.data || [],
+    routes: routesResult.data || [],
+  };
+}
+
+function isEmbedOriginAllowed(c: any, form: any, body: any) {
+  const allowedOrigins = Array.isArray(form?.allowed_embed_origins)
+    ? form.allowed_embed_origins.map((value: unknown) => String(value || "").trim()).filter(Boolean)
+    : [];
+  if (allowedOrigins.length === 0) return true;
+
+  const candidates = [
+    c.req.header("origin"),
+    c.req.header("referer"),
+    body?.landingPageUrl,
+    body?.referrerUrl,
+  ].filter(Boolean) as string[];
+
+  return candidates.some((candidate) => {
+    try {
+      const url = new URL(candidate);
+      return allowedOrigins.some((allowed) => {
+        try {
+          const allowedUrl = new URL(allowed);
+          return allowedUrl.origin === url.origin;
+        } catch {
+          return allowed === url.origin || allowed === url.hostname;
+        }
+      });
+    } catch {
+      return false;
+    }
+  });
+}
+
+function selectEmbedLeadRoute(form: any, routes: any[]) {
+  const activeRoutes = routes
+    .filter((route) => route.status === "active" && route.cs_id)
+    .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0));
+  const routeCsIds = activeRoutes.map((route) => String(route.cs_id));
+  const fallbackCsId = form.fallback_cs_id || routeCsIds[0] || null;
+  const currentCursor = Number(form.round_robin_cursor || 0);
+
+  if (form.routing_mode === "broadcast") {
+    return {
+      primaryCsId: fallbackCsId,
+      routedCsIds: routeCsIds.length > 0 ? routeCsIds : fallbackCsId ? [fallbackCsId] : [],
+      nextCursor: currentCursor,
+    };
+  }
+
+  if (form.routing_mode === "random" && routeCsIds.length > 0) {
+    const index = Math.floor(Math.random() * routeCsIds.length);
+    return {
+      primaryCsId: routeCsIds[index],
+      routedCsIds: [routeCsIds[index]],
+      nextCursor: currentCursor,
+    };
+  }
+
+  if (form.routing_mode === "round_robin" && routeCsIds.length > 0) {
+    const index = currentCursor % routeCsIds.length;
+    return {
+      primaryCsId: routeCsIds[index],
+      routedCsIds: [routeCsIds[index]],
+      nextCursor: currentCursor + 1,
+    };
+  }
+
+  return {
+    primaryCsId: fallbackCsId,
+    routedCsIds: fallbackCsId ? [fallbackCsId] : [],
+    nextCursor: currentCursor,
+  };
+}
+
+function legacyEmbedLeadPayload(payload: Record<string, unknown>) {
+  return cleanEmbedRecord({
+    id: payload.id,
+    name: payload.name,
+    phone: payload.phone,
+    status: payload.status,
+    notes: payload.notes,
+    platform_id: payload.platform_id,
+    sub_channel_id: payload.sub_channel_id,
+    advertiser_id: payload.advertiser_id,
+    cs_id: payload.cs_id,
+    vehicle_id: payload.vehicle_id,
+    last_contact: payload.last_contact,
+    template_history: payload.template_history,
+    social_platform: payload.social_platform,
+    social_username: payload.social_username,
+    social_profile_url: payload.social_profile_url,
+    social_chat_url: payload.social_chat_url,
+    created_at: payload.created_at,
+  });
+}
+
+function minimalEmbedLeadPayload(payload: Record<string, unknown>) {
+  return cleanEmbedRecord({
+    id: payload.id,
+    name: payload.name,
+    phone: payload.phone,
+    status: payload.status,
+    notes: payload.notes,
+    platform_id: payload.platform_id,
+    sub_channel_id: payload.sub_channel_id,
+    advertiser_id: payload.advertiser_id,
+    cs_id: payload.cs_id,
+    vehicle_id: payload.vehicle_id,
+    last_contact: payload.last_contact,
+    template_history: payload.template_history,
+    created_at: payload.created_at,
+  });
+}
+
+async function insertEmbedLeadWithSchemaFallback(payload: Record<string, unknown>) {
+  const fullResult = await supabase.from("leads").insert(payload).select().single();
+  if (!fullResult.error) return fullResult.data;
+  if (!isEmbedLeadSchemaError(fullResult.error)) throw fullResult.error;
+
+  const legacyResult = await supabase.from("leads").insert(legacyEmbedLeadPayload(payload)).select().single();
+  if (!legacyResult.error) return legacyResult.data;
+  if (!isEmbedLeadSchemaError(legacyResult.error)) throw legacyResult.error;
+
+  const minimalResult = await supabase.from("leads").insert(minimalEmbedLeadPayload(payload)).select().single();
+  if (minimalResult.error) throw minimalResult.error;
+  return minimalResult.data;
+}
+
+async function createEmbedSubmissionRecord(payload: Record<string, unknown>) {
+  try {
+    const result = await supabase
+      .from("embed_lead_form_submissions")
+      .insert(payload)
+      .select()
+      .single();
+    if (result.error) throw result.error;
+    return { submission: result.data as Record<string, unknown> & { id: string }, storage: "db" as const };
+  } catch (error) {
+    if (!isMissingEmbedSchemaError(error)) throw error;
+
+    const now = new Date().toISOString();
+    const fallbackSubmission = {
+      id: createEmbedClientId(),
+      ...payload,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await kv.set(`${EMBED_LEAD_SUBMISSION_MASTER_TYPE}:${fallbackSubmission.id}`, fallbackSubmission);
+    return { submission: fallbackSubmission, storage: "fallback" as const };
+  }
+}
+
+async function updateEmbedSubmissionRecord(
+  storage: "db" | "fallback",
+  submission: Record<string, unknown> & { id: string },
+  patch: Record<string, unknown>,
+) {
+  if (storage === "db") {
+    const result = await supabase
+      .from("embed_lead_form_submissions")
+      .update(patch)
+      .eq("id", submission.id);
+    if (result.error && !isMissingEmbedSchemaError(result.error)) throw result.error;
+    return;
+  }
+
+  await kv.set(`${EMBED_LEAD_SUBMISSION_MASTER_TYPE}:${submission.id}`, {
+    ...submission,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+async function updateEmbedRoutingSnapshot(form: any, route: ReturnType<typeof selectEmbedLeadRoute>) {
+  if (form.routing_mode !== "round_robin" && !route.primaryCsId) return;
+  const patch = cleanEmbedRecord({
+    round_robin_cursor: form.routing_mode === "round_robin" ? route.nextCursor : undefined,
+    last_routed_cs_id: route.primaryCsId,
+    last_routed_at: route.primaryCsId ? new Date().toISOString() : undefined,
+  });
+  if (Object.keys(patch).length === 0) return;
+
+  const result = await supabase
+    .from("embed_lead_forms")
+    .update(patch)
+    .eq("id", form.id);
+  if (result.error && !isMissingEmbedSchemaError(result.error)) throw result.error;
+}
+
+async function loadActivePublicAffiliate(affiliateId: string) {
+  const id = String(affiliateId || "").trim();
+  if (!id) return null;
+
+  const { data, error } = await supabase
+    .from("affiliates")
+    .select("id,nama_lengkap,status")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.status !== "Active") return null;
+  return data;
+}
+
+app.get("/make-server-f781cd00/public/affiliates/:id", async (c) => {
+  try {
+    const affiliate = await loadActivePublicAffiliate(c.req.param("id"));
+    if (!affiliate) return c.json({ affiliate: null }, 404);
+
+    return c.json({
+      affiliate: {
+        id: affiliate.id,
+        nama_lengkap: affiliate.nama_lengkap,
+      },
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal memuat affiliate." }, 500);
+  }
+});
+
+app.post("/make-server-f781cd00/public/affiliate-bookings", async (c) => {
+  try {
+    const body = await c.req.json();
+    const affiliateId = normalizeEmbedAnswer(body?.affiliateId);
+    const customerName = normalizeEmbedAnswer(body?.name);
+    const customerPhone = normalizeEmbedAnswer(body?.phone);
+    const address = normalizeEmbedAnswer(body?.address);
+    const notes = normalizeEmbedAnswer(body?.notes);
+
+    if (!customerName || !customerPhone || !address) {
+      return c.json({ error: "Nama, nomor WhatsApp, dan alamat wajib diisi." }, 400);
+    }
+
+    const affiliate = affiliateId ? await loadActivePublicAffiliate(affiliateId) : null;
+    if (affiliateId && !affiliate) {
+      return c.json({ error: "Affiliate tidak ditemukan atau tidak aktif." }, 404);
+    }
+
+    const leadNotes = [notes, `Alamat: ${address}`].filter(Boolean).join(" | ");
+    const leadPayload = cleanEmbedRecord({
+      id: createEmbedLeadShortId(),
+      name: customerName,
+      phone: customerPhone,
+      status: "Pending",
+      notes: leadNotes,
+      affiliate_id: affiliate?.id || null,
+      origin: "affiliate_public_booking",
+      landing_page_url: body?.landingPageUrl || null,
+      referrer_url: body?.referrerUrl || null,
+      user_agent: body?.userAgent || c.req.header("user-agent") || null,
+      last_contact: "Baru saja",
+      created_at: new Date().toISOString(),
+      template_history: [],
+    });
+
+    const lead = await insertEmbedLeadWithSchemaFallback(leadPayload);
+    return c.json({
+      leadId: lead.id,
+      affiliateId: affiliate?.id || null,
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal submit booking affiliate." }, 500);
+  }
+});
+
+app.get("/make-server-f781cd00/embed/admin/forms", async (c) => {
+  const auth = await requireAuthorizedRequester(c, ["leads.view"]);
+  if (auth.response) return auth.response;
+
+  try {
+    const { data, error } = await supabase
+      .from("embed_lead_forms")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return c.json({ forms: data || [] });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal memuat embed form." }, 500);
+  }
+});
+
+app.get("/make-server-f781cd00/embed/admin/forms/:identifier", async (c) => {
+  const auth = await requireAuthorizedRequester(c, ["leads.view"]);
+  if (auth.response) return auth.response;
+
+  try {
+    const bundle = await loadEmbedLeadFormBundleRows(c.req.param("identifier"), false);
+    if (!bundle) return c.json({ bundle: null });
+    return c.json({ bundle });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal memuat embed form." }, 500);
+  }
+});
+
+app.post("/make-server-f781cd00/embed/admin/forms", async (c) => {
+  const auth = await requireAuthorizedRequester(c, ["leads.create", "leads.edit"]);
+  if (auth.response) return auth.response;
+
+  try {
+    const body = await c.req.json();
+    const formPayload = {
+      ...(body?.form || {}),
+      updated_by: auth.requester?.authUser.id || null,
+      created_by: body?.form?.created_by || auth.requester?.authUser.id || null,
+    };
+
+    const formResult = formPayload.id
+      ? await supabase
+          .from("embed_lead_forms")
+          .update(formPayload)
+          .eq("id", formPayload.id)
+          .select()
+          .single()
+      : await supabase
+          .from("embed_lead_forms")
+          .insert(formPayload)
+          .select()
+          .single();
+    if (formResult.error) throw formResult.error;
+
+    const form = formResult.data;
+    const fields = Array.isArray(body?.fields) ? body.fields : [];
+    const routes = Array.isArray(body?.routes) ? body.routes : [];
+
+    const deleteFields = await supabase
+      .from("embed_lead_form_fields")
+      .delete()
+      .eq("form_id", form.id);
+    if (deleteFields.error) throw deleteFields.error;
+
+    if (fields.length > 0) {
+      const insertFields = await supabase
+        .from("embed_lead_form_fields")
+        .insert(fields.map((field: Record<string, unknown>) => ({ ...field, form_id: form.id })));
+      if (insertFields.error) throw insertFields.error;
+    }
+
+    const deleteRoutes = await supabase
+      .from("embed_lead_form_cs_routes")
+      .delete()
+      .eq("form_id", form.id);
+    if (deleteRoutes.error) throw deleteRoutes.error;
+
+    if (routes.length > 0) {
+      const insertRoutes = await supabase
+        .from("embed_lead_form_cs_routes")
+        .insert(routes.map((route: Record<string, unknown>) => ({ ...route, form_id: form.id })));
+      if (insertRoutes.error) throw insertRoutes.error;
+    }
+
+    const bundle = await loadEmbedLeadFormBundleRows(form.slug || form.public_token || form.id, false);
+    return c.json({ bundle });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menyimpan embed form." }, 500);
+  }
+});
+
+app.delete("/make-server-f781cd00/embed/admin/forms/:id", async (c) => {
+  const auth = await requireAuthorizedRequester(c, ["leads.delete"]);
+  if (auth.response) return auth.response;
+
+  try {
+    const id = c.req.param("id");
+    const { error } = await supabase
+      .from("embed_lead_forms")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal menghapus embed form." }, 500);
+  }
+});
+
+app.get("/make-server-f781cd00/embed/public/forms/:identifier", async (c) => {
+  try {
+    const bundle = await loadEmbedLeadFormBundleRows(c.req.param("identifier"), true);
+    if (!bundle) return c.json({ bundle: null }, 404);
+    if (!isEmbedOriginAllowed(c, bundle.form, {})) {
+      return c.json({ error: "Origin tidak diizinkan untuk form ini." }, 403);
+    }
+    return c.json({
+      bundle: {
+        form: bundle.form,
+        fields: bundle.fields,
+        routes: [],
+      },
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal memuat public embed form." }, 500);
+  }
+});
+
+app.post("/make-server-f781cd00/embed/public/forms/:identifier/submit", async (c) => {
+  try {
+    const body = await c.req.json();
+    const bundle = await loadEmbedLeadFormBundleRows(c.req.param("identifier"), true);
+    if (!bundle) return c.json({ error: "Form tidak ditemukan atau tidak aktif." }, 404);
+    if (!isEmbedOriginAllowed(c, bundle.form, body)) {
+      return c.json({ error: "Origin tidak diizinkan untuk form ini." }, 403);
+    }
+
+    const answers = body?.answers || {};
+    const customerName = normalizeEmbedAnswer(answers.name);
+    const customerPhone = normalizeEmbedAnswer(answers.phone);
+    if (!customerName || !customerPhone) {
+      return c.json({ error: "Nama customer dan No. WhatsApp wajib diisi." }, 400);
+    }
+
+    const form = bundle.form;
+    const route = selectEmbedLeadRoute(form, bundle.routes);
+    const serviceId = normalizeEmbedAnswer(answers.service_id) || form.default_service_id || null;
+    const serviceField = bundle.fields.find((field: any) => field.field_key === "service_id");
+    const serviceName =
+      (Array.isArray(serviceField?.options)
+        ? serviceField.options.find((option: any) => option.value === serviceId)?.label
+        : null) ||
+      form.default_service_name ||
+      null;
+
+    const submissionPayload = cleanEmbedRecord({
+      form_id: form.id,
+      form_slug: form.slug,
+      form_name: form.name,
+      public_token: form.public_token,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      service_id: serviceId,
+      service_name: serviceName,
+      platform_id: normalizeEmbedAnswer(answers.platform_id) || form.platform_id || null,
+      sub_channel_id: normalizeEmbedAnswer(answers.sub_channel_id) || form.sub_channel_id || null,
+      advertiser_id: normalizeEmbedAnswer(answers.advertiser_id) || form.advertiser_id || null,
+      ad_account_id: form.ad_account_id || null,
+      vehicle_id: normalizeEmbedAnswer(answers.vehicle_id) || null,
+      affiliate_id: normalizeEmbedAnswer(answers.affiliate_id) || null,
+      notes: normalizeEmbedAnswer(answers.notes) || null,
+      field_answers: answers,
+      raw_payload: {
+        answers,
+        landingPageUrl: body?.landingPageUrl,
+        referrerUrl: body?.referrerUrl,
+        submittedAt: new Date().toISOString(),
+      },
+      tracking_context: body?.trackingContext || {},
+      routing_context: {
+        routingMode: form.routing_mode,
+        fallbackCsId: form.fallback_cs_id,
+        activeRouteCount: bundle.routes.filter((item: any) => item.status === "active").length,
+      },
+      utm_source: body?.utm?.utm_source || null,
+      utm_medium: body?.utm?.utm_medium || null,
+      utm_campaign: body?.utm?.utm_campaign || null,
+      utm_term: body?.utm?.utm_term || null,
+      utm_content: body?.utm?.utm_content || null,
+      landing_page_url: body?.landingPageUrl || null,
+      referrer_url: body?.referrerUrl || null,
+      user_agent: body?.userAgent || c.req.header("user-agent") || null,
+      status: "received",
+      routing_mode: form.routing_mode,
+      routed_cs_id: route.primaryCsId,
+      routed_cs_ids: route.routedCsIds,
+    });
+
+    const { submission, storage } = await createEmbedSubmissionRecord(submissionPayload);
+
+    const leadPayload = cleanEmbedRecord({
+      id: createEmbedLeadShortId(),
+      name: customerName,
+      phone: customerPhone,
+      status: form.default_status || "Pending",
+      notes: normalizeEmbedAnswer(answers.notes) || null,
+      platform_id: normalizeEmbedAnswer(answers.platform_id) || form.platform_id || null,
+      sub_channel_id: normalizeEmbedAnswer(answers.sub_channel_id) || form.sub_channel_id || null,
+      advertiser_id: normalizeEmbedAnswer(answers.advertiser_id) || form.advertiser_id || null,
+      cs_id: route.primaryCsId,
+      vehicle_id: normalizeEmbedAnswer(answers.vehicle_id) || null,
+      service_id: serviceId,
+      affiliate_id: normalizeEmbedAnswer(answers.affiliate_id) || null,
+      social_platform: normalizeEmbedAnswer(answers.social_platform) || null,
+      social_username: normalizeEmbedAnswer(answers.social_username) || null,
+      social_profile_url: normalizeEmbedAnswer(answers.social_profile_url) || null,
+      social_chat_url: normalizeEmbedAnswer(answers.social_chat_url) || null,
+      embed_form_id: form.id,
+      embed_form_submission_id: submission.id,
+      embed_form_slug: form.slug,
+      embed_form_name: form.name,
+      origin: "embed_form",
+      landing_page_url: body?.landingPageUrl || null,
+      utm_source: body?.utm?.utm_source || null,
+      utm_medium: body?.utm?.utm_medium || null,
+      utm_campaign: body?.utm?.utm_campaign || null,
+      utm_term: body?.utm?.utm_term || null,
+      utm_content: body?.utm?.utm_content || null,
+      created_at: new Date().toISOString(),
+      last_contact: "Baru saja",
+      template_history: [],
+    });
+
+    try {
+      const lead = await insertEmbedLeadWithSchemaFallback(leadPayload);
+      await updateEmbedSubmissionRecord(storage, submission, {
+        lead_id: lead.id,
+        lead_payload: leadPayload,
+        status: "lead_created",
+        processed_at: new Date().toISOString(),
+      });
+      await updateEmbedRoutingSnapshot(form, route);
+
+      return c.json({
+        submissionId: submission.id,
+        leadId: lead.id,
+        routedCsIds: route.routedCsIds,
+      });
+    } catch (error: any) {
+      await updateEmbedSubmissionRecord(storage, submission, {
+        status: "failed",
+        error_message: error?.message || "Gagal membuat Prospek.",
+        processed_at: new Date().toISOString(),
+      });
+      throw error;
+    }
+  } catch (err: any) {
+    return c.json({ error: err.message || "Gagal submit embed form." }, 500);
+  }
+});
+
 // Get Master Data by Type
 app.get("/make-server-f781cd00/master/:type", async (c) => {
   const type = c.req.param("type");
@@ -3110,6 +4252,9 @@ app.delete("/make-server-f781cd00/permissions/user/:userId", async (c) => {
 // Get Reports (Optional Date Filter)
 app.get("/make-server-f781cd00/reports", async (c) => {
   try {
+    const auth = await requireAuthorizedRequester(c, [DAILY_REPORT_VIEW_PERMISSION, "finance_report.view"]);
+    if (auth.response) return auth.response;
+
     const date = c.req.query("date");
     const reports = await kv.getByPrefix("report:");
     
@@ -3130,6 +4275,9 @@ app.get("/make-server-f781cd00/reports", async (c) => {
 // Create/Update Report
 app.post("/make-server-f781cd00/reports", async (c) => {
   try {
+    const auth = await requireAuthorizedRequester(c, [DAILY_REPORT_CREATE_PERMISSION, DAILY_REPORT_EDIT_PERMISSION]);
+    if (auth.response) return auth.response;
+
     const data = await c.req.json();
     // ID format: report:YYYY-MM-DD:TECHNICIAN_ID
     // Ensure unique key for Date + Technician
@@ -3148,7 +4296,7 @@ app.post("/make-server-f781cd00/reports", async (c) => {
     
     await kv.set(key, payload);
     
-    const actor = await getActorName(c.req.header('Authorization'));
+    const actor = auth.requester?.actorName || await getActorName(c.req.header('Authorization'));
     await logActivity(actor, "Save Report", `Saved report for ${data.technicianName} on ${data.date}`, "System");
     
     return c.json(payload);
@@ -3161,10 +4309,13 @@ app.post("/make-server-f781cd00/reports", async (c) => {
 app.delete("/make-server-f781cd00/reports/:id", async (c) => {
   const id = c.req.param("id");
   try {
+    const auth = await requireAuthorizedRequester(c, [DAILY_REPORT_DELETE_PERMISSION]);
+    if (auth.response) return auth.response;
+
     const key = `report:${id}`;
     await kv.del(key);
     
-    const actor = await getActorName(c.req.header('Authorization'));
+    const actor = auth.requester?.actorName || await getActorName(c.req.header('Authorization'));
     await logActivity(actor, "Delete Report", `Deleted report ${id}`, "System");
     
     return c.json({ success: true });
@@ -3216,64 +4367,223 @@ app.post("/make-server-f781cd00/targets/:month", async (c) => {
     }
 });
 
+type CsOkrTargetRecord = {
+  id: string;
+  month: string;
+  csId: string;
+  platformId: string | null;
+  leadsTarget: number;
+  orderTarget: number;
+  revenueTarget: number;
+  conversionTargetPercent: number;
+  responseTargetSeconds: number;
+  slaTargetPercent: number;
+  spamTargetPercent: number;
+  notes: string;
+  updatedAt?: string | null;
+};
+
+const CS_OKR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function normalizeCsOkrMonth(value: string) {
+  const month = String(value || "").trim();
+  if (!CS_OKR_MONTH_PATTERN.test(month)) {
+    throw new Error("Format bulan OKR CS tidak valid.");
+  }
+  return month;
+}
+
+function clampCsOkrNumber(value: unknown, fallback = 0, max = 1_000_000_000_000) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(max, numeric));
+}
+
+function normalizeCsOkrTargetPayload(target: any, month: string): CsOkrTargetRecord {
+  const csId = String(target?.csId || target?.cs_id || "").trim();
+  if (!UUID_PATTERN.test(csId)) {
+    throw new Error("CS target OKR tidak valid.");
+  }
+
+  const rawPlatformId = String(target?.platformId || target?.platform_id || "").trim();
+  const platformId = rawPlatformId && rawPlatformId !== "all" ? rawPlatformId : null;
+
+  return {
+    id: UUID_PATTERN.test(String(target?.id || "")) ? String(target.id) : crypto.randomUUID(),
+    month,
+    csId,
+    platformId,
+    leadsTarget: Math.round(clampCsOkrNumber(target?.leadsTarget ?? target?.leads_target)),
+    orderTarget: Math.round(clampCsOkrNumber(target?.orderTarget ?? target?.order_target)),
+    revenueTarget: Math.round(clampCsOkrNumber(target?.revenueTarget ?? target?.revenue_target)),
+    conversionTargetPercent: clampCsOkrNumber(target?.conversionTargetPercent ?? target?.conversion_target_percent, 20, 100),
+    responseTargetSeconds: Math.max(1, Math.round(clampCsOkrNumber(target?.responseTargetSeconds ?? target?.response_target_seconds, 600, 86400))),
+    slaTargetPercent: clampCsOkrNumber(target?.slaTargetPercent ?? target?.sla_target_percent, 85, 100),
+    spamTargetPercent: clampCsOkrNumber(target?.spamTargetPercent ?? target?.spam_target_percent, 10, 100),
+    notes: String(target?.notes || "").trim().slice(0, 500),
+    updatedAt: typeof target?.updatedAt === "string" ? target.updatedAt : null,
+  };
+}
+
+function mapCsOkrTargetRow(row: any): CsOkrTargetRecord {
+  return {
+    id: String(row.id),
+    month: String(row.month_key || row.month),
+    csId: String(row.cs_id || row.csId),
+    platformId: row.platform_id || row.platformId || null,
+    leadsTarget: Number(row.leads_target ?? row.leadsTarget) || 0,
+    orderTarget: Number(row.order_target ?? row.orderTarget) || 0,
+    revenueTarget: Number(row.revenue_target ?? row.revenueTarget) || 0,
+    conversionTargetPercent: Number(row.conversion_target_percent ?? row.conversionTargetPercent) || 20,
+    responseTargetSeconds: Number(row.response_target_seconds ?? row.responseTargetSeconds) || 600,
+    slaTargetPercent: Number(row.sla_target_percent ?? row.slaTargetPercent) || 85,
+    spamTargetPercent: Number(row.spam_target_percent ?? row.spamTargetPercent) || 10,
+    notes: String(row.notes || ""),
+    updatedAt: row.updated_at || row.updatedAt || null,
+  };
+}
+
+function buildCsOkrTargetDbRow(target: CsOkrTargetRecord, actorId?: string | null) {
+  return {
+    id: target.id,
+    month_key: target.month,
+    cs_id: target.csId,
+    platform_id: target.platformId,
+    leads_target: target.leadsTarget,
+    order_target: target.orderTarget,
+    revenue_target: target.revenueTarget,
+    conversion_target_percent: target.conversionTargetPercent,
+    response_target_seconds: target.responseTargetSeconds,
+    sla_target_percent: target.slaTargetPercent,
+    spam_target_percent: target.spamTargetPercent,
+    notes: target.notes,
+    updated_by: actorId || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function dedupeCsOkrTargets(targets: CsOkrTargetRecord[]) {
+  const byScope = new Map<string, CsOkrTargetRecord>();
+  targets.forEach((target) => {
+    byScope.set(`${target.month}:${target.csId}:${target.platformId || "all"}`, target);
+  });
+  return Array.from(byScope.values());
+}
+
+function isMissingCsOkrTargetTableError(error: any) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "");
+  return code === "42P01" || message.includes("cs_okr_targets");
+}
+
+async function loadCsOkrTargetsFromDatabase(month: string) {
+  const { data, error } = await supabase
+    .from("cs_okr_targets")
+    .select("*")
+    .eq("month_key", month)
+    .order("cs_id", { ascending: true })
+    .order("platform_id", { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(mapCsOkrTargetRow);
+}
+
+async function saveCsOkrTargetsToDatabase(month: string, targets: CsOkrTargetRecord[], actorId?: string | null) {
+  const now = new Date().toISOString();
+  const rows = targets.map((target) => ({
+    ...buildCsOkrTargetDbRow(target, actorId),
+    created_by: actorId || null,
+    created_at: now,
+  }));
+
+  const deleteResult = await supabase
+    .from("cs_okr_targets")
+    .delete()
+    .eq("month_key", month);
+  if (deleteResult.error) throw deleteResult.error;
+
+  if (rows.length === 0) return [] as CsOkrTargetRecord[];
+
+  const { data, error } = await supabase
+    .from("cs_okr_targets")
+    .insert(rows)
+    .select("*")
+    .order("cs_id", { ascending: true })
+    .order("platform_id", { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(mapCsOkrTargetRow);
+}
+
 // --- CS OKR TARGETS API (Monthly by CS/Platform) ---
 app.get("/make-server-f781cd00/cs-okr-targets/:month", async (c) => {
-    const month = c.req.param("month");
     try {
-        const auth = await requireAuthorizedRequester(c, [
-          "targets.manage",
-          "monitoring.marketing.view",
-          "dashboard.view_cs",
-        ]);
+        const month = normalizeCsOkrMonth(c.req.param("month"));
+        const auth = await requireAuthorizedRequester(c, [CS_OKR_VIEW_PERMISSION]);
         if (auth.response) {
           return auth.response;
         }
 
-        const key = `cs_okr_targets:${month}`;
-        const data = await kv.get(key);
-        const targets = Array.isArray(data) ? data : [];
+        let targets: CsOkrTargetRecord[] = [];
+        let source = "database";
+        try {
+          targets = await loadCsOkrTargetsFromDatabase(month);
+        } catch (error) {
+          if (!isMissingCsOkrTargetTableError(error)) throw error;
+          const key = `cs_okr_targets:${month}`;
+          const data = await kv.get(key);
+          targets = Array.isArray(data)
+            ? data.map((target: any) => mapCsOkrTargetRow({ ...target, month }))
+            : [];
+          source = "kv";
+        }
+
+        const requesterProfileId = auth.requester?.profile?.id || auth.requester?.authUser.id;
         const scopedTargets = auth.requester?.role === "CS"
-          ? targets.filter((target: any) => target?.csId === auth.requester?.authUser.id)
+          ? targets.filter((target) => target.csId === requesterProfileId)
           : targets;
-        return c.json({ targets: scopedTargets });
+        return c.json({ targets: scopedTargets, source });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
     }
 });
 
 app.post("/make-server-f781cd00/cs-okr-targets/:month", async (c) => {
-    const month = c.req.param("month");
     try {
-        const auth = await requireAuthorizedRequester(c, ["targets.manage"]);
+        const month = normalizeCsOkrMonth(c.req.param("month"));
+        const auth = await requireAuthorizedRequester(c, [CS_OKR_MANAGE_PERMISSION]);
         if (auth.response) {
           return auth.response;
         }
 
         const body = await c.req.json();
         const rawTargets = Array.isArray(body?.targets) ? body.targets : [];
-        const targets = rawTargets.map((target: any) => ({
-          id: target.id || crypto.randomUUID(),
-          month,
-          csId: target.csId || "",
-          platformId: target.platformId || null,
-          leadsTarget: Number(target.leadsTarget) || 0,
-          orderTarget: Number(target.orderTarget) || 0,
-          revenueTarget: Number(target.revenueTarget) || 0,
-          conversionTargetPercent: Number(target.conversionTargetPercent) || 20,
-          responseTargetSeconds: Number(target.responseTargetSeconds) || 600,
-          slaTargetPercent: Number(target.slaTargetPercent) || 85,
-          spamTargetPercent: Number(target.spamTargetPercent) || 10,
-          notes: target.notes || "",
-          updatedAt: new Date().toISOString(),
-        })).filter((target: any) => target.csId);
+        const targets = dedupeCsOkrTargets(
+          rawTargets.map((target: any) => normalizeCsOkrTargetPayload(target, month)),
+        );
+        const actorId = auth.requester?.authUser.id || null;
+        let savedTargets: CsOkrTargetRecord[] = [];
+        let source = "database";
 
-        const key = `cs_okr_targets:${month}`;
-        await kv.set(key, targets);
+        try {
+          savedTargets = await saveCsOkrTargetsToDatabase(month, targets, actorId);
+        } catch (error) {
+          if (!isMissingCsOkrTargetTableError(error)) throw error;
+          const normalizedTargets = targets.map((target) => ({
+            ...target,
+            updatedAt: new Date().toISOString(),
+          }));
+          const key = `cs_okr_targets:${month}`;
+          await kv.set(key, normalizedTargets);
+          savedTargets = normalizedTargets;
+          source = "kv";
+        }
 
         const actor = auth.requester?.actorName || "System";
         await logActivity(actor, "Update CS OKR Targets", `Updated CS OKR targets for ${month}`, "System");
 
-        return c.json({ success: true, targets });
+        return c.json({ success: true, targets: savedTargets, source });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);
     }

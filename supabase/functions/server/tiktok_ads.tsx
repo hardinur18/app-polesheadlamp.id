@@ -17,6 +17,12 @@ import {
   listDateChunks,
   parseBooleanFlag,
 } from "./ads_snapshot_utils.tsx";
+import {
+  getRequesterAccessContext,
+  hasEffectivePermission,
+} from "./requester_access.ts";
+import type { RequesterAccessContext } from "./requester_access.ts";
+import type { PermissionKey } from "../../../src/app/data/permissions.ts";
 
 const app = new Hono();
 
@@ -293,6 +299,29 @@ async function requireAdsOAuthManager(c: any) {
   }
 
   return { user };
+}
+
+type AdsPermissionAccess =
+  | { ok: true; requester: RequesterAccessContext }
+  | { ok: false; error: Response };
+
+const ADS_VIEW_PERMISSIONS: PermissionKey[] = ["monitoring.marketing.view"];
+const ADS_MANAGE_PERMISSIONS: PermissionKey[] = ["ads.manage"];
+
+async function requireAnyAdsPermission(
+  c: any,
+  permissions: readonly PermissionKey[],
+): Promise<AdsPermissionAccess> {
+  const requester = await getRequesterAccessContext(c.req.raw.headers);
+  if (!requester) {
+    return { ok: false, error: c.json({ error: "Unauthorized" }, 401) };
+  }
+
+  if (!permissions.some((permission) => hasEffectivePermission(requester, permission))) {
+    return { ok: false, error: c.json({ error: "Forbidden" }, 403) };
+  }
+
+  return { ok: true, requester };
 }
 
 function appendQueryValue(params: URLSearchParams, key: string, value: unknown) {
@@ -1173,10 +1202,11 @@ app.post("/exchange-code", async (c) => {
 
 app.get("/token-health", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, [
+      ...ADS_VIEW_PERMISSIONS,
+      ...ADS_MANAGE_PERMISSIONS,
+    ]);
+    if (!access.ok) return access.error;
 
     const token = await getStoredTikTokToken();
     const advertiserCache = await kv.get(TIKTOK_ADVERTISER_CACHE_KEY);
@@ -1235,10 +1265,8 @@ app.get("/token-health", async (c) => {
 
 app.get("/advertisers", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const token = await requireStoredTikTokToken();
     const businessCenters = await fetchBusinessCenters(token);
@@ -1264,10 +1292,8 @@ app.get("/advertisers", async (c) => {
 
 app.get("/business-centers", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const token = await requireStoredTikTokToken();
     const businessCenters = await fetchBusinessCenters(token);
@@ -1291,10 +1317,8 @@ app.get("/business-centers", async (c) => {
 
 app.get("/business-centers/:bcId/assets", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const bcId = normalizeBusinessCenterId(c.req.param("bcId"));
     const assetType = readString(c.req.query("assetType")) || "ADVERTISER";
@@ -1337,10 +1361,8 @@ app.get("/business-centers/:bcId/assets", async (c) => {
 
 app.get("/live-breakdown", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const from = readString(c.req.query("from"));
     const to = readString(c.req.query("to"));
@@ -1383,7 +1405,7 @@ app.get("/live-breakdown", async (c) => {
     return c.json({
       source: "tiktok-ads-live",
       generatedAt: new Date().toISOString(),
-      requestedBy: user.id,
+      requestedBy: access.requester.authUser.id,
       range: { from, to },
       businessCenters: payload.businessCenterGroups,
       accounts: payload.accountSnapshots,
@@ -1411,10 +1433,8 @@ app.get("/live-breakdown", async (c) => {
 
 app.get("/snapshots", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const from = readString(c.req.query("from"));
     const to = readString(c.req.query("to"));
@@ -1507,10 +1527,8 @@ app.get("/snapshots", async (c) => {
 
 app.post("/sync-snapshots", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const body = await readJsonBody(c);
     const from = typeof body?.from === "string" ? body.from : readString(c.req.query("from"));
@@ -1588,10 +1606,8 @@ app.post("/sync-snapshots", async (c) => {
 
 app.get("/integration-configs", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const configs = await readTikTokIntegrationConfigs();
     return c.json({ configs });
@@ -1610,10 +1626,8 @@ app.get("/integration-configs", async (c) => {
 
 app.post("/integration-configs/:adAccountId", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_MANAGE_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const adAccountId = c.req.param("adAccountId");
     const body = await c.req.json();
@@ -1637,7 +1651,7 @@ app.post("/integration-configs/:adAccountId", async (c) => {
           ? body.liveTikTokAdvertiserName.trim()
           : undefined,
       updatedAt: new Date().toISOString(),
-      updatedBy: user.id,
+      updatedBy: access.requester.authUser.id,
     } satisfies TikTokIntegrationConfigRecord;
 
     await kv.set(`${TIKTOK_INTEGRATION_CONFIG_PREFIX}${adAccountId}`, config);
@@ -1657,10 +1671,8 @@ app.post("/integration-configs/:adAccountId", async (c) => {
 
 app.get("/report-integrated", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const advertiserId = normalizeAdvertiserId(c.req.query("advertiserId"));
     const from = readString(c.req.query("from"));
@@ -1703,6 +1715,7 @@ app.get("/report-integrated", async (c) => {
     return c.json({
       source: "tiktok-report-integrated",
       fetchedAt: new Date().toISOString(),
+      requestedBy: access.requester.authUser.id,
       advertiserId,
       range: { from, to },
       reportType,

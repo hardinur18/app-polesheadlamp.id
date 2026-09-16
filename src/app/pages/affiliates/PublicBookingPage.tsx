@@ -8,7 +8,8 @@ import { Textarea } from '../../components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/card';
 import { Loader2, CheckCircle2, MapPin, Phone, User, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '../../../lib/supabaseClient';
+import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
+import { getPublicEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
 
 export const PublicBookingPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -17,7 +18,6 @@ export const PublicBookingPage: React.FC = () => {
   const [affiliate, setAffiliate] = useState<Affiliate | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [isValidAffiliate, setIsValidAffiliate] = useState<boolean | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -26,60 +26,56 @@ export const PublicBookingPage: React.FC = () => {
     notes: ''
   });
 
+  const API_URL = buildMakeServerUrl();
+
   useEffect(() => {
     const checkAffiliate = async () => {
       if (!affiliateId) return;
       
       try {
-        // Try Direct DB (Supabase Client) - Most Reliable if table exists
-        const { data: dbData, error: dbError } = await supabase
-            .from('affiliates')
-            .select('*')
-            .eq('id', affiliateId)
-            .single();
+        const response = await fetch(`${API_URL}/public/affiliates/${encodeURIComponent(affiliateId)}`, {
+          headers: getPublicEdgeHeaders(),
+        });
 
-        if (dbData && !dbError) {
-             if (dbData.status === 'Active') {
-                setAffiliate(dbData);
-                setIsValidAffiliate(true);
-             } else {
-                setIsValidAffiliate(false);
-             }
-             return;
+        if (!response.ok) {
+          setAffiliate(null);
+          return;
         }
 
-        setIsValidAffiliate(false);
+        const body = await response.json();
+        setAffiliate(body?.affiliate || null);
       } catch (err) {
         console.error("Error checking affiliate", err);
       }
     };
 
     checkAffiliate();
-  }, [affiliateId]);
+  }, [API_URL, affiliateId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-        // Create Lead Payload
-        // Generate a random ID for the lead
-        const leadId = 'L' + Math.floor(Math.random() * 1000000);
-        
-        const now = new Date().toISOString();
-        const newLead = {
-            id: leadId,
-            name: formData.name,
-            phone: formData.phone,
-            status: 'Pending',
-            notes: `${formData.notes} | Alamat: ${formData.address}`,
-            affiliate_id: affiliateId || null,
-            last_contact: 'Baru saja',
-            created_at: now,
-        };
+        const response = await fetch(`${API_URL}/public/affiliate-bookings`, {
+            method: 'POST',
+            headers: getPublicEdgeHeaders({ includeJsonContentType: true }),
+            body: JSON.stringify({
+              affiliateId,
+              name: formData.name,
+              phone: formData.phone,
+              address: formData.address,
+              notes: formData.notes,
+              landingPageUrl: window.location.href,
+              referrerUrl: document.referrer || null,
+              userAgent: navigator.userAgent,
+            }),
+        });
 
-        const { error } = await supabase.from('leads').insert(newLead);
-        if (error) throw error;
+        if (!response.ok) {
+            const body = await response.json().catch(() => null);
+            throw new Error(body?.error || 'Terjadi kesalahan, silakan coba lagi.');
+        }
 
         setSubmitted(true);
         toast.success("Data berhasil dikirim!");

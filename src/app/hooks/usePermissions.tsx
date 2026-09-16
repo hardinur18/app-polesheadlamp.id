@@ -157,7 +157,7 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
   const fetchCurrentPermissionSnapshot = useCallback(async (): Promise<CurrentPermissionSnapshot> => {
       if (!currentUser?.id) {
           setLocalUserCustomPermissions(null);
-          setCurrentEffectivePermissions(null);
+          setCurrentEffectivePermissions([]);
           return {
             customPermissions: null,
             effectivePermissions: [],
@@ -216,7 +216,7 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
       } catch (err: any) {
           console.error("Error fetching user custom perms via server:", err.message || err);
           setLocalUserCustomPermissions(null);
-          setCurrentEffectivePermissions(null);
+          setCurrentEffectivePermissions([]);
           return {
             customPermissions: null,
             effectivePermissions: [],
@@ -280,7 +280,9 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
     let isActive = true;
     const loadingTimeoutId = window.setTimeout(() => {
       if (!isActive) return;
-      console.warn('[Permissions] Initial refresh timed out; continuing with cached/default permissions.');
+      console.warn('[Permissions] Initial refresh timed out; continuing with deny-all permissions until refresh succeeds.');
+      setLocalUserCustomPermissions(null);
+      setCurrentEffectivePermissions([]);
       setLoading(false);
     }, 3500);
 
@@ -549,21 +551,9 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
         return userCustomPermissions.includes(permission);
     }
 
-    // 4. Fallback to Role Permissions/defaults while snapshot is loading
-    let roleKey = Object.keys(rolePermissions).find(k => k === currentRole) as Role | undefined;
-    if (!roleKey) {
-        roleKey = Object.keys(rolePermissions).find(k => k.toLowerCase() === currentRole.toLowerCase()) as Role | undefined;
-    }
-    
-    if (!roleKey) {
-        // Warning if role key not found in permissions map at all
-        // console.warn(`[Permission] Role ${currentRole} not found in permissions map.`);
-        return false;
-    }
-
-    const allowed = rolePermissions[roleKey]?.includes(permission);
-    // console.log(`[Permission Check] ${currentRole} -> ${permission}: ${allowed}`);
-    return allowed ?? false;
+    // 4. Default-deny until the server snapshot is loaded. Route visibility is UX only;
+    // backend permission checks remain the source of truth.
+    return false;
   }, [currentRole, currentEffectivePermissions, rolePermissions, userCustomPermissions, viewAsRole]);
 
   const isOrderLocked = useCallback((orderStatus: string) => {

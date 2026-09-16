@@ -253,6 +253,30 @@ function toDateInputValue(date: Date) {
   return format(date, 'yyyy-MM-dd');
 }
 
+function getMonthStartInput(value: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return toDateInputValue(startOfMonth(parsed));
+}
+
+function getMonthEndInput(value: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return toDateInputValue(endOfMonth(parsed));
+}
+
+function toJakartaStartIso(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00.000+07:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toJakartaEndIso(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T23:59:59.999+07:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function toDateKey(value?: string | null) {
   if (!value) return '';
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
@@ -402,7 +426,9 @@ function getProgressIndicator(progress: number | null) {
 function buildMetricScore(
   row: Pick<CsReportRow, 'conversionRate' | 'spamRate' | 'avgResponseSeconds' | 'slaHitRate'>,
   benchmarks: TargetBenchmarks,
+  hasTargets: boolean,
 ) {
+  if (!hasTargets) return null;
   return average([
     progressToTarget(row.conversionRate ?? 0, benchmarks.conversionTargetPercent),
     progressLowerIsBetter(row.avgResponseSeconds, benchmarks.responseTargetSeconds),
@@ -492,6 +518,8 @@ function CsOkrReportPage() {
         includeContacts: false,
         includeMessageCounts: false,
         includeConversations: false,
+        from: toJakartaStartIso(fromDate),
+        to: toJakartaEndIso(toDate),
       });
       setWhatsAppPerformance(overview.performance ?? null);
       if (showToast) toast.success('Performa WhatsApp diperbarui');
@@ -502,7 +530,7 @@ function CsOkrReportPage() {
     } finally {
       setWhatsAppLoading(false);
     }
-  }, []);
+  }, [fromDate, toDate]);
 
   React.useEffect(() => {
     fetchTargets();
@@ -574,11 +602,17 @@ function CsOkrReportPage() {
       matchesPlatform(item.platformId),
     );
 
-    const filteredTargets = targets.filter((target) => {
+    const scopedTargets = targets.filter((target) => {
       if (target.month && target.month !== targetMonthKey) return false;
       if (selectedCsIds.length && !selectedCsIds.includes(target.csId || '')) return false;
-      return !(platformFilterActive && target.platformId && target.platformId !== selectedPlatformId);
+      return true;
     });
+    const hasScopedPlatformTargets = platformFilterActive && scopedTargets.some((target) => target.platformId === selectedPlatformId);
+    const filteredTargets = scopedTargets.filter((target) => {
+      if (!platformFilterActive) return true;
+      return hasScopedPlatformTargets ? target.platformId === selectedPlatformId : !target.platformId;
+    });
+    const hasTargets = filteredTargets.length > 0;
 
     const doneOrders = filteredOrders.filter(isDoneOrder);
     const cancelledOrders = filteredOrders.filter(isCancelledOrder);
@@ -587,7 +621,7 @@ function CsOkrReportPage() {
     const revenue = doneOrders.reduce((sum, order) => sum + getOrderRevenue(order), 0);
     const spend = filteredDailyAds.reduce((sum, ad) => sum + getAdSpend(ad), 0);
     const spamCount = sumSpam(filteredSpam);
-    const conversionRate = leadBase > 0 ? (filteredOrders.length / leadBase) * 100 : null;
+    const conversionRate = leadBase > 0 ? (doneOrders.length / leadBase) * 100 : null;
     const spamRate = leadBase > 0 ? (spamCount / leadBase) * 100 : null;
     const selectedWaRows = selectedCsIds
       .map((csId) => whatsAppByCsId.get(csId))
@@ -606,11 +640,17 @@ function CsOkrReportPage() {
     const benchmarks = buildBenchmarks(filteredTargets);
 
     const csRows: CsReportRow[] = selectedCsUsers.map((cs) => {
-      const csTargets = targets.filter((target) => {
+      const scopedCsTargets = targets.filter((target) => {
         if (target.month && target.month !== targetMonthKey) return false;
         if (target.csId !== cs.id) return false;
-        return !(platformFilterActive && target.platformId && target.platformId !== selectedPlatformId);
+        return true;
       });
+      const hasCsPlatformTargets = platformFilterActive && scopedCsTargets.some((target) => target.platformId === selectedPlatformId);
+      const csTargets = scopedCsTargets.filter((target) => {
+        if (!platformFilterActive) return true;
+        return hasCsPlatformTargets ? target.platformId === selectedPlatformId : !target.platformId;
+      });
+      const hasCsTargets = csTargets.length > 0;
       const csBenchmarks = buildBenchmarks(csTargets);
       const csLeads = leads.filter((lead) =>
         lead.csId === cs.id &&
@@ -649,14 +689,14 @@ function CsOkrReportPage() {
         revenue: rowDoneOrders.reduce((sum, order) => sum + getOrderRevenue(order), 0),
         spend: csDailyAds.reduce((sum, ad) => sum + getAdSpend(ad), 0),
         spam: rowSpam,
-        conversionRate: rowLeadBase > 0 ? (csOrders.length / rowLeadBase) * 100 : null,
+        conversionRate: rowLeadBase > 0 ? (rowDoneOrders.length / rowLeadBase) * 100 : null,
         spamRate: rowLeadBase > 0 ? (rowSpam / rowLeadBase) * 100 : null,
         avgResponseSeconds: wa?.avgResponseSeconds ?? null,
         slaHitRate: wa?.slaHitRate ?? null,
         unanswered: safeNumber(wa?.unansweredConversationCount),
         score: null,
       };
-      row.score = buildMetricScore(row, csBenchmarks);
+      row.score = buildMetricScore(row, csBenchmarks, hasCsTargets);
       return row;
     }).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
@@ -672,9 +712,9 @@ function CsOkrReportPage() {
       {
         key: 'orders',
         label: 'Closing order',
-        actual: formatNumber(filteredOrders.length),
+        actual: formatNumber(doneOrders.length),
         target: targetTotals.orders > 0 ? formatNumber(targetTotals.orders) : '-',
-        progress: progressToTarget(filteredOrders.length, targetTotals.orders),
+        progress: progressToTarget(doneOrders.length, targetTotals.orders),
         source: 'Pesanan',
       },
       {
@@ -689,37 +729,38 @@ function CsOkrReportPage() {
         key: 'conversion',
         label: 'Conversion rate',
         actual: formatPercent(conversionRate),
-        target: formatPercent(benchmarks.conversionTargetPercent, 0),
-        progress: progressToTarget(conversionRate ?? 0, benchmarks.conversionTargetPercent),
+        target: hasTargets ? formatPercent(benchmarks.conversionTargetPercent, 0) : '-',
+        progress: hasTargets ? progressToTarget(conversionRate ?? 0, benchmarks.conversionTargetPercent) : null,
         source: 'Leads + Pesanan',
       },
       {
         key: 'response',
         label: 'Avg response WA',
         actual: formatDuration(avgResponseSeconds),
-        target: `<= ${formatDuration(benchmarks.responseTargetSeconds)}`,
-        progress: progressLowerIsBetter(avgResponseSeconds, benchmarks.responseTargetSeconds),
+        target: hasTargets ? `<= ${formatDuration(benchmarks.responseTargetSeconds)}` : '-',
+        progress: hasTargets ? progressLowerIsBetter(avgResponseSeconds, benchmarks.responseTargetSeconds) : null,
         source: 'WhatsApp',
       },
       {
         key: 'sla',
         label: 'SLA hit rate',
         actual: formatPercent(slaHitRate),
-        target: formatPercent(benchmarks.slaTargetPercent, 0),
-        progress: progressToTarget(slaHitRate ?? 0, benchmarks.slaTargetPercent),
+        target: hasTargets ? formatPercent(benchmarks.slaTargetPercent, 0) : '-',
+        progress: hasTargets ? progressToTarget(slaHitRate ?? 0, benchmarks.slaTargetPercent) : null,
         source: 'WhatsApp',
       },
       {
         key: 'spam',
         label: 'Spam rate',
         actual: formatPercent(spamRate),
-        target: `<= ${formatPercent(benchmarks.spamTargetPercent, 0)}`,
-        progress: progressLowerIsBetter(spamRate, benchmarks.spamTargetPercent),
+        target: hasTargets ? `<= ${formatPercent(benchmarks.spamTargetPercent, 0)}` : '-',
+        progress: hasTargets ? progressLowerIsBetter(spamRate, benchmarks.spamTargetPercent) : null,
         source: 'Input Spam',
       },
     ];
 
-    const score = average(okrRows.map((row) => row.progress));
+    const score = hasTargets ? average(okrRows.map((row) => row.progress)) : null;
+    const leadBaseSource = dashboardLeads > 0 ? 'Dashboard Ads' : 'Input Lead';
 
     return {
       filteredLeads,
@@ -740,6 +781,8 @@ function CsOkrReportPage() {
       unanswered,
       targetTotals,
       benchmarks,
+      hasTargets,
+      leadBaseSource,
       okrRows,
       csRows,
       score,
@@ -769,8 +812,38 @@ function CsOkrReportPage() {
     ? 'Semua Platform'
     : platforms.find((platform) => platform.id === selectedPlatformId)?.name || 'Platform';
 
+  const handleFromDateChange = React.useCallback((value: string) => {
+    if (!value) {
+      return;
+    }
+
+    setFromDate(value);
+    setToDate((current) => {
+      if (!current || current.slice(0, 7) !== value.slice(0, 7) || current < value) {
+        return getMonthEndInput(value);
+      }
+      return current;
+    });
+  }, []);
+
+  const handleToDateChange = React.useCallback((value: string) => {
+    if (!value) {
+      return;
+    }
+
+    setToDate(value);
+    setFromDate((current) => {
+      if (!current || current.slice(0, 7) !== value.slice(0, 7) || current > value) {
+        return getMonthStartInput(value);
+      }
+      return current;
+    });
+  }, []);
+
   const openTargetDialog = React.useCallback(() => {
-    setTargetDrafts(targets.map((target) => normalizeCsOkrTarget(target, targetMonthKey)));
+    setTargetDrafts(targets
+      .filter((target) => target.month === targetMonthKey)
+      .map((target) => normalizeCsOkrTarget(target, targetMonthKey)));
     setTargetDialogOpen(true);
   }, [targetMonthKey, targets]);
 
@@ -822,7 +895,10 @@ function CsOkrReportPage() {
     setTargetsSaving(true);
     try {
       const result = await saveCsOkrTargets(targetMonthKey, targetDrafts);
-      setTargets(result.targets);
+      setTargets((current) => [
+        ...current.filter((target) => target.month !== targetMonthKey),
+        ...result.targets,
+      ]);
       setTargetSource(result.source);
       setTargetDialogOpen(false);
       toast.success(result.source === 'server'
@@ -852,7 +928,7 @@ function CsOkrReportPage() {
       body: [
         ['OKR Score', report.score === null ? '-' : `${report.score.toFixed(0)}%`],
         ['Lead Base', formatNumber(report.leadBase)],
-        ['Closing Order', formatNumber(report.filteredOrders.length)],
+        ['Closing Order', formatNumber(report.doneOrders.length)],
         ['Revenue Selesai', formatCurrency(report.revenue)],
         ['Avg Response WA', formatDuration(report.avgResponseSeconds)],
         ['SLA Hit Rate', formatPercent(report.slaHitRate)],
@@ -906,23 +982,25 @@ function CsOkrReportPage() {
 
   return (
     <OperationalPageShell className="csOkrPage">
+      <div className="csOkrStack flex flex-col space-y-4">
       <OperationalPageHeader
         eyebrow="Laporan CS"
         icon={Target}
         title="OKR CS"
         subtitle={`${selectedCsLabel} / ${selectedPlatformLabel} / ${format(new Date(fromDate), 'dd MMM yyyy', { locale: localeId })} - ${format(new Date(toDate), 'dd MMM yyyy', { locale: localeId })}`}
         actions={(
-          <>
+          <div className="csOkrHeaderActions flex flex-wrap items-center justify-end gap-2">
             {canManageTargets && (
-              <Button type="button" variant="outline" className="csOkrHeaderButton" onClick={openTargetDialog}>
+              <Button type="button" variant="outline" className="csOkrHeaderButton" onClick={openTargetDialog} title="Atur Target">
                 <Target className="mr-2 h-4 w-4" />
-                Atur Target
+                <span className="csOkrHeaderLabel">Atur Target</span>
               </Button>
             )}
             <Button
               type="button"
               variant="outline"
               className="csOkrHeaderButton"
+              title="Refresh"
               onClick={() => {
                 fetchTargets();
                 fetchPerformance(true);
@@ -934,13 +1012,13 @@ function CsOkrReportPage() {
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Refresh
+              <span className="csOkrHeaderLabel">Refresh</span>
             </Button>
-            <Button type="button" className="csOkrHeaderButton" onClick={handleExportPdf}>
+            <Button type="button" className="csOkrHeaderButton csOkrHeaderButtonPrimary" onClick={handleExportPdf}>
               <Download className="mr-2 h-4 w-4" />
-              Export PDF
+              <span>Export PDF</span>
             </Button>
-          </>
+          </div>
         )}
       />
 
@@ -971,6 +1049,144 @@ function CsOkrReportPage() {
               <Plus className="mr-2 h-4 w-4" />
               Tambah Target
             </Button>
+          </div>
+
+          <div className="csOkrTargetCards">
+            {targetDrafts.length === 0 ? (
+              <OperationalEmptyState
+                icon={Target}
+                title="Belum ada target"
+                description="Tambahkan target untuk mulai menghitung OKR CS."
+                className="py-8"
+              />
+            ) : targetDrafts.map((target) => (
+              <div key={target.id} className="csOkrTargetCard">
+                <div className="csOkrTargetCardHeader">
+                  <div>
+                    <p>Target CS</p>
+                    <span>{targetMonthKey}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeTargetDraft(target.id)}
+                    title="Hapus target"
+                  >
+                    <Trash2 className="h-4 w-4 text-rose-600" />
+                  </Button>
+                </div>
+                <div className="csOkrTargetCardGrid">
+                  <label className="csOkrTargetField csOkrTargetFieldWide">
+                    <span>CS</span>
+                    <Select
+                      value={target.csId || csUsers[0]?.id || ''}
+                      onValueChange={(value) => updateTargetDraft(target.id, 'csId', value)}
+                    >
+                      <SelectTrigger className="csOkrTargetControl">
+                        <SelectValue placeholder="CS" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {csUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="csOkrTargetField csOkrTargetFieldWide">
+                    <span>Platform</span>
+                    <Select
+                      value={target.platformId || ALL_VALUE}
+                      onValueChange={(value) => updateTargetDraft(target.id, 'platformId', value === ALL_VALUE ? null : value)}
+                    >
+                      <SelectTrigger className="csOkrTargetControl">
+                        <SelectValue placeholder="Platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ALL_VALUE}>Semua Platform</SelectItem>
+                        {platforms.filter((platform) => platform.status !== 'inactive').map((platform) => (
+                          <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="csOkrTargetField">
+                    <span>Leads</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={0}
+                      value={target.leadsTarget}
+                      onChange={(event) => updateTargetDraft(target.id, 'leadsTarget', event.target.value)}
+                    />
+                  </label>
+                  <label className="csOkrTargetField">
+                    <span>Order</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={0}
+                      value={target.orderTarget}
+                      onChange={(event) => updateTargetDraft(target.id, 'orderTarget', event.target.value)}
+                    />
+                  </label>
+                  <label className="csOkrTargetField csOkrTargetFieldWide">
+                    <span>Omzet</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={target.revenueTarget}
+                      onChange={(event) => updateTargetDraft(target.id, 'revenueTarget', event.target.value)}
+                    />
+                  </label>
+                  <label className="csOkrTargetField">
+                    <span>Conv %</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={target.conversionTargetPercent}
+                      onChange={(event) => updateTargetDraft(target.id, 'conversionTargetPercent', event.target.value)}
+                    />
+                  </label>
+                  <label className="csOkrTargetField">
+                    <span>Resp mnt</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={1}
+                      value={Math.round(target.responseTargetSeconds / 60)}
+                      onChange={(event) => updateTargetDraft(target.id, 'responseTargetSeconds', safeNumber(event.target.value) * 60)}
+                    />
+                  </label>
+                  <label className="csOkrTargetField">
+                    <span>SLA %</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={target.slaTargetPercent}
+                      onChange={(event) => updateTargetDraft(target.id, 'slaTargetPercent', event.target.value)}
+                    />
+                  </label>
+                  <label className="csOkrTargetField">
+                    <span>Spam %</span>
+                    <Input
+                      className="csOkrTargetControl"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={target.spamTargetPercent}
+                      onChange={(event) => updateTargetDraft(target.id, 'spamTargetPercent', event.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="csOkrTargetTable overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
@@ -1132,27 +1348,27 @@ function CsOkrReportPage() {
 
       <OperationalFilterPanel className="csOkrFilterPanel">
         <div className="csOkrFilterGrid grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-1.5">
+          <div className="csOkrFilterField space-y-1.5">
             <Label htmlFor="okr-from-date">Dari</Label>
             <Input
               className="csOkrFilterControl"
               id="okr-from-date"
               type="date"
               value={fromDate}
-              onChange={(event) => setFromDate(event.target.value)}
+              onChange={(event) => handleFromDateChange(event.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="csOkrFilterField space-y-1.5">
             <Label htmlFor="okr-to-date">Sampai</Label>
             <Input
               className="csOkrFilterControl"
               id="okr-to-date"
               type="date"
               value={toDate}
-              onChange={(event) => setToDate(event.target.value)}
+              onChange={(event) => handleToDateChange(event.target.value)}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="csOkrFilterField space-y-1.5">
             <Label>CS</Label>
             <Select value={selectedCsId} onValueChange={setSelectedCsId} disabled={!canViewAllCs}>
               <SelectTrigger className="csOkrFilterControl">
@@ -1166,7 +1382,7 @@ function CsOkrReportPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
+          <div className="csOkrFilterField space-y-1.5">
             <Label>Platform</Label>
             <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
               <SelectTrigger className="csOkrFilterControl">
@@ -1183,7 +1399,7 @@ function CsOkrReportPage() {
         </div>
       </OperationalFilterPanel>
 
-      <OperationalKpiGrid className="xl:grid-cols-6">
+      <OperationalKpiGrid className="csOkrKpiGrid">
         <OperationalKpiCard
           label="OKR Score"
           icon={Target}
@@ -1198,7 +1414,9 @@ function CsOkrReportPage() {
             <div>
               <div>{formatNumber(report.leadBase)}</div>
               <p className="mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">
-                Input {formatNumber(report.filteredLeads.length)}
+                {report.dashboardLeads > 0
+                  ? `Ads ${formatNumber(report.dashboardLeads)} | Input ${formatNumber(report.filteredLeads.length)}`
+                  : `Input ${formatNumber(report.filteredLeads.length)}`}
               </p>
             </div>
           )}
@@ -1250,6 +1468,40 @@ function CsOkrReportPage() {
               </Badge>
             )}
           </div>
+          <div className="csOkrMetricCards">
+            {report.okrRows.map((row) => (
+              <div key={row.key} className="csOkrMetricCard">
+                <div className="csOkrMetricCardHeader">
+                  <div>
+                    <p className="csOkrMetricCardTitle">{row.label}</p>
+                    <p className="csOkrMetricCardSource">{row.source}</p>
+                  </div>
+                  <Badge variant="outline" className={cn('border', getProgressTone(row.progress))}>
+                    {getProgressLabel(row.progress)}
+                  </Badge>
+                </div>
+                <div className="csOkrMetricCardValues">
+                  <div>
+                    <span>Actual</span>
+                    <strong>{row.actual}</strong>
+                  </div>
+                  <div>
+                    <span>Target</span>
+                    <strong>{row.target}</strong>
+                  </div>
+                </div>
+                <div className="csOkrMetricProgressRow">
+                  <Progress
+                    value={row.progress ?? 0}
+                    indicatorClassName={getProgressIndicator(row.progress)}
+                    className="h-2 bg-slate-100 dark:bg-slate-800"
+                  />
+                  <span>{row.progress === null ? '-' : `${row.progress.toFixed(0)}%`}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="csOkrTableScroll csOkrDesktopTable">
           <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow className={OKR_TABLE_HEADER_ROW_CLASS}>
@@ -1295,6 +1547,7 @@ function CsOkrReportPage() {
               ))}
             </TableBody>
           </Table>
+          </div>
         </OperationalTableCard>
 
         <OperationalTableCard className="csOkrTableCard">
@@ -1314,6 +1567,44 @@ function CsOkrReportPage() {
               description="Data CS aktif belum tersedia untuk filter ini."
             />
           ) : (
+            <>
+            <div className="csOkrCsCards">
+              {report.csRows.map((row) => (
+                <div key={row.id} className="csOkrCsCard">
+                  <div className="csOkrCsCardHeader">
+                    <div>
+                      <p className="csOkrCsName">{row.name}</p>
+                      <p className="csOkrCsRevenue">{formatCurrency(row.revenue)} revenue</p>
+                    </div>
+                    <Badge variant="outline" className={cn('border', getProgressTone(row.score))}>
+                      {row.score === null ? '-' : `${row.score.toFixed(0)}%`}
+                    </Badge>
+                  </div>
+                  <div className="csOkrCsStats">
+                    <div>
+                      <span>Lead</span>
+                      <strong>{formatNumber(row.leadBase)}</strong>
+                    </div>
+                    <div>
+                      <span>Order</span>
+                      <strong>{formatNumber(row.doneOrders)}</strong>
+                    </div>
+                    <div>
+                      <span>Conv.</span>
+                      <strong>{formatPercent(row.conversionRate)}</strong>
+                    </div>
+                    <div>
+                      <span>Resp.</span>
+                      <strong>{formatDuration(row.avgResponseSeconds)}</strong>
+                    </div>
+                  </div>
+                  <p className="csOkrCsMeta">
+                    Spam {formatNumber(row.spam)} / SLA {formatPercent(row.slaHitRate)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="csOkrTableScroll csOkrDesktopTable">
             <Table className="min-w-[720px]">
               <TableHeader>
                 <TableRow className={OKR_TABLE_HEADER_ROW_CLASS}>
@@ -1356,8 +1647,11 @@ function CsOkrReportPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </OperationalTableCard>
+      </div>
       </div>
     </OperationalPageShell>
   );

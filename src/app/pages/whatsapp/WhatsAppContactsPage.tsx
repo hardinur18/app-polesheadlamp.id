@@ -1641,27 +1641,27 @@ export function WhatsAppContactsPage() {
   const currentCsLabel = currentUser ? getUserDisplayName(currentUser) : 'CS';
 
   return (
-    <OperationalPageShell>
-      <div className="flex flex-col space-y-4">
+    <OperationalPageShell className="contactsPage">
+      <div className="contactsPageStack flex flex-col space-y-4">
         <OperationalPageHeader
           eyebrow="Prospek & Channel"
           icon={Users}
           title="Database Kontak"
           subtitle="Kontak CRM dari pesanan dan input manual, dengan riwayat pemakaian jasa yang digabung per nomor."
           actions={
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="contactsHeaderActions flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                className="contactsHeaderButton h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
                 onClick={() => setCreatingContact(true)}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Tambah Kontak
+                <span>Tambah Kontak</span>
               </Button>
               <Button
                 type="button"
-                className="h-10 rounded-xl bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"
+                className="contactsHeaderButton h-10 rounded-xl bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"
                 onClick={() => void refreshAll()}
                 disabled={loading || isRefreshing}
               >
@@ -1670,13 +1670,13 @@ export function WhatsAppContactsPage() {
                 ) : (
                   <RefreshCcw className="mr-2 h-4 w-4" />
                 )}
-                Refresh
+                <span>Refresh</span>
               </Button>
             </div>
           }
         />
 
-        <OperationalKpiGrid>
+        <OperationalKpiGrid className="contactsKpiGrid">
           <OperationalKpiCard label="Total" value={formatNumber(visibleContactRows.length)} icon={Users} />
           <OperationalKpiCard label="Customer" value={formatNumber(customerCount)} icon={Check} tone="emerald" />
           <OperationalKpiCard label="Loyal" value={formatNumber(loyalCount)} icon={Check} tone="blue" />
@@ -1701,9 +1701,9 @@ export function WhatsAppContactsPage() {
           </div>
         ) : null}
 
-        <OperationalFilterPanel>
-          <div className="flex flex-col gap-4">
-            <div className="flex w-full flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+        <OperationalFilterPanel className="contactsFilterPanel">
+          <div className="contactsFilterStack flex flex-col gap-4">
+            <div className="contactsTabScroller flex w-full flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-950/40">
               {contactTabs.map((tab) => {
                 const active = tabFilter === tab.id;
                 return (
@@ -1712,7 +1712,7 @@ export function WhatsAppContactsPage() {
                     type="button"
                     onClick={() => setTabFilter(tab.id)}
                     className={cn(
-                      'inline-flex h-10 min-w-[120px] items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-all',
+                      'contactsFilterTab inline-flex h-10 min-w-[120px] items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-all',
                       active
                         ? 'border border-blue-200 bg-white text-blue-700 shadow-sm'
                         : 'text-slate-500 hover:bg-white/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100',
@@ -1725,14 +1725,14 @@ export function WhatsAppContactsPage() {
               })}
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_170px_190px_190px_190px_120px]">
-              <div className="relative">
+            <div className="contactsFilterGrid grid gap-3">
+              <div className="contactsSearchField relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Cari nama, nomor, email, akun, atau CS..."
-                  className="h-11 rounded-xl border-slate-200 bg-white pl-11 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950"
+                  className="contactsFilterControl h-11 rounded-xl border-slate-200 bg-white pl-11 text-sm shadow-sm dark:border-slate-800 dark:bg-slate-950"
                 />
               </div>
 
@@ -1740,7 +1740,7 @@ export function WhatsAppContactsPage() {
                 value={providerFilter}
                 onValueChange={(value) => setProviderFilter(value as 'all' | WhatsAppProvider)}
               >
-                <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <SelectTrigger className="contactsFilterControl h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <SelectValue placeholder="Provider" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1753,7 +1753,7 @@ export function WhatsAppContactsPage() {
               </Select>
 
               <Select value={csSelectValue} onValueChange={setCsFilter} disabled={isCsScopedUser}>
-                <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <SelectTrigger className="contactsFilterControl h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <SelectValue placeholder="Filter CS" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1781,7 +1781,7 @@ export function WhatsAppContactsPage() {
                 value={workStatusFilter}
                 onValueChange={(value) => setWorkStatusFilter(value as WorkStatusFilterValue)}
               >
-                <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <SelectTrigger className="contactsFilterControl h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <SelectValue placeholder="Status pengerjaan" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1797,7 +1797,7 @@ export function WhatsAppContactsPage() {
                 value={followUpFilter}
                 onValueChange={(value) => setFollowUpFilter(value as FollowUpFilterValue)}
               >
-                <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <SelectTrigger className="contactsFilterControl h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <SelectValue placeholder="Follow up" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1812,7 +1812,7 @@ export function WhatsAppContactsPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950"
+                className="contactsResetButton h-11 rounded-xl border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-950"
                 disabled={!hasActiveFilters}
                 onClick={resetFilters}
               >
@@ -1822,8 +1822,8 @@ export function WhatsAppContactsPage() {
           </div>
         </OperationalFilterPanel>
 
-        <OperationalTableCard>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
+        <OperationalTableCard className="contactsTableCard">
+          <div className="contactsTableHeader flex flex-wrap items-center justify-between gap-3 px-6 py-5">
             <MasterDataTableTitle
               title="Database Kontak"
               count={formatNumber(filteredContacts.length)}

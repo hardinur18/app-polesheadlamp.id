@@ -409,6 +409,79 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     }
   };
 
+  const appDataUrl = (table: string, id?: string) =>
+    buildMakeServerUrl(`/app-data/${encodeURIComponent(table)}${id ? `/${encodeURIComponent(id)}` : ''}`);
+
+  const readAppDataError = async (response: Response, fallback: string) => {
+    const body = await response.json().catch(() => ({}));
+    return new Error(body.error || fallback);
+  };
+
+  const fetchAppDataPage = async (table: string, from: number, to: number) => {
+    const url = new URL(appDataUrl(table));
+    url.searchParams.set('from', String(from));
+    url.searchParams.set('to', String(to));
+
+    const response = await fetch(url.toString(), {
+      headers: await getSessionBackedEdgeHeaders(),
+    });
+
+    if (response.status === 403) {
+      return { rows: [] as any[], forbidden: true };
+    }
+
+    if (!response.ok) {
+      throw await readAppDataError(response, `Gagal memuat ${table}`);
+    }
+
+    const body = await response.json();
+    return {
+      rows: Array.isArray(body?.rows) ? body.rows : [],
+      forbidden: false,
+    };
+  };
+
+  const createAppDataRow = async (table: string, payload: any) => {
+    const response = await fetch(appDataUrl(table), {
+      method: 'POST',
+      headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw await readAppDataError(response, `Gagal menyimpan ${table}`);
+    }
+
+    const body = await response.json();
+    return body?.row;
+  };
+
+  const updateAppDataRow = async (table: string, id: string, payload: any) => {
+    const response = await fetch(appDataUrl(table, id), {
+      method: 'PUT',
+      headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw await readAppDataError(response, `Gagal memperbarui ${table}`);
+    }
+
+    const body = await response.json();
+    return body?.row;
+  };
+
+  const deleteAppDataRow = async (table: string, id: string) => {
+    const response = await fetch(appDataUrl(table, id), {
+      method: 'DELETE',
+      headers: await getSessionBackedEdgeHeaders(),
+    });
+
+    if (!response.ok) {
+      throw await readAppDataError(response, `Gagal menghapus ${table}`);
+    }
+  };
+
   // Helper to fetch data from a table
   const fetchData = async (table: string, setter: React.Dispatch<React.SetStateAction<any[]>>, mapper?: (data: any[]) => any[]) => {
     const startedAt = performance.now();
@@ -423,35 +496,20 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         const from = page * pageSize;
         const to = from + pageSize - 1;
 
-        // Try fetching with sort first to ensure stable pagination
-        let { data, error } = await supabase
-            .from(table)
-            .select('*')
-            .order('created_at', { ascending: false })
-            .range(from, to);
-        
-        // If sort fails (column might not exist), try without sort
-        if (error && error.code === '42703') { // Undefined column
-           const retry = await supabase.from(table).select('*').range(from, to);
-           data = retry.data;
-           error = retry.error;
-        }
+        const { rows, forbidden } = await fetchAppDataPage(table, from, to);
 
-        if (error) {
-          if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(error)) {
-            leadSpamDailyInputsUseFallbackRef.current = true;
-            const fallbackRows = await fetchLeadSpamDailyInputsFallback();
-            setter(fallbackRows);
-            return;
+        if (forbidden) {
+          setter([]);
+          if (import.meta.env.DEV) {
+            console.info('[MasterData] skipped forbidden table', { table });
           }
-          console.error(`Error fetching ${table} page ${page}:`, error.message);
-          break;
+          return;
         }
 
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
+        if (rows.length > 0) {
+          allData = [...allData, ...rows];
           
-          if (data.length < pageSize) {
+          if (rows.length < pageSize) {
             hasMore = false; // Reached end
           } else {
             page++;
@@ -475,6 +533,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         });
       }
     } catch (e) {
+      if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(e)) {
+        leadSpamDailyInputsUseFallbackRef.current = true;
+        const fallbackRows = await fetchLeadSpamDailyInputsFallback();
+        setter(fallbackRows);
+        return;
+      }
       console.error(`Error fetching ${table}:`, e);
     }
   };
@@ -494,13 +558,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const addItem = async (table: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>, dbMapper?: (item: any) => any, uiMapper?: (item: any) => any, options?: MutationOptions) => {
     try {
       const payload = dbMapper ? dbMapper(item) : item;
-      let { data, error } = await supabase.from(table).insert(payload).select().single();
-      if (error && isAssignmentSchemaCacheError(table, error)) {
-        const retry = await supabase.from(table).insert(withoutAssignmentDraftColumns(payload)).select().single();
-        data = retry.data;
-        error = retry.error;
-      }
-      if (error) throw error;
+      let data = await createAppDataRow(table, payload);
       if (data) {
          const uiItem = uiMapper ? uiMapper(data) : data;
          setter(prev => {
@@ -513,6 +571,18 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
          return uiItem;
       }
     } catch (e: any) {
+      if (isAssignmentSchemaCacheError(table, e)) {
+        const data = await createAppDataRow(table, withoutAssignmentDraftColumns(dbMapper ? dbMapper(item) : item));
+        const uiItem = uiMapper ? uiMapper(data) : data;
+        setter(prev => {
+          if (prev.some(i => i.id === uiItem.id)) return prev;
+          return [uiItem, ...prev];
+        });
+        if (!options?.silent) {
+          toast.success("Data berhasil disimpan");
+        }
+        return uiItem;
+      }
       if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(e)) {
         leadSpamDailyInputsUseFallbackRef.current = true;
         const fallbackItem = await upsertLeadSpamDailyInputFallback(item as LeadSpamDailyInput);
@@ -538,13 +608,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const updateItem = async (table: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>, dbMapper?: (item: any) => any, uiMapper?: (item: any) => any) => {
     try {
       const payload = dbMapper ? dbMapper(item) : item;
-      let { data, error } = await supabase.from(table).update(payload).eq('id', item.id).select().single();
-      if (error && isAssignmentSchemaCacheError(table, error)) {
-        const retry = await supabase.from(table).update(withoutAssignmentDraftColumns(payload)).eq('id', item.id).select().single();
-        data = retry.data;
-        error = retry.error;
-      }
-      if (error) throw error;
+      let data = await updateAppDataRow(table, item.id, payload);
       if (data) {
          const uiItem = uiMapper ? uiMapper(data) : data;
          setter(prev => prev.map(i => i.id === item.id ? { ...i, ...uiItem } : i));
@@ -556,6 +620,13 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
          return item;
       }
     } catch (e: any) {
+      if (isAssignmentSchemaCacheError(table, e)) {
+        const data = await updateAppDataRow(table, item.id, withoutAssignmentDraftColumns(dbMapper ? dbMapper(item) : item));
+        const uiItem = uiMapper ? uiMapper(data) : data;
+        setter(prev => prev.map(i => i.id === item.id ? { ...i, ...uiItem } : i));
+        toast.success("Data berhasil diperbarui");
+        return uiItem;
+      }
       if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(e)) {
         leadSpamDailyInputsUseFallbackRef.current = true;
         const fallbackItem = await upsertLeadSpamDailyInputFallback(item as LeadSpamDailyInput);
@@ -571,8 +642,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
   const deleteItem = async (table: string, id: string, setter: React.Dispatch<React.SetStateAction<any[]>>, options?: MutationOptions) => {
     try {
-      const { error } = await supabase.from(table).delete().eq('id', id);
-      if (error) throw error;
+      await deleteAppDataRow(table, id);
       setter(prev => prev.filter(i => i.id !== id));
       if (!options?.silent) {
         toast.success("Data berhasil dihapus");
@@ -871,10 +941,19 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const addUser = (user: User) => setUsers(prev => [user, ...prev]);
   const updateUser = (user: User) => setUsers(prev => prev.map(item => item.id === user.id ? user : item)); // Local update
   const refetchUsersFromProfiles = async () => {
-    const { data: profiles } = await supabase.from('profiles').select('*');
-    if (profiles) {
-      setUsers(mapProfilesToUsers(profiles));
+    const rows: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+
+    while (true) {
+      const { rows: pageRows, forbidden } = await fetchAppDataPage('profiles', page * pageSize, (page + 1) * pageSize - 1);
+      if (forbidden) return;
+      rows.push(...pageRows);
+      if (pageRows.length < pageSize) break;
+      page += 1;
     }
+
+    setUsers(mapProfilesToUsers(rows));
   };
   
   const createSystemUser = async (data: any) => {
@@ -1332,8 +1411,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
       try {
         const payload = mapLeadToDB(item);
-        const { data, error } = await supabase.from('leads').insert(payload).select().single();
-        if (error) throw error;
+        const data = await createAppDataRow('leads', payload);
         savedLead = data ? mapLeadFromDB(data, leadSocialContactsRef.current[data.id]) : item;
       } catch (error) {
         if (!isLeadSocialSchemaError(error)) {
@@ -1342,8 +1420,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         const fallbackLead = stripLeadSocialFields(item);
         const payload = mapLeadToDB(fallbackLead);
-        const { data, error: fallbackError } = await supabase.from('leads').insert(payload).select().single();
-        if (fallbackError) throw fallbackError;
+        const data = await createAppDataRow('leads', payload);
         savedLead = mergeLeadSocialFields(
           data ? mapLeadFromDB(data, leadSocialContactsRef.current[data.id]) : fallbackLead,
           pickLeadSocialFields(item),
@@ -1385,8 +1462,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
       try {
         const payload = mapLeadToDB(item);
-        const { data, error } = await supabase.from('leads').update(payload).eq('id', item.id).select().single();
-        if (error) throw error;
+        const data = await updateAppDataRow('leads', item.id, payload);
         savedLead = data ? mapLeadFromDB(data, leadSocialContactsRef.current[data.id]) : item;
       } catch (error) {
         if (!isLeadSocialSchemaError(error)) {
@@ -1395,8 +1471,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         const fallbackLead = stripLeadSocialFields(item);
         const payload = mapLeadToDB(fallbackLead);
-        const { data, error: fallbackError } = await supabase.from('leads').update(payload).eq('id', item.id).select().single();
-        if (fallbackError) throw fallbackError;
+        const data = await updateAppDataRow('leads', item.id, payload);
         savedLead = mergeLeadSocialFields(
           data ? mapLeadFromDB(data, leadSocialContactsRef.current[data.id]) : fallbackLead,
           pickLeadSocialFields(item),
@@ -1426,8 +1501,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
   const deleteLead = async (id: string, options?: MutationOptions) => {
     try {
-      const { error } = await supabase.from('leads').delete().eq('id', id);
-      if (error) throw error;
+      await deleteAppDataRow('leads', id);
       setLeads(prev => prev.filter(lead => lead.id !== id));
       await deleteLeadSocialContact(id);
       if (!options?.silent) {
@@ -1580,14 +1654,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       updatePayload.status = patch.status;
     }
 
-    const { data, error } = await supabase
-      .from('prospect_bookings')
-      .update(updatePayload)
-      .eq('id', booking.id)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await updateAppDataRow('prospect_bookings', booking.id, updatePayload);
 
     const updatedBooking = data
       ? mapProspectBookingFromDB(data)
@@ -1603,14 +1670,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const updateLeadStatusSilently = async (lead: Lead, status: Lead['status']) => {
     if (lead.status === status) return;
 
-    const { data, error } = await supabase
-      .from('leads')
-      .update({ status })
-      .eq('id', lead.id)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await updateAppDataRow('leads', lead.id, { status });
 
     const updatedLead = data
       ? mapLeadFromDB(data, leadSocialContactsRef.current[data.id])
@@ -1906,10 +1966,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     
     // 2. Fetch Users (Profiles)
     const fetchUsers = async () => {
-         const { data: profiles } = await supabase.from('profiles').select('*');
-         if (profiles) {
-            setUsers(mapProfilesToUsers(profiles));
-         }
+      await refetchUsersFromProfiles();
     };
     fetchUsers();
 

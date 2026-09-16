@@ -12342,8 +12342,177 @@ body {
   border-radius: 18px !important;
 }
 
+.csOkrPage.opsPageShell {
+  container-type: inline-size;
+}
+
 .csOkrTargetTable {
   border-radius: 14px;
+}
+
+.csOkrTargetCards,
+.csOkrMetricCards,
+.csOkrCsCards {
+  display: none;
+}
+
+.csOkrMetricCard,
+.csOkrCsCard,
+.csOkrTargetCard {
+  min-width: 0;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.055);
+}
+
+.csOkrMetricCard,
+.csOkrCsCard,
+.csOkrTargetCard {
+  padding: 12px;
+}
+
+.csOkrMetricCardHeader,
+.csOkrCsCardHeader,
+.csOkrTargetCardHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.csOkrMetricCardTitle,
+.csOkrCsName,
+.csOkrTargetCardHeader p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 830;
+  line-height: 1.18;
+}
+
+.csOkrMetricCardSource,
+.csOkrCsRevenue,
+.csOkrCsMeta,
+.csOkrTargetCardHeader span {
+  margin: 0;
+  color: #7c8da6;
+  font-size: 0.72rem;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.csOkrMetricCardValues,
+.csOkrCsStats,
+.csOkrTargetCardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.csOkrMetricCardValues > div,
+.csOkrCsStats > div {
+  min-width: 0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 9px;
+}
+
+.csOkrMetricCardValues span,
+.csOkrCsStats span,
+.csOkrTargetField > span {
+  display: block;
+  color: #7c8da6;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.csOkrMetricCardValues strong,
+.csOkrCsStats strong {
+  display: block;
+  min-width: 0;
+  margin-top: 3px;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 860;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.csOkrMetricProgressRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.csOkrMetricProgressRow span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 830;
+}
+
+.csOkrCsMeta {
+  margin-top: 10px;
+}
+
+.csOkrTargetField {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.csOkrTargetFieldWide {
+  grid-column: 1 / -1;
+}
+
+.csOkrHeaderActions,
+.csOkrStack,
+.csOkrFilterGrid,
+.csOkrTableCard,
+.csOkrTableScroll {
+  min-width: 0;
+}
+
+.csOkrHeaderButton.uiButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.csOkrHeaderButton.uiButton svg {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.csOkrPage .csOkrKpiGrid.metricGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+}
+
+.csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+  min-width: 0;
+  min-height: 112px;
+  grid-template-columns: minmax(44px, 50px) minmax(0, 1fr);
+  padding: 18px;
+}
+
+.csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+  font-size: clamp(1rem, 4.8cqi, 1.26rem);
+  line-height: 1.14;
+}
+
+.csOkrPage .csOkrKpiGrid.metricGrid .metricValue > div,
+.csOkrPage .csOkrKpiGrid.metricGrid .metricValue p {
+  min-width: 0;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .csOkrTargetControl.uiInput,
@@ -12368,10 +12537,18 @@ body {
 }
 
 .csOkrTableCard.tablePanel {
-  overflow-x: auto;
+  overflow: hidden;
 }
 
-.csOkrTableCard table {
+.csOkrTableScroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.csOkrTableScroll table {
   min-width: 760px;
 }
 
@@ -12449,7 +12626,31 @@ body {
   background: #0f172a;
 }
 
+.dark .csOkrMetricCard,
+.dark .csOkrCsCard,
+.dark .csOkrTargetCard {
+  border-color: rgba(30, 41, 59, 0.92);
+  background: rgba(15, 23, 42, 0.94);
+}
+
+.dark .csOkrMetricCardTitle,
+.dark .csOkrCsName,
+.dark .csOkrTargetCardHeader p,
+.dark .csOkrMetricCardValues strong,
+.dark .csOkrCsStats strong {
+  color: #f8fafc;
+}
+
+.dark .csOkrMetricCardValues > div,
+.dark .csOkrCsStats > div {
+  background: rgba(30, 41, 59, 0.72);
+}
+
 @media (max-width: 1180px) {
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
   .marketingMonitoringSummaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -12481,6 +12682,22 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .csOkrHeaderActions {
+    display: grid !important;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px !important;
+  }
+
+  .csOkrPage .topbarActions > .csOkrHeaderActions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .csOkrHeaderActions:has(.csOkrHeaderButton:nth-child(3)) .csOkrHeaderButton:last-child {
+    grid-column: 1 / -1;
+  }
+
   .marketingMonitoringPage .topbarActions > div {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -12492,7 +12709,44 @@ body {
   .affiliateHeaderButton.uiButton {
     width: 100%;
     min-width: 0;
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+    font-weight: 820;
     padding-inline: 10px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 104px;
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.68rem;
+    line-height: 1.15;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    font-size: clamp(0.94rem, 5.8vw, 1.16rem) !important;
+    line-height: 1.12;
   }
 
   .marketingMonitoringPeriodPanel.filterPanel,
@@ -12568,11 +12822,178 @@ body {
   }
 
   .csOkrFilterGrid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .csOkrFilterGrid .space-y-1\.5 {
+    min-width: 0;
+  }
+
+  .csOkrFilterGrid label {
+    font-size: 0.68rem;
+    line-height: 1.15;
+  }
+
+  .csOkrFilterControl.uiInput,
+  .csOkrFilterControl.uiSelectTrigger {
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+    font-weight: 760;
   }
 
   .csOkrTableCard.tablePanel {
     border-radius: 16px;
+  }
+
+  .csOkrDesktopTable {
+    display: none;
+  }
+
+  .csOkrMetricCards,
+  .csOkrCsCards,
+  .csOkrTargetCards {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .csOkrMetricCard,
+  .csOkrCsCard,
+  .csOkrTargetCard {
+    min-width: 0;
+    border: 1px solid rgba(226, 232, 240, 0.86);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.055);
+  }
+
+  .csOkrMetricCard,
+  .csOkrCsCard {
+    padding: 12px;
+  }
+
+  .csOkrMetricCardHeader,
+  .csOkrCsCardHeader,
+  .csOkrTargetCardHeader {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .csOkrMetricCardTitle,
+  .csOkrCsName,
+  .csOkrTargetCardHeader p {
+    margin: 0;
+    color: #0f172a;
+    font-size: 0.84rem;
+    font-weight: 830;
+    line-height: 1.18;
+  }
+
+  .csOkrMetricCardSource,
+  .csOkrCsRevenue,
+  .csOkrCsMeta,
+  .csOkrTargetCardHeader span {
+    margin: 0;
+    color: #7c8da6;
+    font-size: 0.72rem;
+    font-weight: 620;
+    line-height: 1.25;
+  }
+
+  .csOkrMetricCardValues,
+  .csOkrCsStats,
+  .csOkrTargetCardGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: 12px;
+  }
+
+  .csOkrMetricCardValues > div,
+  .csOkrCsStats > div {
+    min-width: 0;
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 9px;
+  }
+
+  .csOkrMetricCardValues span,
+  .csOkrCsStats span,
+  .csOkrTargetField > span {
+    display: block;
+    color: #7c8da6;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 1.15;
+  }
+
+  .csOkrMetricCardValues strong,
+  .csOkrCsStats strong {
+    display: block;
+    min-width: 0;
+    margin-top: 3px;
+    color: #0f172a;
+    font-size: 0.86rem;
+    font-weight: 860;
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+  }
+
+  .csOkrMetricProgressRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    margin-top: 12px;
+  }
+
+  .csOkrMetricProgressRow span {
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 830;
+  }
+
+  .csOkrCsMeta {
+    margin-top: 10px;
+  }
+
+  .csOkrTargetTable {
+    display: none;
+  }
+
+  .csOkrTargetCard {
+    padding: 12px;
+  }
+
+  .csOkrTargetField {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .csOkrTargetFieldWide {
+    grid-column: 1 / -1;
+  }
+
+  .csOkrTargetControl.uiInput,
+  .csOkrTargetControl.uiSelectTrigger {
+    height: 42px !important;
+    min-height: 42px !important;
+    border-radius: 12px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .csOkrTargetDialog .uiDialogFooter,
+  .csOkrTargetDialog [data-slot="dialog-footer"] {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
   }
 
   .affiliateSearchBox {
@@ -12586,6 +13007,819 @@ body {
   .affiliateFormSheet {
     height: min(88vh, 720px) !important;
     border-radius: 20px 20px 0 0 !important;
+  }
+}
+
+@media (max-width: 374px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid,
+  .csOkrPage .csOkrKpiGrid.metricGrid,
+  .csOkrMetricCardValues,
+  .csOkrCsStats,
+  .csOkrTargetCardGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .csOkrHeaderActions:has(.csOkrHeaderButton:nth-child(3)) .csOkrHeaderButton:last-child,
+  .csOkrTargetFieldWide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 92px;
+    grid-template-columns: minmax(38px, 42px) minmax(0, 1fr);
+    gap: 12px;
+    padding: 13px 14px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.67rem;
+    line-height: 1.12;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    font-size: clamp(0.98rem, 5.2vw, 1.14rem) !important;
+    line-height: 1.1;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue p {
+    margin-top: 3px !important;
+    font-size: 0.68rem !important;
+    line-height: 1.15;
+  }
+}
+
+@container (max-width: 980px) {
+  .csOkrPage .topbarActions,
+  .csOkrPage .topbarActions > .csOkrHeaderActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .csOkrPage .topbarActions {
+    display: block;
+  }
+
+  .csOkrHeaderActions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px !important;
+  }
+
+  .csOkrHeaderActions:has(.csOkrHeaderButton:nth-child(3)) .csOkrHeaderButton:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .csOkrHeaderButton.uiButton {
+    width: 100%;
+    min-width: 0;
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+    font-weight: 820;
+    padding-inline: 10px !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .csOkrFilterControl.uiInput,
+  .csOkrFilterControl.uiSelectTrigger {
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+    font-weight: 760;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 104px;
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.68rem;
+    line-height: 1.15;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    font-size: clamp(0.94rem, 5.8cqi, 1.16rem) !important;
+    line-height: 1.12;
+  }
+
+  .csOkrDesktopTable {
+    display: none;
+  }
+
+  .csOkrMetricCards,
+  .csOkrCsCards,
+  .csOkrTargetCards {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .csOkrTargetTable {
+    display: none;
+  }
+}
+
+@container (max-width: 560px) {
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 92px;
+    grid-template-columns: minmax(38px, 42px) minmax(0, 1fr);
+    gap: 12px;
+    padding: 13px 14px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.67rem;
+    line-height: 1.12;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    font-size: clamp(0.98rem, 5.2cqi, 1.14rem) !important;
+    line-height: 1.1;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue p {
+    margin-top: 3px !important;
+    font-size: 0.68rem !important;
+    line-height: 1.15;
+  }
+}
+
+@container (max-width: 430px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid,
+  .csOkrPage .csOkrKpiGrid.metricGrid,
+  .csOkrMetricCardValues,
+  .csOkrCsStats,
+  .csOkrTargetCardGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .csOkrHeaderActions:has(.csOkrHeaderButton:nth-child(3)) .csOkrHeaderButton:last-child,
+  .csOkrTargetFieldWide {
+    grid-column: auto;
+  }
+}
+
+/* CS OKR PWA/mobile final polish */
+.csOkrHeaderActions {
+  min-width: 0;
+}
+
+.csOkrHeaderButton.uiButton {
+  min-width: 128px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 14px;
+  font-size: 0.82rem;
+  font-weight: 820;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.075);
+}
+
+.csOkrHeaderButtonPrimary.uiButton {
+  min-width: 154px;
+}
+
+.csOkrFilterPanel.filterPanel {
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  padding: 12px;
+  border-radius: 18px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.045);
+}
+
+.csOkrFilterGrid {
+  gap: 10px !important;
+}
+
+.csOkrFilterField {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.csOkrFilterField > label {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.69rem;
+  font-weight: 820;
+  line-height: 1.1;
+}
+
+.csOkrFilterControl.uiInput,
+.csOkrFilterControl.uiSelectTrigger {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 14px;
+  border-color: rgba(203, 213, 225, 0.86);
+  padding-inline: 12px;
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.csOkrFilterControl.uiSelectTrigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csOkrPage .csOkrKpiGrid.metricGrid {
+  gap: 12px !important;
+}
+
+.csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+  border-radius: 18px;
+  box-shadow: 0 15px 34px rgba(15, 23, 42, 0.055);
+}
+
+@media (max-width: 767px) {
+  .csOkrPage .topbar {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .csOkrPage .topbar h1 {
+    font-size: clamp(1.54rem, 7.4vw, 1.9rem);
+    line-height: 1.06;
+  }
+
+  .csOkrPage .topbar p {
+    max-width: 100%;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  .csOkrHeaderActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .csOkrHeaderButton.uiButton {
+    min-width: 0;
+    height: 42px !important;
+    min-height: 42px !important;
+    border-radius: 14px !important;
+    padding-inline: 10px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: 1 / -1;
+  }
+
+  .csOkrFilterPanel.filterPanel {
+    padding: 10px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.045) !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .csOkrFilterField {
+    gap: 5px;
+  }
+
+  .csOkrFilterField > label {
+    font-size: 0.66rem;
+  }
+
+  .csOkrFilterControl.uiInput,
+  .csOkrFilterControl.uiSelectTrigger {
+    height: 42px !important;
+    min-height: 42px !important;
+    border-radius: 14px !important;
+    padding-inline: 11px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    gap: 10px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 88px !important;
+    border-radius: 17px !important;
+    padding: 12px 14px !important;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.045) !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.66rem !important;
+    line-height: 1.1;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    margin-top: 2px;
+    font-size: clamp(0.98rem, 5cqi, 1.12rem) !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto;
+  }
+}
+
+@container (max-width: 980px) {
+  .csOkrHeaderActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: 1 / -1;
+  }
+
+  .csOkrFilterPanel.filterPanel {
+    padding: 10px !important;
+    border-radius: 18px !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .csOkrFilterControl.uiInput,
+  .csOkrFilterControl.uiSelectTrigger {
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 88px !important;
+    padding: 12px 14px !important;
+  }
+}
+
+@container (max-width: 430px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto;
+  }
+}
+
+/* CS OKR compact PWA standard override */
+@media (max-width: 767px) {
+  .csOkrPage.opsPageShell {
+    padding: 16px 12px calc(108px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .csOkrStack {
+    gap: 12px;
+  }
+
+  .csOkrHeaderActions {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .csOkrHeaderButton.uiButton,
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto !important;
+    width: 100%;
+    height: 40px !important;
+    min-height: 40px !important;
+    min-width: 0;
+    gap: 6px;
+    border-radius: 13px !important;
+    padding-inline: 7px !important;
+    font-size: 0.72rem !important;
+    line-height: 1;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.055);
+  }
+
+  .csOkrHeaderButton.uiButton svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .csOkrFilterPanel.filterPanel {
+    padding: 10px !important;
+    border-radius: 17px !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .csOkrFilterField > label {
+    font-size: 0.65rem;
+    font-weight: 820;
+  }
+
+  .csOkrFilterControl.uiInput,
+  .csOkrFilterControl.uiSelectTrigger {
+    height: 40px !important;
+    min-height: 40px !important;
+    border-radius: 13px !important;
+    font-size: 0.76rem !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 94px !important;
+    grid-template-columns: minmax(36px, 38px) minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px !important;
+    border-radius: 16px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.64rem !important;
+    line-height: 1.12;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    font-size: clamp(0.88rem, 6cqi, 1.06rem) !important;
+    line-height: 1.1;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue p {
+    font-size: 0.62rem !important;
+    line-height: 1.12;
+  }
+}
+
+@media (max-width: 374px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid,
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@container (max-width: 767px) {
+  .csOkrHeaderActions {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+  }
+
+  .csOkrHeaderButton.uiButton,
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    gap: 6px;
+    padding-inline: 7px !important;
+    font-size: 0.72rem !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 94px !important;
+    grid-template-columns: minmax(36px, 38px) minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px !important;
+    border-radius: 16px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    font-size: clamp(0.88rem, 6cqi, 1.06rem) !important;
+  }
+}
+
+@container (max-width: 374px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid,
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* CS OKR PWA balanced spacing */
+@media (max-width: 767px) {
+  .csOkrPage.opsPageShell {
+    padding: 18px 14px calc(112px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .csOkrStack {
+    gap: 14px;
+  }
+
+  .csOkrPage .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .csOkrPage .topbarTitle,
+  .csOkrPage .topbarActions,
+  .csOkrPage .topbarActions > .csOkrHeaderActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .csOkrPage .topbar h1 {
+    font-size: clamp(1.64rem, 7.8vw, 2rem) !important;
+    line-height: 1.08 !important;
+  }
+
+  .csOkrPage .topbar p {
+    max-width: 92%;
+    font-size: 0.84rem !important;
+    line-height: 1.42 !important;
+  }
+
+  .csOkrHeaderActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .csOkrHeaderButton.uiButton,
+  .csOkrHeaderButtonPrimary.uiButton {
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    padding-inline: 10px !important;
+    font-size: 0.78rem !important;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: 1 / -1 !important;
+  }
+
+  .csOkrFilterPanel.filterPanel {
+    padding: 12px !important;
+    border-radius: 18px !important;
+  }
+
+  .csOkrFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .csOkrFilterField {
+    gap: 6px;
+  }
+
+  .csOkrFilterField > label {
+    font-size: 0.68rem;
+  }
+
+  .csOkrFilterControl.uiInput,
+  .csOkrFilterControl.uiSelectTrigger {
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 112px !important;
+    grid-template-columns: minmax(38px, 42px) minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 15px 30px rgba(15, 23, 42, 0.045) !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricCard small {
+    font-size: 0.68rem !important;
+    line-height: 1.15;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue {
+    margin-top: 4px;
+    font-size: clamp(0.98rem, 5.8cqi, 1.16rem) !important;
+    line-height: 1.12;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid .metricValue p {
+    margin-top: 4px !important;
+    font-size: 0.68rem !important;
+    line-height: 1.16;
+  }
+}
+
+@media (max-width: 374px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid,
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto !important;
+  }
+}
+
+@container (max-width: 767px) {
+  .csOkrPage .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px !important;
+  }
+
+  .csOkrHeaderActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: 1 / -1 !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  .csOkrPage .csOkrKpiGrid.metricGrid > .metricCard {
+    min-height: 112px !important;
+    gap: 12px;
+    padding: 14px !important;
+  }
+}
+
+@container (max-width: 374px) {
+  .csOkrHeaderActions,
+  .csOkrFilterGrid,
+  .csOkrPage .csOkrKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto !important;
+  }
+}
+
+/* CS OKR PWA one-line action bar */
+@media (max-width: 767px) {
+  .csOkrHeaderActions {
+    grid-template-columns: 44px 44px minmax(0, 1fr) !important;
+    gap: 8px !important;
+    align-items: center;
+  }
+
+  .csOkrHeaderButton.uiButton {
+    width: 100%;
+    height: 44px !important;
+    min-height: 44px !important;
+    min-width: 0;
+    border-radius: 14px !important;
+    padding-inline: 0 !important;
+  }
+
+  .csOkrHeaderButton.uiButton:not(.csOkrHeaderButtonPrimary) {
+    aspect-ratio: 1;
+  }
+
+  .csOkrHeaderButton.uiButton:not(.csOkrHeaderButtonPrimary) .csOkrHeaderLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .csOkrHeaderButton.uiButton svg {
+    width: 16px;
+    height: 16px;
+    margin: 0 !important;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto !important;
+    justify-content: center;
+    gap: 7px;
+    padding-inline: 12px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+@media (max-width: 374px) {
+  .csOkrHeaderActions {
+    grid-template-columns: 42px 42px minmax(0, 1fr) !important;
+    gap: 7px !important;
+  }
+
+  .csOkrHeaderButton.uiButton {
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+}
+
+@container (max-width: 767px) {
+  .csOkrHeaderActions {
+    grid-template-columns: 44px 44px minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .csOkrHeaderButton.uiButton:not(.csOkrHeaderButtonPrimary) .csOkrHeaderLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .csOkrHeaderButtonPrimary.uiButton {
+    grid-column: auto !important;
   }
 }
 
@@ -24117,5 +25351,323 @@ body {
 
   .technicianScheduleStatusReason {
     display: none;
+  }
+}
+
+/* CRM contacts PWA/mobile polish */
+.contactsPage.opsPageShell {
+  overflow-x: hidden;
+}
+
+.contactsPageStack {
+  gap: 16px;
+}
+
+.contactsHeaderActions,
+.contactsFilterGrid,
+.contactsFilterStack,
+.contactsSearchField,
+.contactsTableCard,
+.contactsTableHeader {
+  min-width: 0;
+}
+
+.contactsHeaderActions {
+  justify-content: flex-end;
+}
+
+.contactsHeaderButton.uiButton,
+.contactsResetButton.uiButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.contactsHeaderButton.uiButton svg,
+.contactsResetButton.uiButton svg {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.contactsKpiGrid.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.contactsKpiGrid.metricGrid > .metricCard {
+  min-height: 104px;
+  padding: 18px;
+}
+
+.contactsKpiGrid.metricGrid .metricValue {
+  font-size: clamp(1.04rem, 4cqi, 1.34rem);
+}
+
+.contactsFilterPanel.filterPanel {
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.contactsTabScroller {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap !important;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.contactsTabScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.contactsFilterTab {
+  flex: 0 0 auto;
+  min-width: 118px;
+  max-width: max-content;
+}
+
+.contactsFilterTab span:last-child {
+  flex: 0 0 auto;
+}
+
+.contactsFilterGrid {
+  align-items: center;
+  display: grid;
+  grid-template-columns:
+    minmax(220px, 1.35fr)
+    minmax(128px, 0.74fr)
+    minmax(128px, 0.78fr)
+    minmax(148px, 0.95fr)
+    minmax(148px, 0.95fr)
+    minmax(92px, 0.55fr);
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.contactsFilterControl.uiInput,
+.contactsFilterControl.uiSelectTrigger,
+.contactsResetButton.uiButton {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.contactsFilterControl.uiSelectTrigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contactsTableCard.tablePanel {
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+@media (max-width: 1180px) {
+  .contactsKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  .contactsFilterGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .contactsSearchField,
+  .contactsResetButton.uiButton {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .contactsPage.opsPageShell {
+    padding: 16px 12px calc(108px + env(safe-area-inset-bottom));
+  }
+
+  .contactsPageStack {
+    gap: 12px;
+    padding-bottom: 0;
+  }
+
+  .contactsPage .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    margin-bottom: 0;
+  }
+
+  .contactsPage .topbarTitle {
+    min-width: 0;
+  }
+
+  .contactsPage .eyebrowLine {
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .contactsPage .topbar h1 {
+    font-size: clamp(1.44rem, 8vw, 1.72rem);
+    line-height: 1.1;
+  }
+
+  .contactsPage .topbar p {
+    max-width: 100%;
+    font-size: 0.82rem;
+    line-height: 1.42;
+  }
+
+  .contactsPage .topbarActions,
+  .contactsPage .topbarActions > div,
+  .contactsHeaderActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .contactsHeaderActions {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 9px !important;
+  }
+
+  .contactsHeaderButton.uiButton {
+    width: 100%;
+    min-width: 0;
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    padding-inline: 10px !important;
+    font-size: 0.78rem !important;
+    font-weight: 820;
+  }
+
+  .contactsHeaderButton.uiButton svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .contactsHeaderButton.uiButton span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .contactsKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .contactsKpiGrid.metricGrid > .metricCard {
+    min-height: 104px;
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .contactsKpiGrid.metricGrid .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .contactsKpiGrid.metricGrid .metricIcon svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .contactsKpiGrid.metricGrid .metricCard small {
+    font-size: 0.68rem;
+    line-height: 1.15;
+  }
+
+  .contactsKpiGrid.metricGrid .metricValue {
+    font-size: clamp(1.02rem, 6.2vw, 1.22rem) !important;
+    line-height: 1.12;
+  }
+
+  .contactsFilterPanel.filterPanel {
+    padding: 12px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 16px 34px -30px rgba(15, 23, 42, 0.42) !important;
+  }
+
+  .contactsFilterStack {
+    gap: 10px !important;
+  }
+
+  .contactsTabScroller {
+    margin-inline: -2px;
+    padding: 6px;
+    gap: 7px !important;
+    border-radius: 16px !important;
+  }
+
+  .contactsFilterTab {
+    min-width: 104px !important;
+    height: 36px !important;
+    border-radius: 12px !important;
+    padding-inline: 10px !important;
+    font-size: 0.76rem !important;
+  }
+
+  .contactsFilterTab .rounded-full,
+  .contactsFilterTab [class*="rounded-full"] {
+    font-size: 0.62rem !important;
+    padding-inline: 7px !important;
+  }
+
+  .contactsFilterGrid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .contactsSearchField {
+    grid-column: 1 / -1;
+  }
+
+  .contactsFilterControl.uiInput,
+  .contactsFilterControl.uiSelectTrigger,
+  .contactsResetButton.uiButton {
+    height: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+    font-weight: 760;
+    padding-inline: 12px !important;
+  }
+
+  .contactsFilterControl.uiInput {
+    padding-left: 40px !important;
+  }
+
+  .contactsResetButton.uiButton {
+    grid-column: 1 / -1;
+  }
+
+  .contactsTableCard.tablePanel {
+    border-radius: 18px !important;
+  }
+
+  .contactsTableHeader {
+    gap: 10px !important;
+    padding: 14px 12px !important;
+  }
+}
+
+@media (max-width: 374px) {
+  .contactsHeaderActions,
+  .contactsFilterGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .contactsSearchField,
+  .contactsResetButton.uiButton {
+    grid-column: auto;
   }
 }

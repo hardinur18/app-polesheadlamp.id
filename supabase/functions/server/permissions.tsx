@@ -55,9 +55,12 @@ function hasSamePermissionSet(left: PermissionKey[], right: PermissionKey[]) {
 }
 
 async function createAdminClient() {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const supabaseServiceKey =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() || "";
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() || "";
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY wajib dikonfigurasi.");
+  }
 
   return createClient(supabaseUrl, supabaseServiceKey);
 }

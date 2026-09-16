@@ -741,6 +741,13 @@ async function requireAnyMessagingPermissionOrInternalSync(
   return requireAnyMessagingPermission(c, permissions);
 }
 
+const MESSAGING_READ_PERMISSIONS: PermissionKey[] = ["whatsapp.view"];
+const MESSAGING_ASSET_PERMISSIONS: PermissionKey[] = [
+  "whatsapp.settings.manage",
+  ...MESSAGING_READ_PERMISSIONS,
+];
+const MESSAGING_SEND_PERMISSIONS: PermissionKey[] = ["whatsapp.chats.reply"];
+
 function isKirimdevOutboundMediaType(value: unknown): value is KirimdevOutboundMediaType {
   return value === "image" || value === "video" || value === "audio" || value === "document";
 }
@@ -1622,6 +1629,7 @@ type StoredMessageReadOptions = {
   limit?: number;
   before?: string | null;
   since?: string | null;
+  until?: string | null;
   descending?: boolean;
 };
 
@@ -1663,6 +1671,9 @@ function filterStoredMessages(
       return false;
     }
     if (isValidTimestampFilter(options?.since) && message.timestamp < String(options?.since)) {
+      return false;
+    }
+    if (isValidTimestampFilter(options?.until) && message.timestamp > String(options?.until)) {
       return false;
     }
     return true;
@@ -1731,6 +1742,9 @@ async function listMessagesFromDatabase(
     if (isValidTimestampFilter(options?.since)) {
       query = query.gte("timestamp", options?.since as string);
     }
+    if (isValidTimestampFilter(options?.until)) {
+      query = query.lte("timestamp", options?.until as string);
+    }
     const { data, error } = await query;
     if (error) throw error;
     return sortMessagesAscending((data || []).map(mapDbRowToMessageRecord));
@@ -1767,6 +1781,9 @@ async function listMessagesForConversationsFromDatabase(
       }
       if (isValidTimestampFilter(options?.since)) {
         query = query.gte("timestamp", options?.since as string);
+      }
+      if (isValidTimestampFilter(options?.until)) {
+        query = query.lte("timestamp", options?.until as string);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -4583,8 +4600,8 @@ export async function handleKirimdevWebhookReceive(c: any) {
 
 app.get("/readiness", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_ASSET_PERMISSIONS);
+    if (access.error) return access.error;
 
     const channels = await listStoredChannels();
     const debugPayload = await debugCurrentMetaToken();
@@ -4617,8 +4634,8 @@ app.get("/readiness", async (c) => {
 
 app.get("/assets/live", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_ASSET_PERMISSIONS);
+    if (access.error) return access.error;
 
     const channels = await discoverMessagingChannels();
     return c.json({
@@ -4631,8 +4648,8 @@ app.get("/assets/live", async (c) => {
 
 app.post("/assets/sync", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_ASSET_PERMISSIONS);
+    if (access.error) return access.error;
 
     const channels = await discoverMessagingChannels();
     await persistChannels(channels);
@@ -4649,8 +4666,8 @@ app.post("/assets/sync", async (c) => {
 
 app.get("/channels", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_READ_PERMISSIONS);
+    if (access.error) return access.error;
 
     const channels = await listStoredChannels();
     return c.json({
@@ -4663,8 +4680,8 @@ app.get("/channels", async (c) => {
 
 app.get("/conversations", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_READ_PERMISSIONS);
+    if (access.error) return access.error;
 
     const channelId = c.req.query("channelId");
     const conversations = await listConversations();
@@ -4681,8 +4698,8 @@ app.get("/conversations", async (c) => {
 
 app.get("/inbox/overview", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_READ_PERMISSIONS);
+    if (access.error) return access.error;
 
     let channels = await listStoredChannels();
     const needsInstagramSeed = Boolean(
@@ -4763,8 +4780,8 @@ app.get("/inbox/overview", async (c) => {
 
 app.get("/inbox/daily-stats", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_READ_PERMISSIONS);
+    if (access.error) return access.error;
 
     let channels = await listStoredChannels();
     const needsInstagramSeed = Boolean(
@@ -4799,8 +4816,8 @@ app.get("/inbox/daily-stats", async (c) => {
 
 app.get("/messages", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_READ_PERMISSIONS);
+    if (access.error) return access.error;
 
     const conversationId = c.req.query("conversationId");
     if (!conversationId) {
@@ -4816,8 +4833,8 @@ app.get("/messages", async (c) => {
 
 app.get("/inbox/messages", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_READ_PERMISSIONS);
+    if (access.error) return access.error;
 
     const conversationId = c.req.query("conversationId");
     const channelId = c.req.query("channelId");
@@ -4852,8 +4869,8 @@ app.get("/inbox/messages", async (c) => {
 
 app.post("/send", async (c) => {
   try {
-    const auth = await checkAuth(c.req.raw);
-    if (auth.error) return c.json({ error: auth.error }, 401);
+    const access = await requireAnyMessagingPermission(c, MESSAGING_SEND_PERMISSIONS);
+    if (access.error) return access.error;
 
     const body = await c.req.json();
     const channelId = typeof body?.channelId === "string" ? body.channelId.trim() : "";
@@ -5005,6 +5022,7 @@ type WhatsAppCsPerformanceView = {
 type WhatsAppPerformanceSummaryView = {
   windowDays: number;
   since: string;
+  until: string;
   slaTargetSeconds: number;
   totals: {
     csCount: number;
@@ -5192,10 +5210,20 @@ function updateLatestActivity(
   return current;
 }
 
+function isTimestampWithinPerformanceWindow(
+  value: string | null | undefined,
+  sinceMs: number,
+  untilMs: number,
+) {
+  const timestamp = toTimestampMs(value);
+  return timestamp !== null && timestamp >= sinceMs && timestamp <= untilMs;
+}
+
 function addConversationResponseMetrics(
   accumulator: ReturnType<typeof createPerformanceAccumulator>,
   messages: MetaMessageRecord[],
   sinceMs: number,
+  untilMs: number,
 ) {
   const sortedMessages = messages
     .filter((message) => !(message.eventType || "").startsWith("whatsapp_status_"))
@@ -5204,7 +5232,7 @@ function addConversationResponseMetrics(
 
   const windowMessages = sortedMessages.filter((message) => {
     const timestamp = toTimestampMs(message.timestamp);
-    return timestamp !== null && timestamp >= sinceMs;
+    return timestamp !== null && timestamp >= sinceMs && timestamp <= untilMs;
   });
 
   for (const message of windowMessages) {
@@ -5266,25 +5294,31 @@ function isClosingLead(row: any) {
   return normalizeLeadStatus(row?.status) === "closing";
 }
 
-async function listAutoWhatsAppLeadRows(sinceIso: string) {
+async function listAutoWhatsAppLeadRows(sinceIso: string, untilIso?: string | null) {
   try {
     const supabase = resolveSupabaseAdminClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("leads")
       .select("id,status,cs_id,created_at,origin,last_contact")
       .gte("created_at", sinceIso)
-      .or(`origin.eq.${AUTO_WHATSAPP_LEAD_ORIGIN},last_contact.eq.${AUTO_WHATSAPP_LEAD_LAST_CONTACT}`)
-      .limit(5000);
+      .or(`origin.eq.${AUTO_WHATSAPP_LEAD_ORIGIN},last_contact.eq.${AUTO_WHATSAPP_LEAD_LAST_CONTACT}`);
+    if (isValidTimestampFilter(untilIso)) {
+      query = query.lte("created_at", untilIso as string);
+    }
+    const { data, error } = await query.limit(5000);
 
     if (!error) return data || [];
     if (!isSupabaseSchemaError(error)) throw error;
 
-    const fallback = await supabase
+    let fallbackQuery = supabase
       .from("leads")
       .select("id,status,cs_id,created_at,last_contact")
       .gte("created_at", sinceIso)
-      .eq("last_contact", AUTO_WHATSAPP_LEAD_LAST_CONTACT)
-      .limit(5000);
+      .eq("last_contact", AUTO_WHATSAPP_LEAD_LAST_CONTACT);
+    if (isValidTimestampFilter(untilIso)) {
+      fallbackQuery = fallbackQuery.lte("created_at", untilIso as string);
+    }
+    const fallback = await fallbackQuery.limit(5000);
 
     if (fallback.error) throw fallback.error;
     return fallback.data || [];
@@ -5393,14 +5427,27 @@ async function buildWhatsAppCsPerformanceSummary({
   conversations,
   channels,
   ownerByPhoneNumber,
+  since: requestedSince,
+  until: requestedUntil,
 }: {
   conversations: MetaConversationRecord[];
   channels: MetaMessagingChannel[];
   ownerByPhoneNumber: Map<string, WhatsAppAccountOwnerView>;
+  since?: string | null;
+  until?: string | null;
 }): Promise<WhatsAppPerformanceSummaryView> {
   const now = new Date();
-  const since = getPerformanceWindowSince(now);
-  const sinceMs = new Date(since).getTime();
+  let until = normalizeIsoTimestampFilter(requestedUntil) || now.toISOString();
+  let since = normalizeIsoTimestampFilter(requestedSince) || getPerformanceWindowSince(new Date(until));
+  let sinceMs = new Date(since).getTime();
+  let untilMs = new Date(until).getTime();
+  if (sinceMs > untilMs) {
+    since = getPerformanceWindowSince(new Date(until));
+    sinceMs = new Date(since).getTime();
+  }
+  untilMs = Math.max(sinceMs, untilMs);
+  until = new Date(untilMs).toISOString();
+  const windowDays = Math.max(1, Math.ceil((untilMs - sinceMs + 1) / (24 * 60 * 60 * 1000)));
   const whatsappChannels = channels.filter((channel) => channel.platform === "whatsapp");
   const channelById = new Map(whatsappChannels.map((channel) => [channel.id, channel]));
   const ownerByChannelId = new Map<string, WhatsAppAccountOwnerView | null>();
@@ -5430,6 +5477,7 @@ async function buildWhatsAppCsPerformanceSummary({
     whatsappConversations.map((conversation) => conversation.id),
     {
       since,
+      until,
       limit: 50000,
     },
   );
@@ -5448,9 +5496,12 @@ async function buildWhatsAppCsPerformanceSummary({
       ownerByChannelId.get(conversation.channelId) ??
       resolveWhatsAppAccountOwnerForChannel(channel, ownerByPhoneNumber);
     const accumulator = ensureAccumulator(owner);
-    const lastMessageMs = toTimestampMs(conversation.lastMessageAt);
+    const conversationMessages = messagesByConversation.get(conversation.id) || [];
+    const hasWindowMessages = conversationMessages.some((message) =>
+      isTimestampWithinPerformanceWindow(message.timestamp, sinceMs, untilMs),
+    );
 
-    if (lastMessageMs !== null && lastMessageMs >= sinceMs) {
+    if (isTimestampWithinPerformanceWindow(conversation.lastMessageAt, sinceMs, untilMs) || hasWindowMessages) {
       accumulator.conversationIds.add(conversation.id);
       accumulator.lastActivityAt = updateLatestActivity(
         accumulator.lastActivityAt,
@@ -5460,12 +5511,13 @@ async function buildWhatsAppCsPerformanceSummary({
 
     addConversationResponseMetrics(
       accumulator,
-      messagesByConversation.get(conversation.id) || [],
+      conversationMessages,
       sinceMs,
+      untilMs,
     );
   }
 
-  const leadRows = await listAutoWhatsAppLeadRows(since);
+  const leadRows = await listAutoWhatsAppLeadRows(since, until);
   const missingLeadProfileIds = new Set<string>();
   for (const row of leadRows) {
     const csId = typeof row?.cs_id === "string" && row.cs_id.trim() ? row.cs_id.trim() : null;
@@ -5584,8 +5636,9 @@ async function buildWhatsAppCsPerformanceSummary({
   const totalResponseSamples = allResponseSamples.length;
 
   return {
-    windowDays: WHATSAPP_CS_PERFORMANCE_WINDOW_DAYS,
+    windowDays,
     since,
+    until,
     slaTargetSeconds: WHATSAPP_CS_RESPONSE_SLA_SECONDS,
     totals: {
       csCount: sortedRows.filter((row) => row.csProfileId).length,
@@ -6336,6 +6389,12 @@ app.get("/whatsapp/overview", async (c) => {
     const includeContacts = readQueryBoolean(c.req.query("includeContacts"), true);
     const includeMessageCounts = readQueryBoolean(c.req.query("includeMessageCounts"), true);
     const includeConversations = readQueryBoolean(c.req.query("includeConversations"), true);
+    const performanceFrom = normalizeIsoTimestampFilter(
+      c.req.query("from") || c.req.query("performanceFrom"),
+    );
+    const performanceTo = normalizeIsoTimestampFilter(
+      c.req.query("to") || c.req.query("performanceTo"),
+    );
 
     const channels = await listStoredChannels();
     const allWhatsAppChannels = channels.filter((channel) => channel.platform === "whatsapp");
@@ -6498,6 +6557,8 @@ app.get("/whatsapp/overview", async (c) => {
               ),
           channels: whatsappChannels,
           ownerByPhoneNumber,
+          since: performanceFrom,
+          until: performanceTo,
         })
       : undefined;
 

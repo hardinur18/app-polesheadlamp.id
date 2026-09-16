@@ -9,7 +9,11 @@ import {
 const VALID_PERMISSION_KEYS = new Set<string>(PERMISSIONS.map(permission => permission.key));
 const ALL_PERMISSION_KEYS = PERMISSIONS.map(permission => permission.key);
 const ROLE_RESTRICTED_PERMISSIONS: Partial<Record<Role, PermissionKey[]>> = {
+  Finance: [
+    'audit_logs.view',
+  ],
   CS: [
+    'audit_logs.view',
     'monitoring.view',
     'monitoring.activity_view',
     'technician_schedule.view',
@@ -19,6 +23,7 @@ const ROLE_RESTRICTED_PERMISSIONS: Partial<Record<Role, PermissionKey[]>> = {
     'targets.manage',
   ],
   Teknisi: [
+    'audit_logs.view',
     'schedule.view',
     'monitoring.view',
     'monitoring.activity_view',
@@ -26,6 +31,9 @@ const ROLE_RESTRICTED_PERMISSIONS: Partial<Record<Role, PermissionKey[]>> = {
     'technician_schedule.manage',
     'map.view_global',
     'targets.manage',
+  ],
+  Advertiser: [
+    'audit_logs.view',
   ],
 };
 
@@ -72,7 +80,9 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
   const dashboardViewPermissions = Object.values(DASHBOARD_VIEW_PERMISSION_MAP);
 
   if (updated.includes('dashboard.view')) {
-    ensurePermission(updated, 'audit_logs.view');
+    if (role === 'Owner' || role === 'Super Admin' || role === 'Admin PIC') {
+      ensurePermission(updated, 'audit_logs.view');
+    }
 
     const hasAnyDashboardView = dashboardViewPermissions.some(permission => updated.includes(permission));
     if (!hasAnyDashboardView) {

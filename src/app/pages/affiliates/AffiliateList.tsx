@@ -40,7 +40,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
-import { supabase } from '../../../lib/supabaseClient';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { logActivity } from '@/app/services/auditService';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
@@ -55,6 +54,15 @@ import {
   OperationalTableCard,
   RequiredLabel,
 } from '../../components/ui/operational-page';
+
+const readEdgeError = async (response: Response, fallback: string) => {
+  try {
+    const body = await response.json();
+    return new Error(body?.error || fallback);
+  } catch {
+    return new Error(fallback);
+  }
+};
 
 export const AffiliateList: React.FC = () => {
   const { hasPermission } = usePermissions();
@@ -83,40 +91,30 @@ export const AffiliateList: React.FC = () => {
   });
 
   const API_URL = buildMakeServerUrl();
+  const AFFILIATE_APP_DATA_URL = `${API_URL}/app-data/affiliates`;
 
   // Fetch Affiliates
   const fetchAffiliates = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Try fetching from direct DB first (if table exists)
-      const { data, error } = await supabase
-        .from('affiliates')
-        .select('*')
-        .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        setAffiliates(data);
-        return;
-      }
-
-      // Fallback to Edge Function (KV) if DB fails or empty
-      const response = await fetch(`${API_URL}/affiliates`, {
+      const response = await fetch(`${AFFILIATE_APP_DATA_URL}?from=0&to=4999`, {
         headers: await getSessionBackedEdgeHeaders(),
       });
       
       if (!response.ok) {
-         throw new Error(`Failed to fetch affiliates: ${response.status}`);
+         throw await readEdgeError(response, `Failed to fetch affiliates: ${response.status}`);
       }
       
       const apiData = await response.json();
-      setAffiliates(apiData);
+      setAffiliates(Array.isArray(apiData?.rows) ? apiData.rows : []);
     } catch (error) {
-      console.warn('Error fetching affiliates (using fallback):', error);
+      console.warn('Error fetching affiliates:', error);
+      setAffiliates([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [AFFILIATE_APP_DATA_URL]);
 
   useEffect(() => {
     if (hasPermission('affiliate.view')) {
@@ -166,40 +164,19 @@ export const AffiliateList: React.FC = () => {
           created_at: new Date().toISOString()
         };
 
-        try {
-            // Try direct DB insert first
-            const { data, error } = await supabase.from('affiliates').insert(newAffiliate).select().single();
-            
-            if (!error && data) {
-                 setAffiliates([data, ...affiliates]);
-                 setIsAddDialogOpen(false);
-                 resetForm();
-                 toast.success("Affiliate berhasil ditambahkan (DB)");
-                 if (currentUser) {
-                   logActivity(
-                     { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-                     'CREATE', 'Affiliate',
-                     `Menambahkan affiliate: ${newAffiliate.nama_lengkap}`,
-                     data.id
-                   );
-                 }
-                 return;
-            }
+        const response = await fetch(AFFILIATE_APP_DATA_URL, {
+            method: 'POST',
+            headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+            body: JSON.stringify(newAffiliate)
+        });
 
-            // Fallback to Edge Function
-            const response = await fetch(`${API_URL}/affiliates`, {
-                method: 'POST',
-                headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-                body: JSON.stringify(newAffiliate)
-            });
-
-            if (!response.ok) throw new Error('Failed to create affiliate on server');
-            const savedAffiliate = await response.json();
-            setAffiliates([savedAffiliate, ...affiliates]);
-        } catch (serverError) {
-            console.warn("Server create failed, using local fallback", serverError);
-            setAffiliates([newAffiliate, ...affiliates]);
+        if (!response.ok) {
+            throw await readEdgeError(response, 'Failed to create affiliate on server');
         }
+
+        const body = await response.json();
+        const savedAffiliate = body?.row || newAffiliate;
+        setAffiliates([savedAffiliate, ...affiliates]);
 
         setIsAddDialogOpen(false);
         resetForm();
@@ -230,47 +207,19 @@ export const AffiliateList: React.FC = () => {
             komisi: Number(formData.komisi)
         };
 
-        try {
-            // Try direct DB update first
-            const { data, error } = await supabase
-                .from('affiliates')
-                .update(updatedData)
-                .eq('id', currentAffiliate.id)
-                .select()
-                .single();
-            
-            if (!error && data) {
-                 setAffiliates(affiliates.map(item => item.id === currentAffiliate.id ? data : item));
-                 setIsEditDialogOpen(false);
-                 setCurrentAffiliate(null);
-                 resetForm();
-                 toast.success("Data affiliate berhasil diperbarui (DB)");
-                 if (currentUser) {
-                   logActivity(
-                     { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-                     'UPDATE', 'Affiliate',
-                     `Memperbarui data affiliate: ${updatedData.nama_lengkap}`,
-                     currentAffiliate.id
-                   );
-                 }
-                 return;
-            }
+        const response = await fetch(`${AFFILIATE_APP_DATA_URL}/${encodeURIComponent(currentAffiliate.id)}`, {
+            method: 'PUT',
+            headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+            body: JSON.stringify(updatedData)
+        });
 
-            // Fallback to Edge Function
-            const response = await fetch(`${API_URL}/affiliates/${currentAffiliate.id}`, {
-                method: 'PUT',
-                headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-                body: JSON.stringify(updatedData)
-            });
-
-            if (!response.ok) throw new Error('Failed to update affiliate on server');
-            const result = await response.json();
-            setAffiliates(affiliates.map(item => item.id === currentAffiliate.id ? result : item));
-        } catch (serverError) {
-             console.warn("Server update failed, using local fallback", serverError);
-             setAffiliates(affiliates.map(item => item.id === currentAffiliate.id ? updatedData : item));
+        if (!response.ok) {
+            throw await readEdgeError(response, 'Failed to update affiliate on server');
         }
 
+        const body = await response.json();
+        const result = body?.row || updatedData;
+        setAffiliates(affiliates.map(item => item.id === currentAffiliate.id ? result : item));
         setIsEditDialogOpen(false);
         setCurrentAffiliate(null);
         resetForm();
@@ -294,33 +243,13 @@ export const AffiliateList: React.FC = () => {
   const handleDelete = async () => {
     if (!currentAffiliate) return;
     try {
-        try {
-             // Try direct DB delete first
-             const { error } = await supabase.from('affiliates').delete().eq('id', currentAffiliate.id);
-             if (!error) {
-                 setAffiliates(affiliates.filter(item => item.id !== currentAffiliate.id));
-                 setIsDeleteDialogOpen(false);
-                 setCurrentAffiliate(null);
-                 toast.success("Affiliate berhasil dihapus (DB)");
-                 if (currentUser) {
-                   logActivity(
-                     { id: currentUser.id, name: currentUser.name, role: currentUser.role },
-                     'DELETE', 'Affiliate',
-                     `Menghapus affiliate: ${currentAffiliate.nama_lengkap}`,
-                     currentAffiliate.id
-                   );
-                 }
-                 return;
-             }
+        const response = await fetch(`${AFFILIATE_APP_DATA_URL}/${encodeURIComponent(currentAffiliate.id)}`, {
+            method: 'DELETE',
+            headers: await getSessionBackedEdgeHeaders(),
+        });
 
-            const response = await fetch(`${API_URL}/affiliates/${currentAffiliate.id}`, {
-                method: 'DELETE',
-                headers: await getSessionBackedEdgeHeaders(),
-            });
-
-            if (!response.ok) throw new Error('Failed to delete affiliate on server');
-        } catch (serverError) {
-            console.warn("Server delete failed, using local fallback", serverError);
+        if (!response.ok) {
+            throw await readEdgeError(response, 'Failed to delete affiliate on server');
         }
 
         setAffiliates(affiliates.filter(item => item.id !== currentAffiliate.id));

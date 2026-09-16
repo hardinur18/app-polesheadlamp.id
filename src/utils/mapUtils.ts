@@ -1,4 +1,5 @@
 import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { supabase } from '@/lib/supabaseClient';
 
 export const getCoordinatesFromUrl = (url: string) => {
   if (!url) return null;
@@ -98,11 +99,17 @@ export const expandShortUrl = async (url: string) => {
     if (!projectId || !publicAnonKey) return url;
 
     try {
+        const { data } = await supabase.auth.getSession();
+        const accessToken = data.session?.access_token;
+
+        if (!accessToken) return url;
+
         const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-f781cd00/expand-url`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${publicAnonKey}`
+                'Authorization': `Bearer ${accessToken}`,
+                'x-client-token': accessToken
             },
             body: JSON.stringify({ url })
         });
@@ -112,8 +119,8 @@ export const expandShortUrl = async (url: string) => {
             return url;
         }
 
-        const data = await response.json();
-        return data.expandedUrl || url;
+        const payload = await response.json();
+        return payload.expandedUrl || url;
     } catch (e) {
         // Silent fail for network errors to avoid console noise
         // console.warn("Error expanding URL:", e);

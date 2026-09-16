@@ -17,6 +17,12 @@ import {
   listDateChunks,
   parseBooleanFlag,
 } from "./ads_snapshot_utils.tsx";
+import {
+  getRequesterAccessContext,
+  hasEffectivePermission,
+} from "./requester_access.ts";
+import type { RequesterAccessContext } from "./requester_access.ts";
+import type { PermissionKey } from "../../../src/app/data/permissions.ts";
 
 const app = new Hono();
 
@@ -226,6 +232,29 @@ type AuthenticatedUser = NonNullable<Awaited<ReturnType<typeof requireAuthentica
 type AdsOAuthManagerAccess =
   | { ok: true; user: AuthenticatedUser }
   | { ok: false; error: Response };
+
+type AdsPermissionAccess =
+  | { ok: true; requester: RequesterAccessContext }
+  | { ok: false; error: Response };
+
+const ADS_VIEW_PERMISSIONS: PermissionKey[] = ["monitoring.marketing.view"];
+const ADS_MANAGE_PERMISSIONS: PermissionKey[] = ["ads.manage"];
+
+async function requireAnyAdsPermission(
+  c: any,
+  permissions: readonly PermissionKey[],
+): Promise<AdsPermissionAccess> {
+  const requester = await getRequesterAccessContext(c.req.raw.headers);
+  if (!requester) {
+    return { ok: false, error: c.json({ error: "Unauthorized" }, 401) };
+  }
+
+  if (!permissions.some((permission) => hasEffectivePermission(requester, permission))) {
+    return { ok: false, error: c.json({ error: "Forbidden" }, 403) };
+  }
+
+  return { ok: true, requester };
+}
 
 async function requireAdsOAuthManager(c: any): Promise<AdsOAuthManagerAccess> {
   const user = await requireAuthenticatedUser(c);
@@ -993,10 +1022,11 @@ app.post("/exchange-code", async (c) => {
 
 app.get("/token-health", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, [
+      ...ADS_VIEW_PERMISSIONS,
+      ...ADS_MANAGE_PERMISSIONS,
+    ]);
+    if (!access.ok) return access.error;
 
     const storedRefreshToken = await readStoredGoogleAdsRefreshToken();
     const configured = {
@@ -1059,10 +1089,8 @@ app.get("/token-health", async (c) => {
 
 app.get("/live-breakdown", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const from = c.req.query("from");
     const to = c.req.query("to");
@@ -1161,7 +1189,7 @@ app.get("/live-breakdown", async (c) => {
     return c.json({
       source: "google-ads-live",
       generatedAt: new Date().toISOString(),
-      requestedBy: user.id,
+      requestedBy: access.requester.authUser.id,
       range: {
         from,
         to,
@@ -1193,10 +1221,8 @@ app.get("/live-breakdown", async (c) => {
 
 app.get("/snapshots", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const from = c.req.query("from");
     const to = c.req.query("to");
@@ -1276,10 +1302,8 @@ app.get("/snapshots", async (c) => {
 
 app.post("/sync-snapshots", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const body = await readJsonBody(c);
     const from = typeof body?.from === "string" ? body.from : c.req.query("from");
@@ -1355,10 +1379,8 @@ app.post("/sync-snapshots", async (c) => {
 
 app.get("/integration-configs", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const configs = await kv.getByPrefix("google_ads_integration_config:");
     return c.json({ configs });
@@ -1377,10 +1399,8 @@ app.get("/integration-configs", async (c) => {
 
 app.post("/integration-configs/:adAccountId", async (c) => {
   try {
-    const user = await requireAuthenticatedUser(c);
-    if (!user) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
+    const access = await requireAnyAdsPermission(c, ADS_MANAGE_PERMISSIONS);
+    if (!access.ok) return access.error;
 
     const adAccountId = c.req.param("adAccountId");
     const body = await c.req.json();
@@ -1404,7 +1424,7 @@ app.post("/integration-configs/:adAccountId", async (c) => {
           ? body.liveGoogleCustomerName.trim()
           : undefined,
       updatedAt: new Date().toISOString(),
-      updatedBy: user.id,
+      updatedBy: access.requester.authUser.id,
     };
 
     await kv.set(`google_ads_integration_config:${adAccountId}`, config);

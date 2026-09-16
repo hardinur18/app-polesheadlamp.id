@@ -1,7 +1,9 @@
-import { supabase } from '@/lib/supabaseClient';
 import type { LeadStatus } from '@/app/pages/master-data/data';
 import { buildMakeServerUrl } from '@/app/services/internal/functionsBaseUrl';
-import { getSessionBackedEdgeHeaders } from '@/app/services/internal/sessionClientHeaders';
+import {
+  getPublicEdgeHeaders,
+  getSessionBackedEdgeHeaders,
+} from '@/app/services/internal/sessionClientHeaders';
 
 export type EmbedLeadRoutingMode = 'single_cs' | 'broadcast' | 'random' | 'round_robin';
 export type EmbedLeadStatus = 'draft' | 'active' | 'paused' | 'archived';
@@ -153,17 +155,10 @@ export const EMBED_LEAD_FIELD_DEFINITIONS: EmbedLeadFieldDefinition[] = [
 
 const REQUIRED_FIELD_KEYS: EmbedLeadFieldKey[] = ['name', 'phone'];
 const EMBED_FORM_MASTER_TYPE = 'embed_lead_form';
-const EMBED_SUBMISSION_MASTER_TYPE = 'embed_lead_form_submission';
 
 type FallbackEmbedLeadFormRecord = EmbedLeadForm & {
   fields?: EmbedLeadFormField[];
   routes?: EmbedLeadFormCsRoute[];
-};
-
-type FallbackSubmissionRecord = Record<string, unknown> & {
-  id: string;
-  createdAt?: string;
-  updatedAt?: string;
 };
 
 const cleanObject = <T extends Record<string, unknown>>(value: T) =>
@@ -191,31 +186,6 @@ const isMissingEmbedSchemaError = (error: any) => {
     text.includes('embed_lead_form_fields') ||
     text.includes('embed_lead_form_cs_routes') ||
     text.includes('embed_lead_form_submissions')
-  );
-};
-
-const isLeadSchemaError = (error: any) => {
-  const text = [
-    error?.code,
-    error?.message,
-    error?.details,
-    error?.hint,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  return (
-    text.includes('pgrst204') ||
-    text.includes('42703') ||
-    text.includes('schema cache') ||
-    text.includes('could not find') ||
-    text.includes('embed_form') ||
-    text.includes('service_id') ||
-    text.includes('affiliate_id') ||
-    text.includes('origin') ||
-    text.includes('landing_page_url') ||
-    text.includes('utm_')
   );
 };
 
@@ -420,6 +390,49 @@ const deleteMasterItem = async (type: string, id: string) => {
   }
 };
 
+type EmbedLeadApiBundlePayload = {
+  form: any;
+  fields: any[];
+  routes: any[];
+};
+
+const mapBundleFromApi = (bundle: EmbedLeadApiBundlePayload): EmbedLeadFormBundle => ({
+  form: mapFormFromDB(bundle.form),
+  fields: normalizeRequiredFields((bundle.fields || []).map(mapFieldFromDB)),
+  routes: (bundle.routes || []).map(mapRouteFromDB),
+});
+
+const readEmbedApiError = async (response: Response, fallback: string) => {
+  const body = await response.json().catch(() => ({}));
+  return new Error(body.error || fallback);
+};
+
+const fetchEmbedApiJson = async <T,>(
+  path: string,
+  options: {
+    method?: 'GET' | 'POST' | 'DELETE';
+    publicRequest?: boolean;
+    body?: unknown;
+  } = {},
+) => {
+  const includeJsonContentType = typeof options.body !== 'undefined';
+  const headers = options.publicRequest
+    ? getPublicEdgeHeaders({ includeJsonContentType })
+    : await getSessionBackedEdgeHeaders({ includeJsonContentType });
+
+  const response = await fetch(buildMakeServerUrl(path), {
+    method: options.method || 'GET',
+    headers,
+    body: typeof options.body === 'undefined' ? undefined : JSON.stringify(options.body),
+  });
+
+  if (!response.ok) {
+    throw await readEmbedApiError(response, `Request embed form gagal (${response.status})`);
+  }
+
+  return (await response.json()) as T;
+};
+
 const normalizeFallbackBundle = (row: FallbackEmbedLeadFormRecord): EmbedLeadFormBundle => ({
   form: {
     ...row,
@@ -524,13 +537,8 @@ const saveEmbedLeadFormFallback = async (input: EmbedLeadFormSaveInput): Promise
 
 export async function listEmbedLeadForms() {
   try {
-    const { data, error } = await supabase
-      .from('embed_lead_forms')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return (data || []).map(mapFormFromDB);
+    const payload = await fetchEmbedApiJson<{ forms: any[] }>('/embed/admin/forms');
+    return (payload.forms || []).map(mapFormFromDB);
   } catch (error) {
     if (isMissingEmbedSchemaError(error)) {
       return listEmbedLeadFormsFallback();
@@ -544,59 +552,16 @@ export async function fetchEmbedLeadFormBundle(identifier: string, activeOnly = 
   if (!normalizedIdentifier) return null;
 
   try {
-    let query = supabase
-      .from('embed_lead_forms')
-      .select('*')
-      .eq('slug', normalizedIdentifier);
+    const path = activeOnly
+      ? `/embed/public/forms/${encodeURIComponent(normalizedIdentifier)}`
+      : `/embed/admin/forms/${encodeURIComponent(normalizedIdentifier)}`;
+    const payload = await fetchEmbedApiJson<{ bundle: EmbedLeadApiBundlePayload | null }>(path, {
+      publicRequest: activeOnly,
+    });
 
-    if (activeOnly) {
-      query = query.eq('status', 'active');
-    }
-
-    let { data: formRow, error } = await query.maybeSingle();
-    if (error) throw error;
-
-    if (!formRow) {
-      let tokenQuery = supabase
-        .from('embed_lead_forms')
-        .select('*')
-        .eq('public_token', normalizedIdentifier);
-
-      if (activeOnly) {
-        tokenQuery = tokenQuery.eq('status', 'active');
-      }
-
-      const tokenResult = await tokenQuery.maybeSingle();
-      if (tokenResult.error) throw tokenResult.error;
-      formRow = tokenResult.data;
-    }
-
-    if (!formRow) return null;
-
-    const form = mapFormFromDB(formRow);
-    const [fieldsResult, routesResult] = await Promise.all([
-      supabase
-        .from('embed_lead_form_fields')
-        .select('*')
-        .eq('form_id', form.id)
-        .order('sort_order', { ascending: true }),
-      supabase
-        .from('embed_lead_form_cs_routes')
-        .select('*')
-        .eq('form_id', form.id)
-        .order('sort_order', { ascending: true }),
-    ]);
-
-    if (fieldsResult.error) throw fieldsResult.error;
-    if (routesResult.error) throw routesResult.error;
-
-    return {
-      form,
-      fields: normalizeRequiredFields((fieldsResult.data || []).map(mapFieldFromDB)),
-      routes: (routesResult.data || []).map(mapRouteFromDB),
-    };
+    return payload.bundle ? mapBundleFromApi(payload.bundle) : null;
   } catch (error) {
-    if (isMissingEmbedSchemaError(error)) {
+    if (!activeOnly && isMissingEmbedSchemaError(error)) {
       return fetchEmbedLeadFormBundleFallback(normalizedIdentifier, activeOnly);
     }
     throw error;
@@ -610,22 +575,6 @@ export async function saveEmbedLeadForm(input: EmbedLeadFormSaveInput): Promise<
       slug: createEmbedLeadSlug(input.form.slug || input.form.name),
     });
 
-    const formResult = input.form.id
-      ? await supabase
-          .from('embed_lead_forms')
-          .update(payload)
-          .eq('id', input.form.id)
-          .select()
-          .single()
-      : await supabase
-          .from('embed_lead_forms')
-          .insert(payload)
-          .select()
-          .single();
-
-    if (formResult.error) throw formResult.error;
-
-    const form = mapFormFromDB(formResult.data);
     const normalizedFields = normalizeRequiredFields(input.fields);
     const normalizedRoutes = input.routes
       .filter((route) => route.csId)
@@ -636,34 +585,22 @@ export async function saveEmbedLeadForm(input: EmbedLeadFormSaveInput): Promise<
         sortOrder: index * 10,
       }));
 
-    const deleteFields = await supabase.from('embed_lead_form_fields').delete().eq('form_id', form.id);
-    if (deleteFields.error) throw deleteFields.error;
-
     const fieldRows = normalizedFields
       .filter((field) => field.isVisible)
-      .map((field, index) => mapFieldToDB(form.id, { ...field, sortOrder: index * 10 }));
+      .map((field, index) => mapFieldToDB(input.form.id || '', { ...field, sortOrder: index * 10 }));
+    const routeRows = normalizedRoutes.map((route) => mapRouteToDB(input.form.id || '', route));
 
-    if (fieldRows.length > 0) {
-      const insertFields = await supabase.from('embed_lead_form_fields').insert(fieldRows);
-      if (insertFields.error) throw insertFields.error;
-    }
+    const result = await fetchEmbedApiJson<{ bundle: EmbedLeadApiBundlePayload | null }>('/embed/admin/forms', {
+      method: 'POST',
+      body: {
+        form: payload,
+        fields: fieldRows,
+        routes: routeRows,
+      },
+    });
 
-    const deleteRoutes = await supabase.from('embed_lead_form_cs_routes').delete().eq('form_id', form.id);
-    if (deleteRoutes.error) throw deleteRoutes.error;
-
-    if (normalizedRoutes.length > 0) {
-      const insertRoutes = await supabase
-        .from('embed_lead_form_cs_routes')
-        .insert(normalizedRoutes.map((route) => mapRouteToDB(form.id, route)));
-      if (insertRoutes.error) throw insertRoutes.error;
-    }
-
-    const refreshed = await fetchEmbedLeadFormBundle(form.slug);
-    if (!refreshed) {
-      throw new Error('Form tersimpan, tapi gagal dimuat ulang.');
-    }
-
-    return refreshed;
+    if (!result.bundle) throw new Error('Form tersimpan, tapi gagal dimuat ulang.');
+    return mapBundleFromApi(result.bundle);
   } catch (error) {
     if (isMissingEmbedSchemaError(error)) {
       return saveEmbedLeadFormFallback(input);
@@ -674,8 +611,9 @@ export async function saveEmbedLeadForm(input: EmbedLeadFormSaveInput): Promise<
 
 export async function deleteEmbedLeadForm(id: string) {
   try {
-    const { error } = await supabase.from('embed_lead_forms').delete().eq('id', id);
-    if (error) throw error;
+    await fetchEmbedApiJson(`/embed/admin/forms/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
   } catch (error) {
     if (isMissingEmbedSchemaError(error)) {
       await deleteMasterItem(EMBED_FORM_MASTER_TYPE, id);
@@ -714,326 +652,17 @@ export function normalizeRequiredFields(fields: EmbedLeadFormField[]) {
   return Array.from(map.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
-const generateShortLeadId = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
-  for (let i = 0; i < 7; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
-
-const selectRoute = (bundle: EmbedLeadFormBundle) => {
-  const activeRoutes = bundle.routes
-    .filter((route) => route.status === 'active' && route.csId)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  const routeCsIds = activeRoutes.map((route) => route.csId);
-  const fallbackCsId = bundle.form.fallbackCsId || routeCsIds[0] || null;
-
-  if (bundle.form.routingMode === 'broadcast') {
-    return {
-      primaryCsId: fallbackCsId,
-      routedCsIds: routeCsIds.length > 0 ? routeCsIds : fallbackCsId ? [fallbackCsId] : [],
-      nextCursor: bundle.form.roundRobinCursor,
-    };
-  }
-
-  if (bundle.form.routingMode === 'random' && routeCsIds.length > 0) {
-    const index = Math.floor(Math.random() * routeCsIds.length);
-    return {
-      primaryCsId: routeCsIds[index],
-      routedCsIds: [routeCsIds[index]],
-      nextCursor: bundle.form.roundRobinCursor,
-    };
-  }
-
-  if (bundle.form.routingMode === 'round_robin' && routeCsIds.length > 0) {
-    const index = bundle.form.roundRobinCursor % routeCsIds.length;
-    return {
-      primaryCsId: routeCsIds[index],
-      routedCsIds: [routeCsIds[index]],
-      nextCursor: bundle.form.roundRobinCursor + 1,
-    };
-  }
-
-  return {
-    primaryCsId: fallbackCsId,
-    routedCsIds: fallbackCsId ? [fallbackCsId] : [],
-    nextCursor: bundle.form.roundRobinCursor,
-  };
-};
-
-const normalizeAnswer = (value: unknown) => {
-  if (typeof value !== 'string') return '';
-  return value.trim();
-};
-
-const createSubmissionRecord = async (payload: Record<string, unknown>) => {
-  try {
-    const submissionResult = await supabase
-      .from('embed_lead_form_submissions')
-      .insert(payload)
-      .select()
-      .single();
-
-    if (submissionResult.error) throw submissionResult.error;
-    return {
-      submission: submissionResult.data as Record<string, unknown> & { id: string },
-      storage: 'db' as const,
-    };
-  } catch (error) {
-    if (!isMissingEmbedSchemaError(error)) throw error;
-
-    const now = new Date().toISOString();
-    const fallbackSubmission: FallbackSubmissionRecord = {
-      id: createClientId(),
-      ...payload,
-      createdAt: now,
-      updatedAt: now,
-    };
-    const saved = await saveMasterItem(EMBED_SUBMISSION_MASTER_TYPE, fallbackSubmission);
-    return {
-      submission: saved as Record<string, unknown> & { id: string },
-      storage: 'fallback' as const,
-    };
-  }
-};
-
-const updateSubmissionRecord = async (
-  storage: 'db' | 'fallback',
-  submission: Record<string, unknown> & { id: string },
-  patch: Record<string, unknown>,
-) => {
-  if (storage === 'db') {
-    const result = await supabase
-      .from('embed_lead_form_submissions')
-      .update(patch)
-      .eq('id', submission.id);
-    if (result.error && !isMissingEmbedSchemaError(result.error)) throw result.error;
-    return;
-  }
-
-  await saveMasterItem(EMBED_SUBMISSION_MASTER_TYPE, {
-    ...submission,
-    ...patch,
-    updatedAt: new Date().toISOString(),
-  } as FallbackSubmissionRecord);
-};
-
-const updateFormRoutingSnapshot = async (
-  bundle: EmbedLeadFormBundle,
-  patch: Partial<EmbedLeadForm>,
-) => {
-  const dbPatch = cleanObject({
-    round_robin_cursor: patch.roundRobinCursor,
-    last_routed_cs_id: patch.lastRoutedCsId,
-    last_routed_at: patch.lastRoutedAt,
-  });
-
-  try {
-    const result = await supabase
-      .from('embed_lead_forms')
-      .update(dbPatch)
-      .eq('id', bundle.form.id);
-    if (result.error) throw result.error;
-  } catch (error) {
-    if (!isMissingEmbedSchemaError(error)) throw error;
-
-    await saveMasterItem(EMBED_FORM_MASTER_TYPE, {
-      ...bundle.form,
-      ...patch,
-      fields: bundle.fields,
-      routes: bundle.routes,
-      updatedAt: new Date().toISOString(),
-    } as FallbackEmbedLeadFormRecord);
-  }
-};
-
-const legacyLeadPayload = (payload: Record<string, unknown>) => cleanObject({
-  id: payload.id,
-  name: payload.name,
-  phone: payload.phone,
-  status: payload.status,
-  notes: payload.notes,
-  platform_id: payload.platform_id,
-  sub_channel_id: payload.sub_channel_id,
-  advertiser_id: payload.advertiser_id,
-  cs_id: payload.cs_id,
-  vehicle_id: payload.vehicle_id,
-  last_contact: payload.last_contact,
-  template_history: payload.template_history,
-  social_platform: payload.social_platform,
-  social_username: payload.social_username,
-  social_profile_url: payload.social_profile_url,
-  social_chat_url: payload.social_chat_url,
-  created_at: payload.created_at,
-});
-
-const minimalLeadPayload = (payload: Record<string, unknown>) => cleanObject({
-  id: payload.id,
-  name: payload.name,
-  phone: payload.phone,
-  status: payload.status,
-  notes: payload.notes,
-  platform_id: payload.platform_id,
-  sub_channel_id: payload.sub_channel_id,
-  advertiser_id: payload.advertiser_id,
-  cs_id: payload.cs_id,
-  vehicle_id: payload.vehicle_id,
-  last_contact: payload.last_contact,
-  template_history: payload.template_history,
-  created_at: payload.created_at,
-});
-
-const insertLeadWithSchemaFallback = async (payload: Record<string, unknown>) => {
-  const fullResult = await supabase.from('leads').insert(payload).select().single();
-  if (!fullResult.error) return fullResult.data;
-
-  if (!isLeadSchemaError(fullResult.error)) {
-    throw fullResult.error;
-  }
-
-  const legacyResult = await supabase.from('leads').insert(legacyLeadPayload(payload)).select().single();
-  if (!legacyResult.error) return legacyResult.data;
-
-  if (!isLeadSchemaError(legacyResult.error)) {
-    throw legacyResult.error;
-  }
-
-  const minimalResult = await supabase.from('leads').insert(minimalLeadPayload(payload)).select().single();
-  if (minimalResult.error) throw minimalResult.error;
-  return minimalResult.data;
-};
-
 export async function submitEmbedLeadForm(bundle: EmbedLeadFormBundle, input: EmbedLeadSubmissionInput) {
-  const answers = input.answers || {};
-  const customerName = normalizeAnswer(answers.name);
-  const customerPhone = normalizeAnswer(answers.phone);
-
-  if (!customerName || !customerPhone) {
-    throw new Error('Nama customer dan No. WhatsApp wajib diisi.');
-  }
-
-  const route = selectRoute(bundle);
-  const form = bundle.form;
-  const serviceId = normalizeAnswer(answers.service_id) || form.defaultServiceId || null;
-  const serviceField = bundle.fields.find((field) => field.fieldKey === 'service_id');
-  const serviceName = serviceField?.options.find((option) => option.value === serviceId)?.label || form.defaultServiceName || null;
-
-  const submissionPayload = cleanObject({
-    form_id: form.id,
-    form_slug: form.slug,
-    form_name: form.name,
-    public_token: form.publicToken,
-    customer_name: customerName,
-    customer_phone: customerPhone,
-    service_id: serviceId,
-    service_name: serviceName,
-    platform_id: normalizeAnswer(answers.platform_id) || form.platformId || null,
-    sub_channel_id: normalizeAnswer(answers.sub_channel_id) || form.subChannelId || null,
-    advertiser_id: normalizeAnswer(answers.advertiser_id) || form.advertiserId || null,
-    ad_account_id: form.adAccountId || null,
-    vehicle_id: normalizeAnswer(answers.vehicle_id) || null,
-    affiliate_id: normalizeAnswer(answers.affiliate_id) || null,
-    notes: normalizeAnswer(answers.notes) || null,
-    field_answers: answers,
-    raw_payload: {
-      answers,
-      landingPageUrl: input.landingPageUrl,
-      referrerUrl: input.referrerUrl,
-      submittedAt: new Date().toISOString(),
-    },
-    tracking_context: input.trackingContext || {},
-    routing_context: {
-      routingMode: form.routingMode,
-      fallbackCsId: form.fallbackCsId,
-      activeRouteCount: bundle.routes.filter((item) => item.status === 'active').length,
-    },
-    utm_source: input.utm?.utm_source || null,
-    utm_medium: input.utm?.utm_medium || null,
-    utm_campaign: input.utm?.utm_campaign || null,
-    utm_term: input.utm?.utm_term || null,
-    utm_content: input.utm?.utm_content || null,
-    landing_page_url: input.landingPageUrl || null,
-    referrer_url: input.referrerUrl || null,
-    user_agent: input.userAgent || null,
-    status: 'received',
-    routing_mode: form.routingMode,
-    routed_cs_id: route.primaryCsId,
-    routed_cs_ids: route.routedCsIds,
+  const identifier = bundle.form.publicToken || bundle.form.slug;
+  return fetchEmbedApiJson<{
+    submissionId: string;
+    leadId: string;
+    routedCsIds: string[];
+  }>(`/embed/public/forms/${encodeURIComponent(identifier)}/submit`, {
+    method: 'POST',
+    publicRequest: true,
+    body: input,
   });
-
-  const { submission, storage } = await createSubmissionRecord(submissionPayload);
-
-  const leadPayload = cleanObject({
-    id: generateShortLeadId(),
-    name: customerName,
-    phone: customerPhone,
-    status: form.defaultStatus || 'Pending',
-    notes: normalizeAnswer(answers.notes) || null,
-    platform_id: normalizeAnswer(answers.platform_id) || form.platformId || null,
-    sub_channel_id: normalizeAnswer(answers.sub_channel_id) || form.subChannelId || null,
-    advertiser_id: normalizeAnswer(answers.advertiser_id) || form.advertiserId || null,
-    cs_id: route.primaryCsId,
-    vehicle_id: normalizeAnswer(answers.vehicle_id) || null,
-    service_id: serviceId,
-    affiliate_id: normalizeAnswer(answers.affiliate_id) || null,
-    social_platform: normalizeAnswer(answers.social_platform) || null,
-    social_username: normalizeAnswer(answers.social_username) || null,
-    social_profile_url: normalizeAnswer(answers.social_profile_url) || null,
-    social_chat_url: normalizeAnswer(answers.social_chat_url) || null,
-    embed_form_id: form.id,
-    embed_form_submission_id: submission.id,
-    embed_form_slug: form.slug,
-    embed_form_name: form.name,
-    origin: 'embed_form',
-    landing_page_url: input.landingPageUrl || null,
-    utm_source: input.utm?.utm_source || null,
-    utm_medium: input.utm?.utm_medium || null,
-    utm_campaign: input.utm?.utm_campaign || null,
-    utm_term: input.utm?.utm_term || null,
-    utm_content: input.utm?.utm_content || null,
-    created_at: new Date().toISOString(),
-    last_contact: 'Baru saja',
-    template_history: [],
-  });
-
-  try {
-    const lead = await insertLeadWithSchemaFallback(leadPayload);
-
-    await updateSubmissionRecord(storage, submission, {
-      lead_id: lead.id,
-      lead_payload: leadPayload,
-      status: 'lead_created',
-      processed_at: new Date().toISOString(),
-    });
-
-    if (form.routingMode === 'round_robin' && route.nextCursor !== form.roundRobinCursor) {
-      await updateFormRoutingSnapshot(bundle, {
-        roundRobinCursor: route.nextCursor,
-        lastRoutedCsId: route.primaryCsId,
-        lastRoutedAt: new Date().toISOString(),
-      });
-    } else if (route.primaryCsId) {
-      await updateFormRoutingSnapshot(bundle, {
-        lastRoutedCsId: route.primaryCsId,
-        lastRoutedAt: new Date().toISOString(),
-      });
-    }
-
-    return {
-      submissionId: submission.id as string,
-      leadId: lead.id as string,
-      routedCsIds: route.routedCsIds,
-    };
-  } catch (error: any) {
-    await updateSubmissionRecord(storage, submission, {
-      status: 'failed',
-      error_message: error?.message || 'Gagal membuat Prospek.',
-      processed_at: new Date().toISOString(),
-    });
-    throw error;
-  }
 }
 
 export function getEmbedBaseUrl() {

@@ -237,6 +237,7 @@ export interface WhatsAppCsPerformance {
 export interface WhatsAppPerformanceSummary {
   windowDays: number;
   since: string;
+  until?: string | null;
   slaTargetSeconds: number;
   totals: {
     csCount: number;
@@ -389,6 +390,8 @@ export async function fetchWhatsAppOverview(params?: {
   includeContacts?: boolean;
   includeMessageCounts?: boolean;
   includeConversations?: boolean;
+  from?: string | null;
+  to?: string | null;
 }) {
   const searchParams = new URLSearchParams();
   if (typeof params?.includePerformance === 'boolean') {
@@ -403,6 +406,8 @@ export async function fetchWhatsAppOverview(params?: {
   if (typeof params?.includeConversations === 'boolean') {
     searchParams.set('includeConversations', String(params.includeConversations));
   }
+  if (params?.from) searchParams.set('from', params.from);
+  if (params?.to) searchParams.set('to', params.to);
   const query = searchParams.toString();
   return fetchWhatsAppJson<WhatsAppOverviewResponse>(
     `/whatsapp/overview${query ? `?${query}` : ''}`,
