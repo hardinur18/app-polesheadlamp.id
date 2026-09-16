@@ -60,3 +60,4 @@ Use this checklist after permission changes, new role presets, or Supabase funct
 
 - Default role permissions are intentionally conservative for WhatsApp. Grant `whatsapp.view` and `whatsapp.chats.reply` explicitly to CS accounts that operate Live Chat.
 - Residual browser-side Supabase paths are tracked in the release verification checklist until they are fully moved behind guarded server routes or verified by production RLS/storage policies.
+- Broad authenticated database policies are not solved in Phase 2. They remain tracked for Phase 3.

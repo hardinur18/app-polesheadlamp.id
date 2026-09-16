@@ -1911,7 +1911,7 @@ app.get("/make-server-f781cd00/meta/live-breakdown", async (c) => {
     return c.json({
       source: "meta-live",
       generatedAt: new Date().toISOString(),
-      requestedBy: user.id,
+      requestedBy: auth.requester?.authUser.id || null,
       range: {
         from,
         to,
@@ -3450,8 +3450,10 @@ async function loadEmbedLeadFormBundleRows(identifier: string, activeOnly: boole
 }
 
 function isEmbedOriginAllowed(c: any, form: any, body: any) {
-  const allowedOrigins = Array.isArray(form?.allowed_embed_origins)
-    ? form.allowed_embed_origins.map((value: unknown) => String(value || "").trim()).filter(Boolean)
+  const allowedOrigins: string[] = Array.isArray(form?.allowed_embed_origins)
+    ? form.allowed_embed_origins
+        .map((value: unknown) => String(value || "").trim())
+        .filter((value: string): value is string => Boolean(value))
     : [];
   if (allowedOrigins.length === 0) return true;
 

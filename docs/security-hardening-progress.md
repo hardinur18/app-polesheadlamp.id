@@ -106,10 +106,11 @@ Status: Partially cleared, production access blocked
 - [ ] Deploy Edge Functions to the frontend app project from `.env.local` / `.env.supabase.local`.
 - [ ] Run real login smoke tests for Owner, CS, Finance, Teknisi, and Advertiser against the frontend app project.
 - [ ] Run real public embed form and public affiliate booking smoke tests against the frontend app project.
-- [ ] Run Deno check for Edge Functions.
+- [x] Run Deno check for Edge Functions.
 
 Blocker:
 
 - The shell `SUPABASE_PROJECT_REF` does not match the project used by `.env.local` / `.env.supabase.local`.
 - The available `SUPABASE_ACCESS_TOKEN` can access the shell project, but does not have the required privileges for the frontend app project. Supabase CLI returns an access-control error when linking the frontend app project.
 - Until a token with access to the frontend app project is available, production migration/deploy and real role smoke tests for that project cannot be honestly marked complete.
+- Local Deno `2.9.6` check passes for `make-server-f781cd00`, `meta-messaging-webhook`, and `kirimdev-messaging-webhook` entrypoints.
