@@ -34,6 +34,7 @@ export default [
       'dist/**',
       'dev-dist/**',
       'node_modules/**',
+      '.tmp/**',
       'File Review/**',
       'guidelines/**',
       'supabase/.temp/**',

@@ -13,6 +13,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      injectRegister: false,
       registerType: 'autoUpdate',
       devOptions: {
         enabled: false

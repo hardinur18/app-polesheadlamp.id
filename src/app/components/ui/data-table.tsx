@@ -151,10 +151,13 @@ export function DataTable({
   onPointerMove,
   onPointerUp,
   primaryLines,
+  role,
   rowMinHeight,
   secondaryLines,
   style,
+  tabIndex,
   textMax,
+  'aria-label': ariaLabel,
   ...props
 }: DataTableProps) {
   const cssVars = { ...style } as CSSProperties & Record<string, string>;
@@ -207,6 +210,11 @@ export function DataTable({
         isDragScrollEnabled && 'uiDataTableDragScroll',
         className,
       )}
+      role={role ?? 'region'}
+      tabIndex={tabIndex ?? 0}
+      aria-label={ariaLabel ?? 'Tabel data'}
+      data-scrollable-x="true"
+      data-ui-data-table="true"
       style={cssVars}
       {...props}
       {...dragHandlers}

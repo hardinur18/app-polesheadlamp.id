@@ -58,12 +58,21 @@ Notes:
 
 ## Phase 4 - Frontend/UI Stability
 
-Status: Not started
+Status: Completed
 
-- [ ] Consolidate table horizontal-scroll foundation.
-- [ ] Reduce conflicting CSS overrides.
-- [ ] Harden PWA update/cache behavior.
-- [ ] Expand typecheck coverage.
+- [x] Consolidate table horizontal-scroll foundation.
+- [x] Reduce conflicting CSS overrides.
+- [x] Harden PWA update/cache behavior.
+- [x] Expand typecheck coverage.
+
+Notes:
+
+- `DataTable` and legacy `Table` wrappers now share explicit horizontal-scroll markers, keyboard-focusable scroll regions, and the same drag/touch scroll foundation.
+- The inventory transaction table no longer overrides DataTable horizontal scrolling with `overflow-x: hidden` or a forced `min-width: 100%`.
+- PWA registration is now handled from the app bootstrap only in production, with periodic online/visible update checks and no duplicate `/registerSW.js` injection.
+- `tsconfig.typecheck.json` now covers the frontend bootstrap, UI foundation components, and the PWA update service. The Phase 4 aggregate typecheck covers base, stock, finance, orders, ads, and technician suites.
+- Valid local verification passed on Node `20.20.2`: aggregate typecheck, production build, lint, and role-route smoke script. The role-route smoke script exited as a guarded skip because anonymous user creation is correctly unauthorized without provided smoke credentials.
+- Local build verification required repairing the local esbuild native binary in `node_modules`; no dependency manifest change was needed.
 
 ## Phase 5 - Cleanup & Release Verification
 

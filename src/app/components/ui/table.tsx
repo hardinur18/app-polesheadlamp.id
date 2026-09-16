@@ -37,6 +37,11 @@ const Table = React.forwardRef<
     return (
       <div
         className={cn("tableScroller uiDataTableScroller", dragScroll && "uiDataTableDragScroll")}
+        role="region"
+        tabIndex={0}
+        aria-label="Tabel data"
+        data-scrollable-x="true"
+        data-ui-data-table="true"
         {...dragHandlers}
       >
         <table

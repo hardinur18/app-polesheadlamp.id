@@ -4977,8 +4977,10 @@
 
 .tableScroller {
   width: 100%;
+  min-width: 0;
   max-height: none;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   background: var(--table-row-bg);
   cursor: grab;
   isolation: isolate;
@@ -4989,6 +4991,22 @@
   user-select: none;
   -webkit-overflow-scrolling: touch;
   -webkit-user-select: none;
+}
+
+.tableScroller[data-scrollable-x="true"],
+.uiDataTableScroller[data-scrollable-x="true"],
+.uiHorizontalDragScrollArea {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tableScroller:focus-visible,
+.uiHorizontalDragScrollArea:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.34);
+  outline-offset: -2px;
 }
 
 .tableScroller table,
@@ -7729,12 +7747,16 @@
 .uiDataTableDragScroll.uiDataTableScroller,
 .uiHorizontalDragScrollArea {
   cursor: grab;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: visible;
   overscroll-behavior-x: contain;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   touch-action: pan-y;
   user-select: none;
+  -webkit-overflow-scrolling: touch;
   -webkit-user-select: none;
 }
 
@@ -16765,14 +16787,14 @@ body {
    Keep this at the end because the foundation has multiple global table layers. */
 .inventoryPage .inventoryTransactionTable.uiDataTableScroller {
   max-width: 100% !important;
-  overflow-x: hidden !important;
+  overflow-x: auto !important;
   overflow-y: hidden !important;
   scrollbar-gutter: stable !important;
 }
 
 .inventoryPage .inventoryTransactionTable.uiDataTableScroller > table {
   width: 100% !important;
-  min-width: 100% !important;
+  min-width: max(100%, var(--table-min-width)) !important;
   table-layout: fixed !important;
 }
 

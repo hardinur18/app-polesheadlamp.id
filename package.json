@@ -22,6 +22,7 @@
     "typecheck:orders": "tsc --noEmit -p tsconfig.typecheck.orders.json",
     "typecheck:ads": "tsc --noEmit -p tsconfig.typecheck.ads.json",
     "typecheck:technicians": "tsc --noEmit -p tsconfig.typecheck.technicians.json",
+    "typecheck:phase4": "npm run typecheck && npm run typecheck:stock && npm run typecheck:finance && npm run typecheck:orders && npm run typecheck:ads && npm run typecheck:technicians",
     "typecheck:full": "tsc --noEmit",
     "ads:google-oauth-token": "node scripts/google-ads-oauth-token.mjs",
     "ads:google-snapshot-refresh": "node scripts/google-ads-snapshot-refresh.mjs",

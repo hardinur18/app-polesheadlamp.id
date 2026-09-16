@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
-  Search, Plus, MoreVertical, Edit, Trash2, Lock, Shield, Users, Headphones, Wrench, Target, Banknote, UserCog, ShieldAlert, Crown, Filter, Download, ChevronDown, ChevronUp, Mail, Phone, Building2, IdCard
+  Search, Plus, MoreVertical, Edit, Trash2, Lock, Shield, Users, Headphones, Wrench, Target, Banknote, UserCog, ShieldAlert, Crown, Filter, Download, ChevronDown, ChevronUp, Mail, Phone, Building2, IdCard, type LucideIcon
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../components/ui/control-panel';
@@ -52,6 +52,18 @@ import { UserForm } from './UserForm';
 import { PasswordResetDialog } from './PasswordResetDialog';
 import { UserPermissionsDialog } from './UserPermissionsDialog';
 import { cn } from '../../components/ui/utils';
+
+type UserDetailRowData = {
+  icon?: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+};
+
+type UserDetailSection = {
+  icon: LucideIcon;
+  rows: UserDetailRowData[];
+  title: string;
+};
 
 // Inner component that uses the context
 const UserManagementContent = () => {
@@ -1034,7 +1046,7 @@ Password : `;
             const isCsUser = isCsRole(detailUser.role);
             const advertiserRelations = getAdvertiserAccountRelations(detailUser.id);
             const csRelations = getCsAccountRelations(detailUser.id);
-            const detailSections = [
+            const detailSections: UserDetailSection[] = [
               {
                 title: 'Identitas',
                 icon: IdCard,

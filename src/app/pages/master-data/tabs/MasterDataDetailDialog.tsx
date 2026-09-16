@@ -9,7 +9,7 @@ interface MasterDataDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   item: any;
   title: string;
-  type?: 'simple' | 'vehicle' | 'payment' | 'sub_channel' | 'vendor';
+  type?: 'simple' | 'vehicle' | 'payment' | 'sub_channel' | 'vendor' | 'platform';
   columns?: {
       header: string;
       accessor: string;

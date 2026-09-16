@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './app/App'
 import { ErrorBoundary } from './app/components/ErrorBoundary'
+import { registerPwaUpdateService } from './app/services/pwaUpdateService'
 import {
   DOM_MUTATION_RELOAD_MARKER,
   STALE_CHUNK_RELOAD_MARKER,
@@ -63,6 +64,10 @@ if (typeof window !== 'undefined') {
         void window.caches.delete(key)
       })
     })
+  }
+
+  if (!isLocalDev && import.meta.env.PROD) {
+    registerPwaUpdateService()
   }
 
   if (isLocalDev && !window.localStorage.getItem(themeResetMarker)) {
