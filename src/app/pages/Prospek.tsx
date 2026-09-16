@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, Phone,
-  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw
+  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw, SlidersHorizontal
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -215,6 +215,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     to: new Date()
   });
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [isMobileFilterExpanded, setIsMobileFilterExpanded] = useState(false);
 
   // Pagination & Selection State
   const [currentPage, setCurrentPage] = useState(1);
@@ -1156,6 +1157,16 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       !isDefaultDateRange
   );
 
+  const activeFilterCount = [
+      Boolean(search),
+      statusFilter !== 'all',
+      advertiserFilter !== 'all',
+      platformFilter !== 'all',
+      subChannelFilter !== 'all',
+      csFilter !== 'all',
+      !isDefaultDateRange,
+  ].filter(Boolean).length;
+
   const resetFilters = () => {
       setSearch('');
       setStatusFilter('all');
@@ -1164,6 +1175,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       setPlatformFilter('all');
       setSubChannelFilter('all');
       setDateRange({ from: new Date(), to: new Date() });
+      setIsMobileFilterExpanded(false);
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -1760,7 +1772,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         </Tabs>
 
         {/* Stats Cards */}
-        <OperationalKpiGrid>
+        <OperationalKpiGrid className="leadKpiGrid">
           <OperationalKpiCard label="Total" value={stats.total} icon={UserIcon} />
           <OperationalKpiCard label="Pending" value={stats.pending} icon={CalendarClock} tone="amber" />
           <OperationalKpiCard label="Closing" value={stats.closing} icon={CheckCircle2} tone="emerald" />
@@ -1769,7 +1781,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         </OperationalKpiGrid>
 
 
-        <OperationalFilterPanel className="leadFilterPanel">
+        <OperationalFilterPanel className={`leadFilterPanel ${isMobileFilterExpanded ? 'isExpanded' : ''}`}>
           <div className="leadFilterGrid">
             <div className="leadFilterDate leadFilterItem">
               <FoundationDateRangePicker
@@ -1778,71 +1790,93 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
               />
             </div>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="leadFilterControl leadFilterItem">
-                <SelectValue placeholder="Semua Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Status</SelectItem>
-                {['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'].map(status => (
-                  <SelectItem key={status} value={status}>{status}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              className={`leadMobileFilterToggle ${hasActiveFilters ? 'isActive' : ''}`}
+              onClick={() => setIsMobileFilterExpanded((expanded) => !expanded)}
+              aria-expanded={isMobileFilterExpanded}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span>Filter</span>
+              {activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}
+            </Button>
 
-            <Select value={platformFilter} onValueChange={(val) => {
-              setPlatformFilter(val);
-              setSubChannelFilter('all');
-            }}>
-              <SelectTrigger className="leadFilterControl leadFilterItem">
-                <SelectValue placeholder="Semua Sumber" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Sumber</SelectItem>
-                {availablePlatforms.map(platform => (
-                  <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
-              <SelectTrigger className="leadFilterControl leadFilterItem">
-                <SelectValue placeholder="Semua Sub Channel" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Sub Channel</SelectItem>
-                {availableSubChannels.map(sc => (
-                  <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {(isAdminManagementUser || isAdvertiserView) && (
-              <Select value={csFilter} onValueChange={setCsFilter}>
-                <SelectTrigger className="leadFilterControl leadFilterItem">
-                  <SelectValue placeholder="Semua CS" />
+            <div className="leadAdvancedFilter leadFilterItem">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="leadFilterControl">
+                  <SelectValue placeholder="Semua Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Semua CS</SelectItem>
-                  {availableCS.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                  <SelectItem value="all">Semua Status</SelectItem>
+                  {['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel'].map(status => (
+                    <SelectItem key={status} value={status}>{status}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="leadAdvancedFilter leadFilterItem">
+              <Select value={platformFilter} onValueChange={(val) => {
+                setPlatformFilter(val);
+                setSubChannelFilter('all');
+              }}>
+                <SelectTrigger className="leadFilterControl">
+                  <SelectValue placeholder="Semua Sumber" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Sumber</SelectItem>
+                  {availablePlatforms.map(platform => (
+                    <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="leadAdvancedFilter leadFilterItem">
+              <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
+                <SelectTrigger className="leadFilterControl">
+                  <SelectValue placeholder="Semua Sub Channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Sub Channel</SelectItem>
+                  {availableSubChannels.map(sc => (
+                    <SelectItem key={sc.id} value={sc.id}>{sc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {(isAdminManagementUser || isAdvertiserView) && (
+              <div className="leadAdvancedFilter leadFilterItem">
+                <Select value={csFilter} onValueChange={setCsFilter}>
+                  <SelectTrigger className="leadFilterControl">
+                    <SelectValue placeholder="Semua CS" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua CS</SelectItem>
+                    {availableCS.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
             {!isAdvertiserView && (
-              <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
-                <SelectTrigger className="leadFilterControl leadFilterItem">
-                  <SelectValue placeholder="Semua Advertiser" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Advertiser</SelectItem>
-                  {availableAdvertisers.map(user => (
-                    <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="leadAdvancedFilter leadFilterItem">
+                <Select value={advertiserFilter} onValueChange={setAdvertiserFilter}>
+                  <SelectTrigger className="leadFilterControl">
+                    <SelectValue placeholder="Semua Advertiser" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Advertiser</SelectItem>
+                    {availableAdvertisers.map(user => (
+                      <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
             <div className="leadSearchBox leadFilterItem">
@@ -2178,6 +2212,259 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                 </tbody>
               </table>
             </DataTable>
+
+            <div className="leadMobileCardList">
+              {paginatedLeads.length === 0 ? (
+                <OperationalEmptyState
+                  icon={UserIcon}
+                  title="Tidak ada data prospek ditemukan"
+                  description="Coba ubah filter, tanggal, atau kata kunci pencarian."
+                />
+              ) : (
+                paginatedLeads.map((item, index) => {
+                  const booking = getLeadBooking(item.id);
+                  const activeBooking = getActiveLeadBooking(item.id);
+                  const socialHandle = getLeadSocialHandle(item);
+                  const socialUrl = getLeadSocialUrl(item);
+                  const platformLabel = isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-';
+                  const subChannelLabel = isAutoWhatsAppLead(item) && !item.subChannelId ? 'Auto API' : getSubChannelName(item.subChannelId);
+                  const rowNumber = (currentPage - 1) * itemsPerPage + index + 1;
+
+                  return (
+                    <article
+                      key={item.id}
+                      className={`leadMobileCard ${selectedIds.has(item.id) ? 'isSelected' : ''}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openLeadDetail(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          openLeadDetail(item);
+                        }
+                      }}
+                    >
+                      <div className="leadMobileCardHeader">
+                        <div className="leadMobileCardIdentity">
+                          <div className="leadMobileCardTitleRow">
+                            {showSelection && (
+                              <span className="leadMobileSelect" onClick={(event) => event.stopPropagation()}>
+                                <Checkbox
+                                  className="leadSoftCheckbox"
+                                  checked={selectedIds.has(item.id)}
+                                  onCheckedChange={(checked) => handleSelectRow(item.id, checked as boolean)}
+                                />
+                              </span>
+                            )}
+                            <span className="leadMobileCardNo">#{rowNumber}</span>
+                            <h3>{item.name}</h3>
+                          </div>
+                          {!isAdvertiserView && <span className="leadMobilePhone">{item.phone}</span>}
+                        </div>
+
+                        {!isAdvertiserView && (
+                          <TableActionMenu
+                            contentClassName="w-56"
+                            trigger={(
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="leadMobileMoreButton"
+                                onClick={(event) => event.stopPropagation()}
+                                aria-label="Aksi prospek"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            )}
+                          >
+                            <TableActionMenuItem icon={Eye} onClick={() => openLeadDetail(item)}>
+                              Detail
+                            </TableActionMenuItem>
+                            {canSendLeadTemplate && (
+                              <TableActionMenuItem icon={Phone} onClick={() => setSelectedWaLead(item)}>
+                                Template WA
+                              </TableActionMenuItem>
+                            )}
+                            {socialUrl && (
+                              <TableActionMenuItem icon={ExternalLink} onClick={() => handleLeadSocialOpen(item)}>
+                                {getLeadSocialPrimaryActionLabel(item)}
+                              </TableActionMenuItem>
+                            )}
+                            {socialHandle && (
+                              <TableActionMenuItem icon={Copy} onClick={() => void handleLeadSocialCopy(item)}>
+                                Salin Username
+                              </TableActionMenuItem>
+                            )}
+                            {canEditLead(item) && (
+                              <TableActionMenuItem icon={Edit} onClick={() => openEditLeadForm(item)}>
+                                Edit
+                              </TableActionMenuItem>
+                            )}
+                            {item.status !== 'Closing' && (
+                              <TableActionMenuItem icon={CalendarClock} onClick={() => openBookingForm(item)}>
+                                Booking Jadwal
+                              </TableActionMenuItem>
+                            )}
+                            {item.status !== 'Closing' && activeBooking && (
+                              <TableActionMenuItem icon={Ban} onClick={() => void handleCancelLeadBooking(item, activeBooking)}>
+                                Batalkan Booking
+                              </TableActionMenuItem>
+                            )}
+                            {item.status !== 'Closing' && (
+                              <TableActionMenuItem icon={ArrowRightCircle} onClick={() => setForwardLead(item)}>
+                                Proses Order
+                              </TableActionMenuItem>
+                            )}
+                            {canDeleteLead(item) && (
+                              <TableActionMenuItem danger icon={Trash2} onClick={() => setDeleteId(item.id)}>
+                                Hapus
+                              </TableActionMenuItem>
+                            )}
+                          </TableActionMenu>
+                        )}
+                      </div>
+
+                      <div className="leadMobileBadgeRow">
+                        <Badge variant="outline" className={`leadStatusBadge ${getStatusBadgeVariant(item.status)}`}>
+                          {item.status}
+                        </Badge>
+                        <AutoWhatsAppLeadBadge lead={item} />
+                      </div>
+
+                      <div className="leadMobileMetaGrid">
+                        <div>
+                          <span>Waktu</span>
+                          <strong>{new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</strong>
+                          <small>{new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</small>
+                        </div>
+                        <div>
+                          <span>Sumber</span>
+                          <strong>{platformLabel}</strong>
+                          <small>{subChannelLabel}</small>
+                        </div>
+                        <div>
+                          <span>CS</span>
+                          <strong>{item.csId ? getCSName(item.csId) : '-'}</strong>
+                          <small>{item.advertiserId ? users.find((user) => user.id === item.advertiserId)?.name || '-' : '-'}</small>
+                        </div>
+                        <div>
+                          <span>Mobil</span>
+                          <strong>{getVehicleName(item.vehicleId)}</strong>
+                        </div>
+                      </div>
+
+                      {item.notes && (
+                        <p className="leadMobileNote" title={normalizeLeadNotes(item.notes)}>
+                          {getLeadNotesPreview(item.notes, 92)}
+                        </p>
+                      )}
+
+                      {booking && (
+                        <div className="leadMobileBooking" title={getBookingSummary(item.id) || undefined}>
+                          <strong>Booking {getBookingStatusLabel(booking)}</strong>
+                          <span>{getBookingSummary(item.id) || '-'}</span>
+                        </div>
+                      )}
+
+                      {!isAdvertiserView && (
+                        <div className="leadMobileCardActions" onClick={(event) => event.stopPropagation()}>
+                          <div className="leadMobileFollowUps" aria-label="Template follow up">
+                            {visibleFollowUpTemplates.length > 0 ? visibleFollowUpTemplates.map((template) => {
+                              const usageCount = getTemplateUsageCount(item, template.id);
+                              const latestHistory = getLatestTemplateHistory(item, template.id);
+                              const isUsed = usageCount > 0;
+                              const tooltipText = isUsed
+                                ? `${template.title} sudah dipakai ${usageCount}x${latestHistory ? ` - ${formatTemplateSentAt(latestHistory.sentAt)}` : ''}`
+                                : `${template.title} belum dipakai`;
+
+                              return (
+                                <Tooltip key={template.id}>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={`leadFollowUpButton ${isUsed ? 'isUsed' : ''}`}
+                                      disabled={!canSendLeadTemplate}
+                                      onClick={() => {
+                                        if (!canSendLeadTemplate) return;
+                                        handleWhatsappClick(item, template);
+                                      }}
+                                      aria-label={tooltipText}
+                                    >
+                                      {isUsed ? <CheckCircle2 className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="leadFollowUpTooltip">
+                                    <div>
+                                      <strong>{template.title}</strong>
+                                      <span>{isUsed ? `Dipakai ${usageCount}x` : 'Belum dipakai'}</span>
+                                      {latestHistory && <small>{formatTemplateSentAt(latestHistory.sentAt)} - {getTemplateSenderName(latestHistory.sentBy)}</small>}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            }) : (
+                              <span className="leadFollowUpEmpty">-</span>
+                            )}
+                            {hiddenFollowUpTemplateCount > 0 && (
+                              <button
+                                type="button"
+                                className="leadFollowUpMore"
+                                disabled={!canSendLeadTemplate}
+                                onClick={() => {
+                                  if (!canSendLeadTemplate) return;
+                                  setSelectedWaLead(item);
+                                }}
+                                aria-label={`Lihat ${hiddenFollowUpTemplateCount} template lain`}
+                              >
+                                +{hiddenFollowUpTemplateCount}
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="leadMobileQuickActions">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="leadMobileQuickButton"
+                              onClick={() => setSelectedWaLead(item)}
+                              aria-label="Buka template WhatsApp"
+                            >
+                              <Phone className="h-4 w-4" />
+                            </Button>
+                            {socialUrl && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="leadMobileQuickButton"
+                                onClick={() => handleLeadSocialOpen(item)}
+                                aria-label={getLeadSocialPrimaryActionLabel(item)}
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {socialHandle && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="leadMobileQuickButton"
+                                onClick={() => void handleLeadSocialCopy(item)}
+                                aria-label="Salin kontak sosial"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })
+              )}
+            </div>
 
             <div className="leadPaginationBar">
               <span>

@@ -2,6 +2,13 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './app/App'
 import { ErrorBoundary } from './app/components/ErrorBoundary'
+import {
+  DOM_MUTATION_RELOAD_MARKER,
+  STALE_CHUNK_RELOAD_MARKER,
+  installReactDomMutationGuard,
+  isReactDomRemovalError,
+  reloadOnce,
+} from './app/errors/recoverableErrors'
 import './styles/theme.css'
 import './styles/fonts.css'
 import './styles/globals.css'
@@ -14,6 +21,33 @@ if (typeof window !== 'undefined') {
     hostname === '127.0.0.1' ||
     hostname === '0.0.0.0'
   const themeResetMarker = 'rhi-system-theme-reset-v1'
+
+  installReactDomMutationGuard()
+
+  document.documentElement.classList.add('notranslate')
+  document.documentElement.setAttribute('translate', 'no')
+  document.body.classList.add('notranslate')
+  document.body.setAttribute('translate', 'no')
+  document.getElementById('root')?.setAttribute('translate', 'no')
+
+  window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault()
+    reloadOnce(STALE_CHUNK_RELOAD_MARKER)
+  })
+
+  window.addEventListener('error', (event) => {
+    if (!isReactDomRemovalError(event.error || event.message)) return
+
+    event.preventDefault()
+    reloadOnce(DOM_MUTATION_RELOAD_MARKER)
+  })
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (!isReactDomRemovalError(event.reason)) return
+
+    event.preventDefault()
+    reloadOnce(DOM_MUTATION_RELOAD_MARKER)
+  })
 
   if (isLocalDev && 'serviceWorker' in navigator) {
     void navigator.serviceWorker.getRegistrations().then((registrations) => {

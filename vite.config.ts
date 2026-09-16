@@ -35,6 +35,8 @@ export default defineConfig({
         description: 'Sistem Manajemen Operasional Teknisi Restoration Headlamp Indonesia',
         theme_color: '#0F172A',
         background_color: '#F8FAFC',
+        start_url: '/',
+        scope: '/',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

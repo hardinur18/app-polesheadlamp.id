@@ -1,93 +1,41 @@
 import { createBrowserRouter } from "react-router";
 import AuthenticatedApp from "./AuthenticatedApp";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
+
+const authenticatedRoute = (path: string) => ({
+  path,
+  Component: AuthenticatedApp,
+  ErrorBoundary: RouteErrorBoundary,
+});
 
 export const router = createBrowserRouter([
-  {
-    path: "/login",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/app/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/dashboard",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/ads/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/affiliates",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/leads/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/orders",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/reports/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/schedule",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/technician/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/monitoring/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/map",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/profile",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/finance/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/inventory/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/master-data",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/users",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/settings/*",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/audit-logs",
-    Component: AuthenticatedApp,
-  },
-  {
-    path: "/conversations/*",
-    Component: AuthenticatedApp,
-  },
+  authenticatedRoute("/login"),
+  authenticatedRoute("/"),
+  authenticatedRoute("/app/*"),
+  authenticatedRoute("/dashboard"),
+  authenticatedRoute("/ads/*"),
+  authenticatedRoute("/affiliates"),
+  authenticatedRoute("/leads/*"),
+  authenticatedRoute("/orders"),
+  authenticatedRoute("/reports/*"),
+  authenticatedRoute("/schedule"),
+  authenticatedRoute("/technician/*"),
+  authenticatedRoute("/monitoring/*"),
+  authenticatedRoute("/map"),
+  authenticatedRoute("/profile"),
+  authenticatedRoute("/finance/*"),
+  authenticatedRoute("/inventory/*"),
+  authenticatedRoute("/master-data"),
+  authenticatedRoute("/users"),
+  authenticatedRoute("/settings/*"),
+  authenticatedRoute("/audit-logs"),
+  authenticatedRoute("/conversations/*"),
+  authenticatedRoute("/whatsapp"),
+  authenticatedRoute("/whatsapp/*"),
+  authenticatedRoute("/proof-assets"),
   {
     path: "/booking",
+    ErrorBoundary: RouteErrorBoundary,
     lazy: async () => {
       const { PublicBookingPage } = await import("./pages/affiliates/PublicBookingPage");
       return { Component: PublicBookingPage };
@@ -95,13 +43,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/embed/form/:identifier",
+    ErrorBoundary: RouteErrorBoundary,
     lazy: async () => {
       const { PublicEmbedLeadFormPage } = await import("./pages/embed/PublicEmbedLeadFormPage");
       return { Component: PublicEmbedLeadFormPage };
     },
   },
-  {
-    path: "*",
-    Component: AuthenticatedApp,
-  }
+  authenticatedRoute("*"),
 ]);

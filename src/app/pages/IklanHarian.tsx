@@ -341,6 +341,90 @@ export function IklanHarian() {
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [visibleRowLimit, setVisibleRowLimit] = useState(INITIAL_AD_ROW_LIMIT);
+  const dailyAdsTableDragRef = useRef({
+    active: false,
+    dragging: false,
+    pointerId: null as number | null,
+    scrollLeft: 0,
+    startX: 0,
+  });
+  const suppressDailyAdsTableClickRef = useRef(false);
+
+  const getDailyAdsTableScroller = (target: HTMLDivElement) =>
+    target.querySelector<HTMLDivElement>('.uiDataTableScroller');
+
+  const resetDailyAdsTableDrag = (target: HTMLDivElement, pointerId?: number) => {
+    if (pointerId !== undefined && target.hasPointerCapture?.(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+
+    getDailyAdsTableScroller(target)?.removeAttribute('data-dragging');
+    dailyAdsTableDragRef.current.active = false;
+    dailyAdsTableDragRef.current.dragging = false;
+    dailyAdsTableDragRef.current.pointerId = null;
+  };
+
+  const isDailyAdsTableInteractiveTarget = (target: EventTarget | null) =>
+    target instanceof HTMLElement && Boolean(
+      target.closest('button, a, input, textarea, select, [data-slot="checkbox"], [role="menuitem"]'),
+    );
+
+  const handleDailyAdsTableClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressDailyAdsTableClickRef.current || dailyAdsTableDragRef.current.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressDailyAdsTableClickRef.current = false;
+    }
+  };
+
+  const handleDailyAdsTablePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || isDailyAdsTableInteractiveTarget(event.target)) return;
+
+    const scroller = getDailyAdsTableScroller(event.currentTarget);
+
+    if (!scroller || scroller.scrollWidth <= scroller.clientWidth) return;
+
+    suppressDailyAdsTableClickRef.current = false;
+    dailyAdsTableDragRef.current = {
+      active: true,
+      dragging: false,
+      pointerId: event.pointerId,
+      scrollLeft: scroller.scrollLeft,
+      startX: event.clientX,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleDailyAdsTablePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dailyAdsTableDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    const scroller = getDailyAdsTableScroller(event.currentTarget);
+    if (!scroller) return;
+
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > 8) {
+      drag.dragging = true;
+      suppressDailyAdsTableClickRef.current = true;
+      scroller.setAttribute('data-dragging', 'true');
+      event.preventDefault();
+      scroller.scrollLeft = drag.scrollLeft - deltaX;
+    }
+  };
+
+  const handleDailyAdsTablePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dailyAdsTableDragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    if (drag.dragging) {
+      suppressDailyAdsTableClickRef.current = true;
+      window.setTimeout(() => {
+        suppressDailyAdsTableClickRef.current = false;
+      }, 0);
+    }
+
+    resetDailyAdsTableDrag(event.currentTarget, event.pointerId);
+  };
 
   const lookupMaps = useMemo(() => ({
       platformNameById: new Map(platforms.map(platform => [platform.id, platform.name])),
@@ -1916,7 +2000,7 @@ export function IklanHarian() {
             <div className="dailyAdsSearchBox relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <Input
-                placeholder="Cari tanggal, advertiser, atau akun iklan..."
+                placeholder={isMobile ? 'Cari...' : 'Cari tanggal, advertiser, atau akun iklan...'}
                 className="dailyAdsSearchInput pl-9 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 dark:text-slate-200 focus:ring-1 focus:ring-blue-500"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -1971,8 +2055,26 @@ export function IklanHarian() {
         </OperationalFilterPanel>
 
         <OperationalTableCard className="dailyAdsTableCard overflow-hidden p-0">
-             <div className="dailyAdsDesktopTable hidden md:block overflow-x-auto">
-             <Table>
+             <div
+               className="dailyAdsDesktopTable hidden md:block"
+               onClickCapture={handleDailyAdsTableClickCapture}
+               onPointerCancel={handleDailyAdsTablePointerEnd}
+               onPointerDown={handleDailyAdsTablePointerDown}
+               onPointerLeave={handleDailyAdsTablePointerEnd}
+               onPointerMove={handleDailyAdsTablePointerMove}
+               onPointerUp={handleDailyAdsTablePointerEnd}
+             >
+             <Table dragScroll={false}>
+                 <colgroup>
+                     <col className="dailyAdsColDate" />
+                     <col className="dailyAdsColPeople" />
+                     <col className="dailyAdsColInfo" />
+                     <col className="dailyAdsColMoney" />
+                     <col className="dailyAdsColMetric" />
+                     <col className="dailyAdsColMetric" />
+                     <col className="dailyAdsColEfficiency" />
+                     <col className="dailyAdsColAction" />
+                 </colgroup>
                  <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                      <TableRow className="border-b border-slate-100 dark:border-slate-700">
                          <TableHead className="py-4 pl-6 w-[140px] text-slate-600 dark:text-slate-400 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" onClick={() => handleSortRequest('date')}>
@@ -2077,7 +2179,7 @@ export function IklanHarian() {
 
                                     {/* Leads Column */}
                                     <TableCell className="text-right py-4 align-top">
-                                        <div className="flex flex-col items-end gap-1">
+                                        <div className="dailyAdsMetricStack flex flex-col items-end gap-1">
                                             <div className="flex items-center justify-end gap-2 text-xs">
                                                 <span className="text-slate-400">Dash:</span>
                                                 <span className="font-medium text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 px-1.5 rounded">{item.leadsDashboard}</span>
@@ -2091,7 +2193,7 @@ export function IklanHarian() {
 
                                     {/* Orders Column */}
                                     <TableCell className="text-right py-4 align-top">
-                                        <div className="flex flex-col items-end gap-1">
+                                        <div className="dailyAdsMetricStack flex flex-col items-end gap-1">
                                             <div className="flex items-center justify-end gap-2 text-xs">
                                                 <span className="text-slate-400">Deal:</span>
                                                 <span className="font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 rounded">{item.realOrders}</span>
@@ -2105,9 +2207,9 @@ export function IklanHarian() {
 
                                     {/* Efficiency Column */}
                                     <TableCell className="text-right py-4 align-top">
-                                        <div className="flex flex-col items-end gap-1.5">
+                                        <div className="dailyAdsEfficiencyStack flex flex-col items-end gap-1.5">
                                             {/* CPL Combined (Dash & Real) */}
-                                            <div className="flex items-center justify-end gap-1 text-xs">
+                                            <div className="dailyAdsCplRow flex items-center justify-end gap-1 text-xs">
                                                 <span className="text-slate-400 mr-0.5">CPL:</span>
                                                 <span className="font-medium text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-900/20 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap" title="Cost per Lead (Dashboard)">
                                                     D: Rp {cplDash.toLocaleString('id-ID', { maximumFractionDigits: 0 })}
@@ -2185,7 +2287,7 @@ export function IklanHarian() {
 
                         {/* Leads Total */}
                         <TableCell className="text-right py-4 align-top">
-                             <div className="flex flex-col items-end gap-1">
+                             <div className="dailyAdsMetricStack flex flex-col items-end gap-1">
                                 <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">Dash: {totals.leadsDash}</span>
                                 <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Real: {totals.leadsReal}</span>
                              </div>
@@ -2193,7 +2295,7 @@ export function IklanHarian() {
 
                          {/* Orders Total */}
                          <TableCell className="text-right py-4 align-top">
-                             <div className="flex flex-col items-end gap-1">
+                             <div className="dailyAdsMetricStack flex flex-col items-end gap-1">
                                 <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Deal: {totals.orders}</span>
                                 <span className="text-xs font-bold text-purple-600 dark:text-purple-400">Done: {totals.ordersDone}</span>
                              </div>
@@ -2201,17 +2303,20 @@ export function IklanHarian() {
 
                         {/* Efficiency Total */}
                         <TableCell className="text-right py-4 align-top">
-                             <div className="flex flex-col items-end gap-1">
+                             <div className="dailyAdsEfficiencyStack flex flex-col items-end gap-1">
                                 <span className="text-xs font-medium text-cyan-600 dark:text-cyan-400">
                                     CPL(D): Rp {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCplAds)}
                                 </span>
-                                <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                                    CPL(R): Rp {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCplReal)}
-                                </span>
-                                <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
-                                    CPR: Rp {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCprDone)}
-                                </span>
-                             </div>
+                                 <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                                     CPL(R): Rp {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCplReal)}
+                                 </span>
+                                 <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                     CPR(Deal): Rp {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCpr)}
+                                 </span>
+                                 <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                                     CPR(Done): Rp {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCprDone)}
+                                 </span>
+                              </div>
                         </TableCell>
 
                         <TableCell className="py-4"></TableCell>

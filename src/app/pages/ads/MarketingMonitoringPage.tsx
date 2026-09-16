@@ -114,7 +114,12 @@ export function MarketingMonitoringPage() {
   ), [selectedMonth]);
 
   React.useEffect(() => {
-    setExpandedDates([]);
+    const today = new Date();
+    setExpandedDates(
+      format(today, 'yyyy-MM') === format(selectedMonth, 'yyyy-MM')
+        ? [format(today, 'yyyy-MM-dd')]
+        : [],
+    );
     setHiddenBranches([]);
     setVisibleDayLimit(8);
   }, [selectedMonth]);
@@ -437,7 +442,17 @@ export function MarketingMonitoringPage() {
       return acc + branchTechnicians.length * 6;
     }, 0);
 
-    const visibleDaysInMonth = daysInMonth.slice(0, visibleDayLimit);
+    const today = new Date();
+    const todayKey = format(today, 'yyyy-MM-dd');
+    const todayInSelectedMonth = format(today, 'yyyy-MM') === format(selectedMonth, 'yyyy-MM');
+    const orderedDaysInMonth = todayInSelectedMonth
+      ? [
+          ...daysInMonth.filter((date) => format(date, 'yyyy-MM-dd') <= todayKey).reverse(),
+          ...daysInMonth.filter((date) => format(date, 'yyyy-MM-dd') > todayKey),
+        ]
+      : [...daysInMonth].reverse();
+
+    const visibleDaysInMonth = orderedDaysInMonth.slice(0, visibleDayLimit);
     const days = visibleDaysInMonth.map((date) => {
         const dateKey = format(date, 'yyyy-MM-dd');
         const totalDaysInMonth = daysInMonth.length;
@@ -798,17 +813,23 @@ export function MarketingMonitoringPage() {
 
   return (
     <OperationalPageShell className="marketingMonitoringPage">
-      <div className="flex flex-col space-y-4 pb-20">
+      <div className="marketingMonitoringStack flex flex-col space-y-4 pb-20">
       <OperationalPageHeader
         eyebrow="Operasional"
         icon={TrendingUp}
         title="Monitoring Performance"
         subtitle="Pantau target vs realisasi harian untuk advertiser, CS, platform, dan cabang."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" className="marketingMonitoringHeaderButton h-9" onClick={() => setIsSummaryOpen(!isSummaryOpen)}>
+          <div className="marketingMonitoringHeaderActions flex flex-wrap items-center gap-2">
+            <Button
+              variant="ghost"
+              className="marketingMonitoringHeaderButton h-9"
+              onClick={() => setIsSummaryOpen(!isSummaryOpen)}
+              title={isSummaryOpen ? 'Sembunyikan Ringkasan' : 'Lihat Ringkasan'}
+              aria-label={isSummaryOpen ? 'Sembunyikan ringkasan' : 'Lihat ringkasan'}
+            >
                 {isSummaryOpen ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-                <span className="hidden sm:inline">{isSummaryOpen ? 'Sembunyikan Ringkasan' : 'Lihat Ringkasan'}</span>
+                <span className="marketingMonitoringHeaderButtonText">{isSummaryOpen ? 'Sembunyikan Ringkasan' : 'Lihat Ringkasan'}</span>
             </Button>
 
             {canManageTargets && (
@@ -819,15 +840,22 @@ export function MarketingMonitoringPage() {
                        isTargetConsoleOpen ? "bg-blue-50 text-blue-600 border-blue-200" : ""
                     )}
                     onClick={() => setIsTargetConsoleOpen(!isTargetConsoleOpen)}
+                    title="Input Target"
+                    aria-label="Input target"
                 >
                     <Target className="w-4 h-4" />
-                    <span className="hidden sm:inline">Input Target</span>
+                    <span className="marketingMonitoringHeaderButtonText">Input Target</span>
                 </Button>
             )}
 
-            <Button size="sm" className="marketingMonitoringHeaderButton hidden h-9 bg-blue-600 px-3 hover:bg-blue-700 md:flex">
+            <Button
+              size="sm"
+              className="marketingMonitoringHeaderButton h-9 bg-blue-600 px-3 hover:bg-blue-700"
+              title="Download Report"
+              aria-label="Download report"
+            >
               <Download className="w-4 h-4 mr-2" />
-              <span>Download Report</span>
+              <span className="marketingMonitoringHeaderButtonText">Download Report</span>
             </Button>
           </div>
         }
@@ -851,7 +879,7 @@ export function MarketingMonitoringPage() {
         </div>
       </OperationalFilterPanel>
 
-      <OperationalKpiGrid>
+      <OperationalKpiGrid className="marketingMonitoringKpiGrid">
         <OperationalKpiCard label="Target Leads" value={formatNumber(summaryMetrics.monthlyTargetLeads || 0)} icon={Target} tone="blue" />
         <OperationalKpiCard label="Total Order" value={formatNumber(summaryMetrics.totalLeads)} icon={TrendingUp} />
         <OperationalKpiCard label="Selesai" value={formatNumber(summaryMetrics.totalClosing)} icon={MessageCircle} tone="emerald" />
@@ -876,51 +904,51 @@ export function MarketingMonitoringPage() {
         <div className="marketingMonitoringSummaryShell animate-in slide-in-from-top-2 duration-300">
             <div className="marketingMonitoringSummaryGrid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* 1. Global Stats */}
-                <div className="marketingMonitoringSummaryCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex flex-col justify-between">
+                <div className="marketingMonitoringSummaryCard marketingMonitoringTotalCard bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex flex-col justify-between">
                     <div>
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Total Bulan Ini</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-2xl font-bold text-blue-600">{formatNumber(summaryMetrics.monthlyTargetLeads || 0)}</p>
-                                <div className="flex flex-col">
-                                    <p className="text-xs text-slate-500">Target Leads</p>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">Est: {summaryMetrics.dailyTargetEst} / hari</p>
+                        <h3 className="marketingMonitoringTotalTitle text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Total Bulan Ini</h3>
+                        <div className="marketingMonitoringTotalStats">
+                            <div className="marketingMonitoringTotalMetric">
+                                <p className="marketingMonitoringTotalValue marketingMonitoringTotalValue--blue">{formatNumber(summaryMetrics.monthlyTargetLeads || 0)}</p>
+                                <div className="marketingMonitoringTotalText">
+                                    <p className="marketingMonitoringTotalLabel">Target Leads</p>
+                                    <p className="marketingMonitoringTotalSubtext">Est: {summaryMetrics.dailyTargetEst} / hari</p>
                                 </div>
                             </div>
-                            <div>
-                                <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{formatNumber(summaryMetrics.totalLeads)}</p>
-                                <div className="flex flex-col">
-                                    <p className="text-xs text-slate-500">Total Order</p>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                            <div className="marketingMonitoringTotalMetric">
+                                <p className="marketingMonitoringTotalValue text-slate-800 dark:text-slate-100">{formatNumber(summaryMetrics.totalLeads)}</p>
+                                <div className="marketingMonitoringTotalText">
+                                    <p className="marketingMonitoringTotalLabel">Total Order</p>
+                                    <p className="marketingMonitoringTotalSubtext">
                                         CPL: {formatCurrency(summaryMetrics.cpl)}
                                     </p>
                                 </div>
                             </div>
-                            <div>
-                                <p className="text-2xl font-bold text-emerald-600">{formatNumber(summaryMetrics.totalClosing)}</p>
-                                <div className="flex flex-col">
-                                    <p className="text-xs text-slate-500">Selesai</p>
-                                    <p className="text-[10px] text-emerald-600/70 mt-0.5">CPR: {formatCurrency(summaryMetrics.cpr)}</p>
+                            <div className="marketingMonitoringTotalMetric">
+                                <p className="marketingMonitoringTotalValue marketingMonitoringTotalValue--green">{formatNumber(summaryMetrics.totalClosing)}</p>
+                                <div className="marketingMonitoringTotalText">
+                                    <p className="marketingMonitoringTotalLabel">Selesai</p>
+                                    <p className="marketingMonitoringTotalSubtext marketingMonitoringTotalSubtext--green">CPR: {formatCurrency(summaryMetrics.cpr)}</p>
                                 </div>
                             </div>
-                            <div>
-                                <p className="text-sm font-semibold text-emerald-600">{formatCurrency(summaryMetrics.totalOmzet)}</p>
-                                <p className="text-xs text-slate-500">Omzet</p>
+                            <div className="marketingMonitoringTotalMetric">
+                                <p className="marketingMonitoringTotalValue marketingMonitoringTotalValue--money">{formatCurrency(summaryMetrics.totalOmzet)}</p>
+                                <p className="marketingMonitoringTotalLabel">Omzet</p>
                             </div>
                         </div>
                     </div>
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                        <div className="flex justify-between items-center text-xs mb-1">
-                             <span className="text-slate-500">Achievement</span>
-                             <span className="font-bold text-blue-600">
+                    <div className="marketingMonitoringTotalProgress mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <div className="marketingMonitoringTotalProgressRow flex justify-between items-center text-xs mb-1">
+                             <span>Achievement</span>
+                             <strong className="text-blue-600">
                                 {summaryMetrics.monthlyTargetLeads > 0 ? ((summaryMetrics.totalLeads / summaryMetrics.monthlyTargetLeads) * 100).toFixed(1) : 0}%
-                             </span>
+                             </strong>
                         </div>
                         <Progress value={summaryMetrics.monthlyTargetLeads > 0 ? (summaryMetrics.totalLeads / summaryMetrics.monthlyTargetLeads) * 100 : 0} className="h-1.5 bg-blue-100 [&>div]:bg-blue-600" />
                         
-                        <div className="flex justify-between items-center text-xs mt-3">
-                            <span className="text-slate-500">Closing Rate</span>
-                            <span className="font-bold text-emerald-600">{summaryMetrics.closingRate.toFixed(1)}%</span>
+                        <div className="marketingMonitoringTotalProgressRow flex justify-between items-center text-xs mt-3">
+                            <span>Closing Rate</span>
+                            <strong className="text-emerald-600">{summaryMetrics.closingRate.toFixed(1)}%</strong>
                         </div>
                         <Progress value={summaryMetrics.closingRate} className="h-1.5 mt-1.5 bg-emerald-100 [&>div]:bg-emerald-600" />
                     </div>
@@ -932,7 +960,7 @@ export function MarketingMonitoringPage() {
                         <span>Top Advertiser</span>
                         <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">By Order</span>
                     </h3>
-                    <div className="flex-1 overflow-y-auto pr-1 space-y-3 max-h-[140px] custom-scrollbar">
+                    <div className="marketingMonitoringRankList flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
                         {summaryMetrics.advSummary.length === 0 ? (
                             <div className="text-center py-4 text-xs text-slate-400 italic">Belum ada data</div>
                         ) : (
@@ -946,9 +974,9 @@ export function MarketingMonitoringPage() {
                                             <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[100px]">{adv.name}</span>
                                             <span className="text-[9px] text-slate-400">
                                               {formatCurrency(adv.spend)}
-                                              {adv.spend > 0 && <span className="text-slate-300 mx-1">•</span>}
+                                              {adv.spend > 0 && <span className="text-slate-300 mx-1">|</span>}
                                               {adv.spend > 0 && `${formatCurrency(adv.cpl)}/lead`}
-                                              {adv.cpr > 0 && <span className="text-slate-300 mx-1">•</span>}
+                                              {adv.cpr > 0 && <span className="text-slate-300 mx-1">|</span>}
                                               {adv.cpr > 0 && `${formatCurrency(adv.cpr)}/CPR`}
                                             </span>
                                         </div>
@@ -969,7 +997,7 @@ export function MarketingMonitoringPage() {
                         <span>Top CS</span>
                         <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">By Selesai</span>
                     </h3>
-                    <div className="flex-1 overflow-y-auto pr-1 space-y-3 max-h-[140px] custom-scrollbar">
+                    <div className="marketingMonitoringRankList flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
                         {summaryMetrics.csSummary.length === 0 ? (
                             <div className="text-center py-4 text-xs text-slate-400 italic">Belum ada data</div>
                         ) : (
@@ -1000,7 +1028,7 @@ export function MarketingMonitoringPage() {
                         <span>Top Platform</span>
                         <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">By Order</span>
                     </h3>
-                    <div className="flex-1 overflow-y-auto pr-1 space-y-3 max-h-[140px] custom-scrollbar">
+                    <div className="marketingMonitoringRankList flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
                         {summaryMetrics.platformSummary.length === 0 ? (
                             <div className="text-center py-4 text-xs text-slate-400 italic">Belum ada data</div>
                         ) : (
@@ -1037,6 +1065,16 @@ export function MarketingMonitoringPage() {
             description="Data target dan realisasi akan muncul setelah ada order atau target pada periode ini."
           />
         ) : (
+          <div className="marketingMonitoringDayShell">
+          <div className="marketingMonitoringListHeader">
+            <div>
+              <h2>Realisasi Harian</h2>
+              <p>Hari terdekat ditampilkan lebih dulu agar monitoring mobile tidak perlu scroll jauh.</p>
+            </div>
+            <Badge variant="outline" className="marketingMonitoringListBadge">
+              {visibleMonitoringData.length} / {totalDaysInSelectedMonth} hari
+            </Badge>
+          </div>
           <div className="marketingMonitoringDayList space-y-3">
           {visibleMonitoringData.map((day, idx) => {
           const isExpanded = expandedDates.includes(day.dateKey);
@@ -1052,6 +1090,14 @@ export function MarketingMonitoringPage() {
               {/* Row Header (Summary Harian) */}
               <div 
                 onClick={() => toggleDate(day.dateKey)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggleDate(day.dateKey);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
                 className="marketingMonitoringDayHeader flex flex-col md:flex-row items-stretch md:items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50"
               >
                 {/* 1. Date Section (Fixed Width) */}
@@ -1099,16 +1145,20 @@ export function MarketingMonitoringPage() {
                    </div>
 
                    {/* Omset */}
-                   <div className="flex flex-col col-span-2 md:col-span-1 lg:col-span-1 gap-1.5">
-                      {/* Baris 1: Estimasi Omset = Total Order × Rp 350.000 */}
+                   <div className="marketingMonitoringMoneyMetric flex flex-col col-span-2 md:col-span-1 lg:col-span-1 gap-1.5">
+                      {/* Estimasi Omset = Total Order x Rp 350.000 */}
                       <div className="flex flex-col">
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Estimasi Omset</span>
-                        <span className="text-xl font-bold text-blue-600 truncate tracking-tight">{formatCurrency(day.totalReal * 350000)}</span>
+                        <span className="marketingMonitoringMoneyValue marketingMonitoringMoneyValue--estimate text-xl font-bold text-blue-600 tracking-tight">
+                          {formatCurrency(day.totalReal * 350000)}
+                        </span>
                       </div>
                       {/* Baris 2: Omset Real Selesai */}
                       <div className="flex flex-col">
                         <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Real Selesai</span>
-                        <span className="text-base font-semibold text-emerald-600 truncate tracking-tight">{formatCurrency(day.totalOmzet)}</span>
+                        <span className="marketingMonitoringMoneyValue marketingMonitoringMoneyValue--real text-base font-semibold text-emerald-600 tracking-tight">
+                          {formatCurrency(day.totalOmzet)}
+                        </span>
                       </div>
                    </div>
 
@@ -1147,7 +1197,7 @@ export function MarketingMonitoringPage() {
                                           </div>
                                           <div>
                                               <div className="font-semibold text-slate-700 dark:text-slate-200">{adv.name}</div>
-                                              <div className="text-[10px] text-slate-400">{formatCurrency(adv.spend)} • {formatCurrency(adv.cpl)}/lead</div>
+                                              <div className="text-[10px] text-slate-400">{formatCurrency(adv.spend)} | {formatCurrency(adv.cpl)}/lead</div>
                                           </div>
                                       </div>
                                       <div className="text-right">
@@ -1265,7 +1315,7 @@ export function MarketingMonitoringPage() {
                             <div>
                                 <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">{branch.name}</h3>
                                 <div className="text-sm text-slate-500 mt-0.5 font-medium">
-                                    {branch.real} Order <span className="mx-1">•</span> {branch.closing} Selesai
+                                    {branch.real} Order <span className="mx-1">|</span> {branch.closing} Selesai
                                 </div>
                             </div>
                           </div>
@@ -1447,6 +1497,7 @@ export function MarketingMonitoringPage() {
               </Button>
             </div>
           )}
+          </div>
           </div>
         )}
       </OperationalTableCard>

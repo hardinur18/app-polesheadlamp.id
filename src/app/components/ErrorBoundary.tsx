@@ -1,6 +1,13 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import {
+  DOM_MUTATION_RELOAD_MARKER,
+  STALE_CHUNK_RELOAD_MARKER,
+  isReactDomRemovalError,
+  isStaleChunkError,
+  reloadOnce,
+} from '@/app/errors/recoverableErrors';
 
 interface Props {
   children: ReactNode;
@@ -23,6 +30,15 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
+
+    if (isStaleChunkError(error)) {
+      reloadOnce(STALE_CHUNK_RELOAD_MARKER);
+      return;
+    }
+
+    if (isReactDomRemovalError(error)) {
+      reloadOnce(DOM_MUTATION_RELOAD_MARKER);
+    }
   }
 
   private handleReload = () => {
