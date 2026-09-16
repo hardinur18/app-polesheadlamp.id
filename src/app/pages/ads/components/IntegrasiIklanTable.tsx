@@ -1,5 +1,6 @@
 import { Badge } from '@/app/components/ui/badge';
 import { Card } from '@/app/components/ui/card';
+import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { integrasiIklanCopy } from '../integrasiIklanContent';
 import type { UnifiedPerformanceRow } from '../integrasiIklanTypes';
 import { IntegrasiIklanCopyHint } from './IntegrasiIklanCopyHint';
@@ -99,7 +100,7 @@ export function IntegrasiIklanTable({
         </Badge>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
+      <HorizontalDragScrollArea className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[1120px] text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800/80">
             <tr>
@@ -246,7 +247,7 @@ export function IntegrasiIklanTable({
             )}
           </tbody>
         </table>
-      </div>
+      </HorizontalDragScrollArea>
     </Card>
   );
 }

@@ -7335,6 +7335,28 @@
   stroke-width: 2.4;
 }
 
+.uiDataTableDragScroll.uiDataTableScroller,
+.uiHorizontalDragScrollArea {
+  cursor: grab;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.uiDataTableDragScroll.uiDataTableScroller[data-dragging="true"],
+.uiHorizontalDragScrollArea[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.uiDataTableDragScroll.uiDataTableScroller[data-dragging="true"] *,
+.uiHorizontalDragScrollArea[data-dragging="true"] * {
+  cursor: grabbing !important;
+}
+
 .tableScroller th {
   height: 42px;
   color: #738197;

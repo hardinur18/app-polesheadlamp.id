@@ -71,7 +71,6 @@ import { Skeleton } from '@/app/components/ui/skeleton';
 import { Textarea } from '@/app/components/ui/textarea';
 import { MasterDataTableTitle } from '@/app/components/ui/master-data-table-title';
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -111,6 +110,7 @@ const CRM_CONTACTS_PAGE_SIZE = 1000;
 const CRM_CONTACTS_MAX_BACKGROUND_ROWS = 10_000;
 const CONTACT_PAGE_SIZE_OPTIONS = [50, 100, 300, 500];
 const CONTACT_UNASSIGNED_CS_VALUE = '__contact_unassigned';
+const CONTACT_TABLE_MIN_WIDTH = 1760;
 const ALL_WORK_STATUS_FILTER = 'all';
 const NO_WORK_STATUS_FILTER = '__no_work_status';
 const ALL_FOLLOW_UP_FILTER = 'all';
@@ -1844,21 +1844,23 @@ export function WhatsAppContactsPage() {
 
         <DataTable
           className="contactDataTable"
+          dragScroll
+          minWidth={CONTACT_TABLE_MIN_WIDTH}
           columns={createDataTableColumns([
-            { align: 'center', minWidth: 56, width: '56px' },
-            { minWidth: 260, width: '25%' },
-            { minWidth: 220, width: '22%' },
-            { align: 'center', minWidth: 116, width: '10%' },
-            { align: 'center', minWidth: 132, width: '12%' },
-            { minWidth: 150, width: '14%' },
-            { minWidth: 130, width: '12%' },
             { align: 'center', minWidth: 64, width: '64px' },
+            { minWidth: 330, width: '330px' },
+            { minWidth: 520, width: '520px' },
+            { align: 'center', minWidth: 140, width: '140px' },
+            { align: 'center', minWidth: 180, width: '180px' },
+            { minWidth: 200, width: '200px' },
+            { minWidth: 220, width: '220px' },
+            { align: 'center', minWidth: 88, width: '88px' },
           ])}
           primaryLines={2}
           secondaryLines={2}
           rowMinHeight={88}
         >
-          <Table>
+          <table>
             <TableHeader>
               <TableRow>
                 <TableHead>No</TableHead>
@@ -1985,7 +1987,7 @@ export function WhatsAppContactsPage() {
                       </TableCell>
                       <TableCell>
                         <div
-                          className="line-clamp-2 max-w-[280px] text-sm font-medium leading-5 text-slate-600 dark:text-slate-300"
+                          className="line-clamp-2 max-w-[500px] text-sm font-medium leading-5 text-slate-600 dark:text-slate-300"
                           title={orderSummary?.lastAddress || undefined}
                         >
                           {orderSummary?.lastAddress || '-'}
@@ -2096,7 +2098,7 @@ export function WhatsAppContactsPage() {
                 })
               )}
             </TableBody>
-          </Table>
+          </table>
         </DataTable>
           <div className="flex flex-col gap-3 border-t border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm font-medium text-slate-500 dark:text-slate-400">

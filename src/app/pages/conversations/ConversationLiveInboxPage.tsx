@@ -25,6 +25,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
+import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { SmartFilterDate } from '@/app/components/SmartFilterDate';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { Separator } from '@/app/components/ui/separator';
@@ -826,7 +827,7 @@ export function ConversationLiveInboxPage() {
             </div>
           ) : null}
 
-          <div className="overflow-x-auto">
+          <HorizontalDragScrollArea className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.16em] text-slate-500 dark:border-slate-800 dark:text-slate-400">
@@ -874,7 +875,7 @@ export function ConversationLiveInboxPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </HorizontalDragScrollArea>
 
           <div className="rounded-2xl border border-dashed border-slate-300 p-4 text-xs leading-6 text-slate-500 dark:border-slate-700 dark:text-slate-400">
             Filter tanggal di atas sekarang bekerja seperti di advertiser. Klik baris tanggal untuk menyaring daftar chat ke tanggal itu saja. Saat basisnya `Thread Live`, angka merepresentasikan thread yang chat terakhirnya jatuh pada tanggal tersebut. Saat basisnya `Webhook`, angka merepresentasikan event inbound yang tersimpan.

@@ -2,20 +2,52 @@
 
 import * as React from "react";
 
+import {
+  HORIZONTAL_DRAG_SCROLL_INTERACTIVE_SELECTOR,
+  useHorizontalDragScroll,
+} from "./horizontal-drag-scroll";
 import { cn } from "./utils";
+
+type TableProps = React.HTMLAttributes<HTMLTableElement> & {
+  dragScroll?: boolean;
+  dragScrollInteractiveSelector?: string;
+  dragScrollThreshold?: number;
+};
 
 const Table = React.forwardRef<
   HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="tableScroller uiDataTableScroller">
-    <table
-      ref={ref}
-      className={cn("caption-bottom", className)}
-      {...props}
-    />
-  </div>
-));
+  TableProps
+>(
+  (
+    {
+      className,
+      dragScroll = true,
+      dragScrollInteractiveSelector = HORIZONTAL_DRAG_SCROLL_INTERACTIVE_SELECTOR,
+      dragScrollThreshold = 8,
+      ...props
+    },
+    ref,
+  ) => {
+    const dragHandlers = useHorizontalDragScroll<HTMLDivElement>({
+      enabled: dragScroll,
+      interactiveSelector: dragScrollInteractiveSelector,
+      threshold: dragScrollThreshold,
+    });
+
+    return (
+      <div
+        className={cn("tableScroller uiDataTableScroller", dragScroll && "uiDataTableDragScroll")}
+        {...dragHandlers}
+      >
+        <table
+          ref={ref}
+          className={cn("caption-bottom", className)}
+          {...props}
+        />
+      </div>
+    );
+  },
+);
 Table.displayName = "Table";
 
 const TableHeader = React.forwardRef<

@@ -24,6 +24,7 @@ import { isAdvertiserRole } from '@/app/data/roleHelpers';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
+import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { cn } from '@/app/components/ui/utils';
 import { fetchMetaSnapshotDataset, syncMetaSnapshotDataset } from '@/app/services/liveAdsService';
 import { fetchGoogleAdsSnapshotDataset, syncGoogleAdsSnapshotDataset } from '@/app/services/googleAdsLiveService';
@@ -1845,7 +1846,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                           </div>
                         </div>
                         {breakdown.rows.length > 0 ? (
-                          <div className="overflow-x-auto">
+                          <HorizontalDragScrollArea className="overflow-x-auto">
                             <table className="w-full min-w-[760px] table-fixed text-xs">
                               <colgroup>
                                 <col className="w-[230px]" />
@@ -1915,7 +1916,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                 ))}
                               </tbody>
                             </table>
-                          </div>
+                          </HorizontalDragScrollArea>
                         ) : (
                           <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                             Belum ada data real untuk kategori ini.
@@ -2082,7 +2083,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                         </button>
 
                         {isExpanded && (
-                          <div className="w-full max-w-full overflow-x-auto border-t border-slate-100 pb-2 dark:border-slate-800">
+                          <HorizontalDragScrollArea className="w-full max-w-full overflow-x-auto border-t border-slate-100 pb-2 dark:border-slate-800">
                               <table className="w-full min-w-[1910px] table-fixed text-xs">
                                 <colgroup>
                                   <col className="w-[170px]" />
@@ -2168,7 +2169,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                 ))}
                               </tbody>
                             </table>
-                          </div>
+                          </HorizontalDragScrollArea>
                         )}
                       </div>
                     );

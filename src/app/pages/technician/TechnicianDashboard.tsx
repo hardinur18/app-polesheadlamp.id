@@ -37,6 +37,7 @@ import {
 import { id } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { FoundationDateRangePicker } from '@/app/components/ui/period-filter-picker';
+import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { isTechnicianRole } from '@/app/data/roleHelpers';
 import {
@@ -372,7 +373,7 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
           <h2 className="text-base font-semibold text-slate-900">Laporan Harian Detail</h2>
           <p className="mt-1 text-xs text-slate-500">Ringkasan status pekerjaan per tanggal.</p>
         </div>
-        <div className="technicianDashboardTableScroll overflow-x-auto">
+        <HorizontalDragScrollArea className="technicianDashboardTableScroll overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-[10px] font-medium uppercase tracking-wide text-slate-500">
               <tr>
@@ -426,7 +427,7 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
               )}
             </tbody>
           </table>
-        </div>
+        </HorizontalDragScrollArea>
         <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-100 bg-white p-4 sm:flex-row">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span>Tampilkan</span>

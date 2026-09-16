@@ -9,6 +9,10 @@ import {
   DropdownMenuTrigger,
 } from './dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
+import {
+  HORIZONTAL_DRAG_SCROLL_INTERACTIVE_SELECTOR,
+  useHorizontalDragScroll,
+} from './horizontal-drag-scroll';
 import { cn } from './utils';
 
 type DataTableProps = React.HTMLAttributes<HTMLDivElement> & {
@@ -16,6 +20,9 @@ type DataTableProps = React.HTMLAttributes<HTMLDivElement> & {
   cellX?: number | string;
   cellY?: number | string;
   columns?: DataTableColumn[];
+  dragScroll?: boolean;
+  dragScrollInteractiveSelector?: string;
+  dragScrollThreshold?: number;
   minWidth?: number | string;
   primaryLines?: number;
   rowMinHeight?: number | string;
@@ -133,7 +140,16 @@ export function DataTable({
   children,
   className,
   columns,
+  dragScroll,
+  dragScrollInteractiveSelector = HORIZONTAL_DRAG_SCROLL_INTERACTIVE_SELECTOR,
+  dragScrollThreshold = 8,
   minWidth,
+  onClickCapture,
+  onPointerCancel,
+  onPointerDown,
+  onPointerLeave,
+  onPointerMove,
+  onPointerUp,
   primaryLines,
   rowMinHeight,
   secondaryLines,
@@ -142,6 +158,21 @@ export function DataTable({
   ...props
 }: DataTableProps) {
   const cssVars = { ...style } as CSSProperties & Record<string, string>;
+  const hasCustomPointerHandlers = Boolean(
+    onPointerCancel || onPointerDown || onPointerLeave || onPointerMove || onPointerUp,
+  );
+  const isDragScrollEnabled = dragScroll ?? !hasCustomPointerHandlers;
+  const dragHandlers = useHorizontalDragScroll<HTMLDivElement>({
+    enabled: isDragScrollEnabled,
+    interactiveSelector: dragScrollInteractiveSelector,
+    threshold: dragScrollThreshold,
+    onClickCapture,
+    onPointerCancel,
+    onPointerDown,
+    onPointerLeave,
+    onPointerMove,
+    onPointerUp,
+  });
   const resolvedActionWidth = toCssLength(actionWidth);
   const resolvedCellX = toCssLength(cellX);
   const resolvedCellY = toCssLength(cellY);
@@ -170,9 +201,15 @@ export function DataTable({
 
   return (
     <div
-      className={cn('tableScroller uiDataTableScroller', resolvedColumns?.length && 'uiDataTableHasColumns', className)}
+      className={cn(
+        'tableScroller uiDataTableScroller',
+        resolvedColumns?.length && 'uiDataTableHasColumns',
+        isDragScrollEnabled && 'uiDataTableDragScroll',
+        className,
+      )}
       style={cssVars}
       {...props}
+      {...dragHandlers}
     >
       {resolvedColumns?.length ? injectTableColumns(children, resolvedColumns) : children}
     </div>
@@ -189,7 +226,7 @@ function injectTableColumns(children: ReactNode, columns: ResolvedDataTableColum
   );
 
   return React.Children.map(children, (child) => {
-    if (!React.isValidElement<{ children?: ReactNode }>(child)) {
+    if (!React.isValidElement<{ children?: ReactNode; dragScroll?: boolean }>(child)) {
       return child;
     }
 
@@ -205,7 +242,7 @@ function injectTableColumns(children: ReactNode, columns: ResolvedDataTableColum
 
     return React.cloneElement(
       child,
-      undefined,
+      elementName === 'Table' ? { dragScroll: false } : undefined,
       columnGroup,
       ...tableChildren.map((tableChild) => injectColumnClasses(tableChild, columns)),
     );

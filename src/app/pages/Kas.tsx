@@ -77,6 +77,7 @@ import {
   TableHeader,
   TableRow,
 } from '../components/ui/table';
+import { HorizontalDragScrollArea } from '../components/ui/horizontal-drag-scroll';
 import {
   createDataTableColumns,
   DataTable,
@@ -2517,7 +2518,7 @@ export function Kas() {
                 </p>
               </div>
 
-              <div className="kasBulkGridScroller" onWheel={handleBulkGridWheel}>
+              <HorizontalDragScrollArea className="kasBulkGridScroller" onWheel={handleBulkGridWheel}>
                 <table className={`kasBulkGridTable ${bulkInputSelectionMode ? 'hasSelection' : ''}`}>
                   <colgroup>
                     {bulkInputSelectionMode && <col className="kasBulkInputSelectCol" />}
@@ -2741,7 +2742,7 @@ export function Kas() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              </HorizontalDragScrollArea>
               <p className="kasBulkInputHelp">
                 File CSV/TSV/TXT masih bisa diimpor. Header fleksibel, lalu data akan dipindahkan ke grid untuk dicek sebelum simpan.
               </p>
