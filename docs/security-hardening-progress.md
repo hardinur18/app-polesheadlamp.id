@@ -76,12 +76,21 @@ Notes:
 
 ## Phase 5 - Cleanup & Release Verification
 
-Status: Not started
+Status: Completed
 
-- [ ] Remove unused legacy artifacts from runtime scope.
-- [ ] Add release checklist for each role.
-- [ ] Run lint/typecheck/build/smoke checks.
-- [ ] Document residual production validation steps.
+- [x] Remove unused legacy artifacts from runtime scope.
+- [x] Add release checklist for each role.
+- [x] Run lint/typecheck/build/smoke checks.
+- [x] Document residual production validation steps.
+
+Notes:
+
+- Removed stale `/registerSW.js` handling from deploy headers and the local dist server. PWA registration now has one production path through `pwaUpdateService`.
+- Added `docs/release-verification-checklist.md` with automated gates, per-role release checks, public workflow checks, production validation steps, and residual data-access items.
+- Route smoke now covers the active unauthenticated release surface only: login redirects for protected routes and public `/booking`. The stale public `/payment-gateway-preview` expectation was removed, and smoke scripts now log progress and avoid hanging before role-skip checks.
+- Runtime scans found no active source path named Figma or Figma bundle. Generated `dist`, `node_modules`, `.tmp`, and review artifacts remain ignored and outside committed runtime source.
+- Local verification passed for lint, aggregate typecheck, production build, and unauthenticated route smoke. Role-route smoke executed as a guarded skip because the server correctly rejects anonymous test-user creation without provided smoke credentials.
+- Production-live validation remains blocked until the frontend app Supabase project can be migrated/deployed and real role credentials are available.
 
 ## Pre-Phase 4 Clearance - 2026-09-16
 

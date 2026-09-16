@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import puppeteer from 'puppeteer-core';
-
 const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:5174';
 const CHROME_PATH =
   process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const PUPPETEER_IMPORT_TIMEOUT_MS = Number(process.env.PUPPETEER_IMPORT_TIMEOUT_MS || 30_000);
 const ARTIFACT_DIR = path.join(process.cwd(), 'File Review', 'artifacts');
 const OUTPUT_PATH = path.join(ARTIFACT_DIR, 'route-navigation-smoke.json');
 
@@ -45,15 +44,27 @@ const routes = [
     expectedText: 'Booking',
     description: 'public booking route',
   },
-  {
-    path: '/payment-gateway-preview',
-    expectedText: 'PAYMENT GATEWAY PREVIEW',
-    description: 'public payment gateway preview route',
-  },
 ];
 
 function ensureArtifactDir() {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
+
+async function loadPuppeteer() {
+  let timeoutId;
+  try {
+    const module = await Promise.race([
+      import('puppeteer-core'),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Timed out loading puppeteer-core after ${PUPPETEER_IMPORT_TIMEOUT_MS}ms.`));
+        }, PUPPETEER_IMPORT_TIMEOUT_MS);
+      }),
+    ]);
+    return module.default || module;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function smokeRoute(page, route) {
@@ -87,6 +98,9 @@ async function smokeRoute(page, route) {
 async function main() {
   ensureArtifactDir();
 
+  console.error('smoke: loading puppeteer');
+  const puppeteer = await loadPuppeteer();
+  console.error('smoke: launching browser');
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: true,
@@ -99,6 +113,7 @@ async function main() {
   const results = [];
   try {
     for (const route of routes) {
+      console.error(`smoke: ${route.path}`);
       try {
         results.push(await smokeRoute(page, route));
       } catch (error) {

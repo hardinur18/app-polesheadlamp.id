@@ -52,10 +52,6 @@ function resolveAssetFallback(pathname) {
 }
 
 function resolveRequestPath(pathname) {
-  if (pathname === '/registerSW.js') {
-    return { inline: '// Local preview disables service worker registration.\n', type: contentTypes['.js'] }
-  }
-
   const decodedPathname = decodeURIComponent(pathname.split('?')[0] || '/')
   const relativePath = decodedPathname === '/' ? 'index.html' : decodedPathname.slice(1)
   const requestedPath = normalize(join(root, relativePath))

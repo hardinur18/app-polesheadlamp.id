@@ -1,8 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import puppeteer from 'puppeteer-core';
-
 const SUPABASE_URL =
   process.env.SMOKE_SUPABASE_URL ||
   process.env.SUPABASE_URL ||
@@ -15,6 +13,7 @@ const USERS_ENDPOINT = `${SUPABASE_URL}/functions/v1/make-server-f781cd00/users`
 const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:5174';
 const CHROME_PATH =
   process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const PUPPETEER_IMPORT_TIMEOUT_MS = Number(process.env.PUPPETEER_IMPORT_TIMEOUT_MS || 30_000);
 const PASSWORD = 'SmokeTest123!';
 const ARTIFACT_DIR = path.join(process.cwd(), 'File Review', 'artifacts');
 const OUTPUT_PATH = path.join(ARTIFACT_DIR, 'role-route-smoke.json');
@@ -73,6 +72,23 @@ function getProvidedAccount(role) {
 
 function ensureArtifactDir() {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
+
+async function loadPuppeteer() {
+  let timeoutId;
+  try {
+    const module = await Promise.race([
+      import('puppeteer-core'),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Timed out loading puppeteer-core after ${PUPPETEER_IMPORT_TIMEOUT_MS}ms.`));
+        }, PUPPETEER_IMPORT_TIMEOUT_MS);
+      }),
+    ]);
+    return module.default || module;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function appUrl(pathname) {
@@ -219,11 +235,8 @@ async function main() {
 
   const createdUsers = [];
   const results = [];
-  const browser = await puppeteer.launch({
-    executablePath: CHROME_PATH,
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  const preparedScenarios = [];
+  let browser = null;
 
   let cleanup = null;
   try {
@@ -233,10 +246,25 @@ async function main() {
       if (!providedAccount) {
         createdUsers.push(account);
       }
+      preparedScenarios.push({ scenario, account });
+    }
+
+    console.error('role-smoke: loading puppeteer');
+    const puppeteer = await loadPuppeteer();
+    console.error('role-smoke: launching browser');
+    browser = await puppeteer.launch({
+      executablePath: CHROME_PATH,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
+    for (const { scenario, account } of preparedScenarios) {
       results.push(await runScenario(browser, scenario, account));
     }
   } finally {
-    await browser.close();
+    if (browser) {
+      await browser.close();
+    }
     cleanup = await cleanupUsers(createdUsers);
   }
 
