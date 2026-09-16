@@ -30,22 +30,8 @@ import {
   isOwnerLikeRole,
   isTechnicianRole,
 } from '@/app/data/roleHelpers';
-import { AlertTriangle, Check, ChevronsUpDown, ClipboardList, Loader2, MapPin } from 'lucide-react';
+import { AlertTriangle, ClipboardList, Loader2, MapPin } from 'lucide-react';
 import { Alert } from '../../components/ui/alert';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "../../components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../components/ui/popover";
-import { cn } from "../../components/ui/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -114,6 +100,8 @@ const ORDER_SOURCE_PLATFORM_NAME: Partial<Record<OrderSourceMode, string>> = {
   repeat_order: 'repeat order',
 };
 
+const EMPTY_VEHICLE_VALUE = '__no_vehicle__';
+
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
 
@@ -158,7 +146,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [recommendedBranches, setRecommendedBranches] = useState<{ id: string, name: string, distance: number }[]>([]);
   const [mapsUrlError, setMapsUrlError] = useState<string | null>(null);
-  const [openVehicle, setOpenVehicle] = useState(false);
   const lastInitializedSourceRef = useRef<string | null>(null);
 
   const formSourceKey = initialData?.id
@@ -1690,51 +1677,23 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                <div className="md:col-span-2 grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                      <Label>Tipe Mobil</Label>
-                     <Popover open={openVehicle} onOpenChange={setOpenVehicle}>
-                       <PopoverTrigger asChild>
-                         <Button
-                           type="button"
-                           variant="outline"
-                           role="combobox"
-                           aria-expanded={openVehicle}
-                           disabled={!canEdit('vehicleId')}
-                           className="w-full justify-between bg-white border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-left font-normal"
-                         >
-                           {formData.vehicleId
-                             ? vehicles.find((v) => v.id === formData.vehicleId)?.name
-                             : "Pilih Mobil"}
-                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                         </Button>
-                       </PopoverTrigger>
-                       <PopoverContent className="w-[300px] p-0 border-slate-200 dark:border-slate-800" align="start">
-                         <Command>
-                           <CommandInput placeholder="Cari mobil..." />
-                           <CommandList>
-                             <CommandEmpty>Mobil tidak ditemukan.</CommandEmpty>
-                             <CommandGroup>
-                               {vehicles.map((v) => (
-                                 <CommandItem
-                                   key={v.id}
-                                   value={v.name}
-                                   onSelect={(currentValue) => {
-                                     handleChange('vehicleId', v.id);
-                                     setOpenVehicle(false);
-                                   }}
-                                 >
-                                   <Check
-                                     className={cn(
-                                       "mr-2 h-4 w-4",
-                                       formData.vehicleId === v.id ? "opacity-100" : "opacity-0"
-                                     )}
-                                   />
-                                   {v.name}
-                                 </CommandItem>
-                               ))}
-                             </CommandGroup>
-                           </CommandList>
-                         </Command>
-                       </PopoverContent>
-                     </Popover>
+                     <Select
+                       value={formData.vehicleId || EMPTY_VEHICLE_VALUE}
+                       onValueChange={(val) => handleChange('vehicleId', val === EMPTY_VEHICLE_VALUE ? undefined : val)}
+                       disabled={!canEdit('vehicleId')}
+                     >
+                       <SelectTrigger className="bg-white dark:bg-slate-800">
+                         <SelectValue placeholder="Pilih Mobil" />
+                       </SelectTrigger>
+                       <SelectContent className="z-[1000] max-h-[320px] bg-white dark:bg-slate-900">
+                         <SelectItem value={EMPTY_VEHICLE_VALUE}>Tanpa tipe mobil</SelectItem>
+                         {vehicles.map((v) => (
+                           <SelectItem key={v.id} value={v.id}>
+                             {v.name}
+                           </SelectItem>
+                         ))}
+                       </SelectContent>
+                     </Select>
                   </div>
                   <div className="space-y-2">
                      <Label>Jumlah Unit</Label>

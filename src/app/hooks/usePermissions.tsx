@@ -24,6 +24,11 @@ const normalizeRolePermissionsPayload = (permissions: Partial<Record<Role, unkno
     ]),
   ) as Record<Role, PermissionKey[]>;
 
+const getRoleDefaultPermissions = (role?: Role): PermissionKey[] => {
+  if (!role) return [];
+  return normalizeStoredRolePermissions(role, DEFAULT_ROLE_PERMISSIONS[role] || []);
+};
+
 export interface RoleSettings {
   payroll_visible_roles?: Role[];
 }
@@ -165,7 +170,7 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
       }
 
       if (currentRole === 'Owner') {
-          const ownerPermissions = [...DEFAULT_ROLE_PERMISSIONS.Owner];
+          const ownerPermissions = getRoleDefaultPermissions('Owner');
           setLocalUserCustomPermissions(null);
           setCurrentEffectivePermissions(ownerPermissions);
           return {
@@ -173,6 +178,8 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
             effectivePermissions: ownerPermissions,
           };
       }
+
+      const fallbackRolePermissions = getRoleDefaultPermissions(currentRole);
       
       try {
           const headers = await getSessionBackedEdgeHeaders();
@@ -216,10 +223,10 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
       } catch (err: any) {
           console.error("Error fetching user custom perms via server:", err.message || err);
           setLocalUserCustomPermissions(null);
-          setCurrentEffectivePermissions([]);
+          setCurrentEffectivePermissions(fallbackRolePermissions);
           return {
             customPermissions: null,
-            effectivePermissions: [],
+            effectivePermissions: fallbackRolePermissions,
           };
       }
   }, [currentRole, currentUser?.id]);
@@ -280,9 +287,9 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
     let isActive = true;
     const loadingTimeoutId = window.setTimeout(() => {
       if (!isActive) return;
-      console.warn('[Permissions] Initial refresh timed out; continuing with deny-all permissions until refresh succeeds.');
+      console.warn('[Permissions] Initial refresh timed out; continuing with role-default permissions until refresh succeeds.');
       setLocalUserCustomPermissions(null);
-      setCurrentEffectivePermissions([]);
+      setCurrentEffectivePermissions(getRoleDefaultPermissions(currentRole));
       setLoading(false);
     }, 3500);
 
@@ -551,9 +558,9 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
         return userCustomPermissions.includes(permission);
     }
 
-    // 4. Default-deny until the server snapshot is loaded. Route visibility is UX only;
-    // backend permission checks remain the source of truth.
-    return false;
+    // 4. Keep the shell usable while the server snapshot is still loading or recovering.
+    // Route visibility is UX only; backend permission checks remain the source of truth.
+    return getRoleDefaultPermissions(currentRole).includes(permission);
   }, [currentRole, currentEffectivePermissions, rolePermissions, userCustomPermissions, viewAsRole]);
 
   const isOrderLocked = useCallback((orderStatus: string) => {

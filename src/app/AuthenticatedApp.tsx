@@ -3,10 +3,10 @@ import { Navigate, useLocation } from 'react-router';
 import { MasterDataProvider } from '@/app/pages/master-data/context';
 import { PermissionsProvider } from '@/app/hooks/usePermissions';
 import { AppLayout } from './components/layout/AppLayout';
+import { AppLoadingScreen } from './components/AppLoadingScreen';
 import { LoginPage } from './pages/auth/LoginPage';
 import { supabase } from '../lib/supabaseClient';
 import { Session } from '@supabase/supabase-js';
-import { Loader2 } from 'lucide-react';
 import { getAppRouteByPath, getCanonicalAppPath } from '@/app/routing/appRouteRegistry';
 
 const DEFAULT_AUTHENTICATED_PATH = '/dashboard/';
@@ -207,11 +207,7 @@ export const AuthenticatedApp = () => {
   }
 
   if (loading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
   if (!session && currentRoute?.id !== 'login') {

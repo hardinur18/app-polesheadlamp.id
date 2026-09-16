@@ -8,7 +8,7 @@ import { Skeleton } from '../ui/skeleton';
 import { cn } from '../ui/utils';
 import { toast } from 'sonner';
 import { Toaster } from '../ui/sonner';
-import { Menu, Sun, Moon, LogOut, User, RefreshCcw, Loader2 } from 'lucide-react';
+import { Menu, Sun, Moon, LogOut, User, RefreshCcw } from 'lucide-react';
 import { useTheme } from "next-themes"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "../ui/sheet";
 import { NotificationBell } from '../ui/NotificationBell';
@@ -28,6 +28,7 @@ import { DashboardViewMode, DASHBOARD_VIEW_PERMISSION_MAP, DEFAULT_DASHBOARD_VIE
 import { isTechnicianRole } from '@/app/data/roleHelpers';
 import { Lock } from 'lucide-react';
 import { BottomNav } from '../BottomNav';
+import { AppLoadingScreen } from '../AppLoadingScreen';
 import {
   ACCESS_DENIED_FALLBACK_TAB,
   APP_LAYOUT_ACCESS_FALLBACKS,
@@ -322,18 +323,14 @@ export function AppLayout() {
 
   React.useEffect(() => {
     const root = document.documentElement;
-    const workspaceLayerLeft = isTechnicianRole(currentRole)
-      ? '0px'
-      : isSidebarCollapsed
-        ? '88px'
-        : '304px';
+    const workspaceLayerLeft = isSidebarCollapsed ? '88px' : '304px';
 
     root.style.setProperty('--workspace-layer-left', workspaceLayerLeft);
 
     return () => {
       root.style.removeProperty('--workspace-layer-left');
     };
-  }, [currentRole, isSidebarCollapsed]);
+  }, [isSidebarCollapsed]);
 
   const preferredDashboardView = currentRole ? DEFAULT_DASHBOARD_VIEW_BY_ROLE[currentRole] : undefined;
   const preferredDashboardPermission = preferredDashboardView
@@ -460,7 +457,13 @@ export function AppLayout() {
     if (requiredPermission) {
         const isAllowedByCurrentSnapshot = hasRequiredPermission(requiredPermission, hasPermission);
         if (!isAllowedByCurrentSnapshot && permissionsLoading) {
-            return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-slate-300" /></div>;
+            return (
+              <AppLoadingScreen
+                inline
+                label="Membuka akses"
+                detail="Menyiapkan menu sesuai role akun..."
+              />
+            );
         }
 
         if (!isAllowedByCurrentSnapshot) {
@@ -475,7 +478,13 @@ export function AppLayout() {
             (hasPermission('dashboard.view') && activeTab !== 'dashboard') ||
             (hasPermission('teknisi.view_mobile') && activeTab !== 'teknisi-mobile')
         ) {
-             return <div className="flex h-[80vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-slate-300" /></div>;
+             return (
+               <AppLoadingScreen
+                 inline
+                 label="Mengalihkan halaman"
+                 detail="Mengarahkan ke menu yang tersedia untuk role ini..."
+               />
+             );
         }
         return <AccessDenied />;
     }
@@ -667,12 +676,7 @@ export function AppLayout() {
   }
 
   if (!isCurrentUserResolved) {
-    return (
-      <div className="appSplash">
-        <Loader2 className="spin" size={28} />
-        <span>Memuat...</span>
-      </div>
-    );
+    return <AppLoadingScreen />;
   }
 
   return (
@@ -680,7 +684,6 @@ export function AppLayout() {
       className={cn(
         'appShell',
         isSidebarCollapsed && 'sidebarCollapsed',
-        isTechnicianRole(currentRole) && 'sidebarHidden',
       )}
     >
       
@@ -796,7 +799,7 @@ export function AppLayout() {
           className={
             isFlushContentPage
               ? 'workspaceViewport flush'
-              : cn('workspaceViewport withMobileNav', !isTechnicianRole(currentRole) && 'lg:pb-0')
+              : cn('workspaceViewport withMobileNav', 'lg:pb-0')
           }
         >
            <React.Suspense fallback={<PageLoadingState />}>
@@ -805,6 +808,7 @@ export function AppLayout() {
         </div>
 
         {/* Bottom Navigation (Mobile Only) */}
+        {!permissionsLoading && (
         <BottomNav 
             activeTab={activeTab} 
             onNavigate={(id) => {
@@ -815,6 +819,7 @@ export function AppLayout() {
                 }
             }} 
         />
+        )}
       </main>
 
       <Toaster position="top-right" richColors />
