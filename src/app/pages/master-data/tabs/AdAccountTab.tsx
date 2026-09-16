@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Edit, Trash2,
-  History, Link2, Monitor, RefreshCw, Unlink, UserCheck, Users
+  AlertTriangle, CheckCircle2, History, Link2, Monitor, RefreshCw, Unlink, UserCheck, Users
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { ControlPanel, ControlRow, SearchBox } from '../../../components/ui/control-panel';
@@ -95,7 +95,35 @@ interface AdAccountTabProps {
   setPageNotices?: (notices: NoticeItem[]) => void;
 }
 
-type AccountView = 'all' | 'api' | 'live' | 'unmatched' | 'assignment' | 'cs-relations' | 'advertiser-relations';
+type AccountView = 'audit' | 'all' | 'api' | 'live' | 'unmatched' | 'assignment' | 'cs-relations' | 'advertiser-relations';
+
+type MappingAuditAction =
+  | 'pair-api'
+  | 'match-live'
+  | 'assign-owner'
+  | 'assign-cs'
+  | 'assign-subchannel'
+  | 'edit-account';
+
+type MappingAuditIssue =
+  | {
+      id: string;
+      source: 'account';
+      severity: 'danger' | 'warning';
+      title: string;
+      detail: string;
+      action: MappingAuditAction;
+      account: AdAccount;
+    }
+  | {
+      id: string;
+      source: 'api';
+      severity: 'warning';
+      title: string;
+      detail: string;
+      action: 'pair-api';
+      apiAccount: AdApiAccount;
+    };
 
 export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _currentRole, setPageNotices }) => {
   const {
@@ -113,7 +141,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const [search, setSearch] = useState('');
-  const [accountView, setAccountView] = useState<AccountView>('all');
+  const [accountView, setAccountView] = useState<AccountView>('audit');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AdAccount | null>(null);
   const [deletingItem, setDeletingItem] = useState<AdAccount | null>(null);
@@ -1044,7 +1072,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             return saveAdAccountApiMapping({
               internalAdAccountId: pair.internalAdAccountId,
               apiAccount: storedAccount,
-              notes: 'Migrasi otomatis dari config integrasi lama.',
+              notes: 'Disalin otomatis ke registry API master akun iklan.',
             });
           }),
         );
@@ -1060,7 +1088,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
           ),
         ]);
       } catch (error) {
-        console.warn('[AdAccountTab] gagal mirror config integrasi lama', error);
+        console.warn('[AdAccountTab] gagal mirror config integrasi provider', error);
       }
     };
 
@@ -1098,8 +1126,6 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     const lowerSearch = search.trim().toLowerCase();
     return allApiAccounts.filter((account) => {
       const mapping = getApiMappingForAccount(account);
-      if (!mapping) return false;
-
       if (!lowerSearch) return true;
       const internalAccount = getInternalAdAccount(mapping?.internalAdAccountId);
       return (
@@ -1311,9 +1337,151 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     isUnmatchedAccount,
   ]);
 
+  const unpairedApiAccounts = useMemo(
+    () => allApiAccounts.filter((account) => !getApiMappingForAccount(account)),
+    [allApiAccounts, getApiMappingForAccount],
+  );
+
+  const mappingAuditRows = useMemo<MappingAuditIssue[]>(() => {
+    const rows: MappingAuditIssue[] = [];
+
+    rawFilteredData
+      .filter((account) => account.status === 'active')
+      .forEach((account) => {
+        const activeAssignment = getActiveAssignment(account.id);
+        const activeOwner = getActiveOwnerAssignment(account.id);
+        const platformName = getPlatformName(account.platformId);
+        const platformKey = getPlatformKeyByName(platformName);
+        const effectiveSubChannelId = account.subChannelId || activeAssignment?.subChannelId;
+        const billingNeedsCheck =
+          account.ppn === undefined ||
+          account.ppn === null ||
+          account.fee === undefined ||
+          account.fee === null ||
+          !Number.isFinite(Number(account.ppn)) ||
+          !Number.isFinite(Number(account.fee));
+
+        if (!activeOwner) {
+          rows.push({
+            id: `${account.id}:owner`,
+            source: 'account',
+            severity: 'danger',
+            title: 'Belum ada advertiser aktif',
+            detail: 'Akun aktif perlu owner assignment agar mapping order, iklan, dan laporan stabil di master data.',
+            action: 'assign-owner',
+            account,
+          });
+        }
+
+        if (!activeAssignment) {
+          rows.push({
+            id: `${account.id}:cs`,
+            source: 'account',
+            severity: 'danger',
+            title: 'Belum ada CS aktif',
+            detail: 'Akun aktif perlu CS assignment untuk relasi iklan harian dan data order.',
+            action: 'assign-cs',
+            account,
+          });
+        }
+
+        if (!effectiveSubChannelId) {
+          rows.push({
+            id: `${account.id}:subchannel`,
+            source: 'account',
+            severity: 'warning',
+            title: 'Sub-channel belum dikunci',
+            detail: 'Pilih sub-channel aktif agar lead/order dari akun ini masuk ke kanal yang konsisten.',
+            action: 'assign-subchannel',
+            account,
+          });
+        }
+
+        if (billingNeedsCheck) {
+          rows.push({
+            id: `${account.id}:billing`,
+            source: 'account',
+            severity: 'warning',
+            title: 'PPN/Fee belum valid',
+            detail: 'Lengkapi PPN dan fee akun iklan. Nilai 0% boleh dipakai jika memang tidak ada biaya.',
+            action: 'edit-account',
+            account,
+          });
+        }
+
+        if (platformKey && !hasLiveMapping(account)) {
+          rows.push({
+            id: `${account.id}:api`,
+            source: 'account',
+            severity: 'warning',
+            title: 'Belum pairing API/live',
+            detail: 'Akun internal aktif pada platform ads perlu dipasangkan ke registry API untuk data live.',
+            action: 'match-live',
+            account,
+          });
+        } else if (isIntegrationEnabled(account) && isUnmatchedAccount(account)) {
+          rows.push({
+            id: `${account.id}:match`,
+            source: 'account',
+            severity: 'danger',
+            title: 'Live ON tapi belum match API',
+            detail: 'Live ads aktif, tetapi business/manager belum terbaca sebagai pasangan yang valid.',
+            action: 'match-live',
+            account,
+          });
+        }
+      });
+
+    unpairedApiAccounts.forEach((apiAccount) => {
+      rows.push({
+        id: `api:${apiAccount.platformKey}:${apiAccount.externalAccountId}`,
+        source: 'api',
+        severity: 'warning',
+        title: 'Akun API belum dipasangkan',
+        detail: 'Registry live sudah ada, tetapi belum terhubung ke master akun iklan internal.',
+        action: 'pair-api',
+        apiAccount,
+      });
+    });
+
+    const severityRank: Record<MappingAuditIssue['severity'], number> = { danger: 0, warning: 1 };
+    return rows.sort((left, right) =>
+      severityRank[left.severity] - severityRank[right.severity] ||
+      left.title.localeCompare(right.title)
+    );
+  }, [
+    rawFilteredData,
+    getActiveAssignment,
+    getActiveOwnerAssignment,
+    getPlatformName,
+    hasLiveMapping,
+    isIntegrationEnabled,
+    isUnmatchedAccount,
+    unpairedApiAccounts,
+  ]);
+
+  const auditSummary = useMemo(() => {
+    const activeAccounts = rawFilteredData.filter((account) => account.status === 'active');
+    const pairedApiCount = allApiAccounts.length - unpairedApiAccounts.length;
+    return {
+      activeAccounts: activeAccounts.length,
+      pairedApiCount,
+      unpairedApiCount: unpairedApiAccounts.length,
+      missingOwnerCount: mappingAuditRows.filter((row) => row.source === 'account' && row.action === 'assign-owner').length,
+      missingCsCount: mappingAuditRows.filter((row) => row.source === 'account' && row.action === 'assign-cs').length,
+      missingSubChannelCount: mappingAuditRows.filter((row) => row.source === 'account' && row.action === 'assign-subchannel').length,
+      apiIssueCount: mappingAuditRows.filter((row) =>
+        row.action === 'pair-api' || row.action === 'match-live'
+      ).length,
+      dangerCount: mappingAuditRows.filter((row) => row.severity === 'danger').length,
+      warningCount: mappingAuditRows.filter((row) => row.severity === 'warning').length,
+    };
+  }, [allApiAccounts.length, mappingAuditRows, rawFilteredData, unpairedApiAccounts.length]);
+
   const viewTabs = [
+    { id: 'audit' as const, label: 'Audit Mapping', count: mappingAuditRows.length },
     { id: 'all' as const, label: 'Semua', count: rawFilteredData.length },
-    { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.filter(getApiMappingForAccount).length },
+    { id: 'api' as const, label: 'Integrasi API', count: allApiAccounts.length },
     { id: 'live' as const, label: 'Live Ads ON', count: rawFilteredData.filter(isIntegrationEnabled).length },
     { id: 'unmatched' as const, label: 'Belum Match API', count: rawFilteredData.filter(isUnmatchedAccount).length },
     { id: 'assignment' as const, label: 'Perlu Assignment', count: rawFilteredData.filter(hasAssignmentIssue).length },
@@ -2580,6 +2748,281 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     );
   };
 
+  const getMappingAuditActionLabel = (issue: MappingAuditIssue) => {
+    if (issue.source === 'api') return 'Pasangkan';
+    if (issue.action === 'assign-owner') return 'Atur Advertiser';
+    if (issue.action === 'assign-cs') return 'Atur CS';
+    if (issue.action === 'assign-subchannel') return 'Atur Sub-channel';
+    if (issue.action === 'edit-account') return 'Edit Akun';
+    return 'Cek API';
+  };
+
+  const handleMappingAuditAction = (issue: MappingAuditIssue) => {
+    if (issue.source === 'api') {
+      openApiMappingDialog(issue.apiAccount);
+      return;
+    }
+
+    if (issue.action === 'assign-owner') {
+      openOwnerDialog(issue.account);
+      return;
+    }
+
+    if (issue.action === 'assign-cs' || issue.action === 'assign-subchannel') {
+      openAssignmentDialog(issue.account);
+      return;
+    }
+
+    if (issue.action === 'edit-account') {
+      openEdit(issue.account);
+      return;
+    }
+
+    setSearch(issue.account.accountName);
+    setAccountView('api');
+  };
+
+  const renderMappingAuditPanel = () => {
+    const summaryItems = [
+      {
+        label: 'Akun aktif',
+        value: auditSummary.activeAccounts,
+        helper: 'Diperiksa di audit',
+        onClick: () => setAccountView('all'),
+      },
+      {
+        label: 'API belum paired',
+        value: auditSummary.unpairedApiCount,
+        helper: `${auditSummary.pairedApiCount} sudah paired`,
+        onClick: () => setAccountView('api'),
+      },
+      {
+        label: 'Belum advertiser',
+        value: auditSummary.missingOwnerCount,
+        helper: 'Owner assignment kosong',
+        onClick: () => setAccountView('assignment'),
+      },
+      {
+        label: 'Belum CS/sub-channel',
+        value: auditSummary.missingCsCount + auditSummary.missingSubChannelCount,
+        helper: 'Perlu relasi operasional',
+        onClick: () => setAccountView('assignment'),
+      },
+      {
+        label: 'Issue API/live',
+        value: auditSummary.apiIssueCount,
+        helper: 'Pairing atau match live',
+        onClick: () => setAccountView('api'),
+      },
+    ];
+
+    if (mappingAuditRows.length === 0) {
+      return (
+        <div className="space-y-4">
+          <div className="tablePanel p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  <CheckCircle2 className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">Mapping akun iklan clear</h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Semua akun aktif yang terlihat di filter ini sudah punya relasi utama dan registry API tidak menyisakan akun yang belum dipasangkan.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
+                <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
+                Refresh API
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="tablePanel p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">Audit Mapping Akun Iklan</h3>
+                <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
+                  Checklist ini memastikan master akun iklan sudah menjadi sumber relasi utama untuk advertiser, CS, sub-channel, dan pairing API/live.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className={cn('assignmentStatusPill', auditSummary.dangerCount > 0 ? 'is-partial' : 'is-ready')}>
+                    <span className="assignmentStatusDot" />
+                    <span>{auditSummary.dangerCount} prioritas</span>
+                  </span>
+                  <span className={cn('assignmentStatusPill', auditSummary.warningCount > 0 ? 'is-partial' : 'is-ready')}>
+                    <span className="assignmentStatusDot" />
+                    <span>{auditSummary.warningCount} warning</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
+              <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
+              Refresh API
+            </Button>
+          </div>
+
+          <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {summaryItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-900/70 dark:hover:bg-blue-950/30"
+                onClick={item.onClick}
+              >
+                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</span>
+                <strong className="mt-1 block text-2xl font-black text-slate-950 dark:text-slate-50">{item.value}</strong>
+                <span className="mt-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{item.helper}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="tablePanel">
+          <div className="hidden md:block">
+            <DataTable
+              actionWidth={130}
+              cellY={12}
+              columns={createDataTableColumns(['number', 'status', 'name', 'text', 'description', canEdit && 'action'])}
+              rowMinHeight={76}
+            >
+              <table>
+                <thead>
+                  <tr>
+                    <th className="text-center">No</th>
+                    <th className="text-center">Prioritas</th>
+                    <th>Akun</th>
+                    <th>Relasi</th>
+                    <th>Masalah</th>
+                    {canEdit && <TableActionHeader />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {mappingAuditRows.map((issue, index) => {
+                    const account = issue.source === 'account' ? issue.account : null;
+                    const apiAccount = issue.source === 'api' ? issue.apiAccount : null;
+                    const platform = account
+                      ? platforms.find((item) => item.id === account.platformId)
+                      : apiAccount
+                        ? getPlatformByKey(apiAccount.platformKey)
+                        : undefined;
+                    const activeAssignment = account ? getActiveAssignment(account.id) : null;
+                    const activeOwner = account ? getActiveOwnerAssignment(account.id) : null;
+                    const relationPrimary = account
+                      ? getAdvertiserName(activeOwner?.advertiserId || account.advertiserId)
+                      : apiAccount?.externalGroupName || 'Tanpa manager';
+                    const relationSecondary = account
+                      ? `CS: ${activeAssignment ? getUserName(activeAssignment.csId) : 'Belum diset'}`
+                      : apiAccount?.externalGroupId
+                        ? `BM ID: ${apiAccount.externalGroupId}`
+                        : apiAccount?.currencyCode
+                          ? `Mata uang: ${apiAccount.currencyCode}`
+                          : 'Registry API';
+
+                    return (
+                      <tr key={issue.id}>
+                        <td className="monoCell text-center">{index + 1}</td>
+                        <td className="tableIconCell text-center">
+                          <span className={cn('assignmentStatusPill', issue.severity === 'danger' ? 'is-partial' : 'is-empty')}>
+                            <span className="assignmentStatusDot" />
+                            <span>{issue.severity === 'danger' ? 'Prioritas' : 'Warning'}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <div className="platformLogoTableCell">
+                            <PlatformLogo
+                              density="compact"
+                              logoPath={platform?.logoPath}
+                              name={platform?.name || (apiAccount ? getPlatformLabelByKey(apiAccount.platformKey) : getPlatformName(account?.platformId || ''))}
+                              size="sm"
+                            />
+                            <TableText
+                              primary={account?.accountName || apiAccount?.externalAccountName || '-'}
+                              secondary={account ? getPlatformName(account.platformId) : apiAccount ? `ID API: ${apiAccount.externalAccountId}` : undefined}
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <TableText primary={relationPrimary} secondary={relationSecondary} />
+                        </td>
+                        <td>
+                          <TableText primary={issue.title} secondary={issue.detail} />
+                        </td>
+                        {canEdit && (
+                          <TableActionCell>
+                            <Button size="sm" variant="outline" onClick={() => handleMappingAuditAction(issue)}>
+                              {issue.source === 'api' || issue.action === 'match-live' ? <Link2 /> : issue.action === 'edit-account' ? <Edit /> : <Users />}
+                              {getMappingAuditActionLabel(issue)}
+                            </Button>
+                          </TableActionCell>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </DataTable>
+          </div>
+
+          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
+            {mappingAuditRows.map((issue) => {
+              const account = issue.source === 'account' ? issue.account : null;
+              const apiAccount = issue.source === 'api' ? issue.apiAccount : null;
+              const platform = account
+                ? platforms.find((item) => item.id === account.platformId)
+                : apiAccount
+                  ? getPlatformByKey(apiAccount.platformKey)
+                  : undefined;
+
+              return (
+                <div key={issue.id} className="p-4 bg-white dark:bg-slate-800">
+                  <div className="flex items-start gap-3">
+                    <PlatformLogo
+                      density="compact"
+                      logoPath={platform?.logoPath}
+                      name={platform?.name || (apiAccount ? getPlatformLabelByKey(apiAccount.platformKey) : getPlatformName(account?.platformId || ''))}
+                      size="sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
+                          {account?.accountName || apiAccount?.externalAccountName || '-'}
+                        </h3>
+                        <span className={cn('assignmentStatusPill', issue.severity === 'danger' ? 'is-partial' : 'is-empty')}>
+                          <span className="assignmentStatusDot" />
+                          <span>{issue.severity === 'danger' ? 'Prioritas' : 'Warning'}</span>
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{issue.title}</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{issue.detail}</p>
+                      {canEdit && (
+                        <Button className="mt-3" size="sm" variant="outline" onClick={() => handleMappingAuditAction(issue)}>
+                          {issue.source === 'api' || issue.action === 'match-live' ? <Link2 /> : issue.action === 'edit-account' ? <Edit /> : <Users />}
+                          {getMappingAuditActionLabel(issue)}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderApiIntegrationTable = () => {
     if (apiFilteredAccounts.length === 0) {
       return (
@@ -3113,7 +3556,9 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         ))}
       </div>
 
-      {accountView === 'api' ? (
+      {accountView === 'audit' ? (
+        renderMappingAuditPanel()
+      ) : accountView === 'api' ? (
         renderApiIntegrationTable()
       ) : accountView === 'cs-relations' ? (
         renderCsRelationTable()
