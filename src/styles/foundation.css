@@ -3555,15 +3555,42 @@
   margin-top: 0;
 }
 
-.dashboardViewSwitcherWrap {
+.dashboardViewTabsRoot {
+  gap: 0;
   width: 100%;
-  max-width: 1680px;
-  margin: 0 auto;
-  padding: 22px 36px 0;
+  min-width: 0;
+  align-items: stretch;
 }
 
+.dashboardViewSwitcherWrap {
+  --dashboard-view-inline-pad: 42px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 22px var(--dashboard-view-inline-pad) 0;
+}
+
+.dashboardViewContent {
+  min-width: 0;
+}
+
+.dashboardViewContent > .opsPageShell,
 .dashboardViewSwitcherWrap + .opsPageShell {
   padding-top: 24px;
+}
+
+.dashboardViewTabsViewport {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 100%;
+}
+
+.dashboardViewTabsViewport::before,
+.dashboardViewTabsViewport::after {
+  display: none;
 }
 
 .dashboardViewSwitcher {
@@ -3574,12 +3601,37 @@
   gap: 22px;
   overflow-x: auto;
   overflow-y: hidden;
+  padding: 0;
+  border: 0;
   border-bottom: 1px solid var(--ops-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   scrollbar-width: none;
 }
 
+.dashboardViewTabsRail.uiTabsRail {
+  width: fit-content;
+  max-width: 100%;
+  margin-right: auto !important;
+  margin-left: 0 !important;
+  min-height: 48px;
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(12px);
+}
+
+.dashboardViewTabsRail.uiTabsRail::-webkit-scrollbar,
 .dashboardViewSwitcher::-webkit-scrollbar {
   display: none;
+}
+
+.dashboardViewTab.uiTabsTrigger {
+  min-height: 36px;
 }
 
 .dashboardViewTab {
@@ -3589,29 +3641,18 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 1px;
-  border: 0;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 14px;
   color: var(--ops-muted);
   background: transparent;
+  box-shadow: none;
   font-size: 0.9rem;
   font-weight: 750;
   letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
-  transition: color 160ms ease;
-}
-
-.dashboardViewTab::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 999px 999px 0 0;
-  background: transparent;
-  transform: scaleX(0.72);
-  transition: background 160ms ease, transform 160ms ease;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .dashboardViewTab svg {
@@ -3619,23 +3660,26 @@
   transition: color 160ms ease;
 }
 
+.dashboardViewTab.uiTabsTrigger:hover:not(:disabled),
 .dashboardViewTab:hover:not(:disabled) {
   color: var(--ops-ink-2);
+  background: rgba(255, 255, 255, 0.86);
 }
 
+.dashboardViewTab.uiTabsTrigger:hover:not(:disabled) svg,
 .dashboardViewTab:hover:not(:disabled) svg {
   color: var(--ops-blue-ink);
 }
 
+.dashboardViewTab.uiTabsTrigger[data-state="active"],
 .dashboardViewTab.active {
+  border-color: rgba(59, 130, 246, 0.16);
   color: var(--ops-blue-ink);
+  background: #ffffff;
+  box-shadow: 0 12px 26px -20px rgba(37, 99, 235, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.82) inset;
 }
 
-.dashboardViewTab.active::after {
-  background: var(--ops-blue-ink);
-  transform: scaleX(1);
-}
-
+.dashboardViewTab.uiTabsTrigger[data-state="active"] svg,
 .dashboardViewTab.active svg {
   color: var(--ops-blue-ink);
 }
@@ -5372,8 +5416,10 @@
 
 .dark .dashboardViewSwitcher {
   border-color: var(--ops-line);
+  background: transparent;
 }
 
+.dark .dashboardViewTab.uiTabsTrigger,
 .dark .dashboardViewTab {
   color: #94a3b8;
 }
@@ -5382,18 +5428,18 @@
   color: #64748b;
 }
 
+.dark .dashboardViewTab.uiTabsTrigger:hover:not(:disabled),
+.dark .dashboardViewTab.uiTabsTrigger[data-state="active"],
 .dark .dashboardViewTab:hover:not(:disabled),
 .dark .dashboardViewTab.active {
   color: #bfdbfe;
 }
 
+.dark .dashboardViewTab.uiTabsTrigger:hover:not(:disabled) svg,
+.dark .dashboardViewTab.uiTabsTrigger[data-state="active"] svg,
 .dark .dashboardViewTab:hover:not(:disabled) svg,
 .dark .dashboardViewTab.active svg {
   color: #93c5fd;
-}
-
-.dark .dashboardViewTab.active::after {
-  background: #93c5fd;
 }
 
 .dark .uiInput,
@@ -6262,13 +6308,16 @@
   }
 
   .dashboardViewSwitcherWrap {
-    padding: 18px 20px 0;
+    --dashboard-view-inline-pad: 20px;
+    padding-top: 18px;
   }
 
+  .dashboardViewContent > .opsPageShell,
   .dashboardViewSwitcherWrap + .opsPageShell {
     padding-top: 20px;
   }
 
+  .dashboardViewTabsRail.uiTabsRail,
   .dashboardViewSwitcher {
     width: 100%;
     gap: 18px;
@@ -25854,6 +25903,994 @@ body {
 
   .contactsSearchField,
   .contactsResetButton.uiButton {
+    grid-column: auto;
+  }
+}
+
+/* Advertiser Dashboard polish */
+.advertiserDashboardPage.opsPageShell,
+.csDashboardPage.opsPageShell {
+  container-type: inline-size;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  padding-bottom: 7rem;
+}
+
+.advertiserDashboardPage .topbar {
+  margin-bottom: 18px;
+}
+
+.advertiserDashboardHeaderActions,
+.advertiserDashboardFilterGrid,
+.advertiserDashboardTabs,
+.advertiserDashboardTabsViewport,
+.advertiserDashboardTableCard,
+.advertiserDashboardSummaryCard,
+.advertiserDashboardDateGroup,
+.advertiserDashboardDateGroupButton,
+.csDashboardTabs,
+.csDashboardTabsViewport,
+.csDashboardTableCard,
+.csDashboardPerformanceCard,
+.csDashboardDateGroup,
+.csDashboardDateGroupFrame,
+.csDashboardDateGroupButton {
+  min-width: 0;
+}
+
+.advertiserDashboardDateGroup,
+.csDashboardDateGroupFrame {
+  overflow: hidden;
+}
+
+.advertiserDashboardSectionHeader.uiCardHeader,
+.advertiserDashboardSectionHeader[data-slot="card-header"] {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px !important;
+}
+
+.advertiserDashboardSectionHeader .uiCardTitle,
+.advertiserDashboardSectionHeader [data-slot="card-title"] {
+  color: #0f172a;
+  font-size: 0.98rem !important;
+  font-weight: 840;
+  line-height: 1.2;
+}
+
+.advertiserDashboardSectionHeader p {
+  max-width: 720px;
+  margin-top: 5px !important;
+  color: #64748b;
+  font-size: 0.86rem !important;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.advertiserDashboardBreakdownDesktop,
+.advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea,
+.csDashboardDetailScroller.uiHorizontalDragScrollArea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  border-radius: 10px !important;
+  border: 0 !important;
+  background: #ffffff;
+  outline: none !important;
+  box-shadow: none !important;
+  scrollbar-gutter: stable;
+  cursor: default;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+.advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea:focus,
+.advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea:focus-visible {
+  outline: none !important;
+}
+
+.advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea table {
+  overflow: hidden;
+  border-radius: 10px !important;
+  border: 0 !important;
+  background: #ffffff;
+  box-shadow: none !important;
+}
+
+.advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea thead {
+  position: relative;
+  z-index: 1;
+}
+
+.advertiserDashboardBreakdownFoundationTable {
+  width: 100%;
+  min-width: 0;
+  border-top: 1px solid rgba(226, 232, 240, 0.86);
+  background: #ffffff;
+}
+
+.advertiserDashboardBreakdownFoundationTable .tableScroller,
+.advertiserDashboardBreakdownFoundationTable.uiDataTableScroller {
+  border-radius: 0 !important;
+  background: #ffffff;
+  box-shadow: none !important;
+}
+
+.advertiserDashboardBreakdownFoundationTable .tableScroller:focus-visible {
+  outline-offset: -2px;
+}
+
+.advertiserDashboardBreakdownFoundationTable table {
+  min-width: max(100%, 1120px) !important;
+}
+
+.advertiserDashboardBreakdownFoundationTable th {
+  background: #f5f7fb !important;
+  color: #6b7c94 !important;
+  font-size: 0.68rem !important;
+  font-weight: 820 !important;
+  line-height: 1.15;
+  vertical-align: middle !important;
+}
+
+.advertiserDashboardBreakdownFoundationTable td {
+  color: #475569;
+  font-size: 0.8rem !important;
+  line-height: 1.3;
+  vertical-align: top !important;
+  white-space: normal !important;
+}
+
+.advertiserDashboardBreakdownGroupRow td {
+  height: auto !important;
+  border-top: 1px solid rgba(226, 232, 240, 0.92) !important;
+  background: #f8fafc !important;
+}
+
+.advertiserDashboardBreakdownGroupSummary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.advertiserDashboardBreakdownGroupSummary > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.advertiserDashboardBreakdownGroupSummary strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 850;
+  line-height: 1.18;
+}
+
+.advertiserDashboardBreakdownGroupSummary span {
+  color: #71809a;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.advertiserDashboardBreakdownGroupSummary > div:last-child {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.advertiserDashboardBreakdownGroupSummary > div:last-child span,
+.advertiserDashboardBreakdownCategory,
+.advertiserDashboardBreakdownRoas {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid rgba(203, 213, 225, 0.84);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
+.advertiserDashboardBreakdownCategory {
+  background: #eef6ff;
+  border-color: rgba(147, 197, 253, 0.72);
+  color: #0f6bdc;
+}
+
+.advertiserDashboardBreakdownNameCell {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.advertiserDashboardBreakdownLogo {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.advertiserDashboardBreakdownNameCell strong,
+.advertiserDashboardBreakdownNameCell small {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardBreakdownNameCell strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 820;
+  line-height: 1.2;
+}
+
+.advertiserDashboardBreakdownNameCell small {
+  margin-top: 4px;
+  color: #71809a;
+  font-size: 0.72rem;
+  font-weight: 620;
+  line-height: 1.2;
+}
+
+.advertiserDashboardBreakdownRoas {
+  margin: 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.advertiserDashboardDateSummary {
+  grid-template-columns: 150px 118px 92px 76px 84px 102px 116px 116px 116px 88px 66px;
+}
+
+.csDashboardTabsViewport,
+.csDashboardTabsRail.uiTabsRail {
+  max-width: 100%;
+}
+
+.csDashboardTabsRail.uiTabsRail {
+  border-color: rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.csDashboardKpiGrid.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.csDashboardDateGroup {
+  border-radius: 16px;
+}
+
+.csDashboardDateSummary {
+  grid-template-columns: 150px 108px 88px 66px 82px 54px 76px 98px 112px 112px 116px 74px;
+}
+
+.csDashboardDetailScroller.uiHorizontalDragScrollArea {
+  background: #ffffff;
+}
+
+.advertiserDashboardHeaderActions {
+  grid-template-columns: repeat(2, minmax(190px, max-content));
+}
+
+.advertiserDashboardHeaderControl {
+  width: min(100%, 236px);
+}
+
+.advertiserDashboardHeaderDate {
+  width: min(100%, 286px);
+}
+
+.advertiserDashboardHeaderDate .uiPeriodPicker,
+.advertiserDashboardHeaderDate .advertiserDashboardDatePicker {
+  width: 100%;
+}
+
+.advertiserDashboardControl.uiInput,
+.advertiserDashboardControl.uiSelectTrigger,
+.advertiserDashboardHeaderDate .uiPeriodPicker {
+  min-width: 0;
+  height: 44px !important;
+  min-height: 44px !important;
+  border-color: rgba(203, 213, 225, 0.88);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.045);
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.advertiserDashboardControl.uiSelectTrigger > span,
+.advertiserDashboardHeaderDate .uiPeriodPicker > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardFilterPanel.filterPanel {
+  overflow: hidden;
+  padding: 14px;
+  border-radius: 18px;
+  border-color: rgba(226, 232, 240, 0.86);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.052);
+}
+
+.advertiserDashboardFilterGrid.adFilterGrid {
+  grid-template-columns: minmax(260px, 1.3fr) repeat(4, minmax(148px, 0.9fr));
+  gap: 10px;
+}
+
+.advertiserDashboardFilterGrid.adFilterGrid.csMode,
+.advertiserDashboardFilterGridCs {
+  grid-template-columns: repeat(3, minmax(190px, 1fr)) !important;
+  max-width: 840px;
+}
+
+.advertiserDashboardFilterField {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.advertiserDashboardFilterField .filterFieldLabel {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 820;
+  line-height: 1.1;
+}
+
+.advertiserDashboardTabsViewport {
+  max-width: 100%;
+}
+
+.advertiserDashboardTabsRail.uiTabsRail,
+.advertiserDashboardTabsRail.uiTabsList {
+  border-color: rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.advertiserDashboardKpiGrid.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.advertiserDashboardCsKpiGrid.metricGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.advertiserDashboardKpiGrid.metricGrid > .metricCard {
+  min-width: 0;
+  min-height: 108px;
+  border-radius: 18px;
+  padding: 17px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.055);
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue {
+  font-size: clamp(0.95rem, 4.8cqi, 1.24rem);
+  line-height: 1.12;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue > div {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue .text-2xl {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: clamp(0.98rem, 4.8cqi, 1.32rem) !important;
+  line-height: 1.12;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue .text-xs,
+.advertiserDashboardKpiGrid.metricGrid .metricValue span:not(.text-2xl) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardChartCard,
+.advertiserDashboardTableCard.tablePanel {
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.055);
+}
+
+.advertiserDashboardBreakdownCard.tablePanel {
+  border-radius: 10px;
+}
+
+.advertiserDashboardChartCard .uiCardHeader,
+.advertiserDashboardChartCard [data-slot="card-header"] {
+  padding: 16px 18px 10px;
+}
+
+.advertiserDashboardChartCard .uiCardTitle,
+.advertiserDashboardChartCard [data-slot="card-title"] {
+  font-size: 0.96rem !important;
+  line-height: 1.22;
+}
+
+.advertiserDashboardChartBody {
+  padding: 8px 12px 16px !important;
+}
+
+.advertiserDashboardSummaryMobileList,
+.advertiserDashboardBreakdownMobileList,
+.advertiserDashboardCsDetailMobileList {
+  display: none;
+}
+
+.advertiserDashboardSummaryCard,
+.advertiserDashboardBreakdownMobileCard,
+.advertiserDashboardCsDetailMobileCard {
+  min-width: 0;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.052);
+}
+
+.advertiserDashboardSummaryCard {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+}
+
+.advertiserDashboardSummaryCardHeader,
+.advertiserDashboardBreakdownMobileHeader,
+.advertiserDashboardCsDetailHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.advertiserDashboardSummaryCardHeader p,
+.advertiserDashboardBreakdownMobileHeader p,
+.advertiserDashboardCsDetailHeader p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.86rem;
+  font-weight: 840;
+  line-height: 1.16;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardSummaryCardHeader span,
+.advertiserDashboardBreakdownMobileHeader span,
+.advertiserDashboardCsDetailHeader span,
+.advertiserDashboardCsDetailPeople span {
+  color: #71809a;
+  font-size: 0.7rem;
+  font-weight: 640;
+  line-height: 1.22;
+}
+
+.advertiserDashboardWarningPill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(254, 202, 202, 0.9);
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #dc2626 !important;
+  font-size: 0.66rem !important;
+  font-weight: 800 !important;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
+.advertiserDashboardSummaryCardMeta,
+.advertiserDashboardCsDetailPeople {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.advertiserDashboardSummaryCardMeta span,
+.advertiserDashboardCsDetailPeople span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 720;
+  line-height: 1;
+  padding: 6px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardSummaryMetricGrid,
+.advertiserDashboardBreakdownMobileMetrics,
+.advertiserDashboardCsDetailMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.advertiserDashboardSummaryMetricGrid > div,
+.advertiserDashboardBreakdownMobileMetrics > div,
+.advertiserDashboardCsDetailMetrics > div {
+  min-width: 0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 9px;
+}
+
+.advertiserDashboardSummaryMetricGrid span,
+.advertiserDashboardBreakdownMobileMetrics span,
+.advertiserDashboardCsDetailMetrics span {
+  display: block;
+  color: #7c8da6;
+  font-size: 0.64rem;
+  font-weight: 820;
+  line-height: 1.14;
+}
+
+.advertiserDashboardSummaryMetricGrid strong,
+.advertiserDashboardBreakdownMobileMetrics strong,
+.advertiserDashboardCsDetailMetrics strong,
+.advertiserDashboardBreakdownMobileHeader > strong {
+  display: block;
+  min-width: 0;
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 860;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardSummaryMetricGrid small,
+.advertiserDashboardCsDetailMetrics small {
+  display: block;
+  min-width: 0;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advertiserDashboardBreakdownMobileCard,
+.advertiserDashboardCsDetailMobileCard {
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+}
+
+.advertiserDashboardBreakdownMobileHeader > strong {
+  margin-top: 0;
+  flex: 0 0 auto;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.76rem;
+  padding: 5px 8px;
+}
+
+.advertiserDashboardScopeGrid {
+  min-width: 0;
+}
+
+.advertiserDashboardScopeCard {
+  min-width: 0;
+  border-radius: 14px !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045) !important;
+}
+
+.advertiserDashboardDateGroup {
+  border-radius: 16px !important;
+}
+
+.advertiserDashboardCsDetailHeader p {
+  max-width: min(100%, 220px);
+}
+
+.advertiserDashboardCsDetailMetrics strong {
+  font-size: 0.82rem;
+}
+
+.dark .advertiserDashboardFilterPanel.filterPanel,
+.dark .advertiserDashboardControl.uiInput,
+.dark .advertiserDashboardControl.uiSelectTrigger,
+.dark .advertiserDashboardHeaderDate .uiPeriodPicker,
+.dark .advertiserDashboardSummaryCard,
+.dark .advertiserDashboardBreakdownMobileCard,
+.dark .advertiserDashboardCsDetailMobileCard,
+.dark .advertiserDashboardBreakdownMobileHeader > strong,
+.dark .csDashboardDetailScroller.uiHorizontalDragScrollArea {
+  background: rgba(15, 23, 42, 0.94);
+}
+
+.dark .advertiserDashboardSummaryCard,
+.dark .advertiserDashboardBreakdownMobileCard,
+.dark .advertiserDashboardCsDetailMobileCard {
+  border-color: rgba(30, 41, 59, 0.9);
+}
+
+.dark .advertiserDashboardSectionHeader.uiCardHeader,
+.dark .advertiserDashboardSectionHeader[data-slot="card-header"],
+.dark .advertiserDashboardBreakdownFoundationTable,
+.dark .advertiserDashboardBreakdownFoundationTable .tableScroller,
+.dark .advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea,
+.dark .advertiserDashboardBreakdownFoundationTable table,
+.dark .advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea table {
+  background: #0f172a;
+}
+
+.dark .advertiserDashboardBreakdownFoundationTable {
+  border-top-color: rgba(30, 41, 59, 0.9);
+}
+
+.dark .advertiserDashboardBreakdownFoundationTable th,
+.dark .advertiserDashboardBreakdownGroupRow td {
+  background: #111c2e !important;
+}
+
+.dark .advertiserDashboardBreakdownGroupSummary strong,
+.dark .advertiserDashboardBreakdownNameCell strong {
+  color: #f8fafc;
+}
+
+.dark .advertiserDashboardBreakdownGroupSummary span,
+.dark .advertiserDashboardBreakdownNameCell small {
+  color: #94a3b8;
+}
+
+.dark .advertiserDashboardBreakdownGroupSummary > div:last-child span,
+.dark .advertiserDashboardBreakdownRoas,
+.dark .advertiserDashboardBreakdownLogo {
+  border-color: rgba(51, 65, 85, 0.9);
+  background: #0f172a;
+  color: #cbd5e1;
+}
+
+.dark .advertiserDashboardBreakdownCategory {
+  border-color: rgba(37, 99, 235, 0.56);
+  background: rgba(37, 99, 235, 0.16);
+  color: #93c5fd;
+}
+
+.dark .advertiserDashboardSummaryCardHeader p,
+.dark .advertiserDashboardBreakdownMobileHeader p,
+.dark .advertiserDashboardCsDetailHeader p,
+.dark .advertiserDashboardSectionHeader .uiCardTitle,
+.dark .advertiserDashboardSectionHeader [data-slot="card-title"],
+.dark .advertiserDashboardSummaryMetricGrid strong,
+.dark .advertiserDashboardBreakdownMobileMetrics strong,
+.dark .advertiserDashboardCsDetailMetrics strong,
+.dark .advertiserDashboardBreakdownMobileHeader > strong {
+  color: #f8fafc;
+}
+
+.dark .advertiserDashboardSummaryCardMeta span,
+.dark .advertiserDashboardSummaryMetricGrid > div,
+.dark .advertiserDashboardBreakdownMobileMetrics > div,
+.dark .advertiserDashboardCsDetailMetrics > div,
+.dark .advertiserDashboardCsDetailPeople span {
+  background: rgba(30, 41, 59, 0.72);
+}
+
+@media (max-width: 1180px) {
+  .advertiserDashboardKpiGrid.metricGrid,
+  .advertiserDashboardCsKpiGrid.metricGrid,
+  .csDashboardKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .advertiserDashboardPage.opsPageShell,
+  .csDashboardPage.opsPageShell {
+    padding: 16px 12px calc(108px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .csDashboardTabsRail.uiTabsRail {
+    width: 100%;
+    min-width: 0;
+    padding: 4px;
+  }
+
+  .csDashboardTabsRail .uiTabsTrigger {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 38px;
+    min-height: 38px;
+    font-size: 0.76rem;
+    font-weight: 820;
+  }
+
+  .advertiserDashboardPage .topbar {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .advertiserDashboardPage .topbar h1 {
+    font-size: clamp(1.5rem, 7.4vw, 1.88rem);
+    line-height: 1.06;
+  }
+
+  .advertiserDashboardPage .topbar p {
+    max-width: 100%;
+    margin-top: 8px;
+    font-size: 0.82rem;
+    line-height: 1.36;
+  }
+
+  .advertiserDashboardPage .topbarActions {
+    width: 100%;
+  }
+
+  .advertiserDashboardHeaderActions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .advertiserDashboardHeaderControl,
+  .advertiserDashboardHeaderDate {
+    width: 100%;
+  }
+
+  .advertiserDashboardControl.uiInput,
+  .advertiserDashboardControl.uiSelectTrigger,
+  .advertiserDashboardHeaderDate .uiPeriodPicker {
+    height: 42px !important;
+    min-height: 42px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.038);
+  }
+
+  .advertiserDashboardFilterPanel.filterPanel {
+    padding: 10px !important;
+    border-radius: 18px !important;
+  }
+
+  .advertiserDashboardFilterGrid.adFilterGrid,
+  .advertiserDashboardFilterGrid.adFilterGrid.csMode,
+  .advertiserDashboardFilterGridCs {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    max-width: none !important;
+  }
+
+  .advertiserDashboardSearchField {
+    grid-column: 1 / -1;
+  }
+
+  .advertiserDashboardFilterField {
+    gap: 5px;
+  }
+
+  .advertiserDashboardFilterField .filterFieldLabel {
+    font-size: 0.65rem;
+  }
+
+  .advertiserDashboardTabs {
+    gap: 12px !important;
+  }
+
+  .advertiserDashboardTabsRail.uiTabsRail {
+    width: 100%;
+    min-width: 0;
+    padding: 4px;
+  }
+
+  .advertiserDashboardTabsRail .uiTabsTrigger {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 38px;
+    min-height: 38px;
+    font-size: 0.76rem;
+    font-weight: 820;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid,
+  .advertiserDashboardCsKpiGrid.metricGrid,
+  .csDashboardKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid > .metricCard {
+    min-height: 94px !important;
+    grid-template-columns: minmax(36px, 38px) minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px !important;
+    border-radius: 16px !important;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.045) !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricIcon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricCard small {
+    font-size: 0.64rem !important;
+    line-height: 1.12;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricValue {
+    margin-top: 2px;
+    font-size: clamp(0.88rem, 6cqi, 1.06rem) !important;
+    line-height: 1.1;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricValue .text-2xl {
+    font-size: clamp(0.9rem, 5.8cqi, 1.08rem) !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricValue .text-xs {
+    height: auto !important;
+    display: block !important;
+    font-size: 0.62rem !important;
+    line-height: 1.12;
+  }
+
+  .advertiserDashboardChartGrid {
+    gap: 12px !important;
+  }
+
+  .advertiserDashboardChartCard {
+    border-radius: 16px !important;
+  }
+
+  .advertiserDashboardChartCard [data-slot="card-header"],
+  .advertiserDashboardChartCard .uiCardHeader {
+    padding: 13px 14px 6px !important;
+  }
+
+  .advertiserDashboardChartCard [data-slot="card-title"],
+  .advertiserDashboardChartCard .uiCardTitle {
+    font-size: 0.86rem !important;
+    line-height: 1.2;
+  }
+
+  .advertiserDashboardChartCard [data-slot="card-title"] svg,
+  .advertiserDashboardChartCard .uiCardTitle svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .advertiserDashboardChartBody {
+    padding: 6px 6px 12px !important;
+  }
+
+  .advertiserDashboardChartCanvas {
+    height: 220px !important;
+  }
+
+  .advertiserDashboardChartCard .recharts-legend-wrapper {
+    display: none;
+  }
+
+  .advertiserDashboardTableCard.tablePanel {
+    min-height: 0;
+    border-radius: 18px !important;
+  }
+
+  .advertiserDashboardBreakdownCard.tablePanel {
+    border-radius: 10px !important;
+  }
+
+  .advertiserDashboardSummaryMobileList,
+  .advertiserDashboardBreakdownMobileList,
+  .advertiserDashboardCsDetailMobileList {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .advertiserDashboardSummaryDesktop,
+  .advertiserDashboardBreakdownDesktop,
+  .advertiserDashboardCsDetailDesktop {
+    display: none !important;
+  }
+
+  .advertiserDashboardScopeGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .advertiserDashboardScopeCard {
+    padding: 11px 12px !important;
+  }
+
+  .advertiserDashboardDateGroup {
+    border-radius: 16px !important;
+  }
+
+  .advertiserDashboardDateGroupButton {
+    padding: 12px !important;
+  }
+
+  .advertiserDashboardCsDetailMobileList {
+    border-top: 1px solid rgba(226, 232, 240, 0.86);
+    background: #f8fafc;
+  }
+
+  .advertiserDashboardCsDetailMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 374px) {
+  .advertiserDashboardFilterGrid.adFilterGrid,
+  .advertiserDashboardFilterGrid.adFilterGrid.csMode,
+  .advertiserDashboardFilterGridCs,
+  .advertiserDashboardKpiGrid.metricGrid,
+  .advertiserDashboardCsKpiGrid.metricGrid,
+  .csDashboardKpiGrid.metricGrid,
+  .advertiserDashboardSummaryMetricGrid,
+  .advertiserDashboardBreakdownMobileMetrics,
+  .advertiserDashboardCsDetailMetrics {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .advertiserDashboardSearchField {
     grid-column: auto;
   }
 }

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useMasterData } from '../master-data/context';
-import { DatePickerWithRange } from '../../components/ui/date-range-picker';
+import { FoundationDateRangePicker } from '../../components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
 import { startOfDay, endOfDay, isWithinInterval, format, eachDayOfInterval, parseISO } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -22,7 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { isAdvertiserRole } from '@/app/data/roleHelpers';
 import { Button } from '@/app/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '@/app/components/ui/tabs';
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
 import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { cn } from '@/app/components/ui/utils';
@@ -73,18 +73,23 @@ type AdvertiserCsAccountMetric = {
 const advertiserCsPerfCache = new Map<string, { byDateAccount: Record<string, AdvertiserCsAccountMetric>; status: ApiAdsStatus }>();
 
 const formatCurrency = (value: number) =>
-  value > 0
+  Number.isFinite(value) && value > 0
     ? value.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
-    : '-';
+    : Number.isFinite(value) && value === 0
+      ? 'Rp 0'
+      : '-';
 
 const formatNumber = (value: number) =>
-  value > 0 ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '-';
+  Number.isFinite(value) ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '-';
 
 const formatPercent = (value: number) =>
-  Number.isFinite(value) && value > 0 ? `${value.toFixed(1)}%` : '-';
+  Number.isFinite(value) ? `${value.toFixed(1)}%` : '-';
 
 const formatPercentAllowZero = (value: number) =>
   Number.isFinite(value) ? `${value.toFixed(1)}%` : '-';
+
+const getOrderDateKey = (order: { leadDate?: string; serviceDate?: string; created_at?: string }) =>
+  (order.leadDate || order.serviceDate || order.created_at || '').slice(0, 10);
 
 const normalizeLookupKey = (value?: string | null) =>
   (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
@@ -135,6 +140,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     users,
     adAccounts,
     adAccountAssignments,
+    adAccountOwnerAssignments,
     subChannels,
   } = useMasterData();
   const { hasPermission } = usePermissions();
@@ -189,31 +195,144 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     };
   }, [dateRange]);
 
+  const adAccountMasterLookup = useMemo(() => {
+    const byId = new Map<string, (typeof adAccounts)[number]>();
+
+    for (const account of adAccounts) {
+      byId.set(account.id, account);
+    }
+
+    return { byId };
+  }, [adAccounts]);
+
+  const adAccountCsLookup = useMemo(() => {
+    const resolveAssignment = (adAccountId?: string, date?: string) => {
+      if (!adAccountId) return null;
+
+      if (date) {
+        const datedAssignment = adAccountAssignments
+          .filter((assignment) =>
+            assignment.adAccountId === adAccountId &&
+            assignment.status === 'active' &&
+            assignment.startDate <= date &&
+            (!assignment.endDate || assignment.endDate >= date)
+          )
+          .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+
+        if (datedAssignment?.csId) return datedAssignment;
+      }
+
+      const openAssignment = adAccountAssignments
+        .filter((assignment) =>
+          assignment.adAccountId === adAccountId &&
+          assignment.status === 'active' &&
+          !assignment.endDate
+        )
+        .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+
+      return openAssignment || null;
+    };
+
+    return { resolveAssignment };
+  }, [adAccountAssignments]);
+
+  const adAccountOwnerLookup = useMemo(() => {
+    const resolveOwner = (adAccountId?: string, date?: string) => {
+      if (!adAccountId) return null;
+
+      if (date) {
+        const datedOwner = adAccountOwnerAssignments
+          .filter((assignment) =>
+            assignment.adAccountId === adAccountId &&
+            assignment.status === 'active' &&
+            assignment.startDate <= date &&
+            (!assignment.endDate || assignment.endDate >= date)
+          )
+          .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+
+        if (datedOwner?.advertiserId) return datedOwner;
+      }
+
+      const openOwner = adAccountOwnerAssignments
+        .filter((assignment) =>
+          assignment.adAccountId === adAccountId &&
+          assignment.status === 'active' &&
+          !assignment.endDate
+        )
+        .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+
+      return openOwner || null;
+    };
+
+    const hasOwnerInRange = (adAccountId?: string, advertiserId?: string) => {
+      if (!adAccountId || !advertiserId) return false;
+
+      return adAccountOwnerAssignments.some((assignment) =>
+        assignment.adAccountId === adAccountId &&
+        assignment.advertiserId === advertiserId &&
+        assignment.status === 'active' &&
+        (!rangeParams || (
+          assignment.startDate <= rangeParams.to &&
+          (!assignment.endDate || assignment.endDate >= rangeParams.from)
+        ))
+      );
+    };
+
+    return { resolveOwner, hasOwnerInRange };
+  }, [adAccountOwnerAssignments, rangeParams]);
+
+  const getAdAccountAdvertiserId = React.useCallback(
+    (account?: (typeof adAccounts)[number] | null, date?: string) =>
+      account
+        ? adAccountOwnerLookup.resolveOwner(account.id, date)?.advertiserId || account.advertiserId
+        : undefined,
+    [adAccountOwnerLookup],
+  );
+
+  const accountMatchesTargetAdvertiser = React.useCallback(
+    (account: (typeof adAccounts)[number]) =>
+      !targetAdvertiserId ||
+      account.advertiserId === targetAdvertiserId ||
+      adAccountOwnerLookup.hasOwnerInRange(account.id, targetAdvertiserId),
+    [adAccountOwnerLookup, targetAdvertiserId],
+  );
+
+  const adAccountAssignmentCacheKey = useMemo(() => {
+    const ownerKeys = adAccountOwnerAssignments.map((assignment) =>
+      `owner:${assignment.adAccountId}:${assignment.advertiserId}:${assignment.status}:${assignment.startDate}:${assignment.endDate || ''}`,
+    );
+    const csKeys = adAccountAssignments.map((assignment) =>
+      `cs:${assignment.adAccountId}:${assignment.csId}:${assignment.subChannelId || ''}:${assignment.status}:${assignment.startDate}:${assignment.endDate || ''}`,
+    );
+
+    return [...ownerKeys, ...csKeys].sort().join('|');
+  }, [adAccountAssignments, adAccountOwnerAssignments]);
+
   const activeAdvertiserAccounts = useMemo(() => {
     return adAccounts.filter((account) =>
       account.status === 'active' &&
-      (!targetAdvertiserId || account.advertiserId === targetAdvertiserId) &&
+      accountMatchesTargetAdvertiser(account) &&
       (platformFilter === 'all' || account.platformId === platformFilter) &&
       (accountFilter === 'all' || account.id === accountFilter),
     );
-  }, [accountFilter, adAccounts, platformFilter, targetAdvertiserId]);
+  }, [accountFilter, accountMatchesTargetAdvertiser, adAccounts, platformFilter]);
 
   const csAccountOptions = useMemo(() => {
     return adAccounts
       .filter((account) =>
         account.status === 'active' &&
-        (!targetAdvertiserId || account.advertiserId === targetAdvertiserId) &&
+        accountMatchesTargetAdvertiser(account) &&
         (platformFilter === 'all' || account.platformId === platformFilter),
       )
       .sort((left, right) => left.accountName.localeCompare(right.accountName, 'id-ID'));
-  }, [adAccounts, platformFilter, targetAdvertiserId]);
+  }, [accountMatchesTargetAdvertiser, adAccounts, platformFilter]);
 
   const csPlatformOptions = useMemo(() => {
     const platformIds = new Set(
       adAccounts
         .filter((account) =>
           account.status === 'active' &&
-          (!targetAdvertiserId || account.advertiserId === targetAdvertiserId),
+          accountMatchesTargetAdvertiser(account),
         )
         .map((account) => account.platformId)
         .filter(Boolean),
@@ -222,7 +341,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     return platforms
       .filter((platform) => platformIds.has(platform.id))
       .sort((left, right) => left.name.localeCompare(right.name, 'id-ID'));
-  }, [adAccounts, platforms, targetAdvertiserId]);
+  }, [accountMatchesTargetAdvertiser, adAccounts, platforms]);
 
   // 1. Base Data (Filtered by Date & User Role ONLY) - Used for Dropdown Options
   const baseData = useMemo(() => {
@@ -246,7 +365,19 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         return isWithinInterval(d, { start, end });
     };
 
-    const ads = dailyAds.filter(d => {
+    const ads = dailyAds.map((dailyAd) => {
+        const adAccount = adAccountMasterLookup.byId.get(dailyAd.adAccountId);
+        const assignment = adAccountCsLookup.resolveAssignment(dailyAd.adAccountId, dailyAd.date);
+        const owner = adAccountOwnerLookup.resolveOwner(dailyAd.adAccountId, dailyAd.date);
+
+        return {
+            ...dailyAd,
+            advertiserId: owner?.advertiserId || adAccount?.advertiserId || dailyAd.advertiserId,
+            platformId: adAccount?.platformId || dailyAd.platformId,
+            subChannelId: assignment?.subChannelId || adAccount?.subChannelId || dailyAd.subChannelId || undefined,
+            csId: assignment?.csId || dailyAd.csId || undefined,
+        };
+    }).filter(d => {
         if (targetUserId && d.advertiserId !== targetUserId) return false;
         return checkDate(d.date);
     });
@@ -260,15 +391,14 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     });
 
     const orderItems = orders.filter(o => {
-        if (!o.leadDate) return false;
+        const dateStr = getOrderDateKey(o);
+        if (!dateStr) return false;
         if (targetUserId && o.advertiserId !== targetUserId) return false;
-        let dateStr = '';
-        try { dateStr = format(new Date(o.leadDate), 'yyyy-MM-dd'); } catch(e) { return false; }
         return checkDate(dateStr);
     });
 
     return { ads, leads: leadItems, orders: orderItems };
-  }, [dailyAds, leads, orders, dateRange, currentUser, isOwner, selectedAdvertiserId]);
+  }, [adAccountCsLookup, adAccountMasterLookup, adAccountOwnerLookup, dailyAds, leads, orders, dateRange, currentUser, isOwner, selectedAdvertiserId]);
 
   // 2. Dynamic Filter Options (Based on Base Data)
   const filterOptions = useMemo(() => {
@@ -348,7 +478,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     const allDates = new Set<string>();
     finalAds.forEach(d => allDates.add(d.date));
     finalLeads.forEach(l => allDates.add(format(new Date(l.timestamp), 'yyyy-MM-dd')));
-    relevantOrders.forEach(o => o.leadDate && allDates.add(format(new Date(o.leadDate), 'yyyy-MM-dd')));
+    relevantOrders.forEach(o => {
+        const orderDate = getOrderDateKey(o);
+        if (orderDate) allDates.add(orderDate);
+    });
 
     // D. Build Aggregated Rows
     const rows = Array.from(allDates).map(date => {
@@ -366,8 +499,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         // Note: Searching text might filter out "rows", but metric calculation consistency is tricky. 
         // For dashboard, usually search filters "rows displayed", metrics should match displayed rows.
         const dayOrders = relevantOrders.filter(o => {
-            if (!o.leadDate) return false;
-            const matchDate = format(new Date(o.leadDate), 'yyyy-MM-dd') === date;
+            const matchDate = getOrderDateKey(o) === date;
             
             // Apply search logic to orders if search is active? 
             // Currently search logic above was specific to Ads/Leads text. 
@@ -497,44 +629,13 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
     for (const account of adAccounts) {
       if (account.status !== 'active') continue;
-      if (targetAdvertiserId && account.advertiserId !== targetAdvertiserId) continue;
+      if (!accountMatchesTargetAdvertiser(account)) continue;
       byId.set(account.id, account);
       byName.set(normalizeLookupKey(account.accountName), account);
     }
 
     return { byId, byName };
-  }, [adAccounts, targetAdvertiserId]);
-
-  const adAccountCsLookup = useMemo(() => {
-    const resolveAssignment = (adAccountId?: string, date?: string) => {
-      if (!adAccountId) return null;
-
-      if (date) {
-        const datedAssignment = adAccountAssignments
-          .filter((assignment) =>
-            assignment.adAccountId === adAccountId &&
-            assignment.status === 'active' &&
-            assignment.startDate <= date &&
-            (!assignment.endDate || assignment.endDate >= date)
-          )
-          .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
-
-        if (datedAssignment?.csId) return datedAssignment;
-      }
-
-      const openAssignment = adAccountAssignments
-        .filter((assignment) =>
-          assignment.adAccountId === adAccountId &&
-          assignment.status === 'active' &&
-          !assignment.endDate
-        )
-        .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
-
-      return openAssignment || null;
-    };
-
-    return { resolveAssignment };
-  }, [adAccountAssignments]);
+  }, [accountMatchesTargetAdvertiser, adAccounts]);
 
   React.useEffect(() => {
     if (!rangeParams) {
@@ -546,7 +647,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     let cancelled = false;
     const forceRefresh = apiRefreshNonce !== lastApiRefreshNonceRef.current;
     if (forceRefresh) lastApiRefreshNonceRef.current = apiRefreshNonce;
-    const cacheKey = `${rangeParams.from}:${rangeParams.to}:${targetAdvertiserId || 'all'}`;
+    const cacheKey = `${rangeParams.from}:${rangeParams.to}:${targetAdvertiserId || 'all'}:${adAccountAssignmentCacheKey}`;
     const cachedSnapshot = !forceRefresh ? advertiserCsPerfCache.get(cacheKey) : null;
 
     if (cachedSnapshot) {
@@ -575,7 +676,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
         const adAccount = resolveAdAccount(row);
         if (!adAccount) continue;
-        if (targetAdvertiserId && adAccount.advertiserId !== targetAdvertiserId) continue;
+        const advertiserId = getAdAccountAdvertiserId(adAccount, date) || row.advertiserId || null;
+        if (targetAdvertiserId && advertiserId !== targetAdvertiserId) continue;
 
         const assignment = adAccountCsLookup.resolveAssignment(adAccount.id, date);
         const platformName = platforms.find((platform) => platform.id === (row.platformId || adAccount.platformId))?.name;
@@ -583,7 +685,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         const current = resultByDateAccount[accountKey] || {
           date,
           adAccountId: adAccount.id,
-          advertiserId: row.advertiserId || adAccount.advertiserId || null,
+          advertiserId,
           csId: assignment?.csId || null,
           subChannelId: assignment?.subChannelId || null,
           platformId: row.platformId || adAccount.platformId || null,
@@ -642,7 +744,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [adAccountCsLookup, adAccountLookup, apiRefreshNonce, platforms, rangeParams, targetAdvertiserId]);
+  }, [adAccountAssignmentCacheKey, adAccountCsLookup, adAccountLookup, apiRefreshNonce, getAdAccountAdvertiserId, platforms, rangeParams, targetAdvertiserId]);
 
   const csPerformanceRows = useMemo(() => {
     if (!rangeParams) return [];
@@ -682,6 +784,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     type AssignedAccountGroup = {
       date: string;
       account: (typeof activeAdvertiserAccounts)[number];
+      advertiserId: string;
       assignment: ReturnType<typeof adAccountCsLookup.resolveAssignment>;
       apiMetrics: AdvertiserCsAccountMetric[];
       leads: typeof leads;
@@ -702,6 +805,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       `${date}::${advertiserId || 'none'}::${platformId || 'none'}::${csId || 'none'}`;
 
     const getGroup = (date: string, account: (typeof activeAdvertiserAccounts)[number]) => {
+      const advertiserId = getAdAccountAdvertiserId(account, date);
+      if (!advertiserId) return null;
+      if (targetAdvertiserId && advertiserId !== targetAdvertiserId) return null;
+
       const assignment = adAccountCsLookup.resolveAssignment(account.id, date);
       if (csFilter !== 'all' && assignment?.csId !== csFilter) return null;
 
@@ -709,6 +816,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       const current = groups.get(key) || {
         date,
         account,
+        advertiserId,
         assignment,
         apiMetrics: [],
         leads: [],
@@ -722,7 +830,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       for (const account of activeAdvertiserAccounts) {
         const group = getGroup(date, account);
         if (!group) continue;
-        const key = getScopeKey(date, account.advertiserId, account.platformId, group.assignment?.csId);
+        const key = getScopeKey(date, group.advertiserId, account.platformId, group.assignment?.csId);
         const current = candidatesByScope.get(key) || [];
         current.push(group);
         candidatesByScope.set(key, current);
@@ -750,7 +858,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     };
 
     const getLeadDate = (lead: (typeof leads)[number]) => lead.timestamp?.slice(0, 10) || '';
-    const getOrderLeadDate = (order: (typeof orders)[number]) => (order.leadDate || order.created_at || '').slice(0, 10);
 
     for (const lead of leads) {
       const date = getLeadDate(lead);
@@ -765,7 +872,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     }
 
     for (const order of orders) {
-      const date = getOrderLeadDate(order);
+      const date = getOrderDateKey(order);
       if (!date || date < rangeParams.from || date > rangeParams.to) continue;
       if (targetAdvertiserId && order.advertiserId !== targetAdvertiserId) continue;
       if (platformFilter !== 'all' && order.platformId !== platformFilter) continue;
@@ -791,7 +898,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       group.leads.length +
       group.orders.length;
     const shouldAttachScopeSpam = (group: AssignedAccountGroup) => {
-      const scopeKey = getScopeKey(group.date, group.account.advertiserId, group.account.platformId, group.assignment?.csId);
+      const scopeKey = getScopeKey(group.date, group.advertiserId, group.account.platformId, group.assignment?.csId);
       const candidates = candidatesByScope.get(scopeKey);
       if (!candidates?.length) return false;
 
@@ -818,7 +925,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       const doneCount = completedOrders.length;
       const spamCount = spamByScope.get(getScopeKey(
         group.date,
-        group.account.advertiserId,
+        group.advertiserId,
         group.account.platformId,
         group.assignment?.csId,
       )) || 0;
@@ -827,7 +934,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       rows.push({
         accountId: group.account.id,
         date: group.date,
-        advertiserName: userNameById.get(group.account.advertiserId || '') || 'Advertiser belum terdaftar',
+        advertiserName: userNameById.get(group.advertiserId || '') || 'Advertiser belum terdaftar',
         csName: group.assignment?.csId ? userNameById.get(group.assignment.csId) || 'CS belum terdaftar' : 'CS belum diatur',
         platformKey: group.apiMetrics[0]?.platformKey || resolvePlatformKey(platformNameById.get(group.account.platformId || '')),
         platformName: platformNameById.get(group.account.platformId || '') || 'Platform belum terdaftar',
@@ -869,6 +976,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     adAccountCsLookup,
     apiAdsByDateAccount,
     csFilter,
+    getAdAccountAdvertiserId,
     leadSpamDailyInputs,
     leads,
     orders,
@@ -1123,6 +1231,15 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     ];
   }, [csPerformanceRows]);
 
+  const csPerformanceBreakdownRows = useMemo(() => (
+    csPerformanceBreakdowns.flatMap((breakdown) =>
+      breakdown.rows.map((row) => ({
+        ...row,
+        category: breakdown.title,
+      })),
+    )
+  ), [csPerformanceBreakdowns]);
+
   const csFilterOptions = useMemo(() => {
     const csIds = new Set<string>();
     for (const account of activeAdvertiserAccounts) {
@@ -1204,18 +1321,18 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
   return (
     <TooltipProvider>
-    <OperationalPageShell>
+    <OperationalPageShell className="advertiserDashboardPage">
        <OperationalPageHeader
           title="Advertiser View"
           subtitle={`Halo, ${currentUser?.name || 'Advertiser'}. Pantau performa iklan harian Anda di sini.`}
           eyebrow="Dashboard"
           icon={BarChart3}
           actions={
-            <div className="dashboardHeaderActions">
+            <div className="dashboardHeaderActions advertiserDashboardHeaderActions">
                {isOwner && (
-                   <div className="dashboardHeaderControl">
+                   <div className="dashboardHeaderControl advertiserDashboardHeaderControl">
                        <Select value={selectedAdvertiserId} onValueChange={setSelectedAdvertiserId}>
-                          <SelectTrigger>
+                          <SelectTrigger className="advertiserDashboardControl">
                              <SelectValue placeholder="Pilih Advertiser" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1230,24 +1347,30 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                        </Select>
                    </div>
                )}
-               <div className="dashboardHeaderDate">
-                  <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+               <div className="dashboardHeaderDate advertiserDashboardHeaderDate">
+                  <FoundationDateRangePicker
+                    date={dateRange}
+                    setDate={setDateRange}
+                    className="advertiserDashboardDatePicker"
+                    contentClassName="advertiserDashboardDatePopover"
+                    numberOfMonths={1}
+                  />
                </div>
             </div>
           }
        />
 
        {/* Filters Section */}
-       <OperationalFilterPanel className="adFilterPanel">
-            <div className={cn('adFilterGrid', activeTab === 'cs-performance' && 'csMode')}>
+       <OperationalFilterPanel className="adFilterPanel advertiserDashboardFilterPanel">
+            <div className={cn('adFilterGrid advertiserDashboardFilterGrid', activeTab === 'cs-performance' && 'csMode advertiserDashboardFilterGridCs')}>
                  {activeTab === 'ads-summary' && (
-                 <div className="filterField adFilterSearch">
+                 <div className="filterField adFilterSearch advertiserDashboardFilterField advertiserDashboardSearchField">
                     <span className="filterFieldLabel">Pencarian</span>
                     <div className="relative">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input 
                           placeholder="Cari tanggal, platform, akun, CS..." 
-                          className="pl-10"
+                          className="advertiserDashboardControl pl-10"
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
                       />
@@ -1255,10 +1378,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                  </div>
                  )}
 
-                 <div className="filterField">
+                 <div className="filterField advertiserDashboardFilterField">
                     <span className="filterFieldLabel">Platform</span>
                     <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                        <SelectTrigger>
+                        <SelectTrigger className="advertiserDashboardControl">
                             <SelectValue placeholder="Platform" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1271,10 +1394,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                  </div>
 
                       {activeTab === 'cs-performance' && (
-                       <div className="filterField">
+                       <div className="filterField advertiserDashboardFilterField">
                        <span className="filterFieldLabel">Akun Iklan</span>
                        <Select value={accountFilter} onValueChange={setAccountFilter}>
-                          <SelectTrigger>
+                          <SelectTrigger className="advertiserDashboardControl">
                               <SelectValue placeholder="Akun Iklan" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1289,10 +1412,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
                       {activeTab === 'ads-summary' && (
                       <>
-                       <div className="filterField">
+                       <div className="filterField advertiserDashboardFilterField">
                        <span className="filterFieldLabel">Sub Channel</span>
                        <Select value={subChannelFilter} onValueChange={setSubChannelFilter}>
-                        <SelectTrigger>
+                        <SelectTrigger className="advertiserDashboardControl">
                             <SelectValue placeholder="Sub Channel" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1302,10 +1425,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                     </Select>
                     </div>
 
-                     <div className="filterField">
+                     <div className="filterField advertiserDashboardFilterField">
                      <span className="filterFieldLabel">Akun Iklan</span>
                      <Select value={accountFilter} onValueChange={setAccountFilter}>
-                        <SelectTrigger>
+                        <SelectTrigger className="advertiserDashboardControl">
                             <SelectValue placeholder="Akun Iklan" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1317,10 +1440,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                     </>
                     )}
 
-                     <div className="filterField">
+                     <div className="filterField advertiserDashboardFilterField">
                      <span className="filterFieldLabel">CS</span>
                      <Select value={csFilter} onValueChange={setCsFilter}>
-                        <SelectTrigger>
+                        <SelectTrigger className="advertiserDashboardControl">
                             <SelectValue placeholder="CS" />
                         </SelectTrigger>
                         <SelectContent>
@@ -1334,16 +1457,18 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
             </div>
        </OperationalFilterPanel>
 
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdvertiserViewTab)} className="space-y-4">
-          <TabsList className="border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <TabsTrigger value="ads-summary" className="px-4">Ringkasan Iklan</TabsTrigger>
-            <TabsTrigger value="cs-performance" className="px-4">Performa CS</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AdvertiserViewTab)} className="advertiserDashboardTabs space-y-4">
+          <TabsViewport className="advertiserDashboardTabsViewport">
+            <TabsRail className="advertiserDashboardTabsRail min-w-max">
+              <TabsTrigger value="ads-summary" className="px-4">Ringkasan Iklan</TabsTrigger>
+              <TabsTrigger value="cs-performance" className="px-4">Performa CS</TabsTrigger>
+            </TabsRail>
+          </TabsViewport>
 
-          <TabsContent value="ads-summary" className="space-y-6">
-        <div className="space-y-6">
+          <TabsContent value="ads-summary" className="advertiserDashboardTabContent space-y-5">
+        <div className="space-y-5">
             {/* Top Cards */}
-            <OperationalKpiGrid>
+            <OperationalKpiGrid className="advertiserDashboardKpiGrid">
               <OperationalKpiCard
                 label="Total Spending"
                 icon={DollarSign}
@@ -1406,17 +1531,17 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
             </OperationalKpiGrid>
 
             {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="advertiserDashboardChartGrid grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Chart 1: Efficiency Trend */}
-                <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <Card className="advertiserDashboardChartCard border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <CardHeader>
                         <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                             <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                             Tren Efisiensi Cost (CPL & CPR)
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="h-[350px] w-full">
+                    <CardContent className="advertiserDashboardChartBody">
+                        <div className="advertiserDashboardChartCanvas h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                     <defs key="defs">
@@ -1457,15 +1582,15 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                 </Card>
 
                 {/* Chart 2: Volume Trend */}
-                <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <Card className="advertiserDashboardChartCard border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <CardHeader>
                         <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                             <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                             Tren Volume (Leads & Orders)
                         </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <div className="h-[350px] w-full">
+                    <CardContent className="advertiserDashboardChartBody">
+                        <div className="advertiserDashboardChartCanvas h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                     <defs key="defs">
@@ -1506,11 +1631,65 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
             </div>
 
             {/* Detailed Table */}
-            <OperationalTableCard>
+            <OperationalTableCard className="advertiserDashboardTableCard">
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700">
                     <h3 className="font-semibold text-slate-800 dark:text-slate-100">Detail Performa Harian</h3>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="advertiserDashboardSummaryMobileList">
+                  {processedData.length === 0 ? (
+                    <OperationalEmptyState
+                      icon={BarChart3}
+                      title="Tidak ada data"
+                      description="Ubah filter atau rentang tanggal untuk melihat performa advertiser."
+                    />
+                  ) : (
+                    processedData.map((item) => (
+                      <article key={item.id} className="advertiserDashboardSummaryCard">
+                        <div className="advertiserDashboardSummaryCardHeader">
+                          <div className="min-w-0">
+                            <p>{format(new Date(item.date), 'dd MMM yyyy', { locale: idLocale })}</p>
+                            <span>{format(new Date(item.date), 'EEEE', { locale: idLocale })}</span>
+                          </div>
+                          {item.isMissingReport && (
+                            <span className="advertiserDashboardWarningPill">
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              Belum laporan
+                            </span>
+                          )}
+                        </div>
+                        <div className="advertiserDashboardSummaryCardMeta">
+                          <span>{renderSimpleList(item.platforms, getPlatformName)}</span>
+                          <span>{renderSimpleList(item.accounts, getAccountName)}</span>
+                          <span>{renderSimpleList(item.advertisers, getAdvertiserName)}</span>
+                          <span>{renderSimpleList(item.csIds, getCsName)}</span>
+                        </div>
+                        <div className="advertiserDashboardSummaryMetricGrid">
+                          <div>
+                            <span>Spending</span>
+                            <strong>{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.spend)}</strong>
+                            <small>Burn: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.burn)}</small>
+                          </div>
+                          <div>
+                            <span>Leads</span>
+                            <strong>{item.leadsDashboard}</strong>
+                            <small>Real: {item.realLeads}</small>
+                          </div>
+                          <div>
+                            <span>Orders</span>
+                            <strong>{item.realOrders}</strong>
+                            <small>Done: {item.realOrdersDone}</small>
+                          </div>
+                          <div>
+                            <span>Efisiensi</span>
+                            <strong>{new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(item.cprDone)}</strong>
+                            <small>CPR Done</small>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  )}
+                </div>
+                <div className="advertiserDashboardSummaryDesktop overflow-x-auto">
                     <Table>
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow className="border-b border-slate-100 dark:border-slate-700">
@@ -1696,8 +1875,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         </div>
           </TabsContent>
 
-            <TabsContent value="cs-performance" className="space-y-4">
-              <OperationalKpiGrid>
+            <TabsContent value="cs-performance" className="advertiserDashboardTabContent space-y-4">
+              <OperationalKpiGrid className="advertiserDashboardKpiGrid advertiserDashboardCsKpiGrid">
                 <OperationalKpiCard
                   label="Spending"
                   icon={TrendingUp}
@@ -1805,130 +1984,164 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   />
                 </OperationalKpiGrid>
 
-                <OperationalTableCard>
-                  <CardHeader className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <OperationalTableCard className="advertiserDashboardTableCard advertiserDashboardBreakdownCard">
+                  <CardHeader className="advertiserDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
                     <div>
                       <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CPR Terbaik</CardTitle>
                       <p className="mt-1 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
-                        Seluruh advertiser, CS, platform, dan akun iklan aktif berdasarkan CPR closing dan selesai dari filter aktif.
+                        Ranking advertiser, CS, platform, dan akun iklan aktif berdasarkan CPR closing dan selesai dari filter aktif.
                       </p>
                     </div>
                   </CardHeader>
-                  <div className="grid gap-4 p-3 sm:p-5 xl:grid-cols-2">
-                    {csPerformanceBreakdowns.map((breakdown) => (
-                      <div key={breakdown.title} className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Performa {breakdown.title}
+                  <div className="advertiserDashboardBreakdownMobileList">
+                    {csPerformanceBreakdownRows.length === 0 ? (
+                      <OperationalEmptyState
+                        icon={BarChart3}
+                        title="Belum ada data"
+                        description="Data CPR akan tampil setelah ada lead, order, atau spending pada filter aktif."
+                      />
+                    ) : (
+                      csPerformanceBreakdownRows.map((row) => (
+                        <article key={`${row.category}-${row.key}`} className="advertiserDashboardBreakdownMobileCard">
+                          <div className="advertiserDashboardBreakdownMobileHeader">
+                            <div className="flex min-w-0 items-center gap-2">
+                              {row.platformKey && (
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                                  <PlatformLogo platform={row.platformKey} size="sm" />
+                                </span>
+                              )}
+                              <div className="min-w-0">
+                                <span>{row.category}</span>
+                                <p>{row.label}</p>
+                                {row.secondary && <span>{row.secondary}</span>}
+                              </div>
                             </div>
-                            <div className="mt-1 text-[11px] text-slate-400">
-                              Menampilkan {breakdown.rows.length} data aktif by CPR selesai
+                            <strong>{row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}</strong>
+                          </div>
+                          <div className="advertiserDashboardBreakdownMobileMetrics">
+                            <div>
+                              <span>CPR Closing</span>
+                              <strong>{formatCurrency(row.cprClosing)}</strong>
+                            </div>
+                            <div>
+                              <span>CPR Selesai</span>
+                              <strong>{formatCurrency(row.cprDone)}</strong>
+                            </div>
+                            <div>
+                              <span>Closing</span>
+                              <strong>{formatNumber(row.orders)}</strong>
+                            </div>
+                            <div>
+                              <span>Done</span>
+                              <strong>{formatNumber(row.done)}</strong>
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
-                          <div className="rounded-md bg-cyan-50 px-2.5 py-1.5 dark:bg-cyan-950/30">
-                            <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Lead Dashboard</div>
-                            <div className="mt-0.5 font-mono text-sm font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(breakdown.totals.leadsDash)}</div>
-                            </div>
-                            <div className="rounded-md bg-blue-50 px-2.5 py-1.5 dark:bg-blue-950/30">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Lead Real</div>
-                              <div className="mt-0.5 font-mono text-sm font-bold text-blue-700 dark:text-blue-300">{formatNumber(breakdown.totals.leadsReal)}</div>
-                            </div>
-                            <div className="rounded-md bg-violet-50 px-2.5 py-1.5 dark:bg-violet-950/30">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">Closing</div>
-                              <div className="mt-0.5 font-mono text-sm font-bold text-violet-700 dark:text-violet-300">{formatNumber(breakdown.totals.orders)}</div>
-                            </div>
-                            <div className="rounded-md bg-emerald-50 px-2.5 py-1.5 dark:bg-emerald-950/30">
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Done</div>
-                              <div className="mt-0.5 font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(breakdown.totals.done)}</div>
-                            </div>
-                          </div>
-                        </div>
-                        {breakdown.rows.length > 0 ? (
-                          <HorizontalDragScrollArea className="overflow-x-auto">
-                            <table className="w-full min-w-[760px] table-fixed text-xs">
-                              <colgroup>
-                                <col className="w-[230px]" />
-                                <col className="w-[110px]" />
-                                <col className="w-[110px]" />
-                                <col className="w-[110px]" />
-                                <col className="w-[75px]" />
-                                <col className="w-[75px]" />
-                                <col className="w-[75px]" />
-                              </colgroup>
-                              <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
-                                <tr>
-                                  <th className="px-4 py-2.5 text-left font-medium">{breakdown.title}</th>
-                                  <th className="px-3 py-2.5 text-right font-medium">CPR Closing</th>
-                                  <th className="px-3 py-2.5 text-right font-medium">CPR Selesai</th>
-                                  <th className="px-3 py-2.5 text-right font-medium">Spend</th>
-                                  <th className="px-3 py-2.5 text-center font-medium">Closing</th>
-                                  <th className="px-3 py-2.5 text-center font-medium">Done</th>
-                                  <th className="px-3 py-2.5 text-center font-medium">ROAS</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {breakdown.rows.map((row) => (
-                                  <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                                    <td className="px-4 py-3 align-top">
-                                      <div className="flex min-w-0 items-start gap-2">
-                                        {row.platformKey && (
-                                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
-                                            <PlatformLogo platform={row.platformKey} size="sm" />
-                                          </span>
-                                        )}
-                                        <div className="min-w-0">
-                                          <div className="truncate font-semibold text-slate-900 dark:text-slate-100" title={row.label}>
-                                            {row.label}
-                                          </div>
-                                          {row.secondary && (
-                                            <div className="mt-1 truncate text-[11px] text-slate-500" title={row.secondary}>
-                                              {row.secondary}
-                                            </div>
-                                          )}
-                                        </div>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                  <div className="advertiserDashboardBreakdownDesktop advertiserDashboardBreakdownFoundationTable">
+                    <Table className="min-w-[1120px] table-fixed text-xs">
+                      <colgroup>
+                        <col className="w-[132px]" />
+                        <col className="w-[230px]" />
+                        <col className="w-[130px]" />
+                        <col className="w-[130px]" />
+                        <col className="w-[150px]" />
+                        <col className="w-[90px]" />
+                        <col className="w-[90px]" />
+                        <col className="w-[88px]" />
+                      </colgroup>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="py-4 pl-6 font-semibold">Kategori</TableHead>
+                          <TableHead className="py-4 font-semibold">Nama</TableHead>
+                          <TableHead className="py-4 text-right font-semibold">CPR Closing</TableHead>
+                          <TableHead className="py-4 text-right font-semibold">CPR Selesai</TableHead>
+                          <TableHead className="py-4 text-right font-semibold">Spend</TableHead>
+                          <TableHead className="py-4 text-center font-semibold">Closing</TableHead>
+                          <TableHead className="py-4 text-center font-semibold">Done</TableHead>
+                          <TableHead className="py-4 pr-6 text-center font-semibold">ROAS</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {csPerformanceBreakdowns.map((breakdown) => (
+                          <React.Fragment key={breakdown.title}>
+                            <TableRow className="advertiserDashboardBreakdownGroupRow">
+                              <TableCell colSpan={8} className="px-6 py-3">
+                                <div className="advertiserDashboardBreakdownGroupSummary">
+                                  <div>
+                                    <strong>{breakdown.title}</strong>
+                                    <span>{breakdown.rows.length} data aktif by CPR selesai</span>
+                                  </div>
+                                  <div>
+                                    <span>Lead Dashboard: {formatNumber(breakdown.totals.leadsDash)}</span>
+                                    <span>Lead Real: {formatNumber(breakdown.totals.leadsReal)}</span>
+                                    <span>Closing: {formatNumber(breakdown.totals.orders)}</span>
+                                    <span>Done: {formatNumber(breakdown.totals.done)}</span>
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            {breakdown.rows.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={8} className="px-6 py-5 text-center text-sm text-slate-500 dark:text-slate-400">
+                                  Belum ada data real untuk kategori ini.
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              breakdown.rows.map((row) => (
+                                <TableRow key={`${breakdown.title}-${row.key}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                                  <TableCell className="py-4 pl-6 align-top">
+                                    <span className="advertiserDashboardBreakdownCategory">{breakdown.title}</span>
+                                  </TableCell>
+                                  <TableCell className="py-4 align-top">
+                                    <div className="advertiserDashboardBreakdownNameCell">
+                                      {row.platformKey && (
+                                        <span className="advertiserDashboardBreakdownLogo">
+                                          <PlatformLogo platform={row.platformKey} size="sm" />
+                                        </span>
+                                      )}
+                                      <div className="min-w-0">
+                                        <strong title={row.label}>{row.label}</strong>
+                                        {row.secondary && <small title={row.secondary}>{row.secondary}</small>}
                                       </div>
-                                    </td>
-                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
-                                      {formatCurrency(row.cprClosing)}
-                                    </td>
-                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
-                                      {formatCurrency(row.cprDone)}
-                                    </td>
-                                    <td className="px-3 py-3 text-right align-top">
-                                      <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(row.spendDashboard)}</div>
-                                      <div className="mt-1 font-mono text-[10px] text-slate-500">{formatCurrency(row.spendTotal)}</div>
-                                    </td>
-                                    <td className="px-3 py-3 text-center align-top font-mono font-semibold text-violet-600">
-                                      {formatNumber(row.orders)}
-                                    </td>
-                                    <td className="px-3 py-3 text-center align-top">
-                                      <div className="font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</div>
-                                      <div className="mt-1 font-mono text-[10px] text-slate-500">Lead {formatNumber(row.leadsDash)}</div>
-                                    </td>
-                                    <td className="px-3 py-3 text-center align-top">
-                                      <div className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                                        {row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </HorizontalDragScrollArea>
-                        ) : (
-                          <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                            Belum ada data real untuk kategori ini.
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-4 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                    {formatCurrency(row.cprClosing)}
+                                  </TableCell>
+                                  <TableCell className="py-4 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                    {formatCurrency(row.cprDone)}
+                                  </TableCell>
+                                  <TableCell className="py-4 text-right align-top">
+                                    <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(row.spendDashboard)}</div>
+                                    <div className="mt-1 font-mono text-[10px] text-slate-500">{formatCurrency(row.spendTotal)}</div>
+                                  </TableCell>
+                                  <TableCell className="py-4 text-center align-top font-mono font-semibold text-violet-600">
+                                    {formatNumber(row.orders)}
+                                  </TableCell>
+                                  <TableCell className="py-4 text-center align-top">
+                                    <div className="font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</div>
+                                    <div className="mt-1 font-mono text-[10px] text-slate-500">Lead {formatNumber(row.leadsDash)}</div>
+                                  </TableCell>
+                                  <TableCell className="py-4 pr-6 text-center align-top">
+                                    <span className="advertiserDashboardBreakdownRoas">
+                                      {row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 </OperationalTableCard>
 
-            <OperationalTableCard>
-              <CardHeader className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <OperationalTableCard className="advertiserDashboardTableCard advertiserDashboardCsPerformanceCard">
+              <CardHeader className="advertiserDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CS dan Iklan</CardTitle>
@@ -1957,20 +2170,20 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
               </CardHeader>
 
               <div className="space-y-3 p-3 sm:p-5">
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="advertiserDashboardScopeGrid grid gap-3 md:grid-cols-3">
+                  <div className="advertiserDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Advertiser</div>
                     <div className="mt-2 font-semibold text-slate-900 dark:text-slate-100">
                       {targetAdvertiserId ? getAdvertiserName(targetAdvertiserId) : 'Semua Advertiser'}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="advertiserDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">CS Termonitor</div>
                     <div className="mt-2 font-semibold text-slate-900 dark:text-slate-100">
                       {csFilter === 'all' ? `${csFilterOptions.length} CS` : getCsName(csFilter)}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="advertiserDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Akun Iklan</div>
                     <div className="mt-2 font-semibold text-slate-900 dark:text-slate-100">
                       {activeAdvertiserAccounts.length} akun aktif
@@ -1994,17 +2207,17 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   csPerformanceGroups.map((group) => {
                     const isExpanded = expandedCsDates.includes(group.date);
                     return (
-                      <div key={group.date} className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                      <div key={group.date} className="advertiserDashboardDateGroup overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                         <button
                           type="button"
-                          className="w-full px-4 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                          className="advertiserDashboardDateGroupButton w-full px-4 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70"
                           onClick={() => setExpandedCsDates((current) =>
                             current.includes(group.date)
                               ? current.filter((date) => date !== group.date)
                               : [...current, group.date],
                           )}
                         >
-                          <div className="flex flex-col gap-4 lg:hidden">
+                          <div className="flex flex-col gap-4 xl:hidden">
                             <div className="flex items-start gap-3">
                               <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
                                 isExpanded ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500'
@@ -2044,7 +2257,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                             </div>
                           </div>
 
-                              <div className="hidden grid-cols-[160px_130px_110px_90px_90px_110px_130px_130px_130px_120px_90px] items-stretch divide-x divide-slate-100 dark:divide-slate-800 lg:grid">
+                              <div className="advertiserDashboardDateSummary hidden items-stretch divide-x divide-slate-100 dark:divide-slate-800 xl:grid">
                             <div className="flex h-full min-w-0 items-center gap-3 pr-3">
                               <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
                                 isExpanded ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500'
@@ -2083,8 +2296,68 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                         </button>
 
                         {isExpanded && (
-                          <HorizontalDragScrollArea className="w-full max-w-full overflow-x-auto border-t border-slate-100 pb-2 dark:border-slate-800">
-                              <table className="w-full min-w-[1910px] table-fixed text-xs">
+                          <>
+                          <div className="advertiserDashboardCsDetailMobileList">
+                            {group.rows.map((row, index) => (
+                              <article key={`${row.date}-${row.accountId}-${index}-mobile`} className="advertiserDashboardCsDetailMobileCard">
+                                <div className="advertiserDashboardCsDetailHeader">
+                                  <div className="flex min-w-0 items-start gap-2.5">
+                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-950">
+                                      <PlatformLogo platform={row.platformKey} size="sm" />
+                                    </span>
+                                    <div className="min-w-0">
+                                      <p>{row.accountName}</p>
+                                      <span>{row.platformName} / {row.subChannelName}</span>
+                                    </div>
+                                  </div>
+                                  <Badge variant="outline" className={row.source === 'api'
+                                    ? 'border-emerald-200 bg-emerald-50 text-[11px] text-emerald-700'
+                                    : 'border-slate-200 bg-slate-50 text-[11px] text-slate-600'}
+                                  >
+                                    {row.source === 'api' ? 'Connected' : 'Operasional'}
+                                  </Badge>
+                                </div>
+                                <div className="advertiserDashboardCsDetailPeople">
+                                  <span>{row.csName}</span>
+                                  <span>{row.advertiserName}</span>
+                                </div>
+                                <div className="advertiserDashboardCsDetailMetrics">
+                                  <div>
+                                    <span>Spend</span>
+                                    <strong>{formatCurrency(row.spendDashboard)}</strong>
+                                    <small>{formatCurrency(row.spendTotal)}</small>
+                                  </div>
+                                  <div>
+                                    <span>Lead</span>
+                                    <strong>{formatNumber(row.leadsDash)}</strong>
+                                    <small>CRM: {formatNumber(row.leadsReal)}</small>
+                                  </div>
+                                  <div>
+                                    <span>Order</span>
+                                    <strong>{formatNumber(row.orders)}</strong>
+                                    <small>Selesai: {formatNumber(row.done)}</small>
+                                  </div>
+                                  <div>
+                                    <span>CPL</span>
+                                    <strong>{formatCurrency(row.cpl)}</strong>
+                                    <small>{formatPercent(row.orderRate)}</small>
+                                  </div>
+                                  <div>
+                                    <span>Cost Selesai</span>
+                                    <strong>{formatCurrency(row.costPerDone)}</strong>
+                                    <small>Batal: {formatNumber(row.cancelled)}</small>
+                                  </div>
+                                  <div>
+                                    <span>ROAS</span>
+                                    <strong>{row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}</strong>
+                                    <small>{formatCurrency(row.revenue)}</small>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                          <HorizontalDragScrollArea className="advertiserDashboardCsDetailDesktop w-full max-w-full border-t border-slate-100 pb-2 dark:border-slate-800">
+                              <table className="w-full min-w-[1640px] table-fixed text-xs">
                                 <colgroup>
                                   <col className="w-[170px]" />
                                   <col className="w-[320px]" />
@@ -2170,6 +2443,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                               </tbody>
                             </table>
                           </HorizontalDragScrollArea>
+                          </>
                         )}
                       </div>
                     );

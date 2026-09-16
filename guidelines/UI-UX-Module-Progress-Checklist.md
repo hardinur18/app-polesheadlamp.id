@@ -211,7 +211,8 @@ Status: `review`
 - [x] Chart cards standar.
 - [x] Detail table card standar.
 - [x] Empty state standar.
-- [x] Tidak mengubah logic advertiser dashboard.
+- [x] Logic advertiser dashboard diselaraskan ke Master Akun Iklan: `daily_ads` dan snapshot API memakai owner/CS assignment historis; lead/order memakai attribution final dari Pesanan.
+- [x] `npm run lint` sukses.
 - [x] `npm run typecheck` sukses.
 - [x] `npm run build` sukses.
 - [ ] Desktop Chrome visual check.

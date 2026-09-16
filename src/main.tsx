@@ -15,6 +15,38 @@ import './styles/fonts.css'
 import './styles/globals.css'
 import './styles/foundation.css'
 
+const LOCAL_RUNTIME_RESET_MARKER = 'rhi-local-runtime-cache-reset-v2'
+
+async function clearLocalRuntimeCaches(isLocalDev: boolean) {
+  if (typeof window === 'undefined' || !isLocalDev) return false
+
+  let cleared = false
+
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(registrations.map((registration) => registration.unregister()))
+    cleared = cleared || registrations.length > 0
+  }
+
+  if ('caches' in window) {
+    const keys = await window.caches.keys()
+    await Promise.all(keys.map((key) => window.caches.delete(key)))
+    cleared = cleared || keys.length > 0
+  }
+
+  return cleared
+}
+
+function renderApp() {
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    </React.StrictMode>,
+  )
+}
+
 if (typeof window !== 'undefined') {
   const hostname = window.location.hostname
   const isLocalDev =
@@ -50,22 +82,6 @@ if (typeof window !== 'undefined') {
     reloadOnce(DOM_MUTATION_RELOAD_MARKER)
   })
 
-  if (isLocalDev && 'serviceWorker' in navigator) {
-    void navigator.serviceWorker.getRegistrations().then((registrations) => {
-      registrations.forEach((registration) => {
-        void registration.unregister()
-      })
-    })
-  }
-
-  if (isLocalDev && 'caches' in window) {
-    void window.caches.keys().then((keys) => {
-      keys.forEach((key) => {
-        void window.caches.delete(key)
-      })
-    })
-  }
-
   if (!isLocalDev && import.meta.env.PROD) {
     registerPwaUpdateService()
   }
@@ -79,12 +95,24 @@ if (typeof window !== 'undefined') {
     document.documentElement.style.colorScheme = 'light'
     document.body.style.colorScheme = 'light'
   }
-}
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  </React.StrictMode>,
-)
+  if (isLocalDev) {
+    void clearLocalRuntimeCaches(isLocalDev)
+      .then((cleared) => {
+        if (cleared && window.sessionStorage.getItem(LOCAL_RUNTIME_RESET_MARKER) !== 'done') {
+          window.sessionStorage.setItem(LOCAL_RUNTIME_RESET_MARKER, 'done')
+          window.location.reload()
+          return
+        }
+
+        renderApp()
+      })
+      .catch(() => {
+        renderApp()
+      })
+  } else {
+    renderApp()
+  }
+} else {
+  renderApp()
+}

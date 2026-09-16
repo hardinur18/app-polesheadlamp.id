@@ -6,7 +6,7 @@ import { AdvertiserDashboard } from './advertiser/AdvertiserDashboard';
 import { Megaphone, MessageSquare, Wrench, type LucideIcon } from 'lucide-react';
 import { DASHBOARD_VIEW_PERMISSION_MAP, DashboardViewMode } from '../data/permissions';
 import { normalizeRole } from '../data/roleHelpers';
-import { cn } from '../components/ui/utils';
+import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
 
 interface DashboardProps {
   viewMode?: DashboardViewMode;
@@ -20,7 +20,7 @@ const DASHBOARD_VIEW_META: Record<DashboardViewMode, { label: string; icon: Luci
   Teknisi: { label: 'Teknisi', icon: Wrench },
 };
 
-function renderDashboardView(viewMode: DashboardViewMode) {
+function DashboardViewContent({ viewMode }: { viewMode: DashboardViewMode }) {
   if (viewMode === 'Teknisi') return <TechnicianDashboard />;
   if (viewMode === 'CS') return <CSDashboard />;
   return <AdvertiserDashboard />;
@@ -38,37 +38,42 @@ export default function Dashboard({
   const visibleViewModes = availableViewModes.length > 0 ? availableViewModes : [activeViewMode];
   const canSwitchView = visibleViewModes.length > 1 && Boolean(onViewModeChange);
 
+  if (!canSwitchView) {
+    return <DashboardViewContent viewMode={activeViewMode} />;
+  }
+
   return (
-    <>
-      {canSwitchView && (
-        <div className="dashboardViewSwitcherWrap">
-          <div
-            role="tablist"
-            aria-label="Dashboard view"
-            className="dashboardViewSwitcher"
-          >
+    <Tabs
+      value={activeViewMode}
+      onValueChange={(value) => onViewModeChange?.(value as DashboardViewMode)}
+      className="dashboardViewTabsRoot"
+    >
+      <div className="dashboardViewSwitcherWrap">
+        <TabsViewport className="dashboardViewTabsViewport">
+          <TabsRail className="dashboardViewTabsRail min-w-max" aria-label="Dashboard view">
             {visibleViewModes.map((mode) => {
-              const isActive = mode === activeViewMode;
               const Icon = DASHBOARD_VIEW_META[mode].icon;
 
               return (
-                <button
+                <TabsTrigger
                   key={mode}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => onViewModeChange?.(mode)}
-                  className={cn('dashboardViewTab', isActive && 'active')}
+                  value={mode}
+                  className="dashboardViewTab"
                 >
                   <Icon className="h-4 w-4" />
                   <span>{DASHBOARD_VIEW_META[mode].label}</span>
-                </button>
+                </TabsTrigger>
               );
             })}
-          </div>
-        </div>
-      )}
-      {renderDashboardView(activeViewMode)}
-    </>
+          </TabsRail>
+        </TabsViewport>
+      </div>
+
+      {visibleViewModes.map((mode) => (
+        <TabsContent key={mode} value={mode} className="dashboardViewContent">
+          {mode === activeViewMode ? <DashboardViewContent viewMode={mode} /> : null}
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }

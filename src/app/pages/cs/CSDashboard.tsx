@@ -24,7 +24,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/app/components/ui/alert-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '@/app/components/ui/tabs';
+import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { DateRange } from "react-day-picker";
 import { addDays, differenceInCalendarDays, startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, parseISO } from 'date-fns';
@@ -146,16 +147,18 @@ const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
 
 const formatShortCurrency = (value: number) =>
-  value > 0
+  Number.isFinite(value) && value > 0
     ? value.toLocaleString('id-ID', {
       style: 'currency',
       currency: 'IDR',
       maximumFractionDigits: 0,
     })
-    : '-';
+    : Number.isFinite(value) && value === 0
+      ? 'Rp 0'
+      : '-';
 
 const formatNumber = (value: number) =>
-  value > 0 ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '-';
+  Number.isFinite(value) ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '-';
 
 const formatCount = (value: number) =>
   Number.isFinite(value) ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '0';
@@ -505,85 +508,6 @@ function DailyRateMetric({ value }: { value: number }) {
         />
       </div>
     </div>
-  );
-}
-
-function HorizontalDragScroll({ children }: { children: React.ReactNode }) {
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = React.useRef(false);
-  const startXRef = React.useRef(0);
-  const scrollLeftRef = React.useRef(0);
-  const [isDragging, setIsDragging] = React.useState(false);
-
-  React.useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      if (!isDraggingRef.current || !containerRef.current) return;
-      event.preventDefault();
-      containerRef.current.scrollLeft = scrollLeftRef.current - (event.clientX - startXRef.current);
-    };
-
-    const stopDragging = () => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
-      setIsDragging(false);
-      containerRef.current?.style.removeProperty('user-select');
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', stopDragging);
-    window.addEventListener('blur', stopDragging);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', stopDragging);
-      window.removeEventListener('blur', stopDragging);
-    };
-  }, []);
-
-  const scrollByAmount = (amount: number) => {
-    containerRef.current?.scrollBy({ left: amount, behavior: 'smooth' });
-  };
-
-  return (
-    <>
-      <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-4 py-2 text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-800/60 sm:hidden">
-        <span>Geser tabel ke kiri/kanan</span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-            aria-label="Geser tabel ke kiri"
-            onClick={() => scrollByAmount(-360)}
-          >
-            &lt;
-          </button>
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-sm active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-            aria-label="Geser tabel ke kanan"
-            onClick={() => scrollByAmount(360)}
-          >
-            &gt;
-          </button>
-        </div>
-      </div>
-      <div
-        ref={containerRef}
-        className={`w-full max-w-full touch-pan-x overflow-x-auto overscroll-x-contain border-t border-slate-100 pb-2 [-webkit-overflow-scrolling:touch] dark:border-slate-800 ${
-          isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'
-        }`}
-        onMouseDown={(event) => {
-          if (!containerRef.current || containerRef.current.scrollWidth <= containerRef.current.clientWidth) return;
-          isDraggingRef.current = true;
-          setIsDragging(true);
-          startXRef.current = event.clientX;
-          scrollLeftRef.current = containerRef.current.scrollLeft;
-          containerRef.current.style.userSelect = 'none';
-        }}
-      >
-        {children}
-      </div>
-    </>
   );
 }
 
@@ -1847,7 +1771,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   }, [deleteLeadSpamDailyInput, spamInputToDelete]);
 
   return (
-    <OperationalPageShell>
+    <OperationalPageShell className="csDashboardPage">
       <OperationalPageHeader
         title="CS View"
         subtitle={`Ringkasan performa ${selectedCsLabel} pada ${selectedPlatformLabel} berdasarkan tanggal lead dashboard dan spend iklan.`}
@@ -1922,11 +1846,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
         </div>
       </OperationalFilterPanel>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as CsViewTab)} className="space-y-4">
-        <TabsList className="border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <TabsTrigger value="performance" className="px-4">Performa</TabsTrigger>
-          <TabsTrigger value="spam-inputs" className="px-4">Input Spam</TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as CsViewTab)} className="csDashboardTabs space-y-4">
+        <TabsViewport className="csDashboardTabsViewport">
+          <TabsRail className="csDashboardTabsRail min-w-max">
+            <TabsTrigger value="performance" className="px-4">Performa</TabsTrigger>
+            <TabsTrigger value="spam-inputs" className="px-4">Input Spam</TabsTrigger>
+          </TabsRail>
+        </TabsViewport>
 
         <TabsContent value="performance" className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
@@ -1955,7 +1881,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         </div>
       </div>
 
-      <OperationalKpiGrid>
+      <OperationalKpiGrid className="csDashboardKpiGrid">
         <OperationalKpiCard
           label="Spending"
           value={
@@ -2143,7 +2069,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
           )}
         </Card>
 
-        <OperationalTableCard>
+        <OperationalTableCard className="csDashboardTableCard csDashboardPerformanceCard">
           <CardHeader className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -2184,8 +2110,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
                     const isExpanded = expandedDateGroups.includes(group.date);
 
                     return (
-                    <div key={group.date} className="transition-colors">
-                        <div className={`overflow-hidden rounded-lg border bg-white transition-colors dark:bg-slate-900 ${
+                    <div key={group.date} className="csDashboardDateGroup transition-colors">
+                        <div className={`csDashboardDateGroupFrame overflow-hidden rounded-lg border bg-white transition-colors dark:bg-slate-900 ${
                           isExpanded
                             ? 'border-blue-200 shadow-sm dark:border-blue-900/60'
                             : 'border-slate-200 dark:border-slate-800'
@@ -2194,9 +2120,9 @@ export function CSDashboard({ userId }: { userId?: string }) {
                             type="button"
                             aria-expanded={isExpanded}
                             onClick={() => toggleDateGroup(group.date)}
-                            className="w-full bg-white px-3 py-4 text-left transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70 sm:px-4 lg:p-0"
+                            className="csDashboardDateGroupButton w-full bg-white px-3 py-4 text-left transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70 sm:px-4 xl:p-0"
                           >
-                            <div className="lg:hidden">
+                            <div className="xl:hidden">
                               <div className="flex items-start gap-3">
                                 <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm transition-colors ${
                                   isExpanded
@@ -2287,7 +2213,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
                               </div>
                             </div>
 
-                            <div className="hidden min-h-[96px] grid-cols-[160px_118px_96px_72px_92px_54px_78px_102px_118px_130px_138px_82px] items-stretch divide-x divide-slate-100 px-2 py-3 dark:divide-slate-800 lg:grid">
+                            <div className="csDashboardDateSummary hidden min-h-[92px] items-stretch divide-x divide-slate-100 px-2 py-3 dark:divide-slate-800 xl:grid">
                               <div className="flex h-full min-w-0 items-center gap-3 pr-3">
                                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm transition-colors ${
                                   isExpanded
@@ -2460,8 +2386,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
                           {isExpanded && (
                           <>
-                            <HorizontalDragScroll>
-                            <table className="w-full min-w-[1980px] table-fixed text-xs">
+                            <HorizontalDragScrollArea className="csDashboardDetailScroller border-t border-slate-100 pb-2 dark:border-slate-800">
+                            <table className="w-full min-w-[1760px] table-fixed text-xs">
                               <colgroup>
                                 <col className="w-[170px]" />
                                 <col className="w-[320px]" />
@@ -2708,7 +2634,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
                               </tbody>
                               )}
                             </table>
-                            </HorizontalDragScroll>
+                            </HorizontalDragScrollArea>
                           </>
                           )}
                         </div>
