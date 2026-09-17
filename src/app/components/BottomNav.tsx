@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { LayoutDashboard, ClipboardList, Calendar, User, Menu, Users, Megaphone, type LucideIcon } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useMasterData } from '../pages/master-data/context';
@@ -81,6 +82,7 @@ export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
   return (
     <nav
       className={cn('mobileNavBar', technicianDock && 'technicianDock')}
+      style={{ '--mobile-nav-count': navItems.length } as CSSProperties}
       aria-label="Navbar aplikasi"
     >
         {navItems.map((item) => {

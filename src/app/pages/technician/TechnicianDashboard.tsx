@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Loader2,
   Star,
   Wrench,
 } from 'lucide-react';
@@ -26,12 +27,9 @@ import {
 import { DateRange } from 'react-day-picker';
 import {
   eachDayOfInterval,
-  endOfDay,
   endOfMonth,
   format,
-  isWithinInterval,
   parseISO,
-  startOfDay,
   startOfMonth,
 } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -50,7 +48,7 @@ import {
 } from '@/app/components/ui/operational-page';
 
 export function TechnicianDashboard({ userId }: { userId?: string }) {
-  const { currentUser, orders, users } = useMasterData();
+  const { currentUser, orders, users, isOperationalDataLoading } = useMasterData();
   const { hasPermission } = usePermissions();
 
   // Internal selection state for Owner viewing this dashboard.
@@ -72,13 +70,29 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
+  const rangeParams = useMemo(() => {
+    if (!dateRange?.from) return null;
+    return {
+      from: format(dateRange.from, 'yyyy-MM-dd'),
+      to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
+    };
+  }, [dateRange]);
+  const activeTechnicians = useMemo(
+    () => users.filter((user) => isTechnicianRole(user.role) && user.status === 'active'),
+    [users],
+  );
+  const activeTechnicianIds = useMemo(
+    () => new Set(activeTechnicians.map((technician) => technician.id)),
+    [activeTechnicians],
+  );
+  const isAppDatabaseEmpty = orders.length === 0;
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Reset pagination when date range changes
-  useMemo(() => {
+  React.useEffect(() => {
     setCurrentPage(1);
   }, [dateRange]);
 
@@ -89,14 +103,42 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
     return orders.filter(o => {
       if (targetId && o.technicianId !== targetId) return false;
 
-      if (!dateRange?.from) return true;
-      const orderDate = parseISO(o.serviceDate);
-      const start = startOfDay(dateRange.from);
-      const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+      if (!rangeParams) return true;
+      const orderDate = (o.serviceDate || '').slice(0, 10);
+      if (!orderDate) return false;
 
-      return isWithinInterval(orderDate, { start, end });
+      return orderDate >= rangeParams.from && orderDate <= rangeParams.to;
     });
-  }, [orders, currentUser, dateRange, targetId, isOwner]);
+  }, [orders, rangeParams, targetId, isOwner]);
+
+  const technicianDataDiagnostics = useMemo(() => {
+    const scopedOrders = orders.filter((order) => {
+      if (!rangeParams) return true;
+      const orderDate = (order.serviceDate || '').slice(0, 10);
+      return Boolean(orderDate) && orderDate >= rangeParams.from && orderDate <= rangeParams.to;
+    });
+    const activeScopedOrders = scopedOrders.filter((order) => !['cancelled', 'batal'].includes(order.status));
+    const unassignedOrders = activeScopedOrders.filter((order) => !order.technicianId);
+    const inactiveTechnicianOrders = activeScopedOrders.filter((order) =>
+      Boolean(order.technicianId) && !activeTechnicianIds.has(order.technicianId || ''),
+    );
+
+    return {
+      unassignedOrders,
+      inactiveTechnicianOrders,
+      isClean: unassignedOrders.length === 0 && inactiveTechnicianOrders.length === 0 && activeTechnicians.length > 0,
+    };
+  }, [activeTechnicianIds, activeTechnicians.length, orders, rangeParams]);
+
+  const isDashboardLoading = isOperationalDataLoading;
+  const hasDashboardData = myOrders.length > 0;
+  const dashboardDataHint = isDashboardLoading
+    ? 'Data operasional sedang dimuat dari database.'
+    : isAppDatabaseEmpty
+      ? 'Data order belum masuk ke state lokal. Cek session login atau response 401/403 app-data di Network tab.'
+      : hasDashboardData
+        ? 'Order teknisi berhasil terbaca untuk filter aktif.'
+        : 'Belum ada order teknisi pada filter dan periode ini.';
 
   // Stats Calculation
   const stats = useMemo(() => {
@@ -129,9 +171,9 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
 
   // Chart Data: Status Trend
   const trendData = useMemo(() => {
-    if (!dateRange?.from || !dateRange?.to) return [];
+    if (!dateRange?.from) return [];
 
-    const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
+    const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to || dateRange.from });
     return days.map(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
       const dayOrders = myOrders.filter(o => o.serviceDate === dayStr);
@@ -173,9 +215,9 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
 
   // Table Data: Daily Detail
   const dailyReport = useMemo(() => {
-    if (!dateRange?.from || !dateRange?.to) return [];
+    if (!dateRange?.from) return [];
 
-    const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
+    const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to || dateRange.from });
     return days.map(day => {
       const dayStr = format(day, 'yyyy-MM-dd');
       const dayOrders = myOrders.filter(o => o.serviceDate === dayStr);
@@ -187,18 +229,24 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
         otw: dayOrders.filter(o => ['otw'].includes(o.effectiveStatus || o.status)).length,
         working: dayOrders.filter(o => ['working', 'processing'].includes(o.effectiveStatus || o.status)).length,
         qc: dayOrders.filter(o => ['qc'].includes(o.effectiveStatus || o.status)).length,
-        done: dayOrders.filter(o => ['done', 'completed'].includes(o.status)).length,
-        cancelled: dayOrders.filter(o => ['cancelled'].includes(o.status)).length,
+        done: dayOrders.filter(o => ['done', 'completed', 'teknisi_completed'].includes(o.status)).length,
+        cancelled: dayOrders.filter(o => ['cancelled', 'batal'].includes(o.status)).length,
       };
     });
   }, [myOrders, dateRange]);
 
   // Pagination Logic
-  const totalPages = Math.ceil(dailyReport.length / itemsPerPage);
-  const paginatedData = dailyReport.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const totalPages = hasDashboardData ? Math.max(1, Math.ceil(dailyReport.length / itemsPerPage)) : 1;
+  const paginatedData = hasDashboardData
+    ? dailyReport.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage,
+      )
+    : [];
+
+  React.useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   return (
     <OperationalPageShell className="technicianDashboardPage">
@@ -233,6 +281,75 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
           </div>
         )}
       />
+
+      <div className={`technicianDashboardHealth ${
+        isDashboardLoading
+          ? 'isLoading'
+          : technicianDataDiagnostics.isClean || !isOwner
+            ? 'isClean'
+            : 'hasIssues'
+      }`}>
+        <div className="technicianDashboardHealthHeader">
+          {isDashboardLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : technicianDataDiagnostics.isClean || !isOwner ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <AlertTriangle className="h-4 w-4" />
+          )}
+          <div>
+            <strong>
+              {isDashboardLoading
+                ? 'Memuat data teknisi'
+                : technicianDataDiagnostics.isClean || !isOwner
+                  ? 'Dashboard teknisi normal'
+                  : 'Perlu cek assignment teknisi'}
+            </strong>
+            <span>{dashboardDataHint}</span>
+          </div>
+        </div>
+
+        <div className="technicianDashboardHealthStats">
+          <span>{activeTechnicians.length} teknisi aktif</span>
+          <span>{myOrders.length} order terbaca</span>
+          {rangeParams && <span>{format(parseISO(`${rangeParams.from}T00:00:00`), 'dd MMM yyyy', { locale: id })} - {format(parseISO(`${rangeParams.to}T00:00:00`), 'dd MMM yyyy', { locale: id })}</span>}
+        </div>
+
+        {!isDashboardLoading && isOwner && !technicianDataDiagnostics.isClean && (
+          <div className="technicianDashboardHealthIssues">
+            {activeTechnicians.length === 0 && (
+              <div>
+                <strong>Teknisi aktif kosong</strong>
+                <span>Tambahkan atau aktifkan user role Teknisi di master data.</span>
+              </div>
+            )}
+            {technicianDataDiagnostics.unassignedOrders.length > 0 && (
+              <div>
+                <strong>{technicianDataDiagnostics.unassignedOrders.length} order tanpa teknisi</strong>
+                <span>
+                  {technicianDataDiagnostics.unassignedOrders
+                    .slice(0, 3)
+                    .map((order) => order.customerName || order.id)
+                    .join(', ')}
+                  {technicianDataDiagnostics.unassignedOrders.length > 3 && ` +${technicianDataDiagnostics.unassignedOrders.length - 3}`}
+                </span>
+              </div>
+            )}
+            {technicianDataDiagnostics.inactiveTechnicianOrders.length > 0 && (
+              <div>
+                <strong>{technicianDataDiagnostics.inactiveTechnicianOrders.length} order teknisi nonaktif</strong>
+                <span>
+                  {technicianDataDiagnostics.inactiveTechnicianOrders
+                    .slice(0, 3)
+                    .map((order) => order.customerName || order.id)
+                    .join(', ')}
+                  {technicianDataDiagnostics.inactiveTechnicianOrders.length > 3 && ` +${technicianDataDiagnostics.inactiveTechnicianOrders.length - 3}`}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <OperationalKpiGrid>
         <OperationalKpiCard
@@ -279,54 +396,69 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
           </div>
           <div className="p-4 pl-0">
             <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <defs key="defs">
-                    <linearGradient key="selesai" id="colorSelesai" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient key="proses" id="colorProses" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient key="terjadwal" id="colorTerjadwal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient key="batal" id="colorBatal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                  <XAxis
-                    dataKey="date"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: '#64748B' }}
-                    dy={10}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 10, fill: '#64748B' }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #E2E8F0',
-                      boxShadow: '0 4px 12px -4px rgb(15 23 42 / 0.18)',
-                    }}
-                    labelStyle={{ fontSize: '12px', fontWeight: 'bold', color: '#1E293B' }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                  <Area type="monotone" dataKey="Batal" stackId="1" stroke="#EF4444" fill="url(#colorBatal)" />
-                  <Area type="monotone" dataKey="Terjadwal" stackId="1" stroke="#F59E0B" fill="url(#colorTerjadwal)" />
-                  <Area type="monotone" dataKey="Proses" stackId="1" stroke="#3B82F6" fill="url(#colorProses)" />
-                  <Area type="monotone" dataKey="Selesai" stackId="1" stroke="#10B981" fill="url(#colorSelesai)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              {isDashboardLoading ? (
+                <div className="technicianDashboardChartSkeleton">
+                  <div />
+                  <div />
+                  <div />
+                </div>
+              ) : !hasDashboardData ? (
+                <OperationalEmptyState
+                  icon={CalendarIcon}
+                  title="Belum ada aktivitas"
+                  description="Tidak ada order teknisi pada filter dan periode ini."
+                  className="h-full"
+                />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <defs key="defs">
+                      <linearGradient key="selesai" id="colorSelesai" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient key="proses" id="colorProses" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient key="terjadwal" id="colorTerjadwal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient key="batal" id="colorBatal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="date"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748B' }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: '#64748B' }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '8px',
+                        border: '1px solid #E2E8F0',
+                        boxShadow: '0 4px 12px -4px rgb(15 23 42 / 0.18)',
+                      }}
+                      labelStyle={{ fontSize: '12px', fontWeight: 'bold', color: '#1E293B' }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                    <Area type="monotone" dataKey="Batal" stackId="1" stroke="#EF4444" fill="url(#colorBatal)" />
+                    <Area type="monotone" dataKey="Terjadwal" stackId="1" stroke="#F59E0B" fill="url(#colorTerjadwal)" />
+                    <Area type="monotone" dataKey="Proses" stackId="1" stroke="#3B82F6" fill="url(#colorProses)" />
+                    <Area type="monotone" dataKey="Selesai" stackId="1" stroke="#10B981" fill="url(#colorSelesai)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </OperationalTableCard>
@@ -338,31 +470,44 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
           </div>
           <div className="p-4">
             <div className="relative h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={statusDistData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {statusDistData.map((entry, index) => (
-                      <Cell key={`cell-${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center pb-8">
-                <div className="text-center">
-                  <span className="block text-2xl font-semibold text-slate-900">{myOrders.length}</span>
-                  <span className="text-[10px] uppercase tracking-wide text-slate-400">Total</span>
-                </div>
-              </div>
+              {isDashboardLoading ? (
+                <div className="technicianDashboardPieSkeleton" />
+              ) : !hasDashboardData ? (
+                <OperationalEmptyState
+                  icon={CalendarIcon}
+                  title="Belum ada status"
+                  description="Komposisi status akan muncul setelah ada order."
+                  className="h-full"
+                />
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusDistData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {statusDistData.map((entry, index) => (
+                          <Cell key={`cell-${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center pb-8">
+                    <div className="text-center">
+                      <span className="block text-2xl font-semibold text-slate-900">{myOrders.length}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-slate-400">Total</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </OperationalTableCard>
@@ -388,32 +533,17 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedData.map((row) => (
-                <tr key={row.date} className="text-slate-700 transition-colors hover:bg-slate-50">
-                  <td className="sticky left-0 z-10 whitespace-nowrap border-r border-slate-100 bg-white px-4 py-3 font-medium">
-                    {(() => {
-                      const parts = row.date.split(' ');
-                      if (parts.length === 3) {
-                        return (
-                          <div className="flex flex-col">
-                            <span>{parts[0]} {parts[1]}</span>
-                            <span className="text-[10px] text-slate-400">{parts[2]}</span>
-                          </div>
-                        );
-                      }
-                      return row.date;
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-center font-semibold">{row.total === 0 ? '-' : row.total}</td>
-                  <td className="px-4 py-3 text-center text-slate-400">{row.scheduled === 0 ? '-' : row.scheduled}</td>
-                  <td className="px-4 py-3 text-center text-blue-500">{row.otw === 0 ? '-' : row.otw}</td>
-                  <td className="px-4 py-3 text-center text-blue-600">{row.working === 0 ? '-' : row.working}</td>
-                  <td className="px-4 py-3 text-center text-yellow-500">{row.qc === 0 ? '-' : row.qc}</td>
-                  <td className="px-4 py-3 text-center font-semibold text-emerald-600">{row.done === 0 ? '-' : row.done}</td>
-                  <td className="px-4 py-3 text-center text-red-500">{row.cancelled === 0 ? '-' : row.cancelled}</td>
-                </tr>
-              ))}
-              {dailyReport.length === 0 && (
+              {isDashboardLoading ? (
+                Array.from({ length: 6 }).map((_, index) => (
+                  <tr key={index}>
+                    {Array.from({ length: 8 }).map((__, cellIndex) => (
+                      <td key={cellIndex} className="px-4 py-3">
+                        <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : !hasDashboardData ? (
                 <tr>
                   <td colSpan={8}>
                     <OperationalEmptyState
@@ -424,6 +554,32 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
                     />
                   </td>
                 </tr>
+              ) : (
+                paginatedData.map((row) => (
+                  <tr key={row.date} className="text-slate-700 transition-colors hover:bg-slate-50">
+                    <td className="sticky left-0 z-10 whitespace-nowrap border-r border-slate-100 bg-white px-4 py-3 font-medium">
+                      {(() => {
+                        const parts = row.date.split(' ');
+                        if (parts.length === 3) {
+                          return (
+                            <div className="flex flex-col">
+                              <span>{parts[0]} {parts[1]}</span>
+                              <span className="text-[10px] text-slate-400">{parts[2]}</span>
+                            </div>
+                          );
+                        }
+                        return row.date;
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold">{row.total === 0 ? '-' : row.total}</td>
+                    <td className="px-4 py-3 text-center text-slate-400">{row.scheduled === 0 ? '-' : row.scheduled}</td>
+                    <td className="px-4 py-3 text-center text-blue-500">{row.otw === 0 ? '-' : row.otw}</td>
+                    <td className="px-4 py-3 text-center text-blue-600">{row.working === 0 ? '-' : row.working}</td>
+                    <td className="px-4 py-3 text-center text-yellow-500">{row.qc === 0 ? '-' : row.qc}</td>
+                    <td className="px-4 py-3 text-center font-semibold text-emerald-600">{row.done === 0 ? '-' : row.done}</td>
+                    <td className="px-4 py-3 text-center text-red-500">{row.cancelled === 0 ? '-' : row.cancelled}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -458,14 +614,14 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
             <div className="flex gap-1">
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+                disabled={currentPage === 1 || !hasDashboardData}
                 className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronLeft className="h-4 w-4 text-slate-600" />
               </button>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages || totalPages === 0}
+                disabled={currentPage === totalPages || !hasDashboardData}
                 className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <ChevronRight className="h-4 w-4 text-slate-600" />

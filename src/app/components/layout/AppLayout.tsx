@@ -296,6 +296,7 @@ export function AppLayout() {
   const isCurrentUserResolved = context?.isCurrentUserResolved ?? false;
   const currentUserIssue = context?.currentUserIssue;
   const triggerRefresh = context?.triggerRefresh ?? (() => {});
+  const isTechnicianAppMode = isTechnicianRole(currentRole);
   const dashboardViewModes = React.useMemo(
     () => Object.keys(DASHBOARD_VIEW_PERMISSION_MAP) as DashboardViewMode[],
     [],
@@ -323,14 +324,14 @@ export function AppLayout() {
 
   React.useEffect(() => {
     const root = document.documentElement;
-    const workspaceLayerLeft = isSidebarCollapsed ? '88px' : '304px';
+    const workspaceLayerLeft = isTechnicianAppMode ? '0px' : isSidebarCollapsed ? '88px' : '304px';
 
     root.style.setProperty('--workspace-layer-left', workspaceLayerLeft);
 
     return () => {
       root.style.removeProperty('--workspace-layer-left');
     };
-  }, [isSidebarCollapsed]);
+  }, [isSidebarCollapsed, isTechnicianAppMode]);
 
   const preferredDashboardView = currentRole ? DEFAULT_DASHBOARD_VIEW_BY_ROLE[currentRole] : undefined;
   const preferredDashboardPermission = preferredDashboardView
@@ -684,43 +685,48 @@ export function AppLayout() {
       className={cn(
         'appShell',
         isSidebarCollapsed && 'sidebarCollapsed',
+        isTechnicianAppMode && 'sidebarHidden technicianAppMode',
       )}
     >
       
       {/* MOBILE SIDEBAR (Drawer/Sheet) - Still accessible via Hamburger for full menu */}
-      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-        <SheetContent side="left" className="appSheetContent w-[300px] border-r-0 bg-white p-0 text-slate-700 focus:outline-none dark:bg-slate-950 dark:text-slate-300">
-            <SheetHeader className="sr-only">
-              <SheetTitle>Mobile Navigation</SheetTitle>
-              <SheetDescription>Main navigation sidebar for mobile devices</SheetDescription>
-            </SheetHeader>
-            <Sidebar 
-                activeTab={activeTab} 
-                onNavigate={(id) => {
-                    handleNavigate(id);
-                    setIsSidebarOpen(false); // Close sheet on navigate
-                }} 
-                mobileMode={true}
-                onLogout={handleLogout}
-            />
-        </SheetContent>
-      </Sheet>
+      {!isTechnicianAppMode && (
+        <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
+          <SheetContent side="left" className="appSheetContent w-[300px] border-r-0 bg-white p-0 text-slate-700 focus:outline-none dark:bg-slate-950 dark:text-slate-300">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Mobile Navigation</SheetTitle>
+                <SheetDescription>Main navigation sidebar for mobile devices</SheetDescription>
+              </SheetHeader>
+              <Sidebar 
+                  activeTab={activeTab} 
+                  onNavigate={(id) => {
+                      handleNavigate(id);
+                      setIsSidebarOpen(false); // Close sheet on navigate
+                  }} 
+                  mobileMode={true}
+                  onLogout={handleLogout}
+              />
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* DESKTOP SIDEBAR (Static) */}
-      <div className="desktopSidebarSlot">
-        <Sidebar 
-            activeTab={activeTab} 
-            onNavigate={handleNavigate} 
-            isCollapsed={isSidebarCollapsed}
-            toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            onLogout={handleLogout}
-        />
-      </div>
+      {!isTechnicianAppMode && (
+        <div className="desktopSidebarSlot">
+          <Sidebar 
+              activeTab={activeTab} 
+              onNavigate={handleNavigate} 
+              isCollapsed={isSidebarCollapsed}
+              toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              onLogout={handleLogout}
+          />
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="appMain">
         {/* Topbar - Hidden on Teknisi Mobile */}
-        {activeTab !== 'teknisi-mobile' && (
+        {!isTechnicianAppMode && activeTab !== 'teknisi-mobile' && (
         <header className="appTopbar">
           <div className="appTopbarStart">
             <Button 
@@ -812,7 +818,7 @@ export function AppLayout() {
         <BottomNav 
             activeTab={activeTab} 
             onNavigate={(id) => {
-                if (id === 'menu') {
+                if (id === 'menu' && !isTechnicianAppMode) {
                     setIsSidebarOpen(true);
                 } else {
                     handleNavigate(id);
