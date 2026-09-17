@@ -259,10 +259,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     adAccounts = [],
     adAccountAssignments = [],
     adAccountOwnerAssignments = [],
-    isOperationalDataLoading,
+    isOrdersLoading,
   } = useMasterData();
   const { hasPermission, isOrderLocked } = usePermissions();
-  const ordersInitialLoading = isOperationalDataLoading && orders.length === 0;
+  const ordersInitialLoading = isOrdersLoading && orders.length === 0;
 
   const nonScheduleLeadIds = useMemo(
     () => new Set(
@@ -561,6 +561,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     [deleteId, orders],
   );
   const orderTableColumnCount = (showOrderSelection ? 1 : 0) + 9 + (canShowOrderActions ? 1 : 0);
+  const orderById = useMemo(
+    () => new Map(orders.map((order) => [order.id, order])),
+    [orders],
+  );
 
   // --- Helpers ---
   const getTechnicianName = useCallback((id?: string) => users.find(u => u.id === id)?.name || '-', [users]);
@@ -781,6 +785,27 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
       event.preventDefault();
       handleViewDetail(order);
     }
+  };
+
+  const handleOrderTableClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
+
+    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressOrderTableClickRef.current = false;
+      return;
+    }
+
+    const row = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLTableRowElement>('tr[data-order-id]')
+      : null;
+    const orderId = row?.dataset.orderId;
+    const order = orderId ? orderById.get(orderId) : undefined;
+    if (!order) return;
+
+    event.stopPropagation();
+    handleViewDetail(order);
   };
 
   const parseInlinePrice = (value: string) => parseInt(value.replace(/\D/g, ''), 10) || 0;
@@ -2064,6 +2089,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 canShowOrderActions && 'action',
               ])}
               minWidth={showOrderSelection ? 1600 : 1552}
+              onClickCapture={handleOrderTableClickCapture}
               onPointerCancel={handleOrderTablePointerEnd}
               onPointerDown={handleOrderTablePointerDown}
               onPointerLeave={handleOrderTablePointerEnd}
@@ -2166,6 +2192,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                   description: `${order.id} siap ditempel.`
                                 });
                               }}
+                              role="button"
+                              tabIndex={0}
                               className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm cursor-pointer hover:underline"
                               title="Klik untuk menyalin ID"
                           >
@@ -2310,28 +2338,33 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                   </Button>
                               </div>
                           ) : (
-                              <div className="flex items-center gap-2 mt-1 group/price">
-                                  <span className={`${isAdvertiserUser ? 'text-[10px] font-medium text-slate-500' : 'text-sm font-semibold text-slate-900 dark:text-slate-200'}`}>
-                                     Rp {order.price.toLocaleString('id-ID')}
-                                  </span>
-                                  {canEditOrderPrice && (
-                                      <Button
-                                         type="button"
-                                         size="icon"
-                                         variant="ghost"
-                                         className="h-7 w-7 shrink-0 rounded-full text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30"
-                                         title="Ubah harga"
-                                         aria-label="Ubah harga"
-                                         onClick={(event) => {
-                                             event.stopPropagation();
-                                             setEditingPriceId(order.id);
-                                             setTempPrice(order.price.toLocaleString('id-ID'));
-                                         }}
-                                      >
-                                        <Edit className="w-3.5 h-3.5" />
-                                      </Button>
-                                  )}
-                              </div>
+                              canEditOrderPrice ? (
+                                  <button
+                                    type="button"
+                                    data-drag-scroll-ignore="true"
+                                    className="orderPriceEditTrigger mt-1"
+                                    title="Ubah harga"
+                                    aria-label={`Ubah harga pesanan ${order.id}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setEditingPriceId(order.id);
+                                      setTempPrice(order.price.toLocaleString('id-ID'));
+                                    }}
+                                  >
+                                    <span className={`${isAdvertiserUser ? 'text-[10px] font-medium text-slate-500' : 'text-sm font-semibold text-slate-900 dark:text-slate-200'}`}>
+                                       Rp {order.price.toLocaleString('id-ID')}
+                                    </span>
+                                    <span className="orderPriceEditIcon">
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </span>
+                                  </button>
+                              ) : (
+                                  <div className="mt-1">
+                                    <span className={`${isAdvertiserUser ? 'text-[10px] font-medium text-slate-500' : 'text-sm font-semibold text-slate-900 dark:text-slate-200'}`}>
+                                       Rp {order.price.toLocaleString('id-ID')}
+                                    </span>
+                                  </div>
+                              )
                           )}
                         </div>
                       </TableCell>

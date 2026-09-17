@@ -7801,6 +7801,51 @@
   padding-right: 18px;
 }
 
+.orderPage .orderPriceEditTrigger {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 2px 4px 2px 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.orderPage .orderPriceEditTrigger:hover,
+.orderPage .orderPriceEditTrigger:focus-visible {
+  background: rgba(37, 99, 235, 0.08);
+  padding-left: 4px;
+}
+
+.orderPage .orderPriceEditTrigger:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
+}
+
+.orderPage .orderPriceEditIcon {
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #2563eb;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 140ms ease, transform 140ms ease, background-color 140ms ease;
+}
+
+.orderPage .orderPriceEditTrigger:hover .orderPriceEditIcon,
+.orderPage .orderPriceEditTrigger:focus-visible .orderPriceEditIcon {
+  background: rgba(37, 99, 235, 0.12);
+  opacity: 1;
+  transform: scale(1);
+}
+
 @media (min-width: 640px) {
   .orderMobileOnly {
     display: none;

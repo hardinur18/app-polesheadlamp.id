@@ -291,6 +291,7 @@ interface MasterDataContextType {
   triggerRefresh: () => void;
   isMasterDataLoading: boolean;
   isOperationalDataLoading: boolean;
+  isOrdersLoading: boolean;
 
   // Setters (if needed for local state updates before refresh)
   setAreas: React.Dispatch<React.SetStateAction<Area[]>>;
@@ -351,6 +352,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isMasterDataLoading, setIsMasterDataLoading] = useState(true);
   const [isOperationalDataLoading, setIsOperationalDataLoading] = useState(true);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
   const [realtimeRetryKey, setRealtimeRetryKey] = useState(0);
   const leadSocialContactsRef = React.useRef<Record<string, LeadSocialFields>>({});
   const leadSpamDailyInputsUseFallbackRef = React.useRef(false);
@@ -1939,6 +1941,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     let isCancelled = false;
     setIsMasterDataLoading(true);
     setIsOperationalDataLoading(true);
+    setIsOrdersLoading(true);
 
     const fetchCatalog = createMasterDataFetchCatalog({
       setAreas,
@@ -1995,15 +1998,30 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       }
 
       setIsOperationalDataLoading(true);
+      setIsOrdersLoading(true);
 
-      const operationalFetches = fetchCatalog.transactional.map(({ table, setter, mapper }) =>
+      const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
+      const otherTransactionalFetches = fetchCatalog.transactional.filter(({ table }) => table !== 'orders');
+      const operationalFetches = otherTransactionalFetches.map(({ table, setter, mapper }) =>
         fetchData(table, setter, mapper)
       );
+      if (orderFetch) {
+        operationalFetches.unshift(
+          fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper).finally(() => {
+            if (!isCancelled) {
+              setIsOrdersLoading(false);
+            }
+          }),
+        );
+      } else {
+        setIsOrdersLoading(false);
+      }
       operationalFetches.push(fetchLeadSocialContacts());
 
       Promise.allSettled(operationalFetches).finally(() => {
         if (!isCancelled) {
           setIsOperationalDataLoading(false);
+          setIsOrdersLoading(false);
         }
       });
 
@@ -2261,14 +2279,14 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
     setAreas,
     currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser,
-    isMasterDataLoading, isOperationalDataLoading,
+    isMasterDataLoading, isOperationalDataLoading, isOrdersLoading,
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
     leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules,
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
-    isMasterDataLoading, isOperationalDataLoading
+    isMasterDataLoading, isOperationalDataLoading, isOrdersLoading
   ]);
 
   return (
