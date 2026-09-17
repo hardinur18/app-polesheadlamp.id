@@ -702,6 +702,7 @@ type AppDataAccessConfig = {
   orderBy?: string;
   ascending?: boolean;
   maxLimit?: number;
+  filterableColumns?: string[];
 };
 
 const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
@@ -838,6 +839,7 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     edit: ["order.edit", "order.status.edit", "order.payment.edit_status", "order.payment.edit_type", "order.assign_technician"],
     delete: ["order.delete"],
     orderBy: "created_at",
+    filterableColumns: ["service_date", "lead_date", "created_at", "status", "cs_id", "technician_id", "advertiser_id", "branch_id"],
   },
   wa_templates: {
     table: "wa_templates",
@@ -3154,6 +3156,28 @@ function getAppDataRange(c: any, config: AppDataAccessConfig) {
   return { from, to };
 }
 
+function applyAppDataFilters(query: any, c: any, config: AppDataAccessConfig) {
+  let nextQuery = query;
+
+  (config.filterableColumns || []).forEach((column) => {
+    const eqValue = c.req.query(`eq_${column}`);
+    const gteValue = c.req.query(`gte_${column}`);
+    const lteValue = c.req.query(`lte_${column}`);
+
+    if (typeof eqValue === "string" && eqValue.length > 0) {
+      nextQuery = nextQuery.eq(column, eqValue);
+    }
+    if (typeof gteValue === "string" && gteValue.length > 0) {
+      nextQuery = nextQuery.gte(column, gteValue);
+    }
+    if (typeof lteValue === "string" && lteValue.length > 0) {
+      nextQuery = nextQuery.lte(column, lteValue);
+    }
+  });
+
+  return nextQuery;
+}
+
 function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
   const text = String(error?.message || "").toLowerCase();
   return (
@@ -3201,16 +3225,18 @@ app.get("/make-server-f781cd00/app-data/:type", async (c) => {
     let query = supabase
       .from(config.table)
       .select("*")
-      .order(orderBy, { ascending })
-      .range(from, to);
+      .order(orderBy, { ascending });
+
+    query = applyAppDataFilters(query, c, config).range(from, to);
 
     let { data, error } = await query;
 
     if (error && error.code === "42703") {
-      const retry = await supabase
+      let retryQuery = supabase
         .from(config.table)
-        .select("*")
-        .range(from, to);
+        .select("*");
+      retryQuery = applyAppDataFilters(retryQuery, c, config).range(from, to);
+      const retry = await retryQuery;
       data = retry.data;
       error = retry.error;
     }

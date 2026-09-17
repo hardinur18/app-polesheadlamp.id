@@ -418,15 +418,38 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const appDataUrl = (table: string, id?: string) =>
     buildMakeServerUrl(`/app-data/${encodeURIComponent(table)}${id ? `/${encodeURIComponent(id)}` : ''}`);
 
+  type AppDataPageOptions = {
+    orderBy?: string;
+    ascending?: boolean;
+    eq?: Record<string, string>;
+    gte?: Record<string, string>;
+    lte?: Record<string, string>;
+  };
+
   const readAppDataError = async (response: Response, fallback: string) => {
     const body = await response.json().catch(() => ({}));
     return new Error(body.error || fallback);
   };
 
-  const fetchAppDataPage = async (table: string, from: number, to: number) => {
+  const fetchAppDataPage = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
     const url = new URL(appDataUrl(table));
     url.searchParams.set('from', String(from));
     url.searchParams.set('to', String(to));
+    if (options.orderBy) {
+      url.searchParams.set('orderBy', options.orderBy);
+    }
+    if (typeof options.ascending === 'boolean') {
+      url.searchParams.set('ascending', options.ascending ? 'true' : 'false');
+    }
+    Object.entries(options.eq || {}).forEach(([column, value]) => {
+      url.searchParams.set(`eq_${column}`, value);
+    });
+    Object.entries(options.gte || {}).forEach(([column, value]) => {
+      url.searchParams.set(`gte_${column}`, value);
+    });
+    Object.entries(options.lte || {}).forEach(([column, value]) => {
+      url.searchParams.set(`lte_${column}`, value);
+    });
 
     const response = await fetch(url.toString(), {
       headers: await getSessionBackedEdgeHeaders(),
@@ -490,10 +513,37 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
   type FetchDataOptions = {
     progressive?: boolean;
+    mergeProgressiveWithPrevious?: boolean;
+    pageSize?: number;
+    appData?: AppDataPageOptions;
   };
 
   const mapFetchedRows = (rows: any[], mapper?: (data: any[]) => any[]) =>
     mapper ? mapper(rows) : [...rows];
+
+  const mergeRowsById = (nextRows: any[], previousRows: any[]) => {
+    const seen = new Set(nextRows.map((row) => row?.id).filter(Boolean));
+    return [
+      ...nextRows,
+      ...previousRows.filter((row) => row?.id && !seen.has(row.id)),
+    ];
+  };
+
+  const fetchTodayOrdersDirectly = async (todayKey: string, mapper?: (data: any[]) => any[]) => {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .gte('service_date', todayKey)
+      .lte('service_date', todayKey)
+      .order('service_date', { ascending: false })
+      .range(0, 249);
+
+    if (error) {
+      throw error;
+    }
+
+    return mapFetchedRows(data || [], mapper);
+  };
 
   // Helper to fetch data from a table
   const fetchData = async (
@@ -506,7 +556,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     try {
       let allData: any[] = [];
       let page = 0;
-      const pageSize = 1000;
+      const pageSize = options.pageSize || 1000;
       let hasMore = true;
       const MAX_RECORDS = 50000; // Safety cap
 
@@ -514,7 +564,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         const from = page * pageSize;
         const to = from + pageSize - 1;
 
-        const { rows, forbidden } = await fetchAppDataPage(table, from, to);
+        const { rows, forbidden } = await fetchAppDataPage(table, from, to, options.appData);
 
         if (forbidden) {
           setter([]);
@@ -528,7 +578,10 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           allData.push(...rows);
 
           if (options.progressive) {
-            setter(mapFetchedRows(allData, mapper));
+            const mappedRows = mapFetchedRows(allData, mapper);
+            setter((previousRows) =>
+              options.mergeProgressiveWithPrevious ? mergeRowsById(mappedRows, previousRows) : mappedRows
+            );
           }
           
           if (rows.length < pageSize) {
@@ -2001,7 +2054,38 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
     const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
     if (orderFetch) {
-      fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, { progressive: true }).finally(() => {
+      const fetchPriorityOrders = async () => {
+        const todayKey = getTodayDateKey();
+
+        try {
+          orderFetch.setter(await fetchTodayOrdersDirectly(todayKey, orderFetch.mapper));
+        } catch (directError) {
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] direct today orders fetch failed, falling back to app-data', directError);
+          }
+          await fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, {
+            progressive: true,
+            pageSize: 250,
+            appData: {
+              orderBy: 'service_date',
+              ascending: false,
+              gte: { service_date: todayKey },
+              lte: { service_date: todayKey },
+            },
+          });
+        }
+
+        if (!isCancelled) {
+          setIsOrdersLoading(false);
+        }
+
+        await fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, {
+          progressive: true,
+          mergeProgressiveWithPrevious: true,
+        });
+      };
+
+      fetchPriorityOrders().finally(() => {
         if (!isCancelled) {
           setIsOrdersLoading(false);
         }
