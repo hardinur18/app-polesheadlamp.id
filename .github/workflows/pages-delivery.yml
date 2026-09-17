@@ -1,6 +1,16 @@
 name: Cloudflare Pages Delivery
 
 on:
+  push:
+    branches:
+      - main
+      - development
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
   workflow_dispatch:
 
 jobs:
