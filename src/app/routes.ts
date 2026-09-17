@@ -8,31 +8,44 @@ const authenticatedRoute = (path: string) => ({
   ErrorBoundary: RouteErrorBoundary,
 });
 
+const authenticatedRoutes = (path: string) => {
+  const routes = [authenticatedRoute(path)];
+  const shouldAddTrailingSlashAlias =
+    path !== '/' &&
+    path !== '*' &&
+    !path.endsWith('/') &&
+    !path.endsWith('/*');
+
+  return shouldAddTrailingSlashAlias
+    ? [...routes, authenticatedRoute(`${path}/`)]
+    : routes;
+};
+
 export const router = createBrowserRouter([
-  authenticatedRoute("/login"),
-  authenticatedRoute("/"),
-  authenticatedRoute("/app/*"),
-  authenticatedRoute("/dashboard"),
-  authenticatedRoute("/ads/*"),
-  authenticatedRoute("/affiliates"),
-  authenticatedRoute("/leads/*"),
-  authenticatedRoute("/orders"),
-  authenticatedRoute("/reports/*"),
-  authenticatedRoute("/schedule"),
-  authenticatedRoute("/technician/*"),
-  authenticatedRoute("/monitoring/*"),
-  authenticatedRoute("/map"),
-  authenticatedRoute("/profile"),
-  authenticatedRoute("/finance/*"),
-  authenticatedRoute("/inventory/*"),
-  authenticatedRoute("/master-data"),
-  authenticatedRoute("/users"),
-  authenticatedRoute("/settings/*"),
-  authenticatedRoute("/audit-logs"),
-  authenticatedRoute("/conversations/*"),
-  authenticatedRoute("/whatsapp"),
-  authenticatedRoute("/whatsapp/*"),
-  authenticatedRoute("/proof-assets"),
+  ...authenticatedRoutes("/login"),
+  ...authenticatedRoutes("/"),
+  ...authenticatedRoutes("/app/*"),
+  ...authenticatedRoutes("/dashboard"),
+  ...authenticatedRoutes("/ads/*"),
+  ...authenticatedRoutes("/affiliates"),
+  ...authenticatedRoutes("/leads/*"),
+  ...authenticatedRoutes("/orders"),
+  ...authenticatedRoutes("/reports/*"),
+  ...authenticatedRoutes("/schedule"),
+  ...authenticatedRoutes("/technician/*"),
+  ...authenticatedRoutes("/monitoring/*"),
+  ...authenticatedRoutes("/map"),
+  ...authenticatedRoutes("/profile"),
+  ...authenticatedRoutes("/finance/*"),
+  ...authenticatedRoutes("/inventory/*"),
+  ...authenticatedRoutes("/master-data"),
+  ...authenticatedRoutes("/users"),
+  ...authenticatedRoutes("/settings/*"),
+  ...authenticatedRoutes("/audit-logs"),
+  ...authenticatedRoutes("/conversations/*"),
+  ...authenticatedRoutes("/whatsapp"),
+  ...authenticatedRoutes("/whatsapp/*"),
+  ...authenticatedRoutes("/proof-assets"),
   {
     path: "/booking",
     ErrorBoundary: RouteErrorBoundary,
@@ -49,5 +62,5 @@ export const router = createBrowserRouter([
       return { Component: PublicEmbedLeadFormPage };
     },
   },
-  authenticatedRoute("*"),
+  ...authenticatedRoutes("*"),
 ]);
