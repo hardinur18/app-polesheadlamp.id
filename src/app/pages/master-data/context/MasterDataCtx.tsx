@@ -1981,8 +1981,19 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       }
     });
 
+    const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
+    if (orderFetch) {
+      fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper).finally(() => {
+        if (!isCancelled) {
+          setIsOrdersLoading(false);
+        }
+      });
+    } else {
+      setIsOrdersLoading(false);
+    }
+
     // 3. Defer heavy operational data so the app shell and admin pages render first.
-    // Orders, leads, ads, and audit logs can be large; pulling them during boot slows every route.
+    // Orders are loaded eagerly because the Pesanan page depends on them as its primary content.
     const deferredTimers: number[] = [];
     const idleApi = window as unknown as {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
@@ -1998,30 +2009,16 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       }
 
       setIsOperationalDataLoading(true);
-      setIsOrdersLoading(true);
 
-      const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
       const otherTransactionalFetches = fetchCatalog.transactional.filter(({ table }) => table !== 'orders');
       const operationalFetches = otherTransactionalFetches.map(({ table, setter, mapper }) =>
         fetchData(table, setter, mapper)
       );
-      if (orderFetch) {
-        operationalFetches.unshift(
-          fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper).finally(() => {
-            if (!isCancelled) {
-              setIsOrdersLoading(false);
-            }
-          }),
-        );
-      } else {
-        setIsOrdersLoading(false);
-      }
       operationalFetches.push(fetchLeadSocialContacts());
 
       Promise.allSettled(operationalFetches).finally(() => {
         if (!isCancelled) {
           setIsOperationalDataLoading(false);
-          setIsOrdersLoading(false);
         }
       });
 
