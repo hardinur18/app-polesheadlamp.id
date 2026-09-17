@@ -21,12 +21,25 @@ import {
   SelectValue,
 } from '../../components/ui/select';
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '../../components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '../../components/ui/popover';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../components/ui/collapsible";
 import { cn } from "../../components/ui/utils";
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import {
   MasterDataDialogBody,
   MasterDataFormActions,
@@ -108,6 +121,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
   const subChannels = propSubChannels || contextSubChannels || [];
   
   const [openSocialHelp, setOpenSocialHelp] = useState(false);
+  const [openVehicle, setOpenVehicle] = useState(false);
 
   const form = useForm<LeadFormValues>({
     resolver: zodResolver(leadSchema),
@@ -810,26 +824,69 @@ export const LeadForm: React.FC<LeadFormProps> = ({
               render={({field}) => (
                 <FormItem>
                   <FormLabel>Mobil (Opsional)</FormLabel>
-                  <Select
-                    value={field.value || NONE_VEHICLE}
-                    onValueChange={(value) => field.onChange(value === NONE_VEHICLE ? '' : value)}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-white border-slate-200 focus:ring-slate-200 shadow-sm">
-                        <SelectValue placeholder="Pilih Mobil" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="z-[9999] max-h-[320px] rounded-xl border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-                      <SelectItem value={NONE_VEHICLE} className="text-slate-500 focus:bg-slate-50 cursor-pointer italic">
-                        Tidak ada mobil
-                      </SelectItem>
-                      {vehicles.map((vehicle) => (
-                        <SelectItem key={vehicle.id} value={vehicle.id} className="focus:bg-slate-50 cursor-pointer">
-                          {vehicle.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={openVehicle} onOpenChange={setOpenVehicle}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openVehicle}
+                          className="w-full justify-between bg-white border-slate-200 font-normal shadow-sm focus:ring-slate-200"
+                        >
+                          <span className={cn("truncate", !field.value && "text-slate-500")}>
+                            {field.value
+                              ? vehicles.find((vehicle) => vehicle.id === field.value)?.name || "Pilih Mobil"
+                              : "Pilih Mobil"}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="z-[9999] w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Cari mobil..." />
+                        <CommandList className="max-h-[320px]">
+                          <CommandEmpty>Mobil tidak ditemukan.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="tidak ada mobil"
+                              onSelect={() => {
+                                field.onChange('');
+                                setOpenVehicle(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  !field.value ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                              Tidak ada mobil
+                            </CommandItem>
+                            {vehicles.map((vehicle) => (
+                              <CommandItem
+                                key={vehicle.id}
+                                value={vehicle.name}
+                                onSelect={() => {
+                                  field.onChange(vehicle.id);
+                                  setOpenVehicle(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    field.value === vehicle.id ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                                {vehicle.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <FormMessage />
                 </FormItem>
               )}

@@ -8,11 +8,25 @@ import { LoginPage } from './pages/auth/LoginPage';
 import { supabase } from '../lib/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { getAppRouteByPath, getCanonicalAppPath } from '@/app/routing/appRouteRegistry';
+import {
+  getAuthErrorMessage,
+  isFatalSessionError,
+  isRetryableAuthError,
+} from '@/app/services/internal/authErrorUtils';
 
 const DEFAULT_AUTHENTICATED_PATH = '/dashboard/';
 const LOGIN_REDIRECT_STORAGE_KEY = 'app_post_login_redirect';
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
+
+const hasCachedSupabaseSession = () => {
+  if (typeof window === 'undefined') return false;
+  return Object.keys(window.localStorage).some((key) => (
+    key.startsWith('sb-') &&
+    key.endsWith('-auth-token') &&
+    Boolean(window.localStorage.getItem(key))
+  ));
+};
 
 const createLocalSession = (): Session => {
   const email = localStorage.getItem('rhi-v2-local-email') || 'owner@polesheadlamp.id';
@@ -59,7 +73,9 @@ export const AuthenticatedApp = () => {
     }
 
     let isActive = true;
-    const AUTH_BOOT_TIMEOUT_MS = 6000;
+    const AUTH_BOOT_TIMEOUT_MS = 20000;
+    const AUTH_RETRY_DELAY_MS = 1500;
+    const MAX_AUTH_RETRIES = 3;
 
     const settleAuthState = (nextSession: Session | null) => {
       if (!isActive) return;
@@ -67,19 +83,27 @@ export const AuthenticatedApp = () => {
       setLoading(false);
     };
 
-    const handleAuthError = (error: unknown) => {
+    const handleAuthError = (error: unknown, retry?: () => void, attempt = 0) => {
       if (!isActive) return;
 
-      const message = error instanceof Error ? error.message : '';
-      const name = error instanceof Error ? error.name : '';
+      const message = getAuthErrorMessage(error);
 
-      if (message.includes('Failed to fetch') || name === 'AuthRetryableFetchError') {
-        console.warn('Network connection issue during auth check. Proceeding as unauthenticated.');
-      } else {
-        console.error('Unexpected auth error:', error);
+      if (isRetryableAuthError(error) && retry && attempt < MAX_AUTH_RETRIES) {
+        console.warn(`Network connection issue during auth check. Retrying (${attempt + 1}/${MAX_AUTH_RETRIES}).`, message);
+        window.setTimeout(retry, AUTH_RETRY_DELAY_MS);
+        return;
       }
 
-      settleAuthState(null);
+      if (!isRetryableAuthError(error)) {
+        console.error('Unexpected auth error:', error);
+        settleAuthState(null);
+        return;
+      }
+
+      console.warn('Network connection issue during auth check. Keeping cached login instead of forcing logout.');
+      if (!hasCachedSupabaseSession()) {
+        settleAuthState(null);
+      }
     };
 
     const resolveValidSession = async (nextSession: Session | null) => {
@@ -104,14 +128,21 @@ export const AuthenticatedApp = () => {
         return;
       }
 
-      await supabase.auth.signOut();
+      if (refreshError && isRetryableAuthError(refreshError)) {
+        console.warn('Session refresh temporarily failed. Keeping cached session active.', refreshError.message);
+        settleAuthState(nextSession);
+        return;
+      }
+
       settleAuthState(null);
     };
 
     const bootTimeout = window.setTimeout(() => {
       if (!isActive) return;
-      console.warn('Auth bootstrap timed out. Proceeding as unauthenticated.');
-      settleAuthState(null);
+      console.warn('Auth bootstrap timed out. Keeping loading state to avoid forced logout.');
+      if (!hasCachedSupabaseSession()) {
+        settleAuthState(null);
+      }
     }, AUTH_BOOT_TIMEOUT_MS);
 
     // 1. Listen for auth changes
@@ -123,21 +154,27 @@ export const AuthenticatedApp = () => {
     });
 
     // 2. Check active session
-    supabase.auth
-      .getSession()
+    const checkActiveSession = (attempt = 0) => {
+      supabase.auth
+        .getSession()
       .then(({ data: { session }, error }) => {
         window.clearTimeout(bootTimeout);
 
         if (error) {
-          if (error.message.includes('Failed to fetch') || error.name === 'AuthRetryableFetchError') {
+          if (isRetryableAuthError(error) && attempt < MAX_AUTH_RETRIES) {
             console.warn('Network error during session check:', error.message);
+            window.setTimeout(() => checkActiveSession(attempt + 1), AUTH_RETRY_DELAY_MS);
+            return;
+          }
+          if (isRetryableAuthError(error)) {
+            console.warn('Network error during session check. Not clearing auth session:', error.message);
+            if (hasCachedSupabaseSession()) {
+              return;
+            }
           } else {
             console.error('Error getting session:', error.message);
           }
-          if (error.message && error.message.includes('Refresh Token')) {
-            void supabase.auth.signOut();
-          }
-          settleAuthState(null);
+          settleAuthState(isFatalSessionError(error) ? null : session);
           return;
         }
 
@@ -145,8 +182,11 @@ export const AuthenticatedApp = () => {
       })
       .catch((err) => {
         window.clearTimeout(bootTimeout);
-        handleAuthError(err);
+        handleAuthError(err, () => checkActiveSession(attempt + 1), attempt);
       });
+    };
+
+    checkActiveSession();
 
     return () => {
       isActive = false;

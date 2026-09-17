@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { publicAnonKey } from '/utils/supabase/info';
+import { isRetryableAuthError } from './authErrorUtils';
 
 type EdgeHeadersOptions = {
   headers?: HeadersInit;
@@ -8,17 +9,29 @@ type EdgeHeadersOptions = {
 
 async function refreshSessionAccessToken() {
   const {
+    data: { session: cachedSession },
+  } = await supabase.auth.getSession();
+
+  const {
     data: { session: refreshedSession },
     error: refreshError,
   } = await supabase.auth.refreshSession();
 
   if (refreshError) {
-    await supabase.auth.signOut();
+    if (isRetryableAuthError(refreshError) && cachedSession?.access_token) {
+      console.warn('[Auth] Session refresh temporarily failed; reusing cached token for this request.');
+      return cachedSession.access_token;
+    }
+
     throw new Error('Sesi login sudah kedaluwarsa. Silakan login ulang.');
   }
 
   if (!refreshedSession?.access_token) {
-    await supabase.auth.signOut();
+    if (cachedSession?.access_token) {
+      console.warn('[Auth] Session refresh returned no token; reusing cached token for this request.');
+      return cachedSession.access_token;
+    }
+
     throw new Error('Session login tidak ditemukan. Silakan login ulang.');
   }
 
@@ -63,6 +76,11 @@ export async function getSessionAccessToken() {
   const { error: userError } = await supabase.auth.getUser(session.access_token);
 
   if (userError) {
+    if (isRetryableAuthError(userError)) {
+      console.warn('[Auth] User token validation temporarily failed; continuing with cached token.');
+      return session.access_token;
+    }
+
     return refreshSessionAccessToken();
   }
 

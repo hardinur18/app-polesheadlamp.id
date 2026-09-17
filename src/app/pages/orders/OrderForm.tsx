@@ -10,6 +10,16 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '../../components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import { cn } from '../../components/ui/utils';
 import { useMasterData } from '../master-data/context';
 import {
   AVAILABLE_TIME_SLOTS,
@@ -30,7 +40,7 @@ import {
   isOwnerLikeRole,
   isTechnicianRole,
 } from '@/app/data/roleHelpers';
-import { AlertTriangle, ClipboardList, Loader2, MapPin } from 'lucide-react';
+import { AlertTriangle, Check, ChevronsUpDown, ClipboardList, Loader2, MapPin } from 'lucide-react';
 import { Alert } from '../../components/ui/alert';
 import {
   AlertDialog,
@@ -100,8 +110,6 @@ const ORDER_SOURCE_PLATFORM_NAME: Partial<Record<OrderSourceMode, string>> = {
   repeat_order: 'repeat order',
 };
 
-const EMPTY_VEHICLE_VALUE = '__no_vehicle__';
-
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
 
@@ -140,6 +148,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const [formData, setFormData] = useState<Partial<Order>>({});
   const [selectedAdAccountId, setSelectedAdAccountId] = useState('');
   const [orderSourceMode, setOrderSourceMode] = useState<OrderSourceMode>('organic');
+  const [openVehicle, setOpenVehicle] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -161,14 +170,18 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     [formData.id, formData.technicianId, formData.serviceDate, formData.serviceTime, orders],
   );
 
-  const ignoredBookingLeadIds = useMemo(
-    () => new Set(
+  const ignoredBookingLeadIds = useMemo(() => {
+    const ignoredIds = new Set(
       (leads || [])
         .filter((lead) => lead.status === 'Cancel' || lead.status === 'Closing')
         .map((lead) => lead.id),
-    ),
-    [leads],
-  );
+    );
+    const activeLeadId = formData.leadId || prefillData?.leadId || initialData?.leadId;
+    if (activeLeadId) {
+      ignoredIds.add(activeLeadId);
+    }
+    return ignoredIds;
+  }, [formData.leadId, initialData?.leadId, leads, prefillData?.leadId]);
 
   const scheduleBlockingProspectBookings = useMemo(
     () => (prospectBookings || []).filter((booking) =>
@@ -960,6 +973,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       advertiserId: isAdvertiserUser ? currentUser?.id : undefined,
       ...normalizedPrefillData
     };
+    if ((nextFormData.price === undefined || nextFormData.price === null) && nextFormData.serviceId) {
+      nextFormData.price = services.find((service) => service.id === nextFormData.serviceId)?.price;
+    }
     const inferredAdAccountId = inferAdAccountIdFromOrder(nextFormData);
     setOrderSourceMode(inferOrderSourceMode(nextFormData, inferredAdAccountId));
     setSelectedAdAccountId(inferredAdAccountId);
@@ -982,6 +998,23 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     isTechnicianUser,
     prefillData,
   ]);
+
+  useEffect(() => {
+    if (!isOpen || formData.price !== undefined || !formData.serviceId) {
+      return;
+    }
+
+    const selectedService = services.find((service) => service.id === formData.serviceId);
+    if (!selectedService) {
+      return;
+    }
+
+    setFormData((prev) => (
+      prev.price === undefined && prev.serviceId === selectedService.id
+        ? { ...prev, price: selectedService.price }
+        : prev
+    ));
+  }, [formData.price, formData.serviceId, isOpen, services]);
 
   useEffect(() => {
     if (!isOpen || selectedAdAccountId || orderAdAccountOptions.length === 0) {
@@ -1677,23 +1710,68 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                <div className="md:col-span-2 grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                      <Label>Tipe Mobil</Label>
-                     <Select
-                       value={formData.vehicleId || EMPTY_VEHICLE_VALUE}
-                       onValueChange={(val) => handleChange('vehicleId', val === EMPTY_VEHICLE_VALUE ? undefined : val)}
-                       disabled={!canEdit('vehicleId')}
-                     >
-                       <SelectTrigger className="bg-white dark:bg-slate-800">
-                         <SelectValue placeholder="Pilih Mobil" />
-                       </SelectTrigger>
-                       <SelectContent className="z-[1000] max-h-[320px] bg-white dark:bg-slate-900">
-                         <SelectItem value={EMPTY_VEHICLE_VALUE}>Tanpa tipe mobil</SelectItem>
-                         {vehicles.map((v) => (
-                           <SelectItem key={v.id} value={v.id}>
-                             {v.name}
-                           </SelectItem>
-                         ))}
-                       </SelectContent>
-                     </Select>
+                     <Popover open={openVehicle} onOpenChange={setOpenVehicle}>
+                       <PopoverTrigger asChild>
+                         <Button
+                           type="button"
+                           variant="outline"
+                           role="combobox"
+                           aria-expanded={openVehicle}
+                           disabled={!canEdit('vehicleId')}
+                           className="w-full justify-between bg-white font-normal dark:bg-slate-800"
+                         >
+                           <span className={cn("truncate", !formData.vehicleId && "text-slate-500")}>
+                             {formData.vehicleId
+                               ? vehicles.find((vehicle) => vehicle.id === formData.vehicleId)?.name || "Pilih Mobil"
+                               : "Pilih Mobil"}
+                           </span>
+                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                         </Button>
+                       </PopoverTrigger>
+                       <PopoverContent className="z-[1000] w-[--radix-popover-trigger-width] p-0" align="start">
+                         <Command>
+                           <CommandInput placeholder="Cari mobil..." />
+                           <CommandList className="max-h-[320px]">
+                             <CommandEmpty>Mobil tidak ditemukan.</CommandEmpty>
+                             <CommandGroup>
+                               <CommandItem
+                                 value="tanpa tipe mobil"
+                                 onSelect={() => {
+                                   handleChange('vehicleId', undefined);
+                                   setOpenVehicle(false);
+                                 }}
+                               >
+                                 <Check
+                                   className={cn(
+                                     "mr-2 h-4 w-4",
+                                     !formData.vehicleId ? "opacity-100" : "opacity-0",
+                                   )}
+                                 />
+                                 Tanpa tipe mobil
+                               </CommandItem>
+                               {vehicles.map((vehicle) => (
+                                 <CommandItem
+                                   key={vehicle.id}
+                                   value={vehicle.name}
+                                   onSelect={() => {
+                                     handleChange('vehicleId', vehicle.id);
+                                     setOpenVehicle(false);
+                                   }}
+                                 >
+                                   <Check
+                                     className={cn(
+                                       "mr-2 h-4 w-4",
+                                       formData.vehicleId === vehicle.id ? "opacity-100" : "opacity-0",
+                                     )}
+                                   />
+                                   {vehicle.name}
+                                 </CommandItem>
+                               ))}
+                             </CommandGroup>
+                           </CommandList>
+                         </Command>
+                       </PopoverContent>
+                     </Popover>
                   </div>
                   <div className="space-y-2">
                      <Label>Jumlah Unit</Label>
