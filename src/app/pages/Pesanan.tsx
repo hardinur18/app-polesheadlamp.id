@@ -505,7 +505,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const canViewStaffContact = hasPermission('staff.contact.view');
   const canViewRoute = hasPermission('map.view_route');
   const canAssignTechnician = hasPermission('order.assign_technician') || canEditOrders;
-  const canEditOrderPrice = canEditOrders;
+  const canEditOrderPrice =
+    canEditOrders ||
+    hasPermission('order.payment.edit_type') ||
+    hasPermission('order.payment.edit_status') ||
+    hasPermission('finance.manage');
   const canUploadPaymentProof =
     hasPermission('order.payment.edit_status') ||
     hasPermission('finance.manage') ||
@@ -773,6 +777,21 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       handleViewDetail(order);
+    }
+  };
+
+  const parseInlinePrice = (value: string) => parseInt(value.replace(/\D/g, ''), 10) || 0;
+
+  const handleSaveInlinePrice = async (order: Order) => {
+    const rawPrice = parseInlinePrice(tempPrice);
+
+    try {
+      await updateOrder({ ...order, price: rawPrice });
+      setEditingPriceId(null);
+      toast.success('Harga berhasil diperbarui');
+    } catch (error) {
+      console.error('Failed to update order price:', error);
+      toast.error('Harga gagal diperbarui');
     }
   };
 
@@ -2253,8 +2272,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                              </span>
                           </div>
                           
-                          {canEditOrderPrice && (editingPriceId === order.id ? (
-                              <div className="flex items-center gap-1 mt-1">
+                          {canEditOrderPrice && editingPriceId === order.id ? (
+                              <div className="flex items-center gap-1 mt-1" onClick={(event) => event.stopPropagation()}>
                                   <div className="relative">
                                       <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">Rp</span>
                                       <Input 
@@ -2267,25 +2286,23 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                          autoFocus
                                          onKeyDown={(e) => {
                                              if (e.key === 'Enter') {
-                                                 const rawPrice = parseInt(tempPrice.replace(/\./g, '')) || 0;
-                                                 updateOrder({ ...order, price: rawPrice });
-                                                 setEditingPriceId(null);
-                                                 toast.success('Harga berhasil diperbarui');
+                                                 void handleSaveInlinePrice(order);
                                              } else if (e.key === 'Escape') {
                                                  setEditingPriceId(null);
                                              }
                                          }}
                                       />
                                   </div>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-green-600 hover:bg-green-50 rounded-full" onClick={() => {
-                                     const rawPrice = parseInt(tempPrice.replace(/\./g, '')) || 0;
-                                     updateOrder({ ...order, price: rawPrice });
-                                     setEditingPriceId(null);
-                                     toast.success('Harga berhasil diperbarui');
+                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-green-600 hover:bg-green-50 rounded-full" onClick={(event) => {
+                                     event.stopPropagation();
+                                     void handleSaveInlinePrice(order);
                                   }}>
                                      <CheckCircle2 className="w-3.5 h-3.5" />
                                   </Button>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-50 rounded-full" onClick={() => setEditingPriceId(null)}>
+                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-50 rounded-full" onClick={(event) => {
+                                    event.stopPropagation();
+                                    setEditingPriceId(null);
+                                  }}>
                                      <XCircle className="w-3.5 h-3.5" />
                                   </Button>
                               </div>
@@ -2295,16 +2312,24 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                      Rp {order.price.toLocaleString('id-ID')}
                                   </span>
                                   {canEditOrderPrice && (
-                                      <Edit 
-                                         className="w-3 h-3 text-slate-400 hover:text-blue-600 cursor-pointer opacity-0 group-hover/price:opacity-100 transition-all"
-                                         onClick={() => {
+                                      <Button
+                                         type="button"
+                                         size="icon"
+                                         variant="ghost"
+                                         className="h-7 w-7 shrink-0 rounded-full text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30"
+                                         title="Ubah harga"
+                                         aria-label="Ubah harga"
+                                         onClick={(event) => {
+                                             event.stopPropagation();
                                              setEditingPriceId(order.id);
                                              setTempPrice(order.price.toLocaleString('id-ID'));
                                          }}
-                                      />
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </Button>
                                   )}
                               </div>
-                          ))}
+                          )}
                         </div>
                       </TableCell>
 
