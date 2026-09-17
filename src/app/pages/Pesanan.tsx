@@ -753,26 +753,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const handleOrderRowClick = (event: React.MouseEvent<HTMLTableRowElement>, order: Order) => {
     if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
 
-    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
-      event.preventDefault();
-      event.stopPropagation();
-      suppressOrderTableClickRef.current = false;
-      return;
-    }
-
-    handleViewDetail(order);
-  };
-
-  const handleOrderRowPointerUp = (event: React.PointerEvent<HTMLTableRowElement>, order: Order) => {
-    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
-
-    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
-      event.preventDefault();
-      event.stopPropagation();
-      suppressOrderTableClickRef.current = false;
-      return;
-    }
-
     handleViewDetail(order);
   };
 
@@ -2085,11 +2065,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 canShowOrderActions && 'action',
               ])}
               minWidth={showOrderSelection ? 1600 : 1552}
-              onPointerCancel={handleOrderTablePointerEnd}
-              onPointerDown={handleOrderTablePointerDown}
-              onPointerLeave={handleOrderTablePointerEnd}
-              onPointerMove={handleOrderTablePointerMove}
-              onPointerUp={handleOrderTablePointerEnd}
+              dragScroll={false}
               rowMinHeight={82}
               textMax={340}
             >
@@ -2162,7 +2138,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                       aria-label={canViewOrderDetails ? `Buka detail pesanan ${order.id}` : undefined}
                       onClick={(event) => handleOrderRowClick(event, order)}
                       onKeyDown={(event) => handleOrderRowKeyDown(event, order)}
-                      onPointerUp={(event) => handleOrderRowPointerUp(event, order)}
                       className={`border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-200 dark:border-slate-800 dark:hover:bg-slate-800/70 ${canViewOrderDetails ? 'cursor-pointer' : ''} ${selectedIds.has(order.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                     >
                       {showOrderSelection && (
@@ -2300,11 +2275,17 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                           </div>
                           
                           {canEditOrderPrice && editingPriceId === order.id ? (
-                              <div className="flex items-center gap-1 mt-1" onClick={(event) => event.stopPropagation()}>
-                                  <div className="relative">
-                                      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">Rp</span>
+                              <div
+                                className="orderPriceEditor mt-1"
+                                data-drag-scroll-ignore="true"
+                                onClick={(event) => event.stopPropagation()}
+                                onMouseDown={(event) => event.stopPropagation()}
+                                onPointerDown={(event) => event.stopPropagation()}
+                              >
+                                  <div className="relative shrink-0">
+                                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">Rp</span>
                                       <Input 
-                                         className="h-7 w-28 text-xs pl-6 pr-1" 
+                                         className="orderPriceInput h-8 w-28 text-sm font-semibold pl-7 pr-2" 
                                          value={tempPrice}
                                          onChange={(e) => {
                                              const val = e.target.value.replace(/\D/g, '');
@@ -2320,37 +2301,56 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                          }}
                                       />
                                   </div>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-green-600 hover:bg-green-50 rounded-full" onClick={(event) => {
-                                     event.stopPropagation();
-                                     void handleSaveInlinePrice(order);
-                                  }}>
-                                     <CheckCircle2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-50 rounded-full" onClick={(event) => {
-                                    event.stopPropagation();
-                                    setEditingPriceId(null);
-                                  }}>
-                                     <XCircle className="w-3.5 h-3.5" />
-                                  </Button>
-                              </div>
-                          ) : (
-                              canEditOrderPrice ? (
                                   <button
                                     type="button"
-                                    data-drag-scroll-ignore="true"
-                                    className="orderPriceEditTrigger mt-1"
-                                    title="Ubah harga"
-                                    aria-label={`Ubah harga pesanan ${order.id}`}
-                                    onPointerDown={(event) => {
-                                      event.preventDefault();
-                                      event.stopPropagation();
-                                      openInlinePriceEditor(order);
-                                    }}
-                                    onPointerUp={(event) => {
+                                    className="orderPriceIconAction isSave"
+                                    title="Simpan harga"
+                                    aria-label="Simpan harga"
+                                    onMouseDown={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
                                     }}
                                     onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void handleSaveInlinePrice(order);
+                                    }}
+                                  >
+                                     <CheckCircle2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="orderPriceIconAction isCancel"
+                                    title="Batal"
+                                    aria-label="Batal ubah harga"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setEditingPriceId(null);
+                                    }}
+                                  >
+                                     <XCircle className="w-3.5 h-3.5" />
+                                  </button>
+                              </div>
+                          ) : (
+                              canEditOrderPrice ? (
+                                  <div
+                                    data-drag-scroll-ignore="true"
+                                    className="orderPriceEditTrigger mt-1"
+                                    title="Ubah harga"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      openInlinePriceEditor(order);
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key !== 'Enter' && event.key !== ' ') return;
                                       event.preventDefault();
                                       event.stopPropagation();
                                       openInlinePriceEditor(order);
@@ -2362,7 +2362,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                     <span className="orderPriceEditIcon">
                                       <Edit className="w-3.5 h-3.5" />
                                     </span>
-                                  </button>
+                                  </div>
                               ) : (
                                   <div className="mt-1">
                                     <span className={`${isAdvertiserUser ? 'text-[10px] font-medium text-slate-500' : 'text-sm font-semibold text-slate-900 dark:text-slate-200'}`}>
