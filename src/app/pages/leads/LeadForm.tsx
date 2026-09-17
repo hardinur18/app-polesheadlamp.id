@@ -21,25 +21,12 @@ import {
   SelectValue,
 } from '../../components/ui/select';
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "../../components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../components/ui/popover";
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../../components/ui/collapsible";
 import { cn } from "../../components/ui/utils";
-import { Check, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import {
   MasterDataDialogBody,
   MasterDataFormActions,
@@ -92,6 +79,7 @@ const NONE_ADVERTISER = 'none_advertiser';
 const NONE_PLATFORM = 'none_platform';
 const NONE_SUBCHANNEL = 'none_subchannel';
 const NONE_CS = 'none_cs';
+const NONE_VEHICLE = '__no_vehicle__';
 const NONE_SOCIAL_PLATFORM = 'none_social_platform';
 
 const uniqueById = <T extends { id: string }>(items: T[]) =>
@@ -119,7 +107,6 @@ export const LeadForm: React.FC<LeadFormProps> = ({
   } = useMasterData();
   const subChannels = propSubChannels || contextSubChannels || [];
   
-  const [openVehicle, setOpenVehicle] = useState(false);
   const [openSocialHelp, setOpenSocialHelp] = useState(false);
 
   const form = useForm<LeadFormValues>({
@@ -821,73 +808,28 @@ export const LeadForm: React.FC<LeadFormProps> = ({
               control={form.control}
               name="vehicleId"
               render={({field}) => (
-                <FormItem className="flex flex-col">
+                <FormItem>
                   <FormLabel>Mobil (Opsional)</FormLabel>
-                  <Popover open={openVehicle} onOpenChange={setOpenVehicle}>
-                     <PopoverTrigger asChild>
-                       <FormControl>
-                         <Button
-                           type="button"
-                           variant="outline"
-                           role="combobox"
-                           aria-expanded={openVehicle}
-                           className={cn(
-                             "w-full justify-between bg-white border-slate-200 shadow-sm",
-                             !field.value && "text-muted-foreground"
-                           )}
-                         >
-                           {field.value
-                             ? vehicles.find((v) => v.id === field.value)?.name
-                             : "Pilih Mobil"}
-                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                         </Button>
-                       </FormControl>
-                     </PopoverTrigger>
-                     <PopoverContent className="w-[300px] p-0 border-slate-200 dark:border-slate-800" align="start">
-                       <Command>
-                         <CommandInput placeholder="Cari mobil..." />
-                         <CommandList>
-                           <CommandEmpty>Mobil tidak ditemukan.</CommandEmpty>
-                           <CommandGroup>
-                             <CommandItem
-                               value="none_vehicle"
-                               onSelect={() => {
-                                 form.setValue('vehicleId', '');
-                                 setOpenVehicle(false);
-                               }}
-                               className="text-slate-500 italic"
-                             >
-                               <Check
-                                 className={cn(
-                                   "mr-2 h-4 w-4",
-                                   !field.value ? "opacity-100" : "opacity-0"
-                                 )}
-                               />
-                               Tidak ada mobil
-                             </CommandItem>
-                             {vehicles.map((vehicle) => (
-                               <CommandItem
-                                 value={vehicle.name}
-                                 key={vehicle.id}
-                                 onSelect={() => {
-                                   form.setValue('vehicleId', vehicle.id);
-                                   setOpenVehicle(false);
-                                 }}
-                               >
-                                 <Check
-                                   className={cn(
-                                     "mr-2 h-4 w-4",
-                                     vehicle.id === field.value ? "opacity-100" : "opacity-0"
-                                   )}
-                                 />
-                                 {vehicle.name}
-                               </CommandItem>
-                             ))}
-                           </CommandGroup>
-                         </CommandList>
-                       </Command>
-                     </PopoverContent>
-                   </Popover>
+                  <Select
+                    value={field.value || NONE_VEHICLE}
+                    onValueChange={(value) => field.onChange(value === NONE_VEHICLE ? '' : value)}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="bg-white border-slate-200 focus:ring-slate-200 shadow-sm">
+                        <SelectValue placeholder="Pilih Mobil" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="z-[9999] max-h-[320px] rounded-xl border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                      <SelectItem value={NONE_VEHICLE} className="text-slate-500 focus:bg-slate-50 cursor-pointer italic">
+                        Tidak ada mobil
+                      </SelectItem>
+                      {vehicles.map((vehicle) => (
+                        <SelectItem key={vehicle.id} value={vehicle.id} className="focus:bg-slate-50 cursor-pointer">
+                          {vehicle.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

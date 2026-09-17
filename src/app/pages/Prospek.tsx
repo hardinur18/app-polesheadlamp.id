@@ -1347,7 +1347,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     if (formData.advertiserId === "none_advertiser" || formData.advertiserId === "") formData.advertiserId = undefined;
     if (formData.platformId === "none_platform" || formData.platformId === "") formData.platformId = undefined;
     if (formData.subChannelId === "none_subchannel" || formData.subChannelId === "") formData.subChannelId = undefined;
-    if (formData.vehicleId === "none_vehicle" || formData.vehicleId === "") formData.vehicleId = undefined;
+    if (formData.vehicleId === "none_vehicle" || formData.vehicleId === "__no_vehicle__" || formData.vehicleId === "") formData.vehicleId = undefined;
     if (formData.csId === "none_cs" || formData.csId === "") formData.csId = undefined;
 
     const normalizedSocialFields = normalizeLeadSocialFields(formData);
