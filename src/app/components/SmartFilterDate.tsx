@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/app/components/ui/popover"
+import { useMasterData } from "@/app/pages/master-data/context"
 
 interface SmartFilterDateProps {
   date: DateRange | undefined
@@ -87,11 +88,20 @@ function getRangeKey(range: DateRange | undefined) {
   return `${from}:${to}`
 }
 
+function isSmartAllTimeRange(range: DateRange | undefined, now = new Date()) {
+  if (!range?.from) return true
+
+  const allRange = getSmartFilterPresetRange('all', now)
+  return format(range.from, 'yyyy-MM-dd') === format(allRange.from || now, 'yyyy-MM-dd')
+}
+
 export function SmartFilterDate({
   date,
   setDate,
   className,
 }: SmartFilterDateProps) {
+  const { currentRole } = useMasterData()
+  const canUseAllTime = currentRole === 'Owner'
   const [isOpen, setIsOpen] = React.useState(false)
   const [month, setMonth] = React.useState<Date>(() => date?.from || new Date())
 
@@ -101,7 +111,18 @@ export function SmartFilterDate({
     }
   }, [date?.from])
 
-  const presetEntries = React.useMemo(() => getSmartFilterPresetEntries(new Date()), [isOpen])
+  const presetEntries = React.useMemo(
+    () => getSmartFilterPresetEntries(new Date()).filter((preset) => canUseAllTime || preset.type !== 'all'),
+    [canUseAllTime, isOpen],
+  )
+
+  React.useEffect(() => {
+    if (canUseAllTime || !isSmartAllTimeRange(date)) return
+
+    const today = getSmartFilterPresetRange('today')
+    setMonth(today.from || new Date())
+    setDate({ from: today.from, to: today.to || today.from })
+  }, [canUseAllTime, date, setDate])
 
   const setPreset = (type: SmartFilterPreset) => {
     const selectedPreset = presetEntries.find((preset) => preset.type === type)
@@ -150,9 +171,11 @@ export function SmartFilterDate({
           <div className="flex flex-col md:flex-row">
             {/* Sidebar Presets */}
             <div className="flex flex-col border-b border-slate-200 dark:border-slate-700 md:border-b-0 md:border-r p-2 gap-1 min-w-[150px]">
-              <Button variant="ghost" className="justify-start text-sm font-normal hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => setPreset('all')}>
-                Semua Waktu
-              </Button>
+              {canUseAllTime && (
+                <Button variant="ghost" className="justify-start text-sm font-normal hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => setPreset('all')}>
+                  Semua Waktu
+                </Button>
+              )}
               <Button variant="ghost" className="justify-start text-sm font-normal hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => setPreset('today')}>
                 Hari Ini
               </Button>

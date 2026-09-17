@@ -24,6 +24,7 @@ import { DayPicker, type CaptionProps, type DateRange, useNavigation } from "rea
 import { Button } from "./button";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { cn } from "./utils";
+import { useMasterData } from "@/app/pages/master-data/context";
 
 const MONTH_NAMES_ID = [
   "Januari",
@@ -223,6 +224,8 @@ export function PeriodFilterPicker({
   triggerLabelMode,
   variant = "default",
 }: PeriodFilterPickerProps) {
+  const { currentRole } = useMasterData();
+  const canUseAllTime = currentRole === "Owner";
   const isFoundationVariant = variant === "foundation";
   const resolvedNumberOfMonths = numberOfMonths ?? (isFoundationVariant ? 2 : 1);
   const resolvedTriggerLabelMode = triggerLabelMode ?? (isFoundationVariant ? "compact" : "full");
@@ -316,6 +319,15 @@ export function PeriodFilterPicker({
     setIsOpen(false);
   }, [setDate]);
 
+  React.useEffect(() => {
+    if (canUseAllTime || dateFrom || dateTo) return;
+
+    const now = new Date();
+    setDraftRange({ from: now, to: now });
+    setHoveredRangeDate(undefined);
+    setDate({ from: now, to: now });
+  }, [canUseAllTime, dateFrom, dateTo, setDate]);
+
   const handleRangeDayClick = React.useCallback((day: Date) => {
     setPanelMode("relative");
     setHoveredRangeDate(undefined);
@@ -391,13 +403,15 @@ export function PeriodFilterPicker({
         <div className="periodPickerShell">
           <aside className="periodPickerSidebar">
             <div className="periodPickerPresetGroup">
-              <button
-                type="button"
-                onClick={() => applyPeriodPreset("all")}
-                className={cn("periodPickerPreset", !dateFrom && !dateTo && "is-active")}
-              >
-                Semua Waktu
-              </button>
+              {canUseAllTime && (
+                <button
+                  type="button"
+                  onClick={() => applyPeriodPreset("all")}
+                  className={cn("periodPickerPreset", !dateFrom && !dateTo && "is-active")}
+                >
+                  Semua Waktu
+                </button>
+              )}
               {RELATIVE_PRESETS.slice(0, 2).map((preset) => (
                 <button
                   type="button"
