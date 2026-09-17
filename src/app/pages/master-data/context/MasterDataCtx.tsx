@@ -488,8 +488,20 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     }
   };
 
+  type FetchDataOptions = {
+    progressive?: boolean;
+  };
+
+  const mapFetchedRows = (rows: any[], mapper?: (data: any[]) => any[]) =>
+    mapper ? mapper(rows) : [...rows];
+
   // Helper to fetch data from a table
-  const fetchData = async (table: string, setter: React.Dispatch<React.SetStateAction<any[]>>, mapper?: (data: any[]) => any[]) => {
+  const fetchData = async (
+    table: string,
+    setter: React.Dispatch<React.SetStateAction<any[]>>,
+    mapper?: (data: any[]) => any[],
+    options: FetchDataOptions = {},
+  ) => {
     const startedAt = performance.now();
     try {
       let allData: any[] = [];
@@ -513,7 +525,11 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         }
 
         if (rows.length > 0) {
-          allData = [...allData, ...rows];
+          allData.push(...rows);
+
+          if (options.progressive) {
+            setter(mapFetchedRows(allData, mapper));
+          }
           
           if (rows.length < pageSize) {
             hasMore = false; // Reached end
@@ -530,7 +546,9 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         }
       }
 
-      setter(mapper ? mapper(allData) : allData);
+      if (!options.progressive || allData.length === 0) {
+        setter(mapFetchedRows(allData, mapper));
+      }
       if (import.meta.env.DEV) {
         console.info('[MasterData] fetched table', {
           table,
@@ -1983,7 +2001,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
     const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
     if (orderFetch) {
-      fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper).finally(() => {
+      fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, { progressive: true }).finally(() => {
         if (!isCancelled) {
           setIsOrdersLoading(false);
         }
