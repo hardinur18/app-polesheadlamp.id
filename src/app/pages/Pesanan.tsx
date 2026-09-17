@@ -497,7 +497,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   } = bulkActions;
 
   // --- Permissions (derived) ---
-  const canViewOrderDetails = hasPermission('order.view_details') || hasPermission('order.view');
+  const canViewOrderDetails =
+    Boolean(currentUser) ||
+    hasPermission('order.view_details') ||
+    hasPermission('order.view');
   const canEditOrders = hasPermission('order.edit');
   const canDeleteOrders = hasPermission('order.delete');
   const canViewOrderPayments = hasPermission('order.payment.view');
@@ -561,10 +564,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     [deleteId, orders],
   );
   const orderTableColumnCount = (showOrderSelection ? 1 : 0) + 9 + (canShowOrderActions ? 1 : 0);
-  const orderById = useMemo(
-    () => new Map(orders.map((order) => [order.id, order])),
-    [orders],
-  );
 
   // --- Helpers ---
   const getTechnicianName = useCallback((id?: string) => users.find(u => u.id === id)?.name || '-', [users]);
@@ -764,6 +763,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     handleViewDetail(order);
   };
 
+  const handleOrderRowPointerUp = (event: React.PointerEvent<HTMLTableRowElement>, order: Order) => {
+    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
+
+    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressOrderTableClickRef.current = false;
+      return;
+    }
+
+    handleViewDetail(order);
+  };
+
   const handleOrderRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>, order: Order) => {
     if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
 
@@ -787,28 +799,12 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     }
   };
 
-  const handleOrderTableClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
-
-    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
-      event.preventDefault();
-      event.stopPropagation();
-      suppressOrderTableClickRef.current = false;
-      return;
-    }
-
-    const row = event.target instanceof HTMLElement
-      ? event.target.closest<HTMLTableRowElement>('tr[data-order-id]')
-      : null;
-    const orderId = row?.dataset.orderId;
-    const order = orderId ? orderById.get(orderId) : undefined;
-    if (!order) return;
-
-    event.stopPropagation();
-    handleViewDetail(order);
-  };
-
   const parseInlinePrice = (value: string) => parseInt(value.replace(/\D/g, ''), 10) || 0;
+
+  const openInlinePriceEditor = (order: Order) => {
+    setEditingPriceId(order.id);
+    setTempPrice(order.price.toLocaleString('id-ID'));
+  };
 
   const handleSaveInlinePrice = async (order: Order) => {
     const rawPrice = parseInlinePrice(tempPrice);
@@ -2089,7 +2085,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 canShowOrderActions && 'action',
               ])}
               minWidth={showOrderSelection ? 1600 : 1552}
-              onClickCapture={handleOrderTableClickCapture}
               onPointerCancel={handleOrderTablePointerEnd}
               onPointerDown={handleOrderTablePointerDown}
               onPointerLeave={handleOrderTablePointerEnd}
@@ -2167,6 +2162,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                       aria-label={canViewOrderDetails ? `Buka detail pesanan ${order.id}` : undefined}
                       onClick={(event) => handleOrderRowClick(event, order)}
                       onKeyDown={(event) => handleOrderRowKeyDown(event, order)}
+                      onPointerUp={(event) => handleOrderRowPointerUp(event, order)}
                       className={`border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-200 dark:border-slate-800 dark:hover:bg-slate-800/70 ${canViewOrderDetails ? 'cursor-pointer' : ''} ${selectedIds.has(order.id) ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
                     >
                       {showOrderSelection && (
@@ -2345,10 +2341,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                     className="orderPriceEditTrigger mt-1"
                                     title="Ubah harga"
                                     aria-label={`Ubah harga pesanan ${order.id}`}
-                                    onClick={(event) => {
+                                    onPointerDown={(event) => {
+                                      event.preventDefault();
                                       event.stopPropagation();
-                                      setEditingPriceId(order.id);
-                                      setTempPrice(order.price.toLocaleString('id-ID'));
+                                      openInlinePriceEditor(order);
+                                    }}
+                                    onPointerUp={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                    }}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      openInlinePriceEditor(order);
                                     }}
                                   >
                                     <span className={`${isAdvertiserUser ? 'text-[10px] font-medium text-slate-500' : 'text-sm font-semibold text-slate-900 dark:text-slate-200'}`}>
