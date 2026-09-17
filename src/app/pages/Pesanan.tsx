@@ -497,7 +497,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   } = bulkActions;
 
   // --- Permissions (derived) ---
-  const canViewOrderDetails = hasPermission('order.view_details');
+  const canViewOrderDetails = hasPermission('order.view_details') || hasPermission('order.view');
   const canEditOrders = hasPermission('order.edit');
   const canDeleteOrders = hasPermission('order.delete');
   const canViewOrderPayments = hasPermission('order.payment.view');
@@ -652,8 +652,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     setIsDetailOpen(true);
   }, []);
 
-  const isOrderRowInteractiveTarget = (target: EventTarget | null) => {
-    return target instanceof HTMLElement && Boolean(target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR));
+  const isOrderRowInteractiveTarget = (target: EventTarget | null, currentTarget?: HTMLElement) => {
+    if (!(target instanceof HTMLElement)) return false;
+    const interactiveElement = target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR);
+    if (!interactiveElement) return false;
+    return currentTarget ? currentTarget.contains(interactiveElement) && interactiveElement !== currentTarget : true;
   };
 
   const isOrderCardInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLElement) => {
@@ -745,7 +748,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   }, [setSelectedIds]);
 
   const handleOrderRowClick = (event: React.MouseEvent<HTMLTableRowElement>, order: Order) => {
-    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target)) return;
+    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
 
     if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
       event.preventDefault();
@@ -758,7 +761,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   };
 
   const handleOrderRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>, order: Order) => {
-    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target)) return;
+    if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
 
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
