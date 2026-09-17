@@ -70,7 +70,20 @@ type AdvertiserCsAccountMetric = {
   leads: number;
 };
 
-const advertiserCsPerfCache = new Map<string, { byDateAccount: Record<string, AdvertiserCsAccountMetric>; status: ApiAdsStatus }>();
+type ApiUnmappedSnapshot = {
+  date: string;
+  platformKey: string;
+  externalAccountId?: string | null;
+  externalAccountName?: string | null;
+  spend: number;
+  leads: number;
+};
+
+const advertiserCsPerfCache = new Map<string, {
+  byDateAccount: Record<string, AdvertiserCsAccountMetric>;
+  unmappedSnapshots: ApiUnmappedSnapshot[];
+  status: ApiAdsStatus;
+}>();
 
 const formatCurrency = (value: number) =>
   Number.isFinite(value) && value > 0
@@ -122,6 +135,164 @@ const getCostPerLeadTextClass = (value: number) => {
   return 'text-red-600 dark:text-red-300';
 };
 
+type SpendIndicatorTone = 'none' | 'low' | 'target' | 'high';
+type CostIndicatorTone = 'none' | 'good' | 'target' | 'bad';
+type RoasIndicatorTone = 'none' | 'bad' | 'target' | 'good';
+
+const getSpendIndicatorTone = (spendTotal: number): SpendIndicatorTone => {
+  if (spendTotal <= 0) return 'none';
+  if (spendTotal < 1_000_000) return 'low';
+  if (spendTotal <= 1_200_000) return 'target';
+  return 'high';
+};
+
+const spendIndicatorStyles: Record<SpendIndicatorTone, { badge: string; dot: string; title: string }> = {
+  none: {
+    badge: 'text-slate-500 dark:text-slate-400',
+    dot: 'bg-slate-300',
+    title: 'Belum ada total spending',
+  },
+  low: {
+    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
+    dot: 'bg-red-500',
+    title: 'Total spending di bawah Rp 1.000.000',
+  },
+  target: {
+    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
+    dot: 'bg-amber-500',
+    title: 'Total spending Rp 1.000.000 sampai Rp 1.200.000',
+  },
+  high: {
+    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+    title: 'Total spending di atas Rp 1.200.000',
+  },
+};
+
+const getCostIndicatorTone = (value: number): CostIndicatorTone => {
+  if (!Number.isFinite(value) || value <= 0) return 'none';
+  if (value < 80_000) return 'good';
+  if (value <= 100_000) return 'target';
+  return 'bad';
+};
+
+const getCostIndicatorTextClass = (value: number) => {
+  const tone = getCostIndicatorTone(value);
+  if (tone === 'good') return 'text-emerald-600 dark:text-emerald-300';
+  if (tone === 'target') return 'text-amber-500 dark:text-amber-300';
+  if (tone === 'bad') return 'text-red-600 dark:text-red-300';
+  return 'text-slate-950 dark:text-slate-100';
+};
+
+const costIndicatorStyles: Record<CostIndicatorTone, { badge: string; dot: string; title: string }> = {
+  none: {
+    badge: 'text-slate-500 dark:text-slate-400',
+    dot: 'bg-slate-300',
+    title: 'Belum ada biaya per hasil',
+  },
+  good: {
+    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+    title: 'Biaya per hasil di bawah Rp 80.000',
+  },
+  target: {
+    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
+    dot: 'bg-amber-500',
+    title: 'Biaya per hasil Rp 80.000 sampai Rp 100.000',
+  },
+  bad: {
+    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
+    dot: 'bg-red-500',
+    title: 'Biaya per hasil di atas Rp 100.000',
+  },
+};
+
+const getRoasIndicatorTone = (value: number): RoasIndicatorTone => {
+  if (!Number.isFinite(value) || value <= 0) return 'none';
+  if (value < 1) return 'bad';
+  if (value < 2) return 'target';
+  return 'good';
+};
+
+const roasIndicatorStyles: Record<RoasIndicatorTone, { badge: string; dot: string; title: string }> = {
+  none: {
+    badge: 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400',
+    dot: 'bg-slate-300',
+    title: 'Belum ada ROAS',
+  },
+  bad: {
+    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
+    dot: 'bg-red-500',
+    title: 'ROAS di bawah 1x',
+  },
+  target: {
+    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
+    dot: 'bg-amber-500',
+    title: 'ROAS 1x sampai di bawah 2x',
+  },
+  good: {
+    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+    title: 'ROAS 2x atau lebih',
+  },
+};
+
+function SpendingCellValue({
+  spendDashboard,
+  spendTotal,
+}: {
+  spendDashboard: number;
+  spendTotal: number;
+}) {
+  const tone = getSpendIndicatorTone(spendTotal);
+  const indicator = spendIndicatorStyles[tone];
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+        {formatCurrency(spendDashboard)}
+      </div>
+      <div
+        className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] leading-tight ${indicator.badge}`}
+        title={indicator.title}
+      >
+        {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
+        <span>{formatCurrency(spendTotal)}</span>
+      </div>
+    </div>
+  );
+}
+
+function CostIndicatorBadge({ value }: { value: number }) {
+  const tone = getCostIndicatorTone(value);
+  const indicator = costIndicatorStyles[tone];
+
+  return (
+    <div
+      className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold leading-tight ${indicator.badge}`}
+      title={indicator.title}
+    >
+      {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
+      <span>{formatCurrency(value)}</span>
+    </div>
+  );
+}
+
+function RoasBadgeValue({ value }: { value: number }) {
+  const tone = getRoasIndicatorTone(value);
+  const indicator = roasIndicatorStyles[tone];
+
+  return (
+    <div
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] font-semibold leading-tight ${indicator.badge}`}
+      title={indicator.title}
+    >
+      {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
+      <span>{value > 0 ? `${value.toFixed(2)}x` : '-'}</span>
+    </div>
+  );
+}
+
 const getConversionRateTextClass = (value: number) => {
   if (!Number.isFinite(value)) return 'text-slate-950 dark:text-slate-100';
   if (value < 10) return 'text-red-600 dark:text-red-300';
@@ -142,6 +313,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     adAccountAssignments,
     adAccountOwnerAssignments,
     subChannels,
+    isOperationalDataLoading,
   } = useMasterData();
   const { hasPermission } = usePermissions();
 
@@ -150,6 +322,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [selectedAdvertiserId, setSelectedAdvertiserId] = useState<string>(userId || 'all');
   const [activeTab, setActiveTab] = useState<AdvertiserViewTab>('ads-summary');
   const [apiAdsByDateAccount, setApiAdsByDateAccount] = useState<Record<string, AdvertiserCsAccountMetric>>({});
+  const [apiUnmappedSnapshots, setApiUnmappedSnapshots] = useState<ApiUnmappedSnapshot[]>([]);
   const [apiAdsStatus, setApiAdsStatus] = useState<ApiAdsStatus>('idle');
   const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
@@ -187,6 +360,12 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     if (isAdvertiserRole(currentUser?.role)) return currentUser?.id;
     return userId;
   }, [currentUser?.id, currentUser?.role, isOwner, selectedAdvertiserId, userId]);
+  const isAppDatabaseEmpty = dailyAds.length === 0 && leads.length === 0 && orders.length === 0 && leadSpamDailyInputs.length === 0;
+  const emptyDataHint = isOperationalDataLoading
+    ? 'Data operasional sedang dimuat dari database.'
+    : isAppDatabaseEmpty
+      ? 'Data database belum masuk ke state lokal. Cek session login atau response 401/403 app-data di Network tab.'
+    : 'Data akan muncul dari snapshot API, assignment akun iklan, prospek, order, dan input spam pada periode yang dipilih.';
   const rangeParams = useMemo(() => {
     if (!dateRange?.from) return null;
     return {
@@ -640,6 +819,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   React.useEffect(() => {
     if (!rangeParams) {
       setApiAdsByDateAccount({});
+      setApiUnmappedSnapshots([]);
       setApiAdsStatus('idle');
       return;
     }
@@ -652,6 +832,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
     if (cachedSnapshot) {
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
+      setApiUnmappedSnapshots(cachedSnapshot.unmappedSnapshots);
       setApiAdsStatus(cachedSnapshot.status);
       return;
     }
@@ -668,6 +849,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
     const addSnapshotRows = (
       resultByDateAccount: Record<string, AdvertiserCsAccountMetric>,
+      unmappedByKey: Map<string, ApiUnmappedSnapshot>,
       rows: AdsSnapshotRowLike[],
     ) => {
       for (const row of rows) {
@@ -675,7 +857,22 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         if (!date || date < rangeParams.from || date > rangeParams.to) continue;
 
         const adAccount = resolveAdAccount(row);
-        if (!adAccount) continue;
+        if (!adAccount) {
+          const platformKey = row.platformKey || resolvePlatformKey(row.platformId || row.externalAccountName);
+          const key = `${platformKey}::${row.externalAccountId || ''}::${normalizeLookupKey(row.externalAccountName)}::${date}`;
+          const current = unmappedByKey.get(key) || {
+            date,
+            platformKey,
+            externalAccountId: row.externalAccountId || null,
+            externalAccountName: row.externalAccountName || null,
+            spend: 0,
+            leads: 0,
+          };
+          current.spend += Number(row.spend) || 0;
+          current.leads += Number(row.conversions) || 0;
+          unmappedByKey.set(key, current);
+          continue;
+        }
         const advertiserId = getAdAccountAdvertiserId(adAccount, date) || row.advertiserId || null;
         if (targetAdvertiserId && advertiserId !== targetAdvertiserId) continue;
 
@@ -720,21 +917,30 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         ]);
 
         const nextByAccount: Record<string, AdvertiserCsAccountMetric> = {};
-        if (meta.status === 'fulfilled') addSnapshotRows(nextByAccount, meta.value.rows || []);
-        if (google.status === 'fulfilled') addSnapshotRows(nextByAccount, google.value.rows || []);
-        if (tiktok.status === 'fulfilled') addSnapshotRows(nextByAccount, tiktok.value.rows || []);
+        const unmappedByKey = new Map<string, ApiUnmappedSnapshot>();
+        if (meta.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, meta.value.rows || []);
+        if (google.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, google.value.rows || []);
+        if (tiktok.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, tiktok.value.rows || []);
 
         if (cancelled) return;
+        const nextUnmapped = Array.from(unmappedByKey.values())
+          .filter((row) => row.spend > 0 || row.leads > 0)
+          .sort((left, right) => {
+            if (right.spend !== left.spend) return right.spend - left.spend;
+            return (left.externalAccountName || '').localeCompare(right.externalAccountName || '', 'id-ID');
+          });
         const nextStatus: ApiAdsStatus = Object.values(nextByAccount).some((row) => row.spend > 0 || row.leads > 0)
           ? 'ready'
           : 'empty';
 
         setApiAdsByDateAccount(nextByAccount);
+        setApiUnmappedSnapshots(nextUnmapped);
         setApiAdsStatus(nextStatus);
-        advertiserCsPerfCache.set(cacheKey, { byDateAccount: nextByAccount, status: nextStatus });
+        advertiserCsPerfCache.set(cacheKey, { byDateAccount: nextByAccount, unmappedSnapshots: nextUnmapped, status: nextStatus });
       } catch {
         if (cancelled) return;
         setApiAdsByDateAccount({});
+        setApiUnmappedSnapshots([]);
         setApiAdsStatus('error');
       }
     };
@@ -1081,6 +1287,49 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     roas: csPerformanceTotals.spendDashboard > 0 ? csPerformanceTotals.revenue / csPerformanceTotals.spendDashboard : 0,
   }), [csPerformanceTotals]);
 
+  const csPerformanceDiagnostics = useMemo(() => {
+    if (!rangeParams) {
+      return {
+        missingOwnerAccounts: [] as typeof activeAdvertiserAccounts,
+        missingCsAccounts: [] as typeof activeAdvertiserAccounts,
+        unmappedSnapshots: [] as ApiUnmappedSnapshot[],
+        isClean: true,
+      };
+    }
+
+    const overlapsRange = (startDate?: string | null, endDate?: string | null) =>
+      Boolean(startDate) &&
+      startDate! <= rangeParams.to &&
+      (!endDate || endDate >= rangeParams.from);
+
+    const missingOwnerAccounts = activeAdvertiserAccounts.filter((account) =>
+      !adAccountOwnerAssignments.some((assignment) =>
+        assignment.adAccountId === account.id &&
+        assignment.status === 'active' &&
+        Boolean(assignment.advertiserId) &&
+        overlapsRange(assignment.startDate, assignment.endDate),
+      )
+    );
+
+    const missingCsAccounts = activeAdvertiserAccounts.filter((account) =>
+      !adAccountAssignments.some((assignment) =>
+        assignment.adAccountId === account.id &&
+        assignment.status === 'active' &&
+        Boolean(assignment.csId) &&
+        overlapsRange(assignment.startDate, assignment.endDate),
+      )
+    );
+
+    const unmappedSnapshots = apiUnmappedSnapshots.filter((row) => row.spend > 0 || row.leads > 0);
+
+    return {
+      missingOwnerAccounts,
+      missingCsAccounts,
+      unmappedSnapshots,
+      isClean: missingOwnerAccounts.length === 0 && missingCsAccounts.length === 0 && unmappedSnapshots.length === 0,
+    };
+  }, [activeAdvertiserAccounts, adAccountAssignments, adAccountOwnerAssignments, apiUnmappedSnapshots, rangeParams]);
+
   const csPerformanceBreakdowns = useMemo(() => {
     type BreakdownRow = {
       key: string;
@@ -1230,15 +1479,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       ),
     ];
   }, [csPerformanceRows]);
-
-  const csPerformanceBreakdownRows = useMemo(() => (
-    csPerformanceBreakdowns.flatMap((breakdown) =>
-      breakdown.rows.map((row) => ({
-        ...row,
-        category: breakdown.title,
-      })),
-    )
-  ), [csPerformanceBreakdowns]);
 
   const csFilterOptions = useMemo(() => {
     const csIds = new Set<string>();
@@ -1953,7 +2193,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   tone="amber"
                   value={
                     <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatCurrency(csPerformanceSummary.costPerClosing)}</span>
+                      <span className={`text-2xl font-semibold ${getCostIndicatorTextClass(csPerformanceSummary.costPerClosing)}`}>{formatCurrency(csPerformanceSummary.costPerClosing)}</span>
                       <span>{formatCurrency(csPerformanceSummary.costPerClosingTotal)}</span>
                     </div>
                   }
@@ -1964,7 +2204,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   tone="emerald"
                   value={
                     <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatCurrency(csPerformanceSummary.costPerDone)}</span>
+                      <span className={`text-2xl font-semibold ${getCostIndicatorTextClass(csPerformanceSummary.costPerDone)}`}>{formatCurrency(csPerformanceSummary.costPerDone)}</span>
                       <span>{formatCurrency(csPerformanceSummary.costPerDoneTotal)}</span>
                     </div>
                   }
@@ -1976,172 +2216,138 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   value={
                     <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
                       <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
-                        {csPerformanceSummary.roas > 0 ? `${csPerformanceSummary.roas.toFixed(2)}x` : '-'}
+                        <RoasBadgeValue value={csPerformanceSummary.roas} />
                       </span>
                       <span className="invisible">-</span>
                     </div>
                   }
-                  />
+                />
                 </OperationalKpiGrid>
 
-                <OperationalTableCard className="advertiserDashboardTableCard advertiserDashboardBreakdownCard">
-                  <CardHeader className="advertiserDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <OperationalTableCard className="advertiserDashboardLegacyCprCard">
+                  <CardHeader className="advertiserDashboardLegacyCprHeader border-b border-slate-100 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
                     <div>
                       <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CPR Terbaik</CardTitle>
                       <p className="mt-1 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
-                        Ranking advertiser, CS, platform, dan akun iklan aktif berdasarkan CPR closing dan selesai dari filter aktif.
+                        Seluruh advertiser, CS, platform, dan akun iklan aktif berdasarkan CPR closing dan selesai dari filter aktif.
                       </p>
                     </div>
                   </CardHeader>
-                  <div className="advertiserDashboardBreakdownMobileList">
-                    {csPerformanceBreakdownRows.length === 0 ? (
-                      <OperationalEmptyState
-                        icon={BarChart3}
-                        title="Belum ada data"
-                        description="Data CPR akan tampil setelah ada lead, order, atau spending pada filter aktif."
-                      />
-                    ) : (
-                      csPerformanceBreakdownRows.map((row) => (
-                        <article key={`${row.category}-${row.key}`} className="advertiserDashboardBreakdownMobileCard">
-                          <div className="advertiserDashboardBreakdownMobileHeader">
-                            <div className="flex min-w-0 items-center gap-2">
-                              {row.platformKey && (
-                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
-                                  <PlatformLogo platform={row.platformKey} size="sm" />
-                                </span>
-                              )}
-                              <div className="min-w-0">
-                                <span>{row.category}</span>
-                                <p>{row.label}</p>
-                                {row.secondary && <span>{row.secondary}</span>}
-                              </div>
+                  <div className="advertiserDashboardLegacyCprGrid grid gap-4 p-3 sm:p-5 xl:grid-cols-2">
+                    {csPerformanceBreakdowns.map((breakdown) => (
+                      <div key={breakdown.title} className="advertiserDashboardLegacyCprPanel overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                        <div className="advertiserDashboardLegacyCprPanelHeader flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              Performa {breakdown.title}
                             </div>
-                            <strong>{row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}</strong>
-                          </div>
-                          <div className="advertiserDashboardBreakdownMobileMetrics">
-                            <div>
-                              <span>CPR Closing</span>
-                              <strong>{formatCurrency(row.cprClosing)}</strong>
-                            </div>
-                            <div>
-                              <span>CPR Selesai</span>
-                              <strong>{formatCurrency(row.cprDone)}</strong>
-                            </div>
-                            <div>
-                              <span>Closing</span>
-                              <strong>{formatNumber(row.orders)}</strong>
-                            </div>
-                            <div>
-                              <span>Done</span>
-                              <strong>{formatNumber(row.done)}</strong>
+                            <div className="mt-1 text-[11px] text-slate-400">
+                              Menampilkan {breakdown.rows.length} data aktif by CPR selesai
                             </div>
                           </div>
-                        </article>
-                      ))
-                    )}
-                  </div>
-                  <div className="advertiserDashboardBreakdownDesktop advertiserDashboardBreakdownFoundationTable">
-                    <Table className="min-w-[1120px] table-fixed text-xs">
-                      <colgroup>
-                        <col className="w-[132px]" />
-                        <col className="w-[230px]" />
-                        <col className="w-[130px]" />
-                        <col className="w-[130px]" />
-                        <col className="w-[150px]" />
-                        <col className="w-[90px]" />
-                        <col className="w-[90px]" />
-                        <col className="w-[88px]" />
-                      </colgroup>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="py-4 pl-6 font-semibold">Kategori</TableHead>
-                          <TableHead className="py-4 font-semibold">Nama</TableHead>
-                          <TableHead className="py-4 text-right font-semibold">CPR Closing</TableHead>
-                          <TableHead className="py-4 text-right font-semibold">CPR Selesai</TableHead>
-                          <TableHead className="py-4 text-right font-semibold">Spend</TableHead>
-                          <TableHead className="py-4 text-center font-semibold">Closing</TableHead>
-                          <TableHead className="py-4 text-center font-semibold">Done</TableHead>
-                          <TableHead className="py-4 pr-6 text-center font-semibold">ROAS</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {csPerformanceBreakdowns.map((breakdown) => (
-                          <React.Fragment key={breakdown.title}>
-                            <TableRow className="advertiserDashboardBreakdownGroupRow">
-                              <TableCell colSpan={8} className="px-6 py-3">
-                                <div className="advertiserDashboardBreakdownGroupSummary">
-                                  <div>
-                                    <strong>{breakdown.title}</strong>
-                                    <span>{breakdown.rows.length} data aktif by CPR selesai</span>
-                                  </div>
-                                  <div>
-                                    <span>Lead Dashboard: {formatNumber(breakdown.totals.leadsDash)}</span>
-                                    <span>Lead Real: {formatNumber(breakdown.totals.leadsReal)}</span>
-                                    <span>Closing: {formatNumber(breakdown.totals.orders)}</span>
-                                    <span>Done: {formatNumber(breakdown.totals.done)}</span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                            {breakdown.rows.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={8} className="px-6 py-5 text-center text-sm text-slate-500 dark:text-slate-400">
-                                  Belum ada data real untuk kategori ini.
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              breakdown.rows.map((row) => (
-                                <TableRow key={`${breakdown.title}-${row.key}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
-                                  <TableCell className="py-4 pl-6 align-top">
-                                    <span className="advertiserDashboardBreakdownCategory">{breakdown.title}</span>
-                                  </TableCell>
-                                  <TableCell className="py-4 align-top">
-                                    <div className="advertiserDashboardBreakdownNameCell">
-                                      {row.platformKey && (
-                                        <span className="advertiserDashboardBreakdownLogo">
-                                          <PlatformLogo platform={row.platformKey} size="sm" />
-                                        </span>
-                                      )}
-                                      <div className="min-w-0">
-                                        <strong title={row.label}>{row.label}</strong>
-                                        {row.secondary && <small title={row.secondary}>{row.secondary}</small>}
+                          <div className="advertiserDashboardLegacyCprBadges grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
+                          <div className="advertiserDashboardLegacyCprBadge rounded-md bg-cyan-50 px-2.5 py-1.5 dark:bg-cyan-950/30">
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Lead Dashboard</div>
+                            <div className="mt-0.5 font-mono text-sm font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(breakdown.totals.leadsDash)}</div>
+                            </div>
+                            <div className="advertiserDashboardLegacyCprBadge rounded-md bg-blue-50 px-2.5 py-1.5 dark:bg-blue-950/30">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Lead Real</div>
+                              <div className="mt-0.5 font-mono text-sm font-bold text-blue-700 dark:text-blue-300">{formatNumber(breakdown.totals.leadsReal)}</div>
+                            </div>
+                            <div className="advertiserDashboardLegacyCprBadge rounded-md bg-violet-50 px-2.5 py-1.5 dark:bg-violet-950/30">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">Closing</div>
+                              <div className="mt-0.5 font-mono text-sm font-bold text-violet-700 dark:text-violet-300">{formatNumber(breakdown.totals.orders)}</div>
+                            </div>
+                            <div className="advertiserDashboardLegacyCprBadge rounded-md bg-emerald-50 px-2.5 py-1.5 dark:bg-emerald-950/30">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Done</div>
+                              <div className="mt-0.5 font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(breakdown.totals.done)}</div>
+                            </div>
+                          </div>
+                        </div>
+                        {breakdown.rows.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[760px] table-fixed text-xs">
+                              <colgroup>
+                                <col className="w-[230px]" />
+                                <col className="w-[110px]" />
+                                <col className="w-[110px]" />
+                                <col className="w-[110px]" />
+                                <col className="w-[75px]" />
+                                <col className="w-[75px]" />
+                                <col className="w-[75px]" />
+                              </colgroup>
+                              <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
+                                <tr>
+                                  <th className="px-4 py-2.5 text-left font-medium">{breakdown.title}</th>
+                                  <th className="px-3 py-2.5 text-right font-medium">CPR Closing</th>
+                                  <th className="px-3 py-2.5 text-right font-medium">CPR Selesai</th>
+                                  <th className="px-3 py-2.5 text-right font-medium">Spend</th>
+                                  <th className="px-3 py-2.5 text-center font-medium">Closing</th>
+                                  <th className="px-3 py-2.5 text-center font-medium">Done</th>
+                                  <th className="px-3 py-2.5 text-center font-medium">ROAS</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                {breakdown.rows.map((row) => (
+                                  <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                                    <td className="px-4 py-3 align-top">
+                                      <div className="flex min-w-0 items-start gap-2">
+                                        {row.platformKey && (
+                                          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                                            <PlatformLogo platform={row.platformKey} size="sm" />
+                                          </span>
+                                        )}
+                                        <div className="min-w-0">
+                                          <div className="truncate font-semibold text-slate-900 dark:text-slate-100" title={row.label}>
+                                            {row.label}
+                                          </div>
+                                          {row.secondary && (
+                                            <div className="mt-1 truncate text-[11px] text-slate-500" title={row.secondary}>
+                                              {row.secondary}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="py-4 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
-                                    {formatCurrency(row.cprClosing)}
-                                  </TableCell>
-                                  <TableCell className="py-4 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
-                                    {formatCurrency(row.cprDone)}
-                                  </TableCell>
-                                  <TableCell className="py-4 text-right align-top">
-                                    <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(row.spendDashboard)}</div>
-                                    <div className="mt-1 font-mono text-[10px] text-slate-500">{formatCurrency(row.spendTotal)}</div>
-                                  </TableCell>
-                                  <TableCell className="py-4 text-center align-top font-mono font-semibold text-violet-600">
-                                    {formatNumber(row.orders)}
-                                  </TableCell>
-                                  <TableCell className="py-4 text-center align-top">
-                                    <div className="font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</div>
-                                    <div className="mt-1 font-mono text-[10px] text-slate-500">Lead {formatNumber(row.leadsDash)}</div>
-                                  </TableCell>
-                                  <TableCell className="py-4 pr-6 text-center align-top">
-                                    <span className="advertiserDashboardBreakdownRoas">
-                                      {row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}
-                                    </span>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </TableBody>
-                    </Table>
+                                    </td>
+                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                      <CostIndicatorBadge value={row.cprClosing} />
+                                    </td>
+                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                      <CostIndicatorBadge value={row.cprDone} />
+                                    </td>
+                                    <td className="px-3 py-3 text-right align-top">
+                                      <SpendingCellValue
+                                        spendDashboard={row.spendDashboard}
+                                        spendTotal={row.spendTotal}
+                                      />
+                                    </td>
+                                    <td className="px-3 py-3 text-center align-top font-mono font-semibold text-violet-600">
+                                      {formatNumber(row.orders)}
+                                    </td>
+                                    <td className="px-3 py-3 text-center align-top">
+                                      <div className="font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</div>
+                                      <div className="mt-1 font-mono text-[10px] text-slate-500">Lead {formatNumber(row.leadsDash)}</div>
+                                    </td>
+                                    <td className="px-3 py-3 text-center align-top">
+                                      <RoasBadgeValue value={row.roas} />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                            Belum ada data real untuk kategori ini.
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </OperationalTableCard>
 
             <OperationalTableCard className="advertiserDashboardTableCard advertiserDashboardCsPerformanceCard">
-              <CardHeader className="advertiserDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <CardHeader className="advertiserDashboardSectionHeader border-b border-slate-100 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CS dan Iklan</CardTitle>
@@ -2189,6 +2395,74 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                       {activeAdvertiserAccounts.length} akun aktif
                     </div>
                   </div>
+                </div>
+
+                <div className={cn(
+                  'advertiserDashboardMappingHealth',
+                  csPerformanceDiagnostics.isClean ? 'isClean' : 'hasIssues',
+                )}>
+                  <div className="advertiserDashboardMappingHealthHeader">
+                    {csPerformanceDiagnostics.isClean ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4" />
+                    )}
+                    <div>
+                      <strong>
+                        {csPerformanceDiagnostics.isClean ? 'Mapping master data normal' : 'Perlu cek mapping master data'}
+                      </strong>
+                      <span>
+                        {csPerformanceDiagnostics.isClean
+                          ? 'Akun aktif, assignment, dan snapshot API sudah terbaca untuk filter aktif.'
+                          : 'Beberapa akun belum lengkap sehingga angka bisa kosong atau tidak teratribusi.'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!csPerformanceDiagnostics.isClean && (
+                    <div className="advertiserDashboardMappingHealthItems">
+                      {csPerformanceDiagnostics.missingOwnerAccounts.length > 0 && (
+                        <div className="advertiserDashboardMappingHealthItem">
+                          <div className="advertiserDashboardMappingHealthItemLabel">Owner assignment kosong</div>
+                          <div className="advertiserDashboardMappingHealthItemValue">
+                            {formatNumber(csPerformanceDiagnostics.missingOwnerAccounts.length)} akun
+                          </div>
+                          <div className="advertiserDashboardMappingHealthItemList">
+                            {csPerformanceDiagnostics.missingOwnerAccounts.slice(0, 3).map((account) => account.accountName).join(', ')}
+                            {csPerformanceDiagnostics.missingOwnerAccounts.length > 3 && ` +${csPerformanceDiagnostics.missingOwnerAccounts.length - 3}`}
+                          </div>
+                        </div>
+                      )}
+
+                      {csPerformanceDiagnostics.missingCsAccounts.length > 0 && (
+                        <div className="advertiserDashboardMappingHealthItem">
+                          <div className="advertiserDashboardMappingHealthItemLabel">CS assignment kosong</div>
+                          <div className="advertiserDashboardMappingHealthItemValue">
+                            {formatNumber(csPerformanceDiagnostics.missingCsAccounts.length)} akun
+                          </div>
+                          <div className="advertiserDashboardMappingHealthItemList">
+                            {csPerformanceDiagnostics.missingCsAccounts.slice(0, 3).map((account) => account.accountName).join(', ')}
+                            {csPerformanceDiagnostics.missingCsAccounts.length > 3 && ` +${csPerformanceDiagnostics.missingCsAccounts.length - 3}`}
+                          </div>
+                        </div>
+                      )}
+
+                      {csPerformanceDiagnostics.unmappedSnapshots.length > 0 && (
+                        <div className="advertiserDashboardMappingHealthItem">
+                          <div className="advertiserDashboardMappingHealthItemLabel">Snapshot API belum termapping</div>
+                          <div className="advertiserDashboardMappingHealthItemValue">
+                            {formatNumber(csPerformanceDiagnostics.unmappedSnapshots.length)} data
+                          </div>
+                          <div className="advertiserDashboardMappingHealthItemList">
+                            {csPerformanceDiagnostics.unmappedSnapshots.slice(0, 3).map((row) =>
+                              `${row.externalAccountName || row.externalAccountId || 'Akun API tanpa nama'} (${formatCurrency(row.spend)})`,
+                            ).join(', ')}
+                            {csPerformanceDiagnostics.unmappedSnapshots.length > 3 && ` +${csPerformanceDiagnostics.unmappedSnapshots.length - 3}`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {apiAdsStatus === 'loading' && csPerformanceGroups.length === 0 ? (
@@ -2280,10 +2554,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                               ['Spam', formatNumber(group.spam), formatPercentAllowZero(group.spamRate), 'text-red-600'],
                               ['Order', formatNumber(group.orders), `Selesai: ${formatNumber(group.done)}`, 'text-blue-600'],
                                 ['CPL', formatCurrency(group.cpl), '', getCostPerLeadTextClass(group.cpl)],
-                                ['Cost/Closing', formatCurrency(group.cprClosing), '', 'text-slate-950 dark:text-slate-100'],
-                                ['Cost/Selesai', group.done > 0 ? formatCurrency(group.spendDashboard / group.done) : '-', '', 'text-slate-950 dark:text-slate-100'],
-                                ['Revenue', formatCurrency(group.revenue), '', 'text-slate-950 dark:text-slate-100'],
-                                ['ROAS', group.roas > 0 ? `${group.roas.toFixed(2)}x` : '-', '', 'text-slate-950 dark:text-slate-100'],
+                                ['Cost/Closing', formatCurrency(group.cprClosing), '', getCostIndicatorTextClass(group.cprClosing)],
+                                ['Cost/Selesai', group.done > 0 ? formatCurrency(group.spendDashboard / group.done) : '-', '', getCostIndicatorTextClass(group.done > 0 ? group.spendDashboard / group.done : 0)],
+                                ['Revenue', formatCurrency(group.revenue), '', group.revenue > 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-slate-950 dark:text-slate-100'],
+                                ['ROAS', group.roas > 0 ? `${group.roas.toFixed(2)}x` : '-', '', group.roas >= 2 ? 'text-emerald-600 dark:text-emerald-300' : group.roas >= 1 ? 'text-amber-500 dark:text-amber-300' : group.roas > 0 ? 'text-red-600 dark:text-red-300' : 'text-slate-950 dark:text-slate-100'],
                                 ['Rows', formatNumber(group.rows.length), '', 'text-slate-950 dark:text-slate-100'],
                             ].map(([label, primary, secondary, className]) => (
                               <div key={label} className="flex h-full min-w-0 flex-col justify-start px-2 pt-1.5 text-right">
@@ -2339,18 +2613,18 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                   </div>
                                   <div>
                                     <span>CPL</span>
-                                    <strong>{formatCurrency(row.cpl)}</strong>
+                                    <strong className={getCostPerLeadTextClass(row.cpl)}>{formatCurrency(row.cpl)}</strong>
                                     <small>{formatPercent(row.orderRate)}</small>
                                   </div>
                                   <div>
                                     <span>Cost Selesai</span>
-                                    <strong>{formatCurrency(row.costPerDone)}</strong>
+                                    <strong className={getCostIndicatorTextClass(row.costPerDone)}>{formatCurrency(row.costPerDone)}</strong>
                                     <small>Batal: {formatNumber(row.cancelled)}</small>
                                   </div>
                                   <div>
                                     <span>ROAS</span>
-                                    <strong>{row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}</strong>
-                                    <small>{formatCurrency(row.revenue)}</small>
+                                    <strong className={row.roas >= 2 ? 'text-emerald-600 dark:text-emerald-300' : row.roas >= 1 ? 'text-amber-500 dark:text-amber-300' : row.roas > 0 ? 'text-red-600 dark:text-red-300' : undefined}>{row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}</strong>
+                                    <small className={row.revenue > 0 ? 'text-emerald-600 dark:text-emerald-300' : undefined}>{formatCurrency(row.revenue)}</small>
                                   </div>
                                 </div>
                               </article>
@@ -2417,8 +2691,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                       </div>
                                     </td>
                                     <td className="px-4 py-3 text-right align-top">
-                                      <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(row.spendDashboard)}</div>
-                                      <div className="mt-1 font-mono text-[11px] text-slate-500">{formatCurrency(row.spendTotal)}</div>
+                                      <SpendingCellValue
+                                        spendDashboard={row.spendDashboard}
+                                        spendTotal={row.spendTotal}
+                                      />
                                     </td>
                                     <td className="px-4 py-3 text-center align-top">
                                       <div className="font-mono font-semibold text-cyan-600">{formatNumber(row.leadsDash)}</div>
@@ -2429,14 +2705,16 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-blue-600">{formatNumber(row.orders)}</td>
                                     <td className={`px-4 py-3 text-right align-top font-mono font-semibold ${getConversionRateTextClass(row.orderRate)}`}>{formatPercent(row.orderRate)}</td>
                                       <td className={`px-4 py-3 text-right align-top font-mono font-semibold ${getCostPerLeadTextClass(row.cpl)}`}>{formatCurrency(row.cpl)}</td>
-                                      <td className="px-4 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(row.cprClosing)}</td>
-                                      <td className="px-4 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(row.costPerDone)}</td>
+                                      <td className="px-4 py-3 text-right align-top">
+                                        <CostIndicatorBadge value={row.cprClosing} />
+                                      </td>
+                                      <td className="px-4 py-3 text-right align-top">
+                                        <CostIndicatorBadge value={row.costPerDone} />
+                                      </td>
                                       <td className="px-4 py-3 text-center align-top font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-red-500">{formatNumber(row.cancelled)}</td>
                                     <td className="px-4 py-3 text-right align-top">
-                                      <div className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                                        {row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}
-                                      </div>
+                                      <RoasBadgeValue value={row.roas} />
                                     </td>
                                   </tr>
                                 ))}
@@ -2452,7 +2730,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   <OperationalEmptyState
                     icon={BarChart3}
                     title="Belum ada data performa CS"
-                    description="Data akan muncul dari snapshot API, assignment akun iklan, prospek, order, dan input spam pada periode yang dipilih."
+                    description={emptyDataHint}
                   />
                 )}
               </div>

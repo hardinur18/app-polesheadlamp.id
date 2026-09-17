@@ -544,6 +544,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     addLeadSpamDailyInput,
     updateLeadSpamDailyInput,
     deleteLeadSpamDailyInput,
+    isOperationalDataLoading,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   
@@ -571,6 +572,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const targetPlatformId = useMemo(() => (
     selectedPlatformId === 'all' ? undefined : selectedPlatformId
   ), [selectedPlatformId]);
+  const isAppDatabaseEmpty = leads.length === 0 && orders.length === 0 && leadSpamDailyInputs.length === 0;
+  const emptyDataHint = isOperationalDataLoading
+    ? 'Data operasional sedang dimuat dari database.'
+    : isAppDatabaseEmpty
+      ? 'Data database belum masuk ke state lokal. Cek session login atau response 401/403 app-data di Network tab.'
+    : 'Data akan muncul dari prospek/order CS dan snapshot API pada rentang tanggal yang dipilih.';
   
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => readInitialDateRange());
   const [apiAdsMetrics, setApiAdsMetrics] = useState<Record<string, CsAdsDailyMetric>>({});
@@ -1855,8 +1862,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
         </TabsViewport>
 
         <TabsContent value="performance" className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="csDashboardScopeGrid grid gap-3 md:grid-cols-3">
+        <div className="csDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Periode</div>
           <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
             {rangeParams
@@ -1864,13 +1871,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
               : 'Belum dipilih'}
           </div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="csDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Akun Iklan Terpetakan</div>
           <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
             {formatCount(csKpis.mappedAccountCount)} dari {formatCount(csKpis.accountCount)} akun aktif
           </div>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="csDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Status Data</div>
           <div className="mt-1 flex items-center gap-2">
             <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${resolvedApiStatusClassName}`}>
@@ -1982,8 +1989,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
       <div className="grid gap-4 md:grid-cols-1">
         {/* Chart */}
-        <Card className="border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <CardHeader className="border-b border-slate-100 dark:border-slate-800">
+        <Card className="csDashboardChartCard border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <CardHeader className="csDashboardSectionHeader border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="text-base text-slate-800 dark:text-slate-100">Grafik Lead Dashboard dan Order</CardTitle>
@@ -2070,7 +2077,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         </Card>
 
         <OperationalTableCard className="csDashboardTableCard csDashboardPerformanceCard">
-          <CardHeader className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <CardHeader className="csDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CS dan Iklan</CardTitle>
@@ -2645,7 +2652,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
                   <OperationalEmptyState
                     icon={TrendingUp}
                     title="Belum ada data performa"
-                    description="Data akan muncul dari prospek/order CS dan snapshot API pada rentang tanggal yang dipilih."
+                    description={emptyDataHint}
                   />
                 )}
           </div>
@@ -2710,8 +2717,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
         </TabsContent>
 
         <TabsContent value="spam-inputs" className="space-y-4">
-          <OperationalTableCard>
-            <CardHeader className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <OperationalTableCard className="csDashboardTableCard">
+            <CardHeader className="csDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <CardTitle className="text-base text-slate-800 dark:text-slate-100">Riwayat Input Spam</CardTitle>

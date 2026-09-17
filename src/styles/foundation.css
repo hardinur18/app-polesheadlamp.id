@@ -25910,6 +25910,8 @@ body {
 /* Advertiser Dashboard polish */
 .advertiserDashboardPage.opsPageShell,
 .csDashboardPage.opsPageShell {
+  --dashboard-panel-radius: 18px;
+  --dashboard-inner-radius: 12px;
   container-type: inline-size;
   max-width: 100%;
   min-width: 0;
@@ -25954,6 +25956,41 @@ body {
   padding: 18px 20px !important;
 }
 
+.advertiserDashboardPage .tablePanel .rounded-lg,
+.advertiserDashboardPage .tablePanel .rounded-sm,
+.csDashboardPage .tablePanel .rounded-lg,
+.csDashboardPage .tablePanel .rounded-sm {
+  border-radius: var(--dashboard-inner-radius) !important;
+}
+
+.advertiserDashboardPage .tablePanel .rounded-full,
+.csDashboardPage .tablePanel .rounded-full,
+.advertiserDashboardPage .tablePanel [class*="uppercase"][class*="text-"],
+.csDashboardPage .tablePanel [class*="uppercase"][class*="text-"] {
+  border-radius: 999px;
+}
+
+.advertiserDashboardPage :where(.tablePanel, .uiCard, [data-slot="card"]),
+.csDashboardPage :where(.tablePanel, .uiCard, [data-slot="card"]) {
+  border-radius: var(--dashboard-panel-radius);
+}
+
+.advertiserDashboardPage :where(.uiCardHeader, [data-slot="card-header"]),
+.csDashboardPage :where(.uiCardHeader, [data-slot="card-header"]) {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  background: #ffffff;
+}
+
+.advertiserDashboardPage :where(.uiCardTitle, [data-slot="card-title"]),
+.csDashboardPage :where(.uiCardTitle, [data-slot="card-title"]) {
+  color: #0f172a;
+  font-size: 0.98rem !important;
+  font-weight: 840;
+  line-height: 1.22;
+  letter-spacing: 0;
+}
+
 .advertiserDashboardSectionHeader .uiCardTitle,
 .advertiserDashboardSectionHeader [data-slot="card-title"] {
   color: #0f172a;
@@ -25983,7 +26020,7 @@ body {
 .advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea {
   overflow-x: auto !important;
   overflow-y: hidden !important;
-  border-radius: 10px !important;
+  border-radius: 0 !important;
   border: 0 !important;
   background: #ffffff;
   outline: none !important;
@@ -26001,7 +26038,7 @@ body {
 
 .advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea table {
   overflow: hidden;
-  border-radius: 10px !important;
+  border-radius: 0 !important;
   border: 0 !important;
   background: #ffffff;
   box-shadow: none !important;
@@ -26197,6 +26234,9 @@ body {
 
 .csDashboardDetailScroller.uiHorizontalDragScrollArea {
   background: #ffffff;
+  border-radius: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .advertiserDashboardHeaderActions {
@@ -26330,14 +26370,16 @@ body {
 }
 
 .advertiserDashboardChartCard,
-.advertiserDashboardTableCard.tablePanel {
+.advertiserDashboardTableCard.tablePanel,
+.csDashboardTableCard.tablePanel,
+.csDashboardPerformanceCard.tablePanel {
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: var(--dashboard-panel-radius);
   box-shadow: 0 16px 38px rgba(15, 23, 42, 0.055);
 }
 
 .advertiserDashboardBreakdownCard.tablePanel {
-  border-radius: 10px;
+  border-radius: var(--dashboard-panel-radius);
 }
 
 .advertiserDashboardChartCard .uiCardHeader,
@@ -26530,12 +26572,137 @@ body {
 
 .advertiserDashboardScopeCard {
   min-width: 0;
-  border-radius: 14px !important;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.advertiserDashboardLegacyCprCard.tablePanel,
+.advertiserDashboardCsPerformanceCard.tablePanel {
+  min-height: 0 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+  backdrop-filter: none !important;
+}
+
+.advertiserDashboardLegacyCprHeader,
+.advertiserDashboardLegacyCprHeader.uiCardHeader,
+.advertiserDashboardLegacyCprHeader[data-slot="card-header"] {
+  min-height: 0 !important;
+  padding: 18px 24px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  background: #ffffff !important;
+}
+
+.advertiserDashboardLegacyCprHeader .uiCardTitle,
+.advertiserDashboardLegacyCprHeader [data-slot="card-title"] {
+  color: #0f172a;
+  font-size: 1.02rem !important;
+  font-weight: 820 !important;
+  line-height: 1.25 !important;
+}
+
+.advertiserDashboardLegacyCprHeader p {
+  max-width: 48rem;
+  margin-top: 4px !important;
+  color: #64748b;
+  font-size: 0.76rem !important;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.advertiserDashboardLegacyCprGrid {
+  padding: 18px 20px 20px !important;
+}
+
+.advertiserDashboardLegacyCprPanel {
+  min-height: 0;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.advertiserDashboardLegacyCprPanelHeader {
+  min-height: 0;
+  padding: 12px 16px !important;
+  background: #fbfdff;
+}
+
+.advertiserDashboardLegacyCprPanelHeader > div:first-child > div:first-child {
+  color: #64748b !important;
+  font-size: 0.74rem !important;
+  font-weight: 760 !important;
+  letter-spacing: 0.02em !important;
+}
+
+.advertiserDashboardLegacyCprPanelHeader > div:first-child > div:last-child {
+  color: #94a3b8 !important;
+  font-size: 0.7rem !important;
+  font-weight: 520 !important;
+}
+
+.advertiserDashboardLegacyCprBadges {
+  align-items: center;
+}
+
+.advertiserDashboardLegacyCprBadge {
+  border-radius: 6px !important;
+}
+
+.advertiserDashboardLegacyCprBadge > div:first-child {
+  font-size: 0.625rem !important;
+  line-height: 1.1;
+}
+
+.advertiserDashboardLegacyCprBadge > div:last-child {
+  font-size: 0.875rem !important;
+  line-height: 1.2;
+}
+
+.advertiserDashboardLegacyCprCard table th {
+  height: auto !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-size: 0.625rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.025em;
+}
+
+.advertiserDashboardLegacyCprCard table td {
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+  color: #475569;
+  font-size: 0.75rem !important;
+  line-height: 1.35;
+}
+
+@media (min-width: 640px) {
+  .advertiserDashboardLegacyCprGrid {
+    padding: 22px 24px 24px !important;
+  }
+}
+
+.advertiserDashboardCsPerformanceCard > .space-y-3 {
+  padding: 20px 24px 24px !important;
+}
+
+@media (max-width: 639px) {
+  .advertiserDashboardLegacyCprHeader,
+  .advertiserDashboardSectionHeader,
+  .csDashboardSectionHeader {
+    padding: 16px 18px !important;
+  }
+
+  .advertiserDashboardLegacyCprGrid,
+  .advertiserDashboardCsPerformanceCard > .space-y-3 {
+    padding: 16px !important;
+  }
 }
 
 .advertiserDashboardDateGroup {
-  border-radius: 16px !important;
+  border-radius: 8px !important;
 }
 
 .advertiserDashboardCsDetailHeader p {
@@ -26544,6 +26711,214 @@ body {
 
 .advertiserDashboardCsDetailMetrics strong {
   font-size: 0.82rem;
+}
+
+/* Dashboard advertiser / CS final cleanup */
+.advertiserDashboardPage .tablePanel,
+.csDashboardPage .tablePanel,
+.advertiserDashboardChartCard,
+.csDashboardChartCard {
+  border-color: rgba(226, 232, 240, 0.88) !important;
+  background: #ffffff !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.048) !important;
+}
+
+.advertiserDashboardPage .tablePanel,
+.csDashboardPage .tablePanel {
+  min-height: 0;
+}
+
+.advertiserDashboardSectionHeader,
+.advertiserDashboardSectionHeader.uiCardHeader,
+.advertiserDashboardSectionHeader[data-slot="card-header"],
+.csDashboardSectionHeader,
+.csDashboardSectionHeader.uiCardHeader,
+.csDashboardSectionHeader[data-slot="card-header"] {
+  min-height: 76px;
+  padding: 18px 24px !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.88) !important;
+  background: #ffffff !important;
+}
+
+.advertiserDashboardSectionHeader .uiCardTitle,
+.advertiserDashboardSectionHeader [data-slot="card-title"],
+.csDashboardSectionHeader .uiCardTitle,
+.csDashboardSectionHeader [data-slot="card-title"] {
+  color: #0f172a !important;
+  font-size: 1.02rem !important;
+  font-weight: 820 !important;
+  line-height: 1.22 !important;
+}
+
+.advertiserDashboardSectionHeader p,
+.csDashboardSectionHeader p {
+  max-width: 780px;
+  margin-top: 5px !important;
+  color: #64748b;
+  font-size: 0.76rem !important;
+  font-weight: 500;
+  line-height: 1.42;
+}
+
+.advertiserDashboardScopeCard,
+.csDashboardScopeCard {
+  min-width: 0;
+  border-radius: 8px !important;
+  border-color: rgba(226, 232, 240, 0.88) !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.advertiserDashboardScopeCard > div:first-child,
+.csDashboardScopeCard > div:first-child {
+  color: #64748b !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em !important;
+}
+
+.advertiserDashboardScopeCard > div:last-child,
+.csDashboardScopeCard > div:last-child {
+  color: #0f172a !important;
+  font-size: 0.96rem !important;
+  font-weight: 760 !important;
+  line-height: 1.25 !important;
+}
+
+.csDashboardScopeGrid {
+  align-items: stretch;
+}
+
+.advertiserDashboardMappingHealth {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.advertiserDashboardMappingHealth.isClean {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.advertiserDashboardMappingHealth.hasIssues {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.advertiserDashboardMappingHealthHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.advertiserDashboardMappingHealthHeader svg {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.advertiserDashboardMappingHealthHeader strong {
+  display: block;
+  color: inherit;
+  font-size: 0.82rem;
+  font-weight: 780;
+  line-height: 1.25;
+}
+
+.advertiserDashboardMappingHealthHeader span {
+  display: block;
+  margin-top: 2px;
+  color: inherit;
+  font-size: 0.74rem;
+  font-weight: 520;
+  line-height: 1.35;
+  opacity: 0.82;
+}
+
+.advertiserDashboardMappingHealthItems {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.advertiserDashboardMappingHealthItem {
+  min-width: 0;
+  border: 1px solid rgba(251, 146, 60, 0.38);
+  border-radius: 7px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.advertiserDashboardMappingHealthItemLabel {
+  color: #9a3412;
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.advertiserDashboardMappingHealthItemValue {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.advertiserDashboardMappingHealthItemList {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 520;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.advertiserDashboardDateGroup,
+.csDashboardDateGroupFrame {
+  border-radius: 8px !important;
+  border-color: rgba(226, 232, 240, 0.88) !important;
+  box-shadow: none !important;
+}
+
+.advertiserDashboardDateGroupButton,
+.csDashboardDateGroupButton {
+  border-radius: inherit !important;
+}
+
+.advertiserDashboardPage :where(table) th,
+.csDashboardPage :where(table) th {
+  height: 44px;
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-size: 0.68rem !important;
+  font-weight: 780 !important;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  vertical-align: middle !important;
+}
+
+.advertiserDashboardPage :where(table) td,
+.csDashboardPage :where(table) td {
+  color: #475569;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.advertiserDashboardPage :where(tbody tr),
+.csDashboardPage :where(tbody tr) {
+  border-color: rgba(226, 232, 240, 0.82) !important;
+}
+
+.advertiserDashboardPage :where(tbody tr:hover),
+.csDashboardPage :where(tbody tr:hover) {
+  background: #f8fbff !important;
 }
 
 .dark .advertiserDashboardFilterPanel.filterPanel,
@@ -26566,12 +26941,35 @@ body {
 
 .dark .advertiserDashboardSectionHeader.uiCardHeader,
 .dark .advertiserDashboardSectionHeader[data-slot="card-header"],
+.dark .advertiserDashboardPage :where(.uiCardHeader, [data-slot="card-header"]),
+.dark .csDashboardPage :where(.uiCardHeader, [data-slot="card-header"]),
 .dark .advertiserDashboardBreakdownFoundationTable,
 .dark .advertiserDashboardBreakdownFoundationTable .tableScroller,
 .dark .advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea,
 .dark .advertiserDashboardBreakdownFoundationTable table,
 .dark .advertiserDashboardCsDetailDesktop.uiHorizontalDragScrollArea table {
   background: #0f172a;
+}
+
+.dark .advertiserDashboardLegacyCprHeader .uiCardTitle,
+.dark .advertiserDashboardLegacyCprHeader [data-slot="card-title"],
+.dark .advertiserDashboardSectionHeader .uiCardTitle,
+.dark .advertiserDashboardSectionHeader [data-slot="card-title"],
+.dark .csDashboardSectionHeader .uiCardTitle,
+.dark .csDashboardSectionHeader [data-slot="card-title"],
+.dark .advertiserDashboardScopeCard > div:last-child,
+.dark .csDashboardScopeCard > div:last-child {
+  color: #f8fafc !important;
+}
+
+.dark .advertiserDashboardLegacyCprPanelHeader {
+  background: #111827;
+}
+
+.dark .advertiserDashboardLegacyCprPanelHeader > div:first-child > div:first-child,
+.dark .advertiserDashboardScopeCard > div:first-child,
+.dark .csDashboardScopeCard > div:first-child {
+  color: #94a3b8 !important;
 }
 
 .dark .advertiserDashboardBreakdownFoundationTable {
@@ -26612,6 +27010,8 @@ body {
 .dark .advertiserDashboardCsDetailHeader p,
 .dark .advertiserDashboardSectionHeader .uiCardTitle,
 .dark .advertiserDashboardSectionHeader [data-slot="card-title"],
+.dark .advertiserDashboardPage :where(.uiCardTitle, [data-slot="card-title"]),
+.dark .csDashboardPage :where(.uiCardTitle, [data-slot="card-title"]),
 .dark .advertiserDashboardSummaryMetricGrid strong,
 .dark .advertiserDashboardBreakdownMobileMetrics strong,
 .dark .advertiserDashboardCsDetailMetrics strong,
@@ -26627,11 +27027,72 @@ body {
   background: rgba(30, 41, 59, 0.72);
 }
 
+.dark .advertiserDashboardPage .tablePanel,
+.dark .csDashboardPage .tablePanel,
+.dark .advertiserDashboardChartCard,
+.dark .csDashboardChartCard,
+.dark .advertiserDashboardScopeCard,
+.dark .csDashboardScopeCard {
+  border-color: rgba(30, 41, 59, 0.92) !important;
+  background: #0f172a !important;
+}
+
+.dark .advertiserDashboardPage :where(table) th,
+.dark .csDashboardPage :where(table) th {
+  background: #111c2e !important;
+  color: #94a3b8 !important;
+}
+
+.dark .advertiserDashboardPage :where(table) td,
+.dark .csDashboardPage :where(table) td {
+  color: #cbd5e1;
+}
+
+.dark .advertiserDashboardPage :where(tbody tr:hover),
+.dark .csDashboardPage :where(tbody tr:hover) {
+  background: rgba(30, 41, 59, 0.72) !important;
+}
+
+.dark .advertiserDashboardMappingHealth.isClean {
+  border-color: rgba(16, 185, 129, 0.36);
+  background: rgba(6, 78, 59, 0.22);
+  color: #86efac;
+}
+
+.dark .advertiserDashboardMappingHealth.hasIssues {
+  border-color: rgba(251, 146, 60, 0.42);
+  background: rgba(124, 45, 18, 0.22);
+  color: #fdba74;
+}
+
+.dark .advertiserDashboardMappingHealthItem {
+  border-color: rgba(251, 146, 60, 0.28);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.dark .advertiserDashboardMappingHealthItemLabel {
+  color: #fdba74;
+}
+
+.dark .advertiserDashboardMappingHealthItemValue {
+  color: #f8fafc;
+}
+
+.dark .advertiserDashboardMappingHealthItemList {
+  color: #cbd5e1;
+}
+
 @media (max-width: 1180px) {
   .advertiserDashboardKpiGrid.metricGrid,
   .advertiserDashboardCsKpiGrid.metricGrid,
   .csDashboardKpiGrid.metricGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .advertiserDashboardMappingHealthItems {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -26833,7 +27294,7 @@ body {
   }
 
   .advertiserDashboardBreakdownCard.tablePanel {
-    border-radius: 10px !important;
+    border-radius: 18px !important;
   }
 
   .advertiserDashboardSummaryMobileList,

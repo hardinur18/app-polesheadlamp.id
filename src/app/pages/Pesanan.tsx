@@ -84,6 +84,7 @@ import {
 } from '../components/ui/master-data-ui';
 import { MasterDataTableTitle } from '../components/ui/master-data-table-title';
 import { Switch } from '../components/ui/switch';
+import { Skeleton } from '../components/ui/skeleton';
 import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
@@ -169,6 +170,57 @@ function OrderActionButton({
   );
 }
 
+function OrderTableSkeleton({
+  columns,
+  rows = 8,
+}: {
+  columns: number;
+  rows?: number;
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <TableRow key={`order-table-skeleton-${rowIndex}`} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+          {Array.from({ length: columns }).map((__, columnIndex) => (
+            <TableCell key={`order-table-skeleton-${rowIndex}-${columnIndex}`} className="py-6 align-top">
+              <Skeleton
+                className={
+                  columnIndex === 0
+                    ? 'mx-auto h-4 w-8 rounded-md'
+                    : columnIndex === 4
+                      ? 'h-12 w-full max-w-[260px] rounded-md'
+                      : 'h-4 w-full max-w-[160px] rounded-md'
+                }
+              />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
+function OrderMobileSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={`order-mobile-skeleton-${index}`}
+          className="orderMobileCard rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-4 w-28 rounded-md" />
+            <Skeleton className="h-5 w-20 rounded-md" />
+          </div>
+          <Skeleton className="mt-4 h-4 w-40 rounded-md" />
+          <Skeleton className="mt-3 h-3 w-full rounded-md" />
+          <Skeleton className="mt-2 h-3 w-2/3 rounded-md" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 // Extracted modules
 import { WhatsappIcon } from './orders/WhatsappIcon';
 import { getStatusLabel, getStatusBadgeVariant, getStatusReasonSummary, normalizeReasonFilterValue } from './orders/orderHelpers';
@@ -207,8 +259,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     adAccounts = [],
     adAccountAssignments = [],
     adAccountOwnerAssignments = [],
+    isOperationalDataLoading,
   } = useMasterData();
   const { hasPermission, isOrderLocked } = usePermissions();
+  const ordersInitialLoading = isOperationalDataLoading && orders.length === 0;
+
   const nonScheduleLeadIds = useMemo(
     () => new Set(
       leads
@@ -1350,25 +1405,59 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         />
 
         <OperationalKpiGrid className="orderKpiGrid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
-          <OperationalKpiCard label="Total" value={stats.total.toLocaleString('id-ID')} icon={Package} />
+          <OperationalKpiCard
+            label="Total"
+            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.total.toLocaleString('id-ID')}
+            icon={Package}
+          />
           <OperationalKpiCard
             label="Selesai"
             value={
+              ordersInitialLoading ? (
+                <Skeleton className="h-6 w-24 rounded-md" />
+              ) : (
               <div className="flex items-end gap-2">
                 <span>{stats.done.toLocaleString('id-ID')}</span>
                 <span className="mb-1 text-xs font-medium opacity-70">({stats.doneUnits.toLocaleString('id-ID')} Unit)</span>
               </div>
+              )
             }
             icon={CheckCircle2}
             tone="emerald"
           />
-          <OperationalKpiCard label="Terjadwal" value={stats.pending.toLocaleString('id-ID')} icon={Calendar} tone="amber" />
-          <OperationalKpiCard label="Reschedule" value={stats.reschedule.toLocaleString('id-ID')} icon={RefreshCw} tone="violet" />
-          <OperationalKpiCard label="Cancel" value={stats.cancelled.toLocaleString('id-ID')} icon={XCircle} tone="rose" />
-          <OperationalKpiCard label="Proses" value={stats.processing.toLocaleString('id-ID')} icon={Loader2} tone="blue" />
+          <OperationalKpiCard
+            label="Terjadwal"
+            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.pending.toLocaleString('id-ID')}
+            icon={Calendar}
+            tone="amber"
+          />
+          <OperationalKpiCard
+            label="Reschedule"
+            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.reschedule.toLocaleString('id-ID')}
+            icon={RefreshCw}
+            tone="violet"
+          />
+          <OperationalKpiCard
+            label="Cancel"
+            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.cancelled.toLocaleString('id-ID')}
+            icon={XCircle}
+            tone="rose"
+          />
+          <OperationalKpiCard
+            label="Proses"
+            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.processing.toLocaleString('id-ID')}
+            icon={Loader2}
+            tone="blue"
+          />
           <OperationalKpiCard
             label="Revenue"
-            value={<span title={`Rp ${stats.revenue.toLocaleString('id-ID')}`}>Rp {(stats.revenue / 1000).toLocaleString('id-ID')}K</span>}
+            value={
+              ordersInitialLoading ? (
+                <Skeleton className="h-6 w-20 rounded-md" />
+              ) : (
+                <span title={`Rp ${stats.revenue.toLocaleString('id-ID')}`}>Rp {(stats.revenue / 1000).toLocaleString('id-ID')}K</span>
+              )
+            }
             icon={Banknote}
             tone="emerald"
             className="col-span-2 md:col-span-1"
@@ -1999,13 +2088,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedOrders.length === 0 ? (
+                {ordersInitialLoading ? (
+                  <OrderTableSkeleton columns={orderTableColumnCount} />
+                ) : paginatedOrders.length === 0 ? (
                    <TableRow>
                      <TableCell colSpan={orderTableColumnCount}>
                         <OperationalEmptyState
                           icon={ClipboardList}
                           title="Tidak ada pesanan ditemukan"
-                          description="Coba ubah filter, tanggal, atau kata kunci pencarian."
+                          description={
+                            orders.length === 0
+                              ? 'Data database belum masuk ke state lokal. Sistem sudah mencoba muat ulang sekali.'
+                              : 'Coba ubah filter, tanggal, atau kata kunci pencarian.'
+                          }
                           className="py-14"
                         />
                      </TableCell>
@@ -2757,9 +2852,13 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
           {/* MOBILE CARD LIST (Visible on sm/xs) */}
           <div className="orderMobileSurface md:hidden p-4 space-y-3">
-              {paginatedOrders.length === 0 ? (
+              {ordersInitialLoading ? (
+                 <OrderMobileSkeleton />
+              ) : paginatedOrders.length === 0 ? (
                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                    Tidak ada pesanan ditemukan
+                    {orders.length === 0
+                      ? 'Data database belum masuk ke state lokal. Sistem sudah mencoba muat ulang sekali.'
+                      : 'Tidak ada pesanan ditemukan'}
                  </div>
               ) : (
                  paginatedOrders.map((order) => {

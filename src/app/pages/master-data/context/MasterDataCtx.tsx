@@ -289,6 +289,8 @@ interface MasterDataContextType {
   // Global Refresh
   refreshTrigger: number;
   triggerRefresh: () => void;
+  isMasterDataLoading: boolean;
+  isOperationalDataLoading: boolean;
 
   // Setters (if needed for local state updates before refresh)
   setAreas: React.Dispatch<React.SetStateAction<Area[]>>;
@@ -347,6 +349,8 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   
   // Global Refresh Trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isMasterDataLoading, setIsMasterDataLoading] = useState(true);
+  const [isOperationalDataLoading, setIsOperationalDataLoading] = useState(true);
   const [realtimeRetryKey, setRealtimeRetryKey] = useState(0);
   const leadSocialContactsRef = React.useRef<Record<string, LeadSocialFields>>({});
   const leadSpamDailyInputsUseFallbackRef = React.useRef(false);
@@ -1932,6 +1936,10 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
   // Initial Fetch (Waterfall)
   useEffect(() => {
+    let isCancelled = false;
+    setIsMasterDataLoading(true);
+    setIsOperationalDataLoading(true);
+
     const fetchCatalog = createMasterDataFetchCatalog({
       setAreas,
       setBranches,
@@ -1960,19 +1968,18 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     });
 
     // 1. Fetch Masters
-    fetchCatalog.masters.forEach(({ table, setter, mapper }) => {
-      fetchData(table, setter, mapper);
+    const masterFetches = fetchCatalog.masters.map(({ table, setter, mapper }) =>
+      fetchData(table, setter, mapper)
+    );
+
+    Promise.allSettled([...masterFetches, refetchUsersFromProfiles()]).finally(() => {
+      if (!isCancelled) {
+        setIsMasterDataLoading(false);
+      }
     });
-    
-    // 2. Fetch Users (Profiles)
-    const fetchUsers = async () => {
-      await refetchUsersFromProfiles();
-    };
-    fetchUsers();
 
     // 3. Defer heavy operational data so the app shell and admin pages render first.
     // Orders, leads, ads, and audit logs can be large; pulling them during boot slows every route.
-    let isCancelled = false;
     const deferredTimers: number[] = [];
     const idleApi = window as unknown as {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
@@ -1987,10 +1994,18 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         console.info('[MasterData] starting deferred operational fetches');
       }
 
-      fetchCatalog.transactional.forEach(({ table, setter, mapper }) => {
-        fetchData(table, setter, mapper);
+      setIsOperationalDataLoading(true);
+
+      const operationalFetches = fetchCatalog.transactional.map(({ table, setter, mapper }) =>
+        fetchData(table, setter, mapper)
+      );
+      operationalFetches.push(fetchLeadSocialContacts());
+
+      Promise.allSettled(operationalFetches).finally(() => {
+        if (!isCancelled) {
+          setIsOperationalDataLoading(false);
+        }
       });
-      fetchLeadSocialContacts();
 
       const supportTimer = window.setTimeout(() => {
         if (isCancelled) return;
@@ -2245,13 +2260,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     refreshTrigger, triggerRefresh,
 
     setAreas,
-    currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser
+    currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser,
+    isMasterDataLoading, isOperationalDataLoading,
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
     leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules,
-    auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger
+    auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
+    isMasterDataLoading, isOperationalDataLoading
   ]);
 
   return (
