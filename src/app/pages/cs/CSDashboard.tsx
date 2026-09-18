@@ -545,6 +545,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     updateLeadSpamDailyInput,
     deleteLeadSpamDailyInput,
     isOperationalDataLoading,
+    refreshTrigger,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   
@@ -607,6 +608,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     format(new Date(), 'yyyy-MM-dd'),
   ]);
   const lastApiRefreshNonceRef = React.useRef(0);
+  const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
   const lastSpamScopeKeyRef = React.useRef('');
   React.useEffect(() => {
     const checkMobile = () => setIsSpamFormMobile(window.innerWidth < 768);
@@ -614,6 +616,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  React.useEffect(() => {
+    if (refreshTrigger === lastMasterRefreshTriggerRef.current) return;
+    lastMasterRefreshTriggerRef.current = refreshTrigger;
+    setApiRefreshNonce((value) => value + 1);
+  }, [refreshTrigger]);
   React.useEffect(() => {
     setItemsPerPage((current) => current === 25 ? CS_VIEW_DEFAULT_ITEMS_PER_PAGE : current);
   }, []);
@@ -777,7 +785,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshTrigger]);
 
   const googleIntegrationConfigByAdAccountId = useMemo(() => {
     return new Map(googleIntegrationConfigs.map((config) => [config.adAccountId, config]));
@@ -1276,15 +1284,39 @@ export function CSDashboard({ userId }: { userId?: string }) {
     }).map((date) => format(date, 'yyyy-MM-dd'));
     const dates = getDateRange();
 
-    const getGroup = (date: string, account: (typeof activeAdAccounts)[number]) => {
+    const getSyntheticAssignment = (
+      date: string,
+      account: (typeof activeAdAccounts)[number],
+      fallbackCsId?: string | null,
+      fallbackSubChannelId?: string | null,
+    ) => fallbackCsId ? ({
+      id: `operational-${date}-${account.id}-${fallbackCsId}`,
+      adAccountId: account.id,
+      csId: fallbackCsId,
+      subChannelId: fallbackSubChannelId || account.subChannelId || null,
+      startDate: date,
+      endDate: null,
+      status: 'active' as const,
+      notes: null,
+    }) : null;
+
+    const getGroup = (
+      date: string,
+      account: (typeof activeAdAccounts)[number],
+      fallback?: { csId?: string | null; subChannelId?: string | null },
+    ) => {
       const assignment = adAccountCsLookup.resolveAssignment(account.id, date);
-      if (targetId && assignment?.csId !== targetId) return null;
+      const effectiveAssignment =
+        assignment && (!fallback?.csId || assignment.csId === fallback.csId)
+          ? assignment
+          : getSyntheticAssignment(date, account, fallback?.csId, fallback?.subChannelId);
+      if (targetId && effectiveAssignment?.csId !== targetId) return null;
 
       const key = `${date}::${account.id}`;
       const current = groups.get(key) || {
         date,
         account,
-        assignment,
+        assignment: effectiveAssignment,
         apiMetrics: [],
         leads: [],
         orders: [],
@@ -1372,6 +1404,27 @@ export function CSDashboard({ userId }: { userId?: string }) {
       return defaultSubChannel || candidates[0];
     };
 
+    const findFallbackAccount = (
+      advertiserId?: string | null,
+      platformId?: string | null,
+      subChannelId?: string | null,
+    ) => {
+      const candidates = activeAdAccounts.filter((account) => {
+        if (advertiserId && account.advertiserId !== advertiserId) return false;
+        if (platformId && account.platformId !== platformId) return false;
+        return true;
+      });
+
+      if (!candidates.length) return null;
+
+      if (subChannelId) {
+        const exactSubChannel = candidates.find((account) => account.subChannelId === subChannelId);
+        if (exactSubChannel) return exactSubChannel;
+      }
+
+      return candidates[0];
+    };
+
     const getLeadDate = (lead: (typeof leads)[number]) => lead.timestamp?.slice(0, 10) || '';
     const getOrderLeadDate = (order: (typeof orders)[number]) => (order.leadDate || order.created_at || '').slice(0, 10);
 
@@ -1382,7 +1435,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (targetPlatformId && order.platformId !== targetPlatformId) continue;
 
       const candidates = candidatesByScope.get(getScopeKey(date, order.advertiserId, order.platformId, order.csId));
-      const group = selectBestGroup(candidates, order.subChannelId);
+      const group = selectBestGroup(candidates, order.subChannelId)
+        || (
+          order.csId
+            ? (() => {
+              const account = findFallbackAccount(order.advertiserId, order.platformId, order.subChannelId);
+              return account ? getGroup(date, account, { csId: order.csId, subChannelId: order.subChannelId }) : null;
+            })()
+            : null
+        );
       if (!group) continue;
       group.orders.push(order);
     }
@@ -1394,7 +1455,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (targetPlatformId && lead.platformId !== targetPlatformId) continue;
 
       const candidates = candidatesByScope.get(getScopeKey(date, lead.advertiserId, lead.platformId, lead.csId));
-      const group = selectBestGroup(candidates, lead.subChannelId);
+      const group = selectBestGroup(candidates, lead.subChannelId)
+        || (
+          lead.csId
+            ? (() => {
+              const account = findFallbackAccount(lead.advertiserId, lead.platformId, lead.subChannelId);
+              return account ? getGroup(date, account, { csId: lead.csId, subChannelId: lead.subChannelId }) : null;
+            })()
+            : null
+        );
       if (!group) continue;
       group.leads.push(lead);
     }
@@ -1575,12 +1644,25 @@ export function CSDashboard({ userId }: { userId?: string }) {
     () => detailRows.some((row) => row.spendDashboard > 0 || row.leadsDash > 0),
     [detailRows],
   );
+  const hasConnectedVisibleRows = useMemo(
+    () => detailRows.some((row) => row.source === 'api' || row.source === 'connected'),
+    [detailRows],
+  );
+  const hasOperationalVisibleRows = detailRows.length > 0;
   const isApiScopeMismatch = apiAdsStatus === 'ready' && detailRows.length > 0 && !hasVisibleApiData;
   const resolvedApiStatusClassName = isApiScopeMismatch
     ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
+    : hasConnectedVisibleRows
+      ? apiStatusClassName('ready')
+      : hasOperationalVisibleRows
+        ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
     : apiStatusClassName(apiAdsStatus);
   const resolvedApiStatusLabel = isApiScopeMismatch
-    ? 'Unconnect'
+    ? 'Operasional'
+    : hasConnectedVisibleRows
+      ? 'Connected'
+      : hasOperationalVisibleRows
+        ? 'Operasional'
     : getApiStatusLabel(apiAdsStatus);
   const dateGroups = useMemo(() => {
     const groups = new Map<
@@ -2090,10 +2172,24 @@ export function CSDashboard({ userId }: { userId?: string }) {
                   </p>
                 )}
               </div>
-              <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${resolvedApiStatusClassName}`}>
-                {apiAdsStatus === 'loading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                {resolvedApiStatusLabel}
-              </span>
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${resolvedApiStatusClassName}`}>
+                  {apiAdsStatus === 'loading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  {resolvedApiStatusLabel}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-2 rounded-full border-slate-200 bg-white px-3 text-xs font-semibold shadow-sm dark:border-slate-700 dark:bg-slate-900"
+                  disabled={!rangeParams || apiAdsStatus === 'loading'}
+                  onClick={() => setApiRefreshNonce((value) => value + 1)}
+                  title="Refresh data snapshot API iklan"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${apiAdsStatus === 'loading' ? 'animate-spin' : ''}`} />
+                  Refresh API
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <div className="space-y-3 p-3 sm:p-5">

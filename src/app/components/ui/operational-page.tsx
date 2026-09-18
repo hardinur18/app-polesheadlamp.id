@@ -1,7 +1,10 @@
 import React from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { RefreshCw, type LucideIcon } from 'lucide-react';
 import { cn } from './utils';
 import { Skeleton } from './skeleton';
+import { Button } from './button';
+import { useMasterData } from '@/app/pages/master-data/context';
+import { toast } from 'sonner';
 
 type OperationalPageShellProps = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode;
@@ -26,6 +29,7 @@ type OperationalPageHeaderProps = {
   actions?: React.ReactNode;
   children?: React.ReactNode;
   className?: string;
+  showRefresh?: boolean;
 };
 
 export function OperationalPageHeader({
@@ -36,7 +40,39 @@ export function OperationalPageHeader({
   actions,
   children,
   className,
+  showRefresh = true,
 }: OperationalPageHeaderProps) {
+  const {
+    triggerRefresh,
+    isMasterDataLoading,
+    isOperationalDataLoading,
+    isOrdersLoading,
+  } = useMasterData();
+  const isRefreshingData = Boolean(isMasterDataLoading || isOperationalDataLoading || isOrdersLoading);
+
+  const handleRefreshData = React.useCallback(() => {
+    if (isRefreshingData) {
+      toast.info('Data masih dimuat...');
+      return;
+    }
+
+    triggerRefresh();
+    toast.success('Refresh data dijalankan');
+  }, [isRefreshingData, triggerRefresh]);
+  const refreshAction = showRefresh ? (
+    <Button
+      type="button"
+      variant="outline"
+      onClick={handleRefreshData}
+      disabled={isRefreshingData}
+      className="dailyAdsHeaderButton h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
+      aria-label="Refresh data aplikasi"
+    >
+      <RefreshCw className={cn('w-4 h-4', isRefreshingData && 'animate-spin')} />
+      <span className="dailyAdsHeaderButtonText">Refresh Data</span>
+    </Button>
+  ) : null;
+
   return (
     <div className={className}>
       <div className="topbar">
@@ -50,7 +86,12 @@ export function OperationalPageHeader({
           <h1>{title}</h1>
           {subtitle && <p>{subtitle}</p>}
         </div>
-        {actions && <div className="topbarActions">{actions}</div>}
+        {(refreshAction || actions) && (
+          <div className="topbarActions">
+            {refreshAction}
+            {actions}
+          </div>
+        )}
       </div>
       {children && (
         <div className="surfacePanel overflow-hidden p-0">

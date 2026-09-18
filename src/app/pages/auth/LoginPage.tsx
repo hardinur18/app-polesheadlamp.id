@@ -9,6 +9,24 @@ import { toast } from 'sonner';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
+const LOGIN_TIMEOUT_MS = 45_000;
+
+const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
 
 const getLoginErrorMessage = (err: unknown) => {
   if (err instanceof Error) {
@@ -18,7 +36,9 @@ const getLoginErrorMessage = (err: unknown) => {
 
     if (
       err.name === 'AuthRetryableFetchError' ||
+      err.name === 'AbortError' ||
       err.message.includes('Failed to fetch') ||
+      err.message.includes('timeout') ||
       err.message === '{}' ||
       err.message.trim() === ''
     ) {
@@ -58,22 +78,15 @@ export const LoginPage = () => {
       }
 
       // LOGIN LOGIC
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        }),
+        LOGIN_TIMEOUT_MS,
+        'Login timeout. Koneksi ke server auth terlalu lama.',
+      );
       if (error) throw error;
-
-      // Recovery guard: login boleh lanjut hanya kalau profile sudah dibuat oleh admin.
-      if (data.user) {
-          const { data: profile } = await supabase.from('profiles').select('id, role').eq('id', data.user.id).single();
-          if (!profile) {
-            await supabase.auth.signOut();
-            throw new Error('Profil pengguna belum terdaftar. Hubungi admin untuk melengkapi akses akun.');
-          } else {
-            console.log(`[Login] User role: ${profile.role}`);
-          }
-      }
 
       // FIX: Reset activity timer to prevent immediate auto-logout due to old session data
       const timestamp = Date.now().toString();

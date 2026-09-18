@@ -131,6 +131,55 @@ type MutationOptions = {
 const shouldUseLocalProfileFallback =
   import.meta.env.VITE_AUTH_MODE === 'local';
 
+const CURRENT_USER_PROFILE_TIMEOUT_MS = 45_000;
+const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
+
+const readCachedCurrentUser = (userId: string): User | undefined => {
+  if (typeof window === 'undefined' || !userId) return undefined;
+
+  try {
+    const raw = window.localStorage.getItem(CURRENT_USER_CACHE_KEY);
+    if (!raw) return undefined;
+
+    const cached = JSON.parse(raw) as { user?: User; savedAt?: string };
+    if (cached?.user?.id !== userId || cached.user.status === 'inactive') {
+      return undefined;
+    }
+
+    return cached.user;
+  } catch (error) {
+    console.warn('[MasterData] Failed to read cached current user:', error);
+    return undefined;
+  }
+};
+
+const writeCachedCurrentUser = (user: User) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(CURRENT_USER_CACHE_KEY, JSON.stringify({
+      user,
+      savedAt: new Date().toISOString(),
+    }));
+  } catch (error) {
+    console.warn('[MasterData] Failed to cache current user:', error);
+  }
+};
+
+const clearCachedCurrentUser = (userId?: string) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (userId && !readCachedCurrentUser(userId)) {
+      return;
+    }
+
+    window.localStorage.removeItem(CURRENT_USER_CACHE_KEY);
+  } catch (error) {
+    console.warn('[MasterData] Failed to clear cached current user:', error);
+  }
+};
+
 const buildLocalProfileFallbackUser = (session: Session): User => ({
   id: session.user.id || 'local-owner',
   name:
@@ -347,6 +396,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const [realUser, setRealUser] = useState<User | undefined>(undefined);
   const [isCurrentUserResolved, setIsCurrentUserResolved] = useState(!session?.user);
   const [currentUserIssue, setCurrentUserIssue] = useState<CurrentUserIssue | undefined>(undefined);
+  const [profileSyncRetryKey, setProfileSyncRetryKey] = useState(0);
   
   // Global Refresh Trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -431,6 +481,57 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     return new Error(body.error || fallback);
   };
 
+  const fetchDirectAppDataPage = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
+    let query = supabase
+      .from(table)
+      .select('*');
+
+    Object.entries(options.eq || {}).forEach(([column, value]) => {
+      query = query.eq(column, value);
+    });
+    Object.entries(options.gte || {}).forEach(([column, value]) => {
+      query = query.gte(column, value);
+    });
+    Object.entries(options.lte || {}).forEach(([column, value]) => {
+      query = query.lte(column, value);
+    });
+    if (options.orderBy) {
+      query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+    }
+
+    const { data, error } = await query.range(from, to);
+    if (error) throw error;
+
+    return data || [];
+  };
+
+  const shouldRetryEmptyAppDataPageDirectly = (table: string, from: number) => {
+    if (from !== 0) return false;
+
+    return [
+      'profiles',
+      'branches',
+      'areas',
+      'services',
+      'vehicle_types',
+      'ad_platforms',
+      'ad_sub_channels',
+      'ad_accounts',
+      'ad_account_assignments',
+      'ad_account_owner_assignments',
+      'ad_sources',
+      'payment_methods',
+      'roles',
+      'leads',
+      'prospect_bookings',
+      'orders',
+      'wa_templates',
+      'daily_ads',
+      'lead_spam_daily_inputs',
+      'technician_schedules',
+    ].includes(table);
+  };
+
   const fetchAppDataPage = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
     const url = new URL(appDataUrl(table));
     url.searchParams.set('from', String(from));
@@ -456,16 +557,56 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     });
 
     if (response.status === 403) {
-      return { rows: [] as any[], forbidden: true };
+      const rows = await fetchDirectAppDataPage(table, from, to, options);
+      if (import.meta.env.DEV) {
+        console.info('[MasterData] app-data forbidden, using direct Supabase fallback', {
+          table,
+          rows: rows.length,
+        });
+      }
+      return { rows, forbidden: false };
     }
 
     if (!response.ok) {
-      throw await readAppDataError(response, `Gagal memuat ${table}`);
+      try {
+        const rows = await fetchDirectAppDataPage(table, from, to, options);
+        if (import.meta.env.DEV) {
+          console.info('[MasterData] app-data failed, using direct Supabase fallback', {
+            table,
+            status: response.status,
+            rows: rows.length,
+          });
+        }
+        return { rows, forbidden: false };
+      } catch {
+        throw await readAppDataError(response, `Gagal memuat ${table}`);
+      }
     }
 
     const body = await response.json();
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+
+    if (rows.length === 0 && shouldRetryEmptyAppDataPageDirectly(table, from)) {
+      try {
+        const directRows = await fetchDirectAppDataPage(table, from, to, options);
+        if (directRows.length > 0) {
+          if (import.meta.env.DEV) {
+            console.info('[MasterData] app-data returned empty, using direct Supabase fallback', {
+              table,
+              rows: directRows.length,
+            });
+          }
+          return { rows: directRows, forbidden: false };
+        }
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn('[MasterData] direct Supabase empty-page fallback failed', { table, error });
+        }
+      }
+    }
+
     return {
-      rows: Array.isArray(body?.rows) ? body.rows : [],
+      rows,
       forbidden: false,
     };
   };
@@ -803,6 +944,8 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     let isMounted = true;
     const abortController = new AbortController();
     let didProfileSyncTimeout = false;
+    let profileRetryTimeoutId: number | undefined;
+    let keepProfileResolving = false;
     setCurrentUserId('');
     setRealUser(undefined);
     setCurrentUserIssue(undefined);
@@ -811,9 +954,52 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     const syncUser = async () => {
       let profileSyncTimeoutId: number | undefined;
 
+      const scheduleProfileRetry = (reason: CurrentUserIssue) => {
+        if (reason.code !== 'profile_timeout' && reason.code !== 'profile_query_error') {
+          return;
+        }
+
+        if (profileRetryTimeoutId !== undefined) {
+          window.clearTimeout(profileRetryTimeoutId);
+        }
+
+        profileRetryTimeoutId = window.setTimeout(() => {
+          if (!isMounted) return;
+          setProfileSyncRetryKey(value => value + 1);
+        }, 3000);
+      };
+
+      const applyCachedUser = (reason: CurrentUserIssue) => {
+        const cachedUser = readCachedCurrentUser(session.user.id);
+        if (!cachedUser) {
+          return false;
+        }
+
+        console.warn('[MasterData] Using cached current user after profile sync issue:', {
+          reason: reason.code,
+          userId: cachedUser.id,
+          role: cachedUser.role,
+        });
+        setCurrentUserIssue(undefined);
+        setCurrentUserId(cachedUser.id);
+        setRealUser(cachedUser);
+        setUsers(prev => {
+          const exists = prev.some(user => user.id === cachedUser.id);
+          if (exists) return prev.map(user => user.id === cachedUser.id ? cachedUser : user);
+          return [cachedUser, ...prev];
+        });
+        return true;
+      };
+
       const applyLocalFallbackUser = (reason: CurrentUserIssue) => {
+        if (applyCachedUser(reason)) {
+          return true;
+        }
+
         if (!shouldUseLocalProfileFallback) {
           setCurrentUserIssue(reason);
+          scheduleProfileRetry(reason);
+          keepProfileResolving = reason.code === 'profile_timeout' || reason.code === 'profile_query_error';
           return false;
         }
 
@@ -852,7 +1038,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
             didProfileSyncTimeout = true;
             abortController.abort();
             resolve({ timedOut: true });
-          }, 6000);
+          }, CURRENT_USER_PROFILE_TIMEOUT_MS);
         });
 
         const profileResult = await Promise.race([profileQuery, profileTimeout]);
@@ -904,6 +1090,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         const normalizedStatus = typeof profile.status === 'string' ? profile.status.trim().toLowerCase() : '';
         if (normalizedStatus === 'inactive') {
+          clearCachedCurrentUser(profile.id);
           setCurrentUserId(profile.id);
           setRealUser(undefined);
           setUsers(prev => prev.filter(u => u.id !== profile.id));
@@ -927,6 +1114,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         setCurrentUserId(profile.id);
 
         if (!mappedUser) {
+          clearCachedCurrentUser(profile.id);
           setRealUser(undefined);
           setUsers(prev => prev.filter(u => u.id !== profile.id));
           setCurrentUserIssue({
@@ -939,6 +1127,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         setCurrentUserIssue(undefined);
         setRealUser(mappedUser);
+        writeCachedCurrentUser(mappedUser);
 
         setUsers(prev => {
            const exists = prev.find(u => u.id === mappedUser.id);
@@ -964,7 +1153,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         if (profileSyncTimeoutId !== undefined) {
           window.clearTimeout(profileSyncTimeoutId);
         }
-        if (isMounted) {
+        if (isMounted && !keepProfileResolving) {
           setIsCurrentUserResolved(true);
         }
       }
@@ -974,9 +1163,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
     return () => {
       isMounted = false;
+      if (profileRetryTimeoutId !== undefined) {
+        window.clearTimeout(profileRetryTimeoutId);
+      }
       abortController.abort();
     };
-  }, [session?.user?.id]); // Only re-run when user ID changes, not entire session object
+  }, [session?.user?.id, profileSyncRetryKey]); // Only re-run when user ID changes or profile sync needs retry
 
   // Derived State
   const currentUser = React.useMemo(() => {

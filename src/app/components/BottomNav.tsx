@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { LayoutDashboard, ClipboardList, Calendar, User, Menu, Users, Megaphone, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Calendar, User, Menu, Users, Megaphone, RefreshCcw, type LucideIcon } from 'lucide-react';
 import { cn } from './ui/utils';
 import { useMasterData } from '../pages/master-data/context';
 import { usePermissions } from '../hooks/usePermissions';
@@ -9,6 +9,8 @@ import { isAdvertiserRole, isTechnicianRole } from '../data/roleHelpers';
 interface BottomNavProps {
   activeTab: string;
   onNavigate: (id: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 type BottomNavItem = {
@@ -17,7 +19,7 @@ type BottomNavItem = {
   icon: LucideIcon;
 };
 
-export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
+export function BottomNav({ activeTab, onNavigate, onRefresh, isRefreshing = false }: BottomNavProps) {
   const { currentRole } = useMasterData();
   const { hasPermission } = usePermissions();
   const permissionMap: Partial<Record<string, PermissionKey>> = {
@@ -77,6 +79,11 @@ export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
     return permission ? hasPermission(permission) : true;
   });
 
+  navItems = [
+    ...navItems,
+    { id: 'refresh-data', label: 'Refresh', icon: RefreshCcw },
+  ];
+
   const technicianDock = isTechnicianRole(currentRole);
 
   return (
@@ -87,16 +94,24 @@ export function BottomNav({ activeTab, onNavigate }: BottomNavProps) {
     >
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
+          const isRefreshItem = item.id === 'refresh-data';
           
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => onNavigate(item.id)}
+              onClick={() => {
+                if (isRefreshItem) {
+                  onRefresh?.();
+                  return;
+                }
+                onNavigate(item.id);
+              }}
               className={cn('mobileNavItem', isActive && 'active')}
               aria-current={isActive ? 'page' : undefined}
+              disabled={isRefreshItem && isRefreshing}
             >
-              <item.icon size={19} />
+              <item.icon size={19} className={cn(isRefreshItem && isRefreshing && 'animate-spin')} />
               <span>{item.label}</span>
             </button>
           );

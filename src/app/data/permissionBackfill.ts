@@ -142,6 +142,11 @@ export const backfillRolePermissions = (role: Role, permissions: PermissionKey[]
     ensurePermission(updated, 'cs_okr.view');
   }
 
+  if (role === 'CS' && updated.includes('dashboard.view_cs')) {
+    ensurePermission(updated, 'monitoring.marketing.view');
+    ensurePermission(updated, 'cs_okr.view');
+  }
+
   if (updated.includes('targets.manage') && (role === 'Owner' || role === 'Super Admin' || role === 'Admin PIC' || role === 'Finance')) {
     ensurePermission(updated, 'cs_okr.manage');
   }

@@ -191,7 +191,11 @@ export async function getRequesterAccessContext(headers: Headers): Promise<Reque
     };
   }
 
-  const customPermissions = await loadUserCustomPermissions(authUser.id);
+  const storedCustomPermissions = await loadUserCustomPermissions(authUser.id);
+  const customPermissions =
+    storedCustomPermissions !== null && normalizedRole
+      ? normalizeStoredRolePermissions(normalizedRole, storedCustomPermissions)
+      : storedCustomPermissions;
   const rolePermissionsMap = customPermissions === null ? await loadRolePermissionsMap() : null;
   const rolePermissions = normalizedRole && rolePermissionsMap ? rolePermissionsMap[normalizedRole] || [] : [];
 

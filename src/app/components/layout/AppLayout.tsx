@@ -296,12 +296,28 @@ export function AppLayout() {
   const isCurrentUserResolved = context?.isCurrentUserResolved ?? false;
   const currentUserIssue = context?.currentUserIssue;
   const triggerRefresh = context?.triggerRefresh ?? (() => {});
+  const isRefreshingData = Boolean(
+    context?.isMasterDataLoading ||
+    context?.isOperationalDataLoading ||
+    context?.isOrdersLoading,
+  );
+  const handleGlobalRefresh = React.useCallback(() => {
+    if (isRefreshingData) {
+      toast.info('Data masih dimuat...');
+      return;
+    }
+
+    triggerRefresh();
+  }, [isRefreshingData, triggerRefresh]);
   const isTechnicianAppMode = isTechnicianRole(currentRole);
   const dashboardViewModes = React.useMemo(
     () => Object.keys(DASHBOARD_VIEW_PERMISSION_MAP) as DashboardViewMode[],
     [],
   );
-  const hasInvalidRoleSession = isCurrentUserResolved && !currentUser;
+  const isRecoverableCurrentUserIssue =
+    currentUserIssue?.code === 'profile_timeout' ||
+    currentUserIssue?.code === 'profile_query_error';
+  const hasInvalidRoleSession = isCurrentUserResolved && !currentUser && !isRecoverableCurrentUserIssue;
   const currentUserIssueTitle = (() => {
     switch (currentUserIssue?.code) {
       case 'profile_not_found':
@@ -676,6 +692,15 @@ export function AppLayout() {
     return <RoleConfigurationRequired />;
   }
 
+  if (isCurrentUserResolved && !currentUser && isRecoverableCurrentUserIssue) {
+    return (
+      <AppLoadingScreen
+        label="Menyambungkan profile"
+        detail="Koneksi database sedang lambat. App mencoba ulang otomatis..."
+      />
+    );
+  }
+
   if (!isCurrentUserResolved) {
     return <AppLoadingScreen />;
   }
@@ -752,11 +777,13 @@ export function AppLayout() {
              <Button 
                variant="ghost" 
                size="icon" 
-               onClick={triggerRefresh} 
+               onClick={handleGlobalRefresh}
                className="appTopbarButton appTopbarSecondaryAction"
-               title="Refresh Data"
+               title={isRefreshingData ? "Data sedang dimuat" : "Refresh Data"}
+               disabled={isRefreshingData}
+               aria-label="Refresh data aplikasi"
              >
-               <RefreshCcw className="h-[1.2rem] w-[1.2rem]" />
+               <RefreshCcw className={cn("h-[1.2rem] w-[1.2rem]", isRefreshingData && "animate-spin")} />
              </Button>
              
             <ModeToggle />
@@ -817,6 +844,8 @@ export function AppLayout() {
         {!permissionsLoading && (
         <BottomNav 
             activeTab={activeTab} 
+            onRefresh={handleGlobalRefresh}
+            isRefreshing={isRefreshingData}
             onNavigate={(id) => {
                 if (id === 'menu' && !isTechnicianAppMode) {
                     setIsSidebarOpen(true);
@@ -827,6 +856,19 @@ export function AppLayout() {
         />
         )}
       </main>
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={handleGlobalRefresh}
+        className="appGlobalRefreshButton"
+        title={isRefreshingData ? "Data sedang dimuat" : "Refresh Data"}
+        disabled={isRefreshingData}
+        aria-label="Refresh data aplikasi"
+      >
+        <RefreshCcw className={cn("h-[1.15rem] w-[1.15rem]", isRefreshingData && "animate-spin")} />
+      </Button>
 
       <Toaster position="top-right" richColors />
     </div>

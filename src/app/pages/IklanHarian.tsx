@@ -333,6 +333,7 @@ export function IklanHarian() {
     from: new Date(), // Default Today
     to: new Date()
   });
+  const hasAutoAlignedDateRef = useRef(false);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [subChannelFilter, setSubChannelFilter] = useState<string>('all');
   const [advertiserFilter, setAdvertiserFilter] = useState<string>('all'); // Added Advertiser Filter
@@ -349,6 +350,32 @@ export function IklanHarian() {
     startX: 0,
   });
   const suppressDailyAdsTableClickRef = useRef(false);
+
+  useEffect(() => {
+    if (hasAutoAlignedDateRef.current || dailyAds.length === 0 || !dateRange?.from) return;
+
+    const todayKey = format(new Date(), 'yyyy-MM-dd');
+    const fromKey = format(dateRange.from, 'yyyy-MM-dd');
+    const toKey = format(dateRange.to || dateRange.from, 'yyyy-MM-dd');
+    if (fromKey !== todayKey || toKey !== todayKey) return;
+
+    const hasTodayRows = dailyAds.some((item) => item.date === todayKey);
+    if (hasTodayRows) {
+      hasAutoAlignedDateRef.current = true;
+      return;
+    }
+
+    const latestDate = dailyAds
+      .map((item) => item.date)
+      .filter(Boolean)
+      .sort((left, right) => right.localeCompare(left))[0];
+
+    if (!latestDate) return;
+
+    hasAutoAlignedDateRef.current = true;
+    const latest = new Date(`${latestDate}T00:00:00`);
+    setDateRange({ from: latest, to: latest });
+  }, [dailyAds, dateRange]);
 
   const getDailyAdsTableScroller = (target: HTMLDivElement) =>
     target.querySelector<HTMLDivElement>('.uiDataTableScroller');
