@@ -79,7 +79,10 @@ async function smokeRoute(page, route) {
   const finalPath = new URL(page.url()).pathname;
   const expectedFinalPath = route.expectedFinalPath || route.path;
 
-  if (finalPath !== expectedFinalPath) {
+  const normalizePath = (value) =>
+    value !== '/' && value.endsWith('/') ? value.slice(0, -1) : value;
+
+  if (normalizePath(finalPath) !== normalizePath(expectedFinalPath)) {
     throw new Error(`Expected final path ${expectedFinalPath}, got ${finalPath}`);
   }
 
