@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Calendar as CalendarIcon, 
   ChevronDown,
@@ -2944,7 +2945,7 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
         </DataTable>
 
         {/* Floating Bulk Action Bar */}
-        {selectedReportIds.length > 0 && (
+        {typeof document !== 'undefined' && selectedReportIds.length > 0 && createPortal(
             <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl -translate-x-1/2 animate-in slide-in-from-bottom-5 fade-in duration-300 md:bottom-6">
                 <div className="flex flex-col gap-3 rounded-2xl border border-slate-700/60 bg-slate-950/95 p-3 text-white shadow-2xl shadow-slate-950/30 ring-1 ring-white/10 backdrop-blur md:flex-row md:items-center md:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
@@ -2985,7 +2986,8 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
                         </Button>
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
 
       </OperationalTableCard>
