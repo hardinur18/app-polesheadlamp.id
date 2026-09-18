@@ -341,6 +341,9 @@ interface MasterDataContextType {
   isMasterDataLoading: boolean;
   isOperationalDataLoading: boolean;
   isOrdersLoading: boolean;
+  isLeadsLoading: boolean;
+  ensureOrdersForDateRange: (range: { from: string; to: string; mode?: 'service' | 'lead' }) => Promise<void>;
+  ensureLeadsForDateRange: (range: { from: string; to: string }) => Promise<void>;
 
   // Setters (if needed for local state updates before refresh)
   setAreas: React.Dispatch<React.SetStateAction<Area[]>>;
@@ -403,7 +406,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const [isMasterDataLoading, setIsMasterDataLoading] = useState(true);
   const [isOperationalDataLoading, setIsOperationalDataLoading] = useState(true);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [isLeadsLoading, setIsLeadsLoading] = useState(true);
   const [realtimeRetryKey, setRealtimeRetryKey] = useState(0);
+  const fetchedOrderDateRangesRef = React.useRef(new Set<string>());
+  const fetchedLeadDateRangesRef = React.useRef(new Set<string>());
+  const fetchingOrderDateRangesRef = React.useRef(new Map<string, Promise<void>>());
+  const fetchingLeadDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const leadSocialContactsRef = React.useRef<Record<string, LeadSocialFields>>({});
   const leadSpamDailyInputsUseFallbackRef = React.useRef(false);
 
@@ -685,6 +693,142 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
     return mapFetchedRows(data || [], mapper);
   };
+
+  const fetchTodayLeadsDirectly = async (todayKey: string, mapper?: (data: any[]) => any[]) => {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .gte('created_at', `${todayKey}T00:00:00`)
+      .lte('created_at', `${todayKey}T23:59:59.999`)
+      .order('created_at', { ascending: false })
+      .range(0, 249);
+
+    if (error) {
+      throw error;
+    }
+
+    return mapFetchedRows(data || [], mapper);
+  };
+
+  const fetchRangeRows = async (
+    table: string,
+    options: AppDataPageOptions,
+    mapper?: (data: any[]) => any[],
+    pageSize = 500,
+    preferDirect = false,
+  ) => {
+    let allData: any[] = [];
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const pageResult = preferDirect
+        ? await fetchDirectAppDataPage(table, from, to, options)
+            .then((rows) => ({ rows, forbidden: false }))
+            .catch(async (error) => {
+              if (import.meta.env.DEV) {
+                console.warn('[MasterData] direct range fetch failed, falling back to app-data', { table, error });
+              }
+              return fetchAppDataPage(table, from, to, options);
+            })
+        : await fetchAppDataPage(table, from, to, options);
+      const { rows, forbidden } = pageResult;
+
+      if (forbidden) return [];
+      if (rows.length === 0) break;
+
+      allData.push(...rows);
+      hasMore = rows.length >= pageSize;
+      page += 1;
+    }
+
+    return mapFetchedRows(allData, mapper);
+  };
+
+  const ensureOrdersForDateRange = React.useCallback(async ({
+    from,
+    to,
+    mode = 'service',
+  }: {
+    from: string;
+    to: string;
+    mode?: 'service' | 'lead';
+  }) => {
+    if (!from || !to) return;
+
+    const column = mode === 'lead' ? 'lead_date' : 'service_date';
+    const rangeKey = `${mode}:${from}:${to}`;
+    if (fetchedOrderDateRangesRef.current.has(rangeKey)) return;
+    const inFlight = fetchingOrderDateRangesRef.current.get(rangeKey);
+    if (inFlight) return inFlight;
+
+    const request = (async () => {
+      const nextRows = await fetchRangeRows(
+        'orders',
+        {
+          orderBy: column,
+          ascending: false,
+          gte: { [column]: from },
+          lte: { [column]: to },
+        },
+        (rows) => rows.map(mapOrderFromDB),
+        500,
+        true,
+      );
+
+      if (nextRows.length > 0) {
+        setOrders((previousRows) => mergeRowsById(nextRows, previousRows));
+      }
+      fetchedOrderDateRangesRef.current.add(rangeKey);
+    })().finally(() => {
+      fetchingOrderDateRangesRef.current.delete(rangeKey);
+    });
+
+    fetchingOrderDateRangesRef.current.set(rangeKey, request);
+    return request;
+  }, []);
+
+  const ensureLeadsForDateRange = React.useCallback(async ({
+    from,
+    to,
+  }: {
+    from: string;
+    to: string;
+  }) => {
+    if (!from || !to) return;
+
+    const rangeKey = `${from}:${to}`;
+    if (fetchedLeadDateRangesRef.current.has(rangeKey)) return;
+    const inFlight = fetchingLeadDateRangesRef.current.get(rangeKey);
+    if (inFlight) return inFlight;
+
+    const request = (async () => {
+      const nextRows = await fetchRangeRows(
+        'leads',
+        {
+          orderBy: 'created_at',
+          ascending: false,
+          gte: { created_at: `${from}T00:00:00` },
+          lte: { created_at: `${to}T23:59:59.999` },
+        },
+        (rows) => rows.map((lead) => mapLeadFromDB(lead, leadSocialContactsRef.current[lead.id])),
+        500,
+        true,
+      );
+
+      if (nextRows.length > 0) {
+        setLeads((previousRows) => mergeRowsById(nextRows, previousRows));
+      }
+      fetchedLeadDateRangesRef.current.add(rangeKey);
+    })().finally(() => {
+      fetchingLeadDateRangesRef.current.delete(rangeKey);
+    });
+
+    fetchingLeadDateRangesRef.current.set(rangeKey, request);
+    return request;
+  }, []);
 
   // Helper to fetch data from a table
   const fetchData = async (
@@ -1621,6 +1765,10 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   };
   
   const triggerRefresh = () => {
+      fetchedOrderDateRangesRef.current.clear();
+      fetchedLeadDateRangesRef.current.clear();
+      fetchingOrderDateRangesRef.current.clear();
+      fetchingLeadDateRangesRef.current.clear();
       setRefreshTrigger(prev => prev + 1);
       toast.info("Memperbarui data...");
   };
@@ -2205,6 +2353,11 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     setIsMasterDataLoading(true);
     setIsOperationalDataLoading(true);
     setIsOrdersLoading(true);
+    setIsLeadsLoading(true);
+    fetchedOrderDateRangesRef.current.clear();
+    fetchedLeadDateRangesRef.current.clear();
+    fetchingOrderDateRangesRef.current.clear();
+    fetchingLeadDateRangesRef.current.clear();
 
     const fetchCatalog = createMasterDataFetchCatalog({
       setAreas,
@@ -2244,6 +2397,8 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       }
     });
 
+    const deferredTimers: number[] = [];
+
     const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
     if (orderFetch) {
       const fetchPriorityOrders = async () => {
@@ -2271,10 +2426,18 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           setIsOrdersLoading(false);
         }
 
-        await fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, {
-          progressive: true,
-          mergeProgressiveWithPrevious: true,
-        });
+        const fullOrderFetchTimer = window.setTimeout(() => {
+          if (isCancelled) return;
+          void fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, {
+            progressive: true,
+            mergeProgressiveWithPrevious: true,
+            appData: {
+              orderBy: 'service_date',
+              ascending: false,
+            },
+          });
+        }, 4_000);
+        deferredTimers.push(fullOrderFetchTimer);
       };
 
       fetchPriorityOrders().finally(() => {
@@ -2286,9 +2449,58 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       setIsOrdersLoading(false);
     }
 
+    const leadFetch = fetchCatalog.transactional.find(({ table }) => table === 'leads');
+    if (leadFetch) {
+      const fetchPriorityLeads = async () => {
+        const todayKey = getTodayDateKey();
+
+        try {
+          leadFetch.setter(await fetchTodayLeadsDirectly(todayKey, leadFetch.mapper));
+        } catch (directError) {
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] direct today leads fetch failed, falling back to app-data', directError);
+          }
+          await fetchData(leadFetch.table, leadFetch.setter, leadFetch.mapper, {
+            progressive: true,
+            pageSize: 250,
+            appData: {
+              orderBy: 'created_at',
+              ascending: false,
+              gte: { created_at: `${todayKey}T00:00:00` },
+              lte: { created_at: `${todayKey}T23:59:59.999` },
+            },
+          });
+        }
+
+        if (!isCancelled) {
+          setIsLeadsLoading(false);
+        }
+
+        const fullLeadFetchTimer = window.setTimeout(() => {
+          if (isCancelled) return;
+          void fetchData(leadFetch.table, leadFetch.setter, leadFetch.mapper, {
+            progressive: true,
+            mergeProgressiveWithPrevious: true,
+            appData: {
+              orderBy: 'created_at',
+              ascending: false,
+            },
+          });
+        }, 4_500);
+        deferredTimers.push(fullLeadFetchTimer);
+      };
+
+      fetchPriorityLeads().finally(() => {
+        if (!isCancelled) {
+          setIsLeadsLoading(false);
+        }
+      });
+    } else {
+      setIsLeadsLoading(false);
+    }
+
     // 3. Defer heavy operational data so the app shell and admin pages render first.
     // Orders are loaded eagerly because the Pesanan page depends on them as its primary content.
-    const deferredTimers: number[] = [];
     const idleApi = window as unknown as {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
       cancelIdleCallback?: (id: number) => void;
@@ -2304,7 +2516,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
       setIsOperationalDataLoading(true);
 
-      const otherTransactionalFetches = fetchCatalog.transactional.filter(({ table }) => table !== 'orders');
+      const otherTransactionalFetches = fetchCatalog.transactional.filter(({ table }) => table !== 'orders' && table !== 'leads');
       const operationalFetches = otherTransactionalFetches.map(({ table, setter, mapper }) =>
         fetchData(table, setter, mapper)
       );
@@ -2570,14 +2782,16 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
     setAreas,
     currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser,
-    isMasterDataLoading, isOperationalDataLoading, isOrdersLoading,
+    isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
+    ensureOrdersForDateRange, ensureLeadsForDateRange,
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
     leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules,
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
-    isMasterDataLoading, isOperationalDataLoading, isOrdersLoading
+    isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
+    ensureOrdersForDateRange, ensureLeadsForDateRange
   ]);
 
   return (

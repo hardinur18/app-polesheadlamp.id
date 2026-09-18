@@ -139,8 +139,44 @@ const ORDER_STATUS_FILTER_OPTIONS = [
   { value: 'cancelled', label: 'Cancel' },
 ] as const;
 
+const toLocalDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
+
+const ORDER_DOCUMENTATION_ITEMS = [
+  { key: 'before', label: 'Sebelum' },
+  { key: 'after', label: 'Sesudah' },
+  { key: 'payment', label: 'Bayar' },
+  { key: 'signature', label: 'TTD' },
+] as const;
+
+function getOrderDocumentationSummary(order: Order) {
+  const photos = (order.photos || {}) as Record<string, unknown>;
+  const items = ORDER_DOCUMENTATION_ITEMS.map((item) => {
+    const count = Array.isArray(photos[item.key]) ? (photos[item.key] as unknown[]).length : 0;
+    return { ...item, count };
+  });
+  const completed = items.filter((item) => item.count > 0).length;
+  const missingLabels = items.filter((item) => item.count === 0).map((item) => item.label);
+  const total = ORDER_DOCUMENTATION_ITEMS.length;
+
+  return {
+    completed,
+    total,
+    isComplete: completed === total,
+    isEmpty: completed === 0,
+    label: `${completed}/${total}`,
+    tooltip: completed === total
+      ? 'Dokumentasi lengkap'
+      : `Dokumentasi belum lengkap: ${missingLabels.join(', ')}`,
+  };
+}
 
 function OrderActionButton({
   label,
@@ -260,9 +296,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     adAccountAssignments = [],
     adAccountOwnerAssignments = [],
     isOrdersLoading,
+    ensureOrdersForDateRange,
   } = useMasterData();
   const { hasPermission, isOrderLocked } = usePermissions();
   const ordersInitialLoading = isOrdersLoading && orders.length === 0;
+  const [isDateRangeLoading, setIsDateRangeLoading] = useState(false);
 
   const nonScheduleLeadIds = useMemo(
     () => new Set(
@@ -332,6 +370,38 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     resetSheetFilters,
     canAccessAllOrders, isAdminManagementUser, isAdvertiserUser, isCsUser, isTechnicianUser, isFinanceUser,
   } = filters;
+  const ordersRangeLoading = isDateRangeLoading && filteredOrdersBase.length === 0;
+  const ordersTableLoading = ordersInitialLoading || ordersRangeLoading;
+
+  useEffect(() => {
+    if (!dateRange?.from) return;
+
+    let isCancelled = false;
+    const from = toLocalDateKey(dateRange.from);
+    const to = toLocalDateKey(dateRange.to || dateRange.from);
+
+    setIsDateRangeLoading(true);
+    ensureOrdersForDateRange({ from, to, mode: dateFilterMode })
+      .catch((error) => {
+        if (import.meta.env.DEV) {
+          console.warn('[Pesanan] failed to fetch filtered order range', error);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsDateRangeLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    dateRange?.from?.getTime(),
+    dateRange?.to?.getTime(),
+    dateFilterMode,
+    ensureOrdersForDateRange,
+  ]);
 
   const pagination = useOrderPagination({
     filteredOrders, filteredOrdersBase, statusFilter, cancelReasonFilter,
@@ -968,13 +1038,17 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     const orderTemplates = waTemplates.filter((template) =>
       template.category === 'Orders' || template.category === 'General' || !template.category
     );
-    const photoCount = (() => {
-      const photos = order.photos as any;
-      return (photos?.before?.length ? 1 : 0) +
-        (photos?.after?.length ? 1 : 0) +
-        (photos?.payment?.length ? 1 : 0) +
-        (photos?.signature?.length ? 1 : 0);
-    })();
+    const documentationSummary = getOrderDocumentationSummary(order);
+    const documentationToneClass = documentationSummary.isComplete
+      ? 'text-emerald-600 hover:text-emerald-700'
+      : documentationSummary.isEmpty
+        ? 'text-red-500 hover:text-red-600'
+        : 'text-amber-600 hover:text-amber-700';
+    const documentationBadgeClass = documentationSummary.isComplete
+      ? 'bg-emerald-500 text-white'
+      : documentationSummary.isEmpty
+        ? 'bg-red-500 text-white'
+        : 'bg-amber-500 text-white';
 
     const hasMenuActions =
       canViewOrderDetails ||
@@ -1089,6 +1163,23 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             </OrderActionButton>
           )}
 
+          {canViewOrderDetails && !documentationSummary.isEmpty && (
+            <OrderActionButton
+              label={documentationSummary.tooltip}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setPhotoViewerOrder(order);
+              }}
+              className={`${iconClass} ${documentationToneClass}`}
+            >
+              <Camera className="h-4 w-4" />
+              <span className={`absolute -right-1 -top-1 flex h-4 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold ring-2 ring-white dark:ring-slate-900 ${documentationBadgeClass}`}>
+                {documentationSummary.label}
+              </span>
+            </OrderActionButton>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -1115,13 +1206,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 </DropdownMenuItem>
               )}
               {canViewOrderDetails && (
-                <DropdownMenuItem onClick={() => setPhotoViewerOrder(order)} className={ORDER_MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setPhotoViewerOrder(order);
+                  }}
+                  className={ORDER_MENU_ITEM_CLASS}
+                >
                   <Camera className="h-4 w-4" /> Dokumentasi
-                  {photoCount > 0 && (
-                    <span className="ml-auto rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-                      {photoCount}
-                    </span>
-                  )}
+                  <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${documentationSummary.isComplete ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : documentationSummary.isEmpty ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                    {documentationSummary.label}
+                  </span>
                 </DropdownMenuItem>
               )}
               {canViewOrderPayments && (
@@ -1430,13 +1526,13 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         <OperationalKpiGrid className="orderKpiGrid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
           <OperationalKpiCard
             label="Total"
-            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.total.toLocaleString('id-ID')}
+            value={ordersTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.total.toLocaleString('id-ID')}
             icon={Package}
           />
           <OperationalKpiCard
             label="Selesai"
             value={
-              ordersInitialLoading ? (
+              ordersTableLoading ? (
                 <Skeleton className="h-6 w-24 rounded-md" />
               ) : (
               <div className="flex items-end gap-2">
@@ -1450,32 +1546,32 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           />
           <OperationalKpiCard
             label="Terjadwal"
-            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.pending.toLocaleString('id-ID')}
+            value={ordersTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.pending.toLocaleString('id-ID')}
             icon={Calendar}
             tone="amber"
           />
           <OperationalKpiCard
             label="Reschedule"
-            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.reschedule.toLocaleString('id-ID')}
+            value={ordersTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.reschedule.toLocaleString('id-ID')}
             icon={RefreshCw}
             tone="violet"
           />
           <OperationalKpiCard
             label="Cancel"
-            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.cancelled.toLocaleString('id-ID')}
+            value={ordersTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.cancelled.toLocaleString('id-ID')}
             icon={XCircle}
             tone="rose"
           />
           <OperationalKpiCard
             label="Proses"
-            value={ordersInitialLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.processing.toLocaleString('id-ID')}
+            value={ordersTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.processing.toLocaleString('id-ID')}
             icon={Loader2}
             tone="blue"
           />
           <OperationalKpiCard
             label="Revenue"
             value={
-              ordersInitialLoading ? (
+              ordersTableLoading ? (
                 <Skeleton className="h-6 w-20 rounded-md" />
               ) : (
                 <span title={`Rp ${stats.revenue.toLocaleString('id-ID')}`}>Rp {(stats.revenue / 1000).toLocaleString('id-ID')}K</span>
@@ -2107,7 +2203,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ordersInitialLoading ? (
+                {ordersTableLoading ? (
                   <OrderTableSkeleton columns={orderTableColumnCount} />
                 ) : paginatedOrders.length === 0 ? (
                    <TableRow>
@@ -2918,7 +3014,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
           {/* MOBILE CARD LIST (Visible on sm/xs) */}
           <div className="orderMobileSurface md:hidden p-4 space-y-3">
-              {ordersInitialLoading ? (
+              {ordersTableLoading ? (
                  <OrderMobileSkeleton />
               ) : paginatedOrders.length === 0 ? (
                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">

@@ -25,7 +25,7 @@ export function BottomNav({ activeTab, onNavigate, onRefresh, isRefreshing = fal
   const permissionMap: Partial<Record<string, PermissionKey>> = {
     dashboard: 'dashboard.view',
     'daily-ads': 'ads.view_daily',
-    prospek: 'leads.view',
+    leads: 'leads.view',
     orders: 'order.view',
     schedule: 'schedule.view',
     'teknisi-mobile': 'teknisi.view_mobile',
@@ -47,7 +47,7 @@ export function BottomNav({ activeTab, onNavigate, onRefresh, isRefreshing = fal
       navItems = [
         { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
         { id: 'daily-ads', label: 'Iklan', icon: Megaphone },
-        { id: 'prospek', label: 'Prospek', icon: Users },
+        { id: 'leads', label: 'Prospek', icon: Users },
         { id: 'orders', label: 'Pesanan', icon: ClipboardList },
         // Advertiser jarang akses jadwal teknisi, tapi kalau perlu bisa lewat Home -> Jadwal
         // Kita ganti Menu jadi Jadwal jika masih muat, atau hilangkan Menu
@@ -58,7 +58,7 @@ export function BottomNav({ activeTab, onNavigate, onRefresh, isRefreshing = fal
       // Mengutamakan fitur Manajemen: Dashboard, Prospek, Pesanan, Jadwal
       navItems = [
         { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-        { id: 'prospek', label: 'Prospek', icon: Users },
+        { id: 'leads', label: 'Prospek', icon: Users },
         { id: 'orders', label: 'Pesanan', icon: ClipboardList },
         { id: 'schedule', label: 'Jadwal', icon: Calendar },
         { id: 'menu', label: 'Menu', icon: Menu },

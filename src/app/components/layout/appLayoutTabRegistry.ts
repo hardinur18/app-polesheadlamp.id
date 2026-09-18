@@ -2,7 +2,7 @@ import type { PermissionKey } from '../../data/permissions';
 
 export const DEFAULT_APP_LAYOUT_TAB = 'dashboard';
 
-export const ACCESS_DENIED_FALLBACK_TAB = 'profile';
+export const ACCESS_DENIED_FALLBACK_TAB = 'dashboard';
 
 export const TEKNISI_ALLOWED_TABS = ['teknisi-mobile', 'dashboard', 'profile', 'orders'] as const;
 

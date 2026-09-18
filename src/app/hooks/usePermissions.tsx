@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 const PERMISSIONS_REFRESH_BROADCAST_KEY = 'rhi-permissions-updated-at';
 const ROLE_KEYS = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+const INITIAL_PERMISSION_REFRESH_TIMEOUT_MS = 3500;
 
 const cloneDefaultRolePermissions = () =>
   Object.fromEntries(
@@ -282,22 +283,47 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   }, []);
 
+  useEffect(() => {
+    refreshInFlightRef.current = null;
+    lastPermissionRefreshAtRef.current = 0;
+    setLocalUserCustomPermissions(null);
+    setCurrentEffectivePermissions(currentRole ? getRoleDefaultPermissions(currentRole) : null);
+  }, [currentRole, currentUser?.id]);
+
   // Initial Load
   useEffect(() => {
     let isActive = true;
-    const loadingTimeoutId = window.setTimeout(() => {
-      if (!isActive) return;
-      console.warn('[Permissions] Initial refresh timed out; continuing with role-default permissions until refresh succeeds.');
-      setLocalUserCustomPermissions(null);
-      setCurrentEffectivePermissions(getRoleDefaultPermissions(currentRole));
-      setLoading(false);
-    }, 3500);
+    let loadingTimeoutId: number | undefined;
 
     const init = async () => {
         setLoading(true);
-        await runPermissionRefresh({ force: true });
+
+        const timeoutPromise = new Promise<'timeout'>((resolve) => {
+          loadingTimeoutId = window.setTimeout(() => {
+            resolve('timeout');
+          }, INITIAL_PERMISSION_REFRESH_TIMEOUT_MS);
+        });
+        const refreshPromise = runPermissionRefresh({ force: true })
+          .then(() => 'ready' as const)
+          .catch((error) => {
+            console.error('[Permissions] Initial refresh failed; continuing with role-default permissions.', error);
+            return 'error' as const;
+          });
+
+        const result = await Promise.race([refreshPromise, timeoutPromise]);
+
+        if (result === 'timeout') {
+          console.warn('[Permissions] Initial refresh timed out; continuing with role-default permissions until refresh succeeds.');
+          refreshInFlightRef.current = null;
+          setLocalUserCustomPermissions(null);
+          setCurrentEffectivePermissions(getRoleDefaultPermissions(currentRole));
+          void refreshPromise;
+        }
+
         if (isActive) {
-          window.clearTimeout(loadingTimeoutId);
+          if (loadingTimeoutId) {
+            window.clearTimeout(loadingTimeoutId);
+          }
           setLoading(false);
         }
     };
@@ -305,7 +331,9 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
 
     return () => {
       isActive = false;
-      window.clearTimeout(loadingTimeoutId);
+      if (loadingTimeoutId) {
+        window.clearTimeout(loadingTimeoutId);
+      }
     };
   }, [runPermissionRefresh]);
 

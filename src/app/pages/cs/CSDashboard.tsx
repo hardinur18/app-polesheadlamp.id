@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useMasterData } from '../master-data/context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
-import { SmartFilterDate } from '@/app/components/SmartFilterDate';
+import { FoundationDateRangePicker } from '@/app/components/ui/date-range-picker';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -1906,7 +1906,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
             </div>
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Periode</div>
-              <SmartFilterDate date={dateRange} setDate={handleDateRangeChange} />
+              <FoundationDateRangePicker date={dateRange} setDate={handleDateRangeChange} />
             </div>
           </div>
 

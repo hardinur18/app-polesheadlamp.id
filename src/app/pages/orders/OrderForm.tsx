@@ -661,6 +661,44 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     () => orderAdAccountOptions.find((option) => option.account.id === selectedAdAccountId) || null,
     [orderAdAccountOptions, selectedAdAccountId],
   );
+  const isLeadConversionPrefill = Boolean(!initialData && prefillData?.leadId);
+  const hasLeadConversionAttribution = Boolean(
+    isLeadConversionPrefill &&
+    orderSourceMode === 'paid_ads' &&
+    formData.platformId &&
+    formData.csId,
+  );
+  const paidAdsAttributionSummary = React.useMemo(() => {
+    if (selectedAdAccountOption) {
+      return {
+        advertiserName: selectedAdAccountOption.advertiserName,
+        csName: selectedAdAccountOption.csName,
+        platformName: selectedAdAccountOption.platformName,
+        subChannelName: selectedAdAccountOption.subChannelName,
+      };
+    }
+
+    return {
+      advertiserName: formData.advertiserId ? userNameById.get(formData.advertiserId) || '-' : '-',
+      csName:
+        (formData.csId ? userNameById.get(formData.csId) : undefined) ||
+        (isCsUser ? currentUser?.name : undefined) ||
+        '-',
+      platformName: formData.platformId ? platformNameById.get(formData.platformId) || '-' : '-',
+      subChannelName: formData.subChannelId ? subChannelNameById.get(formData.subChannelId) || 'Tanpa sub channel' : 'Tanpa sub channel',
+    };
+  }, [
+    currentUser?.name,
+    formData.advertiserId,
+    formData.csId,
+    formData.platformId,
+    formData.subChannelId,
+    isCsUser,
+    platformNameById,
+    selectedAdAccountOption,
+    subChannelNameById,
+    userNameById,
+  ]);
 
   const inferAdAccountIdFromOrder = React.useCallback(
     (draft: Partial<Order>) => {
@@ -760,6 +798,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     }
 
     if (orderAdAccountOptions.length === 0) {
+      if (hasLeadConversionAttribution) {
+        return {
+          title: 'Data prospek siap dikonversi',
+          description: 'Attribution mengikuti data prospek lama. Pilih akun iklan hanya jika ingin mengganti mapping.',
+          tone: 'success' as const,
+        };
+      }
+
       return {
         title: 'Tidak ada akun iklan sesuai akses',
         description: 'Akun aktif tersedia, tapi belum ada yang sesuai role atau assignment user ini.',
@@ -768,6 +814,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     }
 
     if (!selectedAdAccountOption) {
+      if (hasLeadConversionAttribution) {
+        return {
+          title: 'Data prospek siap dikonversi',
+          description: 'Attribution mengikuti data prospek lama. Pilih akun iklan hanya jika ingin mengganti mapping.',
+          tone: 'success' as const,
+        };
+      }
+
       return {
         title: 'Pilih akun iklan',
         description: 'Advertiser, platform, sub channel, dan CS akan terisi otomatis dari akun iklan yang dipilih.',
@@ -791,6 +845,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   }, [
     activeAdAccounts.length,
     formData.csId,
+    hasLeadConversionAttribution,
     isCsUser,
     orderAdAccountOptions.length,
     orderSourceMode,
@@ -1262,7 +1317,17 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     const selectedOption = selectedAdAccountId
       ? orderAdAccountOptions.find((option) => option.account.id === selectedAdAccountId)
       : null;
-    const requiresMasterAdAccount = orderSourceMode === 'paid_ads' && canEditOrderInfo;
+    const canUseLeadConversionAttribution = Boolean(
+      !initialData &&
+      prefillData?.leadId &&
+      orderSourceMode === 'paid_ads' &&
+      sanitizedData.platformId &&
+      sanitizedData.csId,
+    );
+    const requiresMasterAdAccount =
+      orderSourceMode === 'paid_ads' &&
+      canEditOrderInfo &&
+      !canUseLeadConversionAttribution;
 
     if (requiresMasterAdAccount && !selectedOption?.isComplete) {
       toast.error('Pilih akun iklan yang lengkap dari Master Data Akun Iklan.');
@@ -1862,6 +1927,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                       <span title={formatAdAccountContext(selectedAdAccountOption.account)}>
                         {selectedAdAccountOption.account.accountName}
                       </span>
+                    ) : hasLeadConversionAttribution ? (
+                      <span>Data prospek</span>
                     ) : (
                       <span>{canSelectPaidAdAccount ? `${orderAdAccountOptions.length} akun tersedia` : 'Pilih CS dulu'}</span>
                     )}
@@ -1872,7 +1939,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
               {orderSourceMode === 'paid_ads' ? (
                 <>
                   <div className="orderFormAdAccountPicker space-y-2">
-                    <RequiredLabel>Akun Iklan</RequiredLabel>
+                    {hasLeadConversionAttribution && !selectedAdAccountOption ? (
+                      <Label>Akun Iklan (Opsional)</Label>
+                    ) : (
+                      <RequiredLabel>Akun Iklan</RequiredLabel>
+                    )}
                     <Select
                       value={selectedAdAccountId || undefined}
                       onValueChange={handleAdAccountSelect}
@@ -1899,19 +1970,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                   <div className="orderFormAutoAttributionGrid">
                     <div>
                       <span>Platform</span>
-                      <strong>{selectedAdAccountOption?.platformName || '-'}</strong>
+                      <strong>{paidAdsAttributionSummary.platformName}</strong>
                     </div>
                     <div>
                       <span>Sub Channel</span>
-                      <strong>{selectedAdAccountOption?.subChannelName || '-'}</strong>
+                      <strong>{paidAdsAttributionSummary.subChannelName}</strong>
                     </div>
                     <div>
                       <span>Advertiser</span>
-                      <strong>{selectedAdAccountOption?.advertiserName || '-'}</strong>
+                      <strong>{paidAdsAttributionSummary.advertiserName}</strong>
                     </div>
                     <div>
                       <span>Customer Service</span>
-                      <strong>{selectedAdAccountOption?.csName || '-'}</strong>
+                      <strong>{paidAdsAttributionSummary.csName}</strong>
                     </div>
                   </div>
                 </>

@@ -47,8 +47,9 @@ export function OperationalPageHeader({
     isMasterDataLoading,
     isOperationalDataLoading,
     isOrdersLoading,
+    isLeadsLoading,
   } = useMasterData();
-  const isRefreshingData = Boolean(isMasterDataLoading || isOperationalDataLoading || isOrdersLoading);
+  const isRefreshingData = Boolean(isMasterDataLoading || isOperationalDataLoading || isOrdersLoading || isLeadsLoading);
 
   const handleRefreshData = React.useCallback(() => {
     if (isRefreshingData) {

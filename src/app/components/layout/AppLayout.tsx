@@ -25,7 +25,12 @@ import {
 import { PlaceholderPage } from '../../pages/PlaceholderPage';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { DashboardViewMode, DASHBOARD_VIEW_PERMISSION_MAP, DEFAULT_DASHBOARD_VIEW_BY_ROLE, type PermissionKey } from '../../data/permissions';
-import { isTechnicianRole } from '@/app/data/roleHelpers';
+import {
+  isAdvertiserRole,
+  isCsRole,
+  isFinanceRole,
+  isTechnicianRole,
+} from '@/app/data/roleHelpers';
 import { Lock } from 'lucide-react';
 import { BottomNav } from '../BottomNav';
 import { AppLoadingScreen } from '../AppLoadingScreen';
@@ -206,6 +211,31 @@ const hasRequiredPermission = (
     : hasPermission(requirement);
 };
 
+const hasTabAccess = (
+  tabId: string,
+  hasPermission: (permission: PermissionKey) => boolean,
+) => hasRequiredPermission(APP_LAYOUT_TAB_PERMISSIONS[tabId], hasPermission);
+
+const getRoleFallbackCandidates = (role?: string) => {
+  if (isTechnicianRole(role)) {
+    return ['teknisi-mobile', 'orders', 'dashboard'];
+  }
+
+  if (isCsRole(role)) {
+    return ['dashboard', 'leads', 'orders', 'schedule'];
+  }
+
+  if (isAdvertiserRole(role)) {
+    return ['dashboard', 'daily-ads', 'leads', 'orders', 'schedule'];
+  }
+
+  if (isFinanceRole(role)) {
+    return ['dashboard', 'finance-report', 'daily-report', 'orders', 'cashflow'];
+  }
+
+  return ['dashboard', 'leads', 'orders', 'daily-report'];
+};
+
 // --- COMPONENTS ---
 
 function PageLoadingState() {
@@ -299,7 +329,8 @@ export function AppLayout() {
   const isRefreshingData = Boolean(
     context?.isMasterDataLoading ||
     context?.isOperationalDataLoading ||
-    context?.isOrdersLoading,
+    context?.isOrdersLoading ||
+    context?.isLeadsLoading,
   );
   const handleGlobalRefresh = React.useCallback(() => {
     if (isRefreshingData) {
@@ -417,6 +448,19 @@ export function AppLayout() {
       setFallbackActiveTab(tabId);
   }, [activeTab, location.pathname, navigate]);
 
+  const getAccessibleFallbackTab = React.useCallback(() => {
+      const roleCandidates = getRoleFallbackCandidates(currentRole);
+      const fallbackCandidates = [
+        ...roleCandidates,
+        ...APP_LAYOUT_ACCESS_FALLBACKS.map(({ tab }) => tab),
+        ACCESS_DENIED_FALLBACK_TAB,
+      ];
+
+      return fallbackCandidates.find((tabId) =>
+        tabId !== activeTab && hasTabAccess(tabId, hasPermission)
+      );
+  }, [activeTab, currentRole, hasPermission]);
+
   // Effect: Auto-switch tab if permission denied (e.g. when switching roles)
   React.useEffect(() => {
       if (!isCurrentUserResolved || !currentUser || !currentRole) {
@@ -440,19 +484,14 @@ export function AppLayout() {
           const isAllowed = hasRequiredPermission(requiredPermission, hasPermission);
           
           if (!isAllowed) {
-              // Priority Fallbacks - Redirect immediately to a safe page
-              const fallbackTab = APP_LAYOUT_ACCESS_FALLBACKS.find(({ permission }) =>
-                hasPermission(permission),
-              )?.tab;
+              const fallbackTab = getAccessibleFallbackTab();
 
               if (fallbackTab) {
                   handleNavigate(fallbackTab);
-              } else {
-                  handleNavigate(ACCESS_DENIED_FALLBACK_TAB); // Ultimate fallback
               }
           }
       }
-  }, [activeTab, currentRole, currentUser, handleNavigate, hasPermission, isCurrentUserResolved, permissionsLoading]);
+  }, [activeTab, currentRole, currentUser, getAccessibleFallbackTab, handleNavigate, hasPermission, isCurrentUserResolved, permissionsLoading]);
 
   React.useEffect(() => {
       if (dashboardViewMode !== resolvedDashboardViewMode) {
@@ -489,12 +528,8 @@ export function AppLayout() {
     }
 
     if (!isAllowed) {
-        // Don't show Access Denied immediately if we can redirect
-        // This prevents the "flash" of error page while useEffect is redirecting
-        if (
-            (hasPermission('dashboard.view') && activeTab !== 'dashboard') ||
-            (hasPermission('teknisi.view_mobile') && activeTab !== 'teknisi-mobile')
-        ) {
+        const fallbackTab = getAccessibleFallbackTab();
+        if (fallbackTab) {
              return (
                <AppLoadingScreen
                  inline
@@ -561,7 +596,12 @@ export function AppLayout() {
             title={placeholderMeta.title}
             description={placeholderMeta.description}
           />
-        ) : <Prospek onNavigate={handleNavigate} />;
+        ) : (
+          <PlaceholderPage
+            title="Halaman Belum Tersedia"
+            description="Route ini belum terhubung ke halaman aplikasi."
+          />
+        );
       }
       case 'affiliates':
         return <AffiliateList />;
@@ -663,8 +703,8 @@ export function AppLayout() {
             Anda tidak memiliki izin untuk mengakses halaman ini ({activeTab}). 
             Silakan hubungi Administrator jika Anda yakin ini kesalahan.
         </p>
-        <Button onClick={() => handleNavigate('profile')} variant="outline">
-            Kembali ke Profil
+        <Button onClick={() => handleNavigate(getAccessibleFallbackTab() || DEFAULT_APP_LAYOUT_TAB)} variant="outline">
+            Kembali ke Halaman Utama
         </Button>
       </section>
     </main>

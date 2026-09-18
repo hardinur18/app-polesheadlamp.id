@@ -94,9 +94,10 @@ const NAV_GROUPS: NavGroup[] = [
         icon: MessageSquare,
         label: 'Live Chat',
         id: 'whatsapp',
+        canNavigate: false,
         permission: 'whatsapp.view',
         children: [
-          { icon: MessageSquare, label: 'Live Chat', id: 'whatsapp-chats', permission: 'whatsapp.view' },
+          { icon: MessageSquare, label: 'Percakapan', id: 'whatsapp-chats', permission: 'whatsapp.view' },
           { icon: FileText, label: 'Template Pesan', id: 'whatsapp-templates', permission: 'whatsapp.templates.manage' },
           { icon: Settings, label: 'Akun WA', id: 'whatsapp-inbox-settings', permission: 'whatsapp.settings.manage' },
         ],

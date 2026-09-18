@@ -105,6 +105,7 @@ import {
   FoundationDetailShell,
 } from '../components/ui/detail-view';
 import { Switch } from '../components/ui/switch';
+import { Skeleton } from '../components/ui/skeleton';
 import {
   formatLeadSocialHandle,
   getLeadSocialPlatformLabel,
@@ -131,6 +132,13 @@ const LEAD_PAGE_SIZE_OPTIONS = [50, 100, 300, 500] as const;
 const MANDATORY_PLATFORM_NAMES = ['repeat order', 'organik'];
 const EDITABLE_LEAD_STATUS_OPTIONS: LeadStatus[] = ['Pending', 'Follow Up', 'Booking', 'Cancel'];
 
+const toLocalDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
 
@@ -150,6 +158,56 @@ const AutoWhatsAppLeadBadge = ({ lead, className }: { lead: Lead; className?: st
     </Badge>
   ) : null
 );
+
+function LeadTableSkeleton({ columns, rows = 8 }: { columns: number; rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <tr key={`lead-table-skeleton-${rowIndex}`}>
+          {Array.from({ length: columns }).map((__, columnIndex) => (
+            <td key={`lead-table-skeleton-${rowIndex}-${columnIndex}`} className="py-5 align-top">
+              <Skeleton
+                className={
+                  columnIndex === 0
+                    ? 'mx-auto h-4 w-8 rounded-md'
+                    : columnIndex === 3
+                      ? 'h-10 w-full max-w-[220px] rounded-md'
+                      : 'h-4 w-full max-w-[150px] rounded-md'
+                }
+              />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function LeadMobileSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={`lead-mobile-skeleton-${index}`} className="leadMobileCard">
+          <div className="leadMobileCardHeader">
+            <div className="leadMobileCardIdentity">
+              <Skeleton className="h-5 w-40 rounded-md" />
+              <Skeleton className="mt-3 h-4 w-28 rounded-md" />
+            </div>
+            <Skeleton className="h-8 w-8 rounded-md" />
+          </div>
+          <div className="leadMobileMetaGrid">
+            <Skeleton className="h-12 rounded-md" />
+            <Skeleton className="h-12 rounded-md" />
+            <Skeleton className="h-12 rounded-md" />
+            <Skeleton className="h-12 rounded-md" />
+          </div>
+          <Skeleton className="mt-4 h-4 w-full rounded-md" />
+          <Skeleton className="mt-2 h-4 w-2/3 rounded-md" />
+        </div>
+      ))}
+    </>
+  );
+}
 
 const LEAD_TEMPLATE_TITLE_ORDER = [
   'salam pertama',
@@ -196,8 +254,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     currentRole,
     waTemplates,
     updateWATemplate,
+    isLeadsLoading,
+    ensureLeadsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
+  const leadsInitialLoading = isLeadsLoading && leads.length === 0;
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Lead | null>(null);
@@ -216,6 +277,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   });
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
   const [isMobileFilterExpanded, setIsMobileFilterExpanded] = useState(false);
+  const [isDateRangeLoading, setIsDateRangeLoading] = useState(false);
 
   // Pagination & Selection State
   const [currentPage, setCurrentPage] = useState(1);
@@ -1045,6 +1107,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       leadId: forwardLead.id,
       leadDate: forwardLead.timestamp.split('T')[0],
       status: 'pending',
+      paymentType: 'Transfer',
       paymentStatus: 'Unpaid',
       paymentValidation: 'Pending',
       serviceDate: activeForwardBooking?.scheduleDate || '',
@@ -1097,6 +1160,37 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       return matchesSearch && matchesAdvertiser && matchesPlatform && matchesSubChannel && matchesDate && matchesCS;
     });
   }, [roleBasedLeads, search, advertiserFilter, platformFilter, subChannelFilter, csFilter, dateRange, platforms, vehicles, users]);
+  const leadsRangeLoading = isDateRangeLoading && filteredLeadsBase.length === 0;
+  const leadTableLoading = leadsInitialLoading || leadsRangeLoading;
+
+  useEffect(() => {
+    if (!dateRange?.from) return;
+
+    let isCancelled = false;
+    const from = toLocalDateKey(dateRange.from);
+    const to = toLocalDateKey(dateRange.to || dateRange.from);
+
+    setIsDateRangeLoading(true);
+    ensureLeadsForDateRange({ from, to })
+      .catch((error) => {
+        if (import.meta.env.DEV) {
+          console.warn('[Prospek] failed to fetch filtered lead range', error);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsDateRangeLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    dateRange?.from?.getTime(),
+    dateRange?.to?.getTime(),
+    ensureLeadsForDateRange,
+  ]);
 
   // --- FINAL FILTERED DATA (Includes Status) ---
   const filteredData = useMemo(() => {
@@ -1324,6 +1418,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     const conversionRate = total > 0 ? ((closing / total) * 100).toFixed(1) : '0.0';
     return { total, pending, closing, autoWhatsApp, conversionRate };
   }, [filteredData]);
+  const leadTableColumnCount = isAdvertiserView ? (showSelection ? 10 : 9) : (showSelection ? 11 : 10);
 
   // Access Control
   if (!hasPermission('leads.view')) {
@@ -1773,11 +1868,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
         {/* Stats Cards */}
         <OperationalKpiGrid className="leadKpiGrid">
-          <OperationalKpiCard label="Total" value={stats.total} icon={UserIcon} />
-          <OperationalKpiCard label="Pending" value={stats.pending} icon={CalendarClock} tone="amber" />
-          <OperationalKpiCard label="Closing" value={stats.closing} icon={CheckCircle2} tone="emerald" />
-          <OperationalKpiCard label="Auto WA" value={stats.autoWhatsApp} icon={MessageCircle} tone="emerald" />
-          <OperationalKpiCard label="Conversion Rate" value={`${stats.conversionRate}%`} icon={ArrowRightCircle} tone="blue" />
+          <OperationalKpiCard label="Total" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.total} icon={UserIcon} />
+          <OperationalKpiCard label="Pending" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.pending} icon={CalendarClock} tone="amber" />
+          <OperationalKpiCard label="Closing" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.closing} icon={CheckCircle2} tone="emerald" />
+          <OperationalKpiCard label="Auto WA" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.autoWhatsApp} icon={MessageCircle} tone="emerald" />
+          <OperationalKpiCard label="Conversion Rate" value={leadTableLoading ? <Skeleton className="h-6 w-16 rounded-md" /> : `${stats.conversionRate}%`} icon={ArrowRightCircle} tone="blue" />
         </OperationalKpiGrid>
 
 
@@ -2006,13 +2101,19 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedLeads.length === 0 ? (
+                  {leadTableLoading ? (
+                    <LeadTableSkeleton columns={leadTableColumnCount} />
+                  ) : paginatedLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={isAdvertiserView ? (showSelection ? 10 : 9) : (showSelection ? 11 : 10)}>
+                      <td colSpan={leadTableColumnCount}>
                         <OperationalEmptyState
                           icon={UserIcon}
                           title="Tidak ada data prospek ditemukan"
-                          description="Coba ubah filter, tanggal, atau kata kunci pencarian."
+                          description={
+                            leads.length === 0
+                              ? 'Data prospek belum masuk ke state lokal. Sistem sedang mencoba muat data terbaru.'
+                              : 'Coba ubah filter, tanggal, atau kata kunci pencarian.'
+                          }
                         />
                       </td>
                     </tr>
@@ -2214,11 +2315,17 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
             </DataTable>
 
             <div className="leadMobileCardList">
-              {paginatedLeads.length === 0 ? (
+              {leadTableLoading ? (
+                <LeadMobileSkeleton />
+              ) : paginatedLeads.length === 0 ? (
                 <OperationalEmptyState
                   icon={UserIcon}
                   title="Tidak ada data prospek ditemukan"
-                  description="Coba ubah filter, tanggal, atau kata kunci pencarian."
+                  description={
+                    leads.length === 0
+                      ? 'Data prospek belum masuk ke state lokal. Sistem sedang mencoba muat data terbaru.'
+                      : 'Coba ubah filter, tanggal, atau kata kunci pencarian.'
+                  }
                 />
               ) : (
                 paginatedLeads.map((item, index) => {
@@ -2517,7 +2624,21 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
           </OperationalTableCard>
         ) : (
             /* KANBAN VIEW */
-            kanbanView
+            leadTableLoading ? (
+              <div className="leadKanbanBoard" aria-label="Memuat board prospek">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <section key={`lead-kanban-skeleton-${index}`} className="leadKanbanColumn">
+                    <div className="leadKanbanColumnHeader">
+                      <Skeleton className="h-6 w-28 rounded-md" />
+                    </div>
+                    <div className="leadKanbanList">
+                      <Skeleton className="h-28 w-full rounded-lg" />
+                      <Skeleton className="h-24 w-full rounded-lg" />
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : kanbanView
         )}
       </div>
 
