@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:5174';
-const CHROME_PATH =
-  process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME_PATH = resolveChromePath();
 const PUPPETEER_IMPORT_TIMEOUT_MS = Number(process.env.PUPPETEER_IMPORT_TIMEOUT_MS || 30_000);
 const ARTIFACT_DIR = path.join(process.cwd(), 'File Review', 'artifacts');
 const OUTPUT_PATH = path.join(ARTIFACT_DIR, 'route-navigation-smoke.json');
@@ -48,6 +48,45 @@ const routes = [
 
 function ensureArtifactDir() {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
+
+function resolveChromePath() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+
+  const platformCandidates = {
+    darwin: [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    ],
+    win32: [
+      'C:/Program Files/Google/Chrome/Application/chrome.exe',
+      'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+      `${process.env.LOCALAPPDATA || ''}/Google/Chrome/Application/chrome.exe`,
+    ],
+    linux: [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+    ],
+  };
+
+  const candidates = platformCandidates[process.platform] || [];
+  const fileMatch = candidates.find((candidate) => candidate && fs.existsSync(candidate));
+  if (fileMatch) return fileMatch;
+
+  if (process.platform === 'linux') {
+    for (const command of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
+      try {
+        return execFileSync('which', [command], { encoding: 'utf8' }).trim();
+      } catch {
+        // Try the next known binary name.
+      }
+    }
+  }
+
+  throw new Error('Chrome executable tidak ditemukan. Set CHROME_PATH=/path/to/chrome lalu jalankan ulang smoke test.');
 }
 
 async function loadPuppeteer() {

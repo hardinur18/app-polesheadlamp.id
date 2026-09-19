@@ -7,6 +7,11 @@ import {
   isTechnicianRole,
 } from '@/app/data/roleHelpers';
 import { normalizeOrderTime } from '@/app/services/orderTime';
+import {
+  assertSpreadsheetRowLimit,
+  getSpreadsheetReadRowLimit,
+  validateSpreadsheetUploadFile,
+} from '@/app/utils/spreadsheetUploadGuards';
 
 const loadCsvParser = async () => (await import('papaparse')).default;
 const loadSpreadsheet = async () => import('xlsx');
@@ -245,21 +250,35 @@ export function useOrderImport({
         toast.error("Gagal menyiapkan import CSV.");
       }
     } else if (file.name.match(/\.(xlsx|xls)$/i)) {
+      try {
+        validateSpreadsheetUploadFile(file, { label: 'File Excel pesanan' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'File Excel tidak valid.';
+        toast.error(message);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
         const data = e.target?.result;
         try {
           const XLSX = await loadSpreadsheet();
-          const workbook = XLSX.read(data, { type: 'array' });
+          const workbook = XLSX.read(data, {
+            type: 'array',
+            sheetRows: getSpreadsheetReadRowLimit(),
+          });
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(sheet, { cellDates: true } as any);
+          assertSpreadsheetRowLimit(rows, { label: 'Import pesanan' });
           await processRows(rows);
         } catch (error) {
           console.error("Error reading Excel file:", error);
-          toast.error("Gagal membaca file Excel.");
+          const message = error instanceof Error ? error.message : 'Gagal membaca file Excel.';
+          toast.error(message);
         }
       };
+      reader.onerror = () => toast.error('Gagal membaca file Excel.');
       reader.readAsArrayBuffer(file);
     } else {
       toast.error("Format file tidak didukung. Harap gunakan .csv atau .xlsx");

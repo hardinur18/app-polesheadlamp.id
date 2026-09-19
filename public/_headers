@@ -1,9 +1,143 @@
 /*
-  Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), payment=(), usb=()
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https: wss:; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'self'
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/booking
+  Cache-Control: no-cache
+
+/booking/
+  Cache-Control: no-cache
+
+/payment-gateway-preview
+  Cache-Control: no-cache
+
+/payment-gateway-preview/
+  Cache-Control: no-cache
+
+/login
+  Cache-Control: no-cache
+
+/login/
+  Cache-Control: no-cache
+
+/dashboard
+  Cache-Control: no-cache
+
+/dashboard/
+  Cache-Control: no-cache
+
+/ads/*
+  Cache-Control: no-cache
+
+/affiliates
+  Cache-Control: no-cache
+
+/affiliates/
+  Cache-Control: no-cache
+
+/leads/*
+  Cache-Control: no-cache
+
+/leads
+  Cache-Control: no-cache
+
+/leads/
+  Cache-Control: no-cache
+
+/orders
+  Cache-Control: no-cache
+
+/orders/
+  Cache-Control: no-cache
+
+/reports/*
+  Cache-Control: no-cache
+
+/schedule
+  Cache-Control: no-cache
+
+/schedule/
+  Cache-Control: no-cache
+
+/technician/*
+  Cache-Control: no-cache
+
+/monitoring/*
+  Cache-Control: no-cache
+
+/map
+  Cache-Control: no-cache
+
+/map/
+  Cache-Control: no-cache
+
+/profile
+  Cache-Control: no-cache
+
+/profile/
+  Cache-Control: no-cache
+
+/finance/*
+  Cache-Control: no-cache
+
+/inventory/*
+  Cache-Control: no-cache
+
+/inventory
+  Cache-Control: no-cache
+
+/master-data
+  Cache-Control: no-cache
+
+/master-data/
+  Cache-Control: no-cache
+
+/users
+  Cache-Control: no-cache
+
+/users/
+  Cache-Control: no-cache
+
+/settings/*
+  Cache-Control: no-cache
+
+/audit-logs
+  Cache-Control: no-cache
+
+/audit-logs/
+  Cache-Control: no-cache
+
+/conversations/*
+  Cache-Control: no-cache
+
+/whatsapp
+  Cache-Control: no-cache
+
+/whatsapp/
+  Cache-Control: no-cache
+
+/whatsapp/*
+  Cache-Control: no-cache
+
+/proof-assets
+  Cache-Control: no-cache
+
+/proof-assets/
+  Cache-Control: no-cache
+
+/embed/form/*
+  Cache-Control: no-cache
+
+/app/*
+  Cache-Control: no-cache
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

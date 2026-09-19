@@ -33,6 +33,11 @@ import {
   OPERATIONAL_EXPENSE_FORWARD_DRAFT_KEY,
   type OperationalExpenseForwardDraft,
 } from '@/app/data/operationalExpenseForwardDraft';
+import {
+  assertSpreadsheetRowLimit,
+  getSpreadsheetReadRowLimit,
+  validateSpreadsheetUploadFile,
+} from '@/app/utils/spreadsheetUploadGuards';
 import { usePermissions } from '../hooks/usePermissions';
 import { useMasterData } from './master-data/context';
 import { Button } from '../components/ui/button';
@@ -1638,9 +1643,15 @@ export function Kas() {
       let importedRows: BulkInputDraftRow[] = [];
 
       if (['xlsx', 'xls'].includes(extension || '')) {
-        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+        validateSpreadsheetUploadFile(file, { label: 'File Excel biaya operasional' });
+        const workbook = XLSX.read(await file.arrayBuffer(), {
+          type: 'array',
+          cellDates: true,
+          sheetRows: getSpreadsheetReadRowLimit(),
+        });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = sheet ? XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true }) : [];
+        assertSpreadsheetRowLimit(rows, { label: 'Import biaya operasional' });
         importedRows = buildBulkInputRowsFromMatrix(rows);
       } else {
         const parsed = Papa.parse<string[]>(await file.text(), {

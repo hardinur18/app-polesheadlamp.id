@@ -66,6 +66,11 @@ import {
   resolveAdAccountAttribution,
   type ResolvedAdAccountAttribution,
 } from '@/app/pages/ads/adAccountAttribution';
+import {
+  assertSpreadsheetRowLimit,
+  getSpreadsheetReadRowLimit,
+  validateSpreadsheetUploadFile,
+} from '@/app/utils/spreadsheetUploadGuards';
 
 const loadSpreadsheet = () => import('xlsx');
 
@@ -1600,15 +1605,28 @@ export function IklanHarian() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    try {
+      validateSpreadsheetUploadFile(file, { label: 'File Excel iklan harian' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'File Excel tidak valid.';
+      toast.error(message);
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
         try {
             const bstr = evt.target?.result;
             const spreadsheet = await loadSpreadsheet();
-            const wb = spreadsheet.read(bstr, { type: 'binary' });
+            const wb = spreadsheet.read(bstr, {
+              type: 'binary',
+              sheetRows: getSpreadsheetReadRowLimit(),
+            });
             const wsname = wb.SheetNames[0];
             const ws = wb.Sheets[wsname];
             const data = spreadsheet.utils.sheet_to_json(ws);
+            assertSpreadsheetRowLimit(data, { label: 'Import iklan harian' });
             
             const staged = data.map((row: any) => {
                  const dateStr = normalizeImportDate(row['Date'] || row['Tanggal'] || row['date']);
@@ -1643,9 +1661,11 @@ export function IklanHarian() {
 
         } catch (error) {
             console.error(error);
-            toast.error('Gagal memproses file Excel');
+            const message = error instanceof Error ? error.message : 'Gagal memproses file Excel';
+            toast.error(message);
         }
     };
+    reader.onerror = () => toast.error('Gagal membaca file Excel.');
     reader.readAsBinaryString(file);
   };
 

@@ -14,6 +14,11 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { VehicleType } from '../data';
 import { getVehicleNameValidationMessage, normalizeVehicleName } from '../vehicleValidation';
+import {
+  assertSpreadsheetRowLimit,
+  getSpreadsheetReadRowLimit,
+  validateSpreadsheetUploadFile,
+} from '@/app/utils/spreadsheetUploadGuards';
 
 interface VehicleImportModalProps {
   isOpen: boolean;
@@ -103,15 +108,34 @@ export function VehicleImportModal({ isOpen, onClose, onConfirm }: VehicleImport
         complete: (results) => processRows(results.data)
       });
     } else if (file.name.match(/\.(xlsx|xls)$/i)) {
+      try {
+        validateSpreadsheetUploadFile(file, { label: 'File Excel tipe mobil' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'File Excel tidak valid.';
+        toast.error(message);
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet);
-        processRows(rows);
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, {
+            type: 'array',
+            sheetRows: getSpreadsheetReadRowLimit(),
+          });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet);
+          assertSpreadsheetRowLimit(rows, { label: 'Import tipe mobil' });
+          processRows(rows);
+        } catch (error) {
+          console.error('Error reading vehicle Excel file:', error);
+          const message = error instanceof Error ? error.message : 'Gagal membaca file Excel.';
+          toast.error(message);
+        }
       };
+      reader.onerror = () => toast.error('Gagal membaca file Excel.');
       reader.readAsArrayBuffer(file);
     } else {
       toast.error("Format file tidak didukung.");
