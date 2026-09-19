@@ -166,6 +166,47 @@ const assetMatchesSearch = (asset: ProofAsset, search: string, vehicleName: stri
   ].some((value) => value.toLowerCase().includes(query));
 };
 
+type ProofAssetImageProps = {
+  src: string;
+  alt: string;
+  className: string;
+  loading?: 'eager' | 'lazy';
+};
+
+function ProofAssetImage({ src, alt, className, loading = 'lazy' }: ProofAssetImageProps) {
+  const [loaded, setLoaded] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [src]);
+
+  if (!src || failed) {
+    return (
+      <div className="proofAssetImageFallback" aria-label={alt}>
+        <Images className="h-7 w-7" />
+        <span>Gambar tidak tersedia</span>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className={cn('proofAssetImageSkeleton', loaded && 'isLoaded')} aria-hidden="true" />
+      <img
+        src={src}
+        alt={alt}
+        className={cn(className, !loaded && 'isLoading')}
+        loading={loading}
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </>
+  );
+}
+
 export function ProofAssetLibraryPage() {
   const { vehicles, currentUser, leads, orders } = useMasterData();
   const { hasPermission } = usePermissions();
@@ -433,7 +474,7 @@ export function ProofAssetLibraryPage() {
       };
 
       const savedAsset = editingAsset
-        ? await updateProofAsset(editingAsset.id, payload)
+        ? await updateProofAsset(editingAsset.id, payload, { existingAsset: editingAsset })
         : await createProofAsset({
             ...payload,
             id: assetId,
@@ -513,7 +554,7 @@ export function ProofAssetLibraryPage() {
     window.open(buildWhatsAppManualUrl(targetPhone, caption), '_blank', 'noopener,noreferrer');
     setForwardSending(true);
     try {
-      const updatedAsset = await incrementProofAssetUsage(forwardAsset.id).catch(() => null);
+      const updatedAsset = await incrementProofAssetUsage(forwardAsset.id, { existingAsset: forwardAsset }).catch(() => null);
       setAssets((current) => current.map((asset) => {
         if (asset.id !== forwardAsset.id) return asset;
         return updatedAsset || { ...asset, usageCount: asset.usageCount + 1 };
@@ -645,7 +686,7 @@ export function ProofAssetLibraryPage() {
           </div>
         ) : (
           <div className="proofAssetGalleryGrid">
-            {filteredAssets.map((asset) => {
+            {filteredAssets.map((asset, index) => {
               const vehicleName = asset.vehicleTypeId
                 ? vehicleNameById.get(asset.vehicleTypeId) || 'Tipe mobil tidak tersedia'
                 : 'Tanpa tipe mobil';
@@ -666,11 +707,11 @@ export function ProofAssetLibraryPage() {
                   }}
                 >
                   <div className="proofAssetImageWrap">
-                    <img
+                    <ProofAssetImage
                       src={imageUrl}
                       alt={asset.title}
                       className="proofAssetImage"
-                      loading="lazy"
+                      loading={index < 6 ? 'eager' : 'lazy'}
                     />
                     <div className="proofAssetImageShade" />
                     <div className="proofAssetCardStatus">
@@ -748,7 +789,12 @@ export function ProofAssetLibraryPage() {
               <div className="proofAssetDetailBody">
                 <div className="proofAssetDetailLayout">
                   <div className="proofAssetDetailImageFrame">
-                    <img src={imageUrl} alt={previewAsset.title} className="proofAssetDetailImage" />
+                    <ProofAssetImage
+                      src={imageUrl}
+                      alt={previewAsset.title}
+                      className="proofAssetDetailImage"
+                      loading="eager"
+                    />
                   </div>
                   <div className="proofAssetDetailInfo">
                     <div className="proofAssetDetailHero">
@@ -843,7 +889,12 @@ export function ProofAssetLibraryPage() {
               <div className="proofAssetForwardBody">
                 <section className="proofAssetForwardPreview">
                   <div className="proofAssetForwardImageFrame">
-                    <img src={imageUrl} alt={forwardAsset.title} className="proofAssetForwardImage" />
+                    <ProofAssetImage
+                      src={imageUrl}
+                      alt={forwardAsset.title}
+                      className="proofAssetForwardImage"
+                      loading="eager"
+                    />
                   </div>
                   <div className="proofAssetForwardPreviewMeta">
                     <strong>{forwardAsset.title}</strong>

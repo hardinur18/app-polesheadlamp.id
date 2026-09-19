@@ -314,6 +314,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     adAccountOwnerAssignments,
     subChannels,
     isOperationalDataLoading,
+    ensureOrdersForDateRange,
+    ensureLeadsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
 
@@ -373,6 +375,29 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+
+  React.useEffect(() => {
+    if (!rangeParams) return;
+
+    void Promise.allSettled([
+      ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'lead' }),
+      ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'service' }),
+      ensureLeadsForDateRange({ from: rangeParams.from, to: rangeParams.to }),
+    ]).then((results) => {
+      if (import.meta.env.DEV) {
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.warn('[Advertiser Dashboard] range data fetch failed', { index, error: result.reason });
+          }
+        });
+      }
+    });
+  }, [
+    ensureLeadsForDateRange,
+    ensureOrdersForDateRange,
+    rangeParams?.from,
+    rangeParams?.to,
+  ]);
 
   const adAccountMasterLookup = useMemo(() => {
     const byId = new Map<string, (typeof adAccounts)[number]>();

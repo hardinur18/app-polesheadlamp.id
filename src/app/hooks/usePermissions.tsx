@@ -6,6 +6,7 @@ import { useMasterData } from '@/app/pages/master-data/context';
 import { getSessionBackedEdgeHeaders } from '../services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '../services/internal/functionsBaseUrl';
 import { minutesToMs, useUsageControlSettings } from '../services/usageControlSettings';
+import { startPerfTimer } from '@/app/utils/perfTelemetry';
 import { toast } from 'sonner';
 
 const PERMISSIONS_REFRESH_BROADCAST_KEY = 'rhi-permissions-updated-at';
@@ -233,18 +234,32 @@ export const PermissionsProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, [currentRole, currentUser?.id]);
 
   const refreshPermissions = useCallback(async () => {
-    const snapshot = await fetchCurrentPermissionSnapshot();
-    const canReadRoleConfiguration =
-      currentRole === 'Owner' ||
-      snapshot.effectivePermissions.includes('role_permissions.view') ||
-      snapshot.effectivePermissions.includes('role_permissions.manage');
+    const endTimer = startPerfTimer('permissions.refresh', { role: currentRole });
 
-    if (canReadRoleConfiguration) {
-      void Promise.all([fetchRolePermissions(), fetchRoleSettings()]).catch((error) => {
-        console.error('[Permissions] Background role configuration refresh failed:', error);
+    try {
+      const snapshot = await fetchCurrentPermissionSnapshot();
+      const canReadRoleConfiguration =
+        currentRole === 'Owner' ||
+        snapshot.effectivePermissions.includes('role_permissions.view') ||
+        snapshot.effectivePermissions.includes('role_permissions.manage');
+
+      if (canReadRoleConfiguration) {
+        void Promise.all([fetchRolePermissions(), fetchRoleSettings()]).catch((error) => {
+          console.error('[Permissions] Background role configuration refresh failed:', error);
+        });
+      } else {
+        setLocalRoleSettings({} as Record<Role, RoleSettings>);
+      }
+
+      endTimer('ok', {
+        permissions: snapshot.effectivePermissions.length,
+        readsRoleConfiguration: canReadRoleConfiguration,
       });
-    } else {
-      setLocalRoleSettings({} as Record<Role, RoleSettings>);
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   }, [currentRole, fetchCurrentPermissionSnapshot, fetchRolePermissions, fetchRoleSettings]);
 

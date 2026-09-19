@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { startPerfTimer } from '@/app/utils/perfTelemetry';
 import { buildMakeServerUrl } from './internal/functionsBaseUrl';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 
@@ -69,6 +70,10 @@ export type ProofAssetInput = {
   caption?: string | null;
   isActive: boolean;
   createdBy?: string | null;
+};
+
+type ProofAssetMutationOptions = {
+  existingAsset?: ProofAsset | null;
 };
 
 const cleanText = (value: string | null | undefined) => value?.replace(/\s+/g, ' ').trim() || '';
@@ -291,6 +296,17 @@ async function fetchProofAssetDirectRecords() {
   return (data || []) as ProofAssetStorageRecord[];
 }
 
+async function fetchProofAssetDirectRecordById(id: string) {
+  const { data, error } = await supabase
+    .from(PROOF_ASSET_APP_DATA_TYPE)
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data as ProofAssetStorageRecord;
+}
+
 async function fetchProofAssetLegacyRecords(timeoutMs = PROOF_ASSET_LEGACY_FETCH_TIMEOUT_MS) {
   const response = await fetchWithTimeout(PROOF_ASSET_MASTER_URL, {
     headers: await getSessionBackedEdgeHeaders(),
@@ -300,19 +316,22 @@ async function fetchProofAssetLegacyRecords(timeoutMs = PROOF_ASSET_LEGACY_FETCH
 
 async function fetchProofAssetRecords() {
   try {
-    const records = await fetchProofAssetAppDataRecords();
+    const records = await fetchProofAssetDirectRecords();
     if (records.length > 0) return records;
 
-    return await fetchProofAssetLegacyRecords().catch(() => records);
-  } catch (appDataError) {
+    const appDataRecords = await fetchProofAssetAppDataRecords().catch(() => records);
+    if (appDataRecords.length > 0) return appDataRecords;
+
+    return await fetchProofAssetLegacyRecords().catch(() => appDataRecords);
+  } catch (directError) {
     try {
-      const records = await fetchProofAssetDirectRecords();
+      const records = await fetchProofAssetAppDataRecords();
       if (records.length > 0) return records;
 
       return await fetchProofAssetLegacyRecords().catch(() => records);
     } catch {
       return fetchProofAssetLegacyRecords(PROOF_ASSET_FETCH_TIMEOUT_MS).catch(() => {
-        throw appDataError;
+        throw directError;
       });
     }
   }
@@ -418,75 +437,175 @@ async function saveProofAssetRecord(record: ProofAssetStorageRecord) {
   return readJsonResponse<ProofAssetStorageRecord>(response, 'Gagal menyimpan aset.');
 }
 
+async function incrementProofAssetUsageRecord(id: string) {
+  const { data, error } = await supabase.rpc('increment_proof_asset_usage', {
+    p_asset_id: id,
+  });
+
+  if (error) throw error;
+  const record = Array.isArray(data) ? data[0] : data;
+  if (!record) throw new Error('Aset tidak ditemukan.');
+  return record as ProofAssetStorageRecord;
+}
+
 export async function listProofAssets() {
-  const records = await fetchProofAssetRecords();
-  return records
-    .map(mapProofAssetFromRecord)
-    .filter((asset) => asset.id && asset.title)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 500);
+  const endTimer = startPerfTimer('proof-assets.list', { limit: PROOF_ASSET_LIST_LIMIT });
+
+  try {
+    const records = await fetchProofAssetRecords();
+    const assets = records
+      .map(mapProofAssetFromRecord)
+      .filter((asset) => asset.id && asset.title)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 500);
+    endTimer('ok', { records: records.length, assets: assets.length });
+    return assets;
+  } catch (error) {
+    endTimer('error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 export async function createProofAsset(input: ProofAssetInput) {
-  const record = mapProofAssetToRecord(input);
-  const savedRecord = await createProofAssetRecord(record)
-    .catch(() => createProofAssetDirectRecord(record))
-    .catch(() => saveProofAssetRecord(record));
-  return mapProofAssetFromRecord(savedRecord);
+  const endTimer = startPerfTimer('proof-assets.create');
+
+  try {
+    const record = mapProofAssetToRecord(input);
+    const savedRecord = await createProofAssetRecord(record)
+      .catch(() => createProofAssetDirectRecord(record))
+      .catch(() => saveProofAssetRecord(record));
+    const asset = mapProofAssetFromRecord(savedRecord);
+    endTimer('ok', { hasImage: Boolean(asset.imagePath) });
+    return asset;
+  } catch (error) {
+    endTimer('error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
-export async function updateProofAsset(id: string, input: Omit<ProofAssetInput, 'id' | 'createdBy'>) {
-  const existing = (await listProofAssets()).find((asset) => asset.id === id) || null;
-  const record = mapProofAssetToRecord({ ...input, id }, existing);
-  const savedRecord = await updateProofAssetRecord(id, record)
-    .catch(() => updateProofAssetDirectRecord(id, record))
-    .catch(() => saveProofAssetRecord(record));
-  return mapProofAssetFromRecord(savedRecord);
+function pickExistingProofAsset(id: string, asset: ProofAsset | null | undefined) {
+  return asset?.id === id ? asset : null;
 }
 
-export async function incrementProofAssetUsage(id: string) {
-  const existing = (await listProofAssets()).find((asset) => asset.id === id) || null;
-  if (!existing) throw new Error('Aset tidak ditemukan.');
+export async function updateProofAsset(
+  id: string,
+  input: Omit<ProofAssetInput, 'id' | 'createdBy'>,
+  options: ProofAssetMutationOptions = {},
+) {
+  const endTimer = startPerfTimer('proof-assets.update');
 
-  const record = mapProofAssetToRecord({
-    id,
-    title: existing.title,
-    vehicleTypeId: existing.vehicleTypeId,
-    year: existing.year,
-    imagePath: existing.imagePath,
-    tags: existing.tags,
-    caption: existing.caption,
-    isActive: existing.isActive,
-    createdBy: existing.createdBy,
-  }, existing);
+  try {
+    const providedExisting = pickExistingProofAsset(id, options.existingAsset);
+    const existing = providedExisting || (await listProofAssets()).find((asset) => asset.id === id) || null;
+    const record = mapProofAssetToRecord({ ...input, id }, existing);
+    const savedRecord = await updateProofAssetRecord(id, record)
+      .catch(() => updateProofAssetDirectRecord(id, record))
+      .catch(() => saveProofAssetRecord(record));
+    const asset = mapProofAssetFromRecord(savedRecord);
+    endTimer('ok', {
+      hadExisting: Boolean(existing),
+      usedProvidedExisting: Boolean(providedExisting),
+      hasImage: Boolean(asset.imagePath),
+    });
+    return asset;
+  } catch (error) {
+    endTimer('error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
 
-  record.usageCount = existing.usageCount + 1;
-  const savedRecord = await updateProofAssetRecord(id, record)
-    .catch(() => updateProofAssetDirectRecord(id, record))
-    .catch(() => saveProofAssetRecord(record));
-  return mapProofAssetFromRecord(savedRecord);
+export async function incrementProofAssetUsage(id: string, options: ProofAssetMutationOptions = {}) {
+  const endTimer = startPerfTimer('proof-assets.increment-usage');
+
+  try {
+    const savedRecord = await incrementProofAssetUsageRecord(id);
+    const asset = mapProofAssetFromRecord(savedRecord);
+    endTimer('ok', { usageCount: asset.usageCount, source: 'rpc' });
+    return asset;
+  } catch (rpcError) {
+    try {
+      const providedExisting = pickExistingProofAsset(id, options.existingAsset);
+      const directExisting = await fetchProofAssetDirectRecordById(id)
+        .then(mapProofAssetFromRecord)
+        .catch(() => null);
+      const existing = directExisting || providedExisting;
+      if (!existing) throw new Error('Aset tidak ditemukan.');
+
+      const record = mapProofAssetToRecord({
+        id,
+        title: existing.title,
+        vehicleTypeId: existing.vehicleTypeId,
+        year: existing.year,
+        imagePath: existing.imagePath,
+        tags: existing.tags,
+        caption: existing.caption,
+        isActive: existing.isActive,
+        createdBy: existing.createdBy,
+      }, existing);
+
+      record.usageCount = existing.usageCount + 1;
+      const savedRecord = await updateProofAssetRecord(id, record)
+        .catch(() => updateProofAssetDirectRecord(id, record))
+        .catch(() => saveProofAssetRecord(record));
+      const asset = mapProofAssetFromRecord(savedRecord);
+      endTimer('fallback', {
+        usageCount: asset.usageCount,
+        source: directExisting ? 'fresh-row' : 'provided-existing',
+        rpcError: rpcError instanceof Error ? rpcError.message : String(rpcError),
+      });
+      return asset;
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+        rpcError: rpcError instanceof Error ? rpcError.message : String(rpcError),
+      });
+      throw error;
+    }
+  }
 }
 
 export async function deleteProofAsset(id: string) {
-  const response = await fetchWithTimeout(`${PROOF_ASSET_APP_DATA_URL}/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: await getSessionBackedEdgeHeaders(),
-  }).catch(() => null);
+  const endTimer = startPerfTimer('proof-assets.delete');
 
-  if (response?.ok) return;
+  try {
+    const response = await fetchWithTimeout(`${PROOF_ASSET_APP_DATA_URL}/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: await getSessionBackedEdgeHeaders(),
+    }).catch(() => null);
 
-  const { error } = await supabase
-    .from(PROOF_ASSET_APP_DATA_TYPE)
-    .delete()
-    .eq('id', id);
+    if (response?.ok) {
+      endTimer('ok', { source: 'app-data' });
+      return;
+    }
 
-  if (!error) return;
+    const { error } = await supabase
+      .from(PROOF_ASSET_APP_DATA_TYPE)
+      .delete()
+      .eq('id', id);
 
-  const legacyResponse = await fetchWithTimeout(`${PROOF_ASSET_MASTER_URL}/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: await getSessionBackedEdgeHeaders(),
-  });
-  await readJsonResponse(legacyResponse, 'Gagal menghapus aset.');
+    if (!error) {
+      endTimer('fallback', { source: 'direct' });
+      return;
+    }
+
+    const legacyResponse = await fetchWithTimeout(`${PROOF_ASSET_MASTER_URL}/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: await getSessionBackedEdgeHeaders(),
+    });
+    await readJsonResponse(legacyResponse, 'Gagal menghapus aset.');
+    endTimer('fallback', { source: 'legacy' });
+  } catch (error) {
+    endTimer('error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
@@ -692,6 +811,10 @@ async function createInlineProofAssetImage(file: File, assetId: string) {
 }
 
 export async function uploadProofAssetImage(file: File, assetId: string) {
+  const endTimer = startPerfTimer('proof-assets.upload-image', {
+    originalBytes: file.size,
+    type: file.type,
+  });
   const compressionProfiles = [
     {
       force: file.size > PROOF_ASSET_UPLOAD_TARGET_BYTES,
@@ -712,30 +835,49 @@ export async function uploadProofAssetImage(file: File, assetId: string) {
   let lastSizeError: unknown = null;
   let storageUnavailableError: unknown = null;
 
-  for (const profile of compressionProfiles) {
-    const uploadFile = await compressProofAssetImageFile(file, assetId, profile);
-    try {
-      return await uploadCompressedProofAssetImage(uploadFile);
-    } catch (error) {
-      if (isStorageObjectSizeError(error)) {
-        lastSizeError = error;
-        continue;
+  try {
+    for (const profile of compressionProfiles) {
+      const uploadFile = await compressProofAssetImageFile(file, assetId, profile);
+      try {
+        const imagePath = await uploadCompressedProofAssetImage(uploadFile);
+        endTimer('ok', {
+          uploadedBytes: uploadFile.size,
+          inlineFallback: false,
+          maxDimension: profile.maxDimension,
+        });
+        return imagePath;
+      } catch (error) {
+        if (isStorageObjectSizeError(error)) {
+          lastSizeError = error;
+          continue;
+        }
+        if (isStorageUnavailableError(error)) {
+          storageUnavailableError = error;
+          break;
+        }
+        throw error;
       }
-      if (isStorageUnavailableError(error)) {
-        storageUnavailableError = error;
-        break;
-      }
-      throw error;
     }
+
+    const inlineImage = await createInlineProofAssetImage(file, assetId);
+    if (inlineImage) {
+      endTimer('fallback', {
+        inlineFallback: true,
+        bytes: inlineImage.length,
+      });
+      return inlineImage;
+    }
+
+    const lastError = storageUnavailableError || lastSizeError;
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Gambar belum bisa disimpan ke storage.');
+  } catch (error) {
+    endTimer('error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
   }
-
-  const inlineImage = await createInlineProofAssetImage(file, assetId);
-  if (inlineImage) return inlineImage;
-
-  const lastError = storageUnavailableError || lastSizeError;
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Gambar belum bisa disimpan ke storage.');
 }
 
 export async function deleteProofAssetImage(imagePath: string | null | undefined) {

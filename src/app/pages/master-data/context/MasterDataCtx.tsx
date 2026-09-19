@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { getSessionBackedEdgeHeaders } from '../../../services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '../../../services/internal/functionsBaseUrl';
+import { recordPerfMetric, startPerfTimer } from '@/app/utils/perfTelemetry';
+import { isAdminManagementRole, isFinanceRole } from '@/app/data/roleHelpers';
 import { getPreviousDateKey, getTodayDateKey } from '../dateKeys';
 import { 
   Area, Branch,
@@ -496,6 +498,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   };
 
   const fetchDirectAppDataPage = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
+    const endTimer = startPerfTimer('master-data.direct-page', {
+      table,
+      from,
+      to,
+      orderBy: options.orderBy,
+    });
     let query = supabase
       .from(table)
       .select('*');
@@ -513,10 +521,19 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       query = query.order(options.orderBy, { ascending: options.ascending ?? true });
     }
 
-    const { data, error } = await query.range(from, to);
-    if (error) throw error;
+    try {
+      const { data, error } = await query.range(from, to);
+      if (error) throw error;
 
-    return data || [];
+      const rows = data || [];
+      endTimer('ok', { rows: rows.length });
+      return rows;
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   const shouldRetryEmptyAppDataPageDirectly = (table: string, from: number) => {
@@ -547,6 +564,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   };
 
   const fetchAppDataPage = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
+    const endTimer = startPerfTimer('master-data.app-data-page', {
+      table,
+      from,
+      to,
+      orderBy: options.orderBy,
+    });
     const url = new URL(appDataUrl(table));
     url.searchParams.set('from', String(from));
     url.searchParams.set('to', String(to));
@@ -566,103 +589,150 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       url.searchParams.set(`lte_${column}`, value);
     });
 
-    const response = await fetch(url.toString(), {
-      headers: await getSessionBackedEdgeHeaders(),
-    });
+    try {
+      const response = await fetch(url.toString(), {
+        headers: await getSessionBackedEdgeHeaders(),
+      });
 
-    if (response.status === 403) {
-      const rows = await fetchDirectAppDataPage(table, from, to, options);
-      if (import.meta.env.DEV) {
-        console.info('[MasterData] app-data forbidden, using direct Supabase fallback', {
-          table,
-          rows: rows.length,
-        });
-      }
-      return { rows, forbidden: false };
-    }
-
-    if (!response.ok) {
-      try {
+      if (response.status === 403) {
         const rows = await fetchDirectAppDataPage(table, from, to, options);
         if (import.meta.env.DEV) {
-          console.info('[MasterData] app-data failed, using direct Supabase fallback', {
+          console.info('[MasterData] app-data forbidden, using direct Supabase fallback', {
             table,
-            status: response.status,
             rows: rows.length,
           });
         }
+        endTimer('fallback', { reason: 'forbidden', rows: rows.length });
         return { rows, forbidden: false };
-      } catch {
-        throw await readAppDataError(response, `Gagal memuat ${table}`);
       }
-    }
 
-    const body = await response.json();
-    const rows = Array.isArray(body?.rows) ? body.rows : [];
-
-    if (rows.length === 0 && shouldRetryEmptyAppDataPageDirectly(table, from)) {
-      try {
-        const directRows = await fetchDirectAppDataPage(table, from, to, options);
-        if (directRows.length > 0) {
+      if (!response.ok) {
+        try {
+          const rows = await fetchDirectAppDataPage(table, from, to, options);
           if (import.meta.env.DEV) {
-            console.info('[MasterData] app-data returned empty, using direct Supabase fallback', {
+            console.info('[MasterData] app-data failed, using direct Supabase fallback', {
               table,
-              rows: directRows.length,
+              status: response.status,
+              rows: rows.length,
             });
           }
-          return { rows: directRows, forbidden: false };
-        }
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn('[MasterData] direct Supabase empty-page fallback failed', { table, error });
+          endTimer('fallback', { reason: `http_${response.status}`, rows: rows.length });
+          return { rows, forbidden: false };
+        } catch {
+          const error = await readAppDataError(response, `Gagal memuat ${table}`);
+          endTimer('error', { status: response.status, error: error.message });
+          throw error;
         }
       }
-    }
 
-    return {
-      rows,
-      forbidden: false,
-    };
+      const body = await response.json();
+      const rows = Array.isArray(body?.rows) ? body.rows : [];
+
+      if (rows.length === 0 && shouldRetryEmptyAppDataPageDirectly(table, from)) {
+        try {
+          const directRows = await fetchDirectAppDataPage(table, from, to, options);
+          if (directRows.length > 0) {
+            if (import.meta.env.DEV) {
+              console.info('[MasterData] app-data returned empty, using direct Supabase fallback', {
+                table,
+                rows: directRows.length,
+              });
+            }
+            endTimer('fallback', { reason: 'empty_page', rows: directRows.length });
+            return { rows: directRows, forbidden: false };
+          }
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] direct Supabase empty-page fallback failed', { table, error });
+          }
+        }
+      }
+
+      endTimer('ok', { rows: rows.length });
+      return {
+        rows,
+        forbidden: false,
+      };
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 
   const createAppDataRow = async (table: string, payload: any) => {
-    const response = await fetch(appDataUrl(table), {
-      method: 'POST',
-      headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-      body: JSON.stringify(payload),
-    });
+    const endTimer = startPerfTimer('master-data.create-row', { table });
+    try {
+      const response = await fetch(appDataUrl(table), {
+        method: 'POST',
+        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      throw await readAppDataError(response, `Gagal menyimpan ${table}`);
+      if (!response.ok) {
+        const error = await readAppDataError(response, `Gagal menyimpan ${table}`);
+        endTimer('error', { status: response.status, error: error.message });
+        throw error;
+      }
+
+      const body = await response.json();
+      endTimer('ok', { hasRow: Boolean(body?.row) });
+      return body?.row;
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-
-    const body = await response.json();
-    return body?.row;
   };
 
   const updateAppDataRow = async (table: string, id: string, payload: any) => {
-    const response = await fetch(appDataUrl(table, id), {
-      method: 'PUT',
-      headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-      body: JSON.stringify(payload),
-    });
+    const endTimer = startPerfTimer('master-data.update-row', { table });
+    try {
+      const response = await fetch(appDataUrl(table, id), {
+        method: 'PUT',
+        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      throw await readAppDataError(response, `Gagal memperbarui ${table}`);
+      if (!response.ok) {
+        const error = await readAppDataError(response, `Gagal memperbarui ${table}`);
+        endTimer('error', { status: response.status, error: error.message });
+        throw error;
+      }
+
+      const body = await response.json();
+      endTimer('ok', { hasRow: Boolean(body?.row) });
+      return body?.row;
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-
-    const body = await response.json();
-    return body?.row;
   };
 
   const deleteAppDataRow = async (table: string, id: string) => {
-    const response = await fetch(appDataUrl(table, id), {
-      method: 'DELETE',
-      headers: await getSessionBackedEdgeHeaders(),
-    });
+    const endTimer = startPerfTimer('master-data.delete-row', { table });
+    try {
+      const response = await fetch(appDataUrl(table, id), {
+        method: 'DELETE',
+        headers: await getSessionBackedEdgeHeaders(),
+      });
 
-    if (!response.ok) {
-      throw await readAppDataError(response, `Gagal menghapus ${table}`);
+      if (!response.ok) {
+        const error = await readAppDataError(response, `Gagal menghapus ${table}`);
+        endTimer('error', { status: response.status, error: error.message });
+        throw error;
+      }
+
+      endTimer('ok');
+    } catch (error) {
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   };
 
@@ -741,34 +811,53 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     pageSize = 500,
     preferDirect = false,
   ) => {
+    const endTimer = startPerfTimer('master-data.range-fetch', {
+      table,
+      pageSize,
+      preferDirect,
+      orderBy: options.orderBy,
+    });
     let allData: any[] = [];
     let page = 0;
     let hasMore = true;
 
-    while (hasMore) {
-      const from = page * pageSize;
-      const to = from + pageSize - 1;
-      const pageResult = preferDirect
-        ? await fetchDirectAppDataPage(table, from, to, options)
-            .then((rows) => ({ rows, forbidden: false }))
-            .catch(async (error) => {
-              if (import.meta.env.DEV) {
-                console.warn('[MasterData] direct range fetch failed, falling back to app-data', { table, error });
-              }
-              return fetchAppDataPage(table, from, to, options);
-            })
-        : await fetchAppDataPage(table, from, to, options);
-      const { rows, forbidden } = pageResult;
+    try {
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const pageResult = preferDirect
+          ? await fetchDirectAppDataPage(table, from, to, options)
+              .then((rows) => ({ rows, forbidden: false }))
+              .catch(async (error) => {
+                if (import.meta.env.DEV) {
+                  console.warn('[MasterData] direct range fetch failed, falling back to app-data', { table, error });
+                }
+                return fetchAppDataPage(table, from, to, options);
+              })
+          : await fetchAppDataPage(table, from, to, options);
+        const { rows, forbidden } = pageResult;
 
-      if (forbidden) return [];
-      if (rows.length === 0) break;
+        if (forbidden) {
+          endTimer('skipped', { reason: 'forbidden', pages: page, rows: allData.length });
+          return [];
+        }
+        if (rows.length === 0) break;
 
-      allData.push(...rows);
-      hasMore = rows.length >= pageSize;
-      page += 1;
+        allData.push(...rows);
+        hasMore = rows.length >= pageSize;
+        page += 1;
+      }
+
+      endTimer('ok', { pages: page, rows: allData.length });
+      return mapFetchedRows(allData, mapper);
+    } catch (error) {
+      endTimer('error', {
+        pages: page,
+        rows: allData.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-
-    return mapFetchedRows(allData, mapper);
   };
 
   const ensureOrdersForDateRange = React.useCallback(async ({
@@ -942,7 +1031,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     mapper?: (data: any[]) => any[],
     options: FetchDataOptions = {},
   ) => {
-    const startedAt = performance.now();
+    const endTimer = startPerfTimer('master-data.full-fetch', {
+      table,
+      pageSize: options.pageSize || 1000,
+      progressive: Boolean(options.progressive),
+      orderBy: options.appData?.orderBy,
+    });
     try {
       let allData: any[] = [];
       let page = 0;
@@ -958,6 +1052,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
         if (forbidden) {
           setter([]);
+          endTimer('skipped', { reason: 'forbidden', pages: page, rows: allData.length });
           if (import.meta.env.DEV) {
             console.info('[MasterData] skipped forbidden table', { table });
           }
@@ -992,20 +1087,18 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       if (!options.progressive || allData.length === 0) {
         setter(mapFetchedRows(allData, mapper));
       }
-      if (import.meta.env.DEV) {
-        console.info('[MasterData] fetched table', {
-          table,
-          rows: allData.length,
-          ms: Math.round(performance.now() - startedAt),
-        });
-      }
+      endTimer('ok', { pages: page + 1, rows: allData.length });
     } catch (e) {
       if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(e)) {
         leadSpamDailyInputsUseFallbackRef.current = true;
         const fallbackRows = await fetchLeadSpamDailyInputsFallback();
         setter(fallbackRows);
+        endTimer('fallback', { reason: 'lead_spam_missing_table', rows: fallbackRows.length });
         return;
       }
+      endTimer('error', {
+        error: e instanceof Error ? e.message : String(e),
+      });
       console.error(`Error fetching ${table}:`, e);
     }
   };
@@ -2502,6 +2595,9 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     return deleteItem('lead_spam_daily_inputs', id, setLeadSpamDailyInputs, options);
   };
 
+  const shouldFetchFullOperationalHistory =
+    isAdminManagementRole(currentRole) || isFinanceRole(currentRole);
+
   // Initial Fetch (Waterfall)
   useEffect(() => {
     let isCancelled = false;
@@ -2557,6 +2653,39 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     });
 
     const deferredTimers: number[] = [];
+    const idleRequestIds: number[] = [];
+    const idleApi = window as unknown as {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const scheduleIdleTask = (task: () => void, timeout = 2_500) => {
+      if (idleApi.requestIdleCallback) {
+        const idleRequestId = idleApi.requestIdleCallback(() => {
+          if (!isCancelled) task();
+        }, { timeout });
+        idleRequestIds.push(idleRequestId);
+        return;
+      }
+
+      const timerId = window.setTimeout(() => {
+        if (!isCancelled) task();
+      }, 250);
+      deferredTimers.push(timerId);
+    };
+
+    const scheduleDeferredTask = (name: string, delayMs: number, task: () => void, idleTimeoutMs = 4_000) => {
+      const timerId = window.setTimeout(() => {
+        if (isCancelled) return;
+        recordPerfMetric(name, 0, 'scheduled', {
+          delayMs,
+          idleTimeoutMs,
+          role: currentRole,
+        });
+        scheduleIdleTask(task, idleTimeoutMs);
+      }, delayMs);
+      deferredTimers.push(timerId);
+    };
 
     const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
     if (orderFetch) {
@@ -2585,8 +2714,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           setIsOrdersLoading(false);
         }
 
-        const fullOrderFetchTimer = window.setTimeout(() => {
-          if (isCancelled) return;
+        if (!shouldFetchFullOperationalHistory) {
+          recordPerfMetric('master-data.full-orders-bootstrap', 0, 'skipped', {
+            reason: 'role_scoped',
+            role: currentRole,
+          });
+          return;
+        }
+
+        scheduleDeferredTask('master-data.full-orders-bootstrap', 6_000, () => {
           void fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, {
             progressive: true,
             mergeProgressiveWithPrevious: true,
@@ -2595,8 +2731,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
               ascending: false,
             },
           });
-        }, 4_000);
-        deferredTimers.push(fullOrderFetchTimer);
+        }, 5_000);
       };
 
       fetchPriorityOrders().finally(() => {
@@ -2636,8 +2771,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           setIsLeadsLoading(false);
         }
 
-        const fullLeadFetchTimer = window.setTimeout(() => {
-          if (isCancelled) return;
+        if (!shouldFetchFullOperationalHistory) {
+          recordPerfMetric('master-data.full-leads-bootstrap', 0, 'skipped', {
+            reason: 'role_scoped',
+            role: currentRole,
+          });
+          return;
+        }
+
+        scheduleDeferredTask('master-data.full-leads-bootstrap', 7_000, () => {
           void fetchData(leadFetch.table, leadFetch.setter, leadFetch.mapper, {
             progressive: true,
             mergeProgressiveWithPrevious: true,
@@ -2646,8 +2788,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
               ascending: false,
             },
           });
-        }, 4_500);
-        deferredTimers.push(fullLeadFetchTimer);
+        }, 5_000);
       };
 
       fetchPriorityLeads().finally(() => {
@@ -2658,14 +2799,6 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     } else {
       setIsLeadsLoading(false);
     }
-
-    // 3. Defer heavy operational data so the app shell and admin pages render first.
-    // Orders are loaded eagerly because the Pesanan page depends on them as its primary content.
-    const idleApi = window as unknown as {
-      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    let idleRequestId: number | undefined;
 
     const runDeferredOperationalFetches = () => {
       if (isCancelled) return;
@@ -2688,30 +2821,26 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
         }
       });
 
-      const supportTimer = window.setTimeout(() => {
-        if (isCancelled) return;
+      scheduleDeferredTask('master-data.support-bootstrap', 1_500, () => {
         fetchCatalog.support.forEach(({ table, setter, mapper }) => {
           fetchData(table, setter, mapper);
         });
-      }, 1500);
-      deferredTimers.push(supportTimer);
+      }, 2_500);
     };
 
-    if (idleApi.requestIdleCallback) {
-      idleRequestId = idleApi.requestIdleCallback(runDeferredOperationalFetches, { timeout: 1600 });
-    } else {
-      deferredTimers.push(window.setTimeout(runDeferredOperationalFetches, 500));
-    }
+    scheduleIdleTask(runDeferredOperationalFetches, 1_600);
 
     return () => {
       isCancelled = true;
-      if (idleRequestId !== undefined && idleApi.cancelIdleCallback) {
-        idleApi.cancelIdleCallback(idleRequestId);
+      if (idleApi.cancelIdleCallback) {
+        idleRequestIds.forEach((idleRequestId) => {
+          idleApi.cancelIdleCallback?.(idleRequestId);
+        });
       }
       deferredTimers.forEach((timerId) => window.clearTimeout(timerId));
     };
 
-  }, [refreshTrigger]);
+  }, [currentRole, refreshTrigger, shouldFetchFullOperationalHistory]);
 
   // --- REALTIME SUBSCRIPTIONS ---
   useEffect(() => {

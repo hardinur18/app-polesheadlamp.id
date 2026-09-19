@@ -15,6 +15,7 @@ import {
 import { getCoordinatesFromUrl, expandShortUrl } from '@/utils/mapUtils';
 import { copyToClipboard } from '@/lib/clipboard';
 import { supabase } from '@/lib/supabaseClient';
+import { startPerfTimer } from '@/app/utils/perfTelemetry';
 import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
@@ -413,9 +414,6 @@ export default function Schedule() {
     addLead,
     deleteLead,
     addProspectBooking,
-    ensureOrdersForDateRange,
-    ensureProspectBookingsForDateRange,
-    ensureTechnicianSchedulesForDateRange,
     currentUser,
     currentRole,
     isOrdersLoading,
@@ -538,53 +536,74 @@ export default function Schedule() {
     setScheduleRangeError(null);
 
     const loadScheduleRangeSnapshot = async () => {
-      const [ordersResult, bookingsResult, schedulesResult, branchesResult] = await Promise.all([
-        supabase
-          .from('orders')
-          .select('*')
-          .gte('service_date', monthStart)
-          .lte('service_date', monthEnd)
-          .order('service_date', { ascending: false })
-          .range(0, 1499),
-        supabase
-          .from('prospect_bookings')
-          .select('*')
-          .gte('schedule_date', monthStart)
-          .lte('schedule_date', monthEnd)
-          .order('schedule_date', { ascending: false })
-          .range(0, 1499),
-        supabase
-          .from('technician_schedules')
-          .select('*')
-          .gte('date', monthStart)
-          .lte('date', monthEnd)
-          .order('date', { ascending: false })
-          .range(0, 1499),
-        supabase
-          .from('branches')
-          .select('*')
-          .eq('status', 'active')
-          .range(0, 499),
-      ]);
+      const endTimer = startPerfTimer('schedule.month-snapshot', {
+        from: monthStart,
+        to: monthEnd,
+      });
 
-      if (ordersResult.error) throw ordersResult.error;
-      if (bookingsResult.error) throw bookingsResult.error;
-      if (schedulesResult.error) throw schedulesResult.error;
-      if (branchesResult.error) throw branchesResult.error;
-      if (isCancelled) return;
+      try {
+        const [ordersResult, bookingsResult, schedulesResult, branchesResult] = await Promise.all([
+          supabase
+            .from('orders')
+            .select('*')
+            .gte('service_date', monthStart)
+            .lte('service_date', monthEnd)
+            .order('service_date', { ascending: false })
+            .range(0, 1499),
+          supabase
+            .from('prospect_bookings')
+            .select('*')
+            .gte('schedule_date', monthStart)
+            .lte('schedule_date', monthEnd)
+            .order('schedule_date', { ascending: false })
+            .range(0, 1499),
+          supabase
+            .from('technician_schedules')
+            .select('*')
+            .gte('date', monthStart)
+            .lte('date', monthEnd)
+            .order('date', { ascending: false })
+            .range(0, 1499),
+          supabase
+            .from('branches')
+            .select('*')
+            .eq('status', 'active')
+            .range(0, 499),
+        ]);
 
-      setScheduleRangeOrders((ordersResult.data || []).map(mapOrderFromDB));
-      setScheduleRangeBookings((bookingsResult.data || []).map(mapProspectBookingFromDB));
-      setScheduleRangeTechnicianSchedules((schedulesResult.data || []).map(mapScheduleFromDB));
-      setScheduleRangeBranches((branchesResult.data || []).map(mapBranchFromDB));
+        if (ordersResult.error) throw ordersResult.error;
+        if (bookingsResult.error) throw bookingsResult.error;
+        if (schedulesResult.error) throw schedulesResult.error;
+        if (branchesResult.error) throw branchesResult.error;
+        if (isCancelled) {
+          endTimer('skipped', { reason: 'cancelled' });
+          return;
+        }
+
+        const orderRows = (ordersResult.data || []).map(mapOrderFromDB);
+        const bookingRows = (bookingsResult.data || []).map(mapProspectBookingFromDB);
+        const scheduleRows = (schedulesResult.data || []).map(mapScheduleFromDB);
+        const branchRows = (branchesResult.data || []).map(mapBranchFromDB);
+
+        setScheduleRangeOrders(orderRows);
+        setScheduleRangeBookings(bookingRows);
+        setScheduleRangeTechnicianSchedules(scheduleRows);
+        setScheduleRangeBranches(branchRows);
+        endTimer('ok', {
+          orders: orderRows.length,
+          bookings: bookingRows.length,
+          technicianSchedules: scheduleRows.length,
+          branches: branchRows.length,
+        });
+      } catch (error) {
+        endTimer('error', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
     };
 
-    Promise.all([
-      ensureOrdersForDateRange({ from: monthStart, to: monthEnd, mode: 'service' }),
-      ensureProspectBookingsForDateRange({ from: monthStart, to: monthEnd }),
-      ensureTechnicianSchedulesForDateRange({ from: monthStart, to: monthEnd }),
-      loadScheduleRangeSnapshot(),
-    ])
+    loadScheduleRangeSnapshot()
       .catch((error) => {
         if (isCancelled) return;
         console.error('Failed to load schedule month orders:', error);
@@ -599,7 +618,7 @@ export default function Schedule() {
     return () => {
       isCancelled = true;
     };
-  }, [currentMonthKey, ensureOrdersForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange]);
+  }, [currentMonthKey]);
 
   const openAddProspectFromTimeline = (request: AddProspectFormRequest) => {
     if (!canOpenAddProspectFromTimeline) return;

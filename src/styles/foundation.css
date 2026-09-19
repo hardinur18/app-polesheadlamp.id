@@ -21706,6 +21706,64 @@ body {
   width: 100%;
 }
 
+.proofAssetImageSkeleton {
+  animation: proofAssetImagePulse 1.2s ease-in-out infinite;
+  background: linear-gradient(90deg, #eef2f7 0%, #f8fafc 48%, #e2e8f0 100%);
+  background-size: 220% 100%;
+  inset: 0;
+  opacity: 1;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 180ms ease;
+  z-index: 1;
+}
+
+.proofAssetImageSkeleton.isLoaded {
+  opacity: 0;
+}
+
+.proofAssetImageFallback {
+  align-items: center;
+  background: #f8fafc;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 8px;
+  height: 100%;
+  justify-content: center;
+  min-height: 180px;
+  padding: 16px;
+  position: relative;
+  text-align: center;
+  width: 100%;
+  z-index: 1;
+}
+
+.proofAssetImage,
+.proofAssetDetailImage,
+.proofAssetForwardImage {
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+.proofAssetImage.isLoading,
+.proofAssetDetailImage.isLoading,
+.proofAssetForwardImage.isLoading {
+  opacity: 0;
+}
+
+@keyframes proofAssetImagePulse {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
 .proofAssetImageShade {
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.28), rgba(15, 23, 42, 0.02) 34%, rgba(15, 23, 42, 0.18)),
@@ -21912,7 +21970,9 @@ body {
   border-radius: 20px;
   display: flex;
   justify-content: center;
+  min-height: 260px;
   overflow: hidden;
+  position: relative;
 }
 
 .proofAssetDetailImage {
@@ -22035,6 +22095,7 @@ body {
   border: 1px solid rgba(203, 213, 225, 0.7);
   border-radius: 16px;
   overflow: hidden;
+  position: relative;
 }
 
 .proofAssetForwardImage {
