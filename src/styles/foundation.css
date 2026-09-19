@@ -4870,7 +4870,7 @@
   gap: 8px;
   margin-bottom: 11px;
   color: var(--ops-blue-ink);
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   font-weight: 760;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -4879,7 +4879,7 @@
 .topbar h1 {
   margin: 0;
   color: var(--ops-ink);
-  font-size: clamp(1.9rem, 2.4vw, 2.55rem);
+  font-size: calc(1rem + 3px);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.1;
@@ -4889,7 +4889,7 @@
   max-width: 760px;
   margin: 13px 0 0;
   color: var(--ops-muted);
-  font-size: 0.94rem;
+  font-size: 0.86rem;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -6908,7 +6908,7 @@
   }
 
   .topbar h1 {
-    font-size: 1.55rem;
+    font-size: calc(1rem + 3px);
   }
 
   .appTopbarActions .appTopbarSecondaryAction {
@@ -7356,7 +7356,7 @@
   gap: 9px;
   margin-bottom: 14px;
   color: var(--blue-ink);
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   font-weight: 820;
   letter-spacing: 0.055em;
   animation: headerStageIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -7375,7 +7375,7 @@
 
 .topbar h1 {
   max-width: 980px;
-  font-size: clamp(1.92rem, 2.45vw, 2.42rem);
+  font-size: calc(1rem + 3px);
   font-weight: 780;
   line-height: 1.08;
   animation: headerStageIn 460ms cubic-bezier(0.22, 1, 0.36, 1) 55ms both;
@@ -7385,7 +7385,7 @@
   max-width: 1040px;
   margin-top: 14px;
   color: #64748b;
-  font-size: 0.95rem;
+  font-size: 0.86rem;
   font-weight: 620;
   line-height: 1.42;
   animation: headerStageIn 480ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
@@ -7541,10 +7541,10 @@
 
 .scheduleHeader h1 {
   color: var(--ops-ink);
-  font-size: clamp(1.85rem, 2.2vw, 2.35rem);
-  font-weight: 820;
+  font-size: calc(1rem + 3px);
+  font-weight: 800;
   letter-spacing: 0;
-  line-height: 1.06;
+  line-height: 1.1;
 }
 
 .scheduleHeader p {
@@ -7656,8 +7656,8 @@
   }
 
   .scheduleHeader h1 {
-    font-size: 1.55rem;
-    line-height: 1.12;
+    font-size: calc(1rem + 3px);
+    line-height: 1.1;
   }
 
   .scheduleHeader p {
@@ -8355,8 +8355,19 @@
   gap: 2px;
 }
 
-.orderPage .orderDataTable .tableActionCell {
-  padding-right: 18px;
+.orderPage .orderDataTable.uiDataTableScroller .dataTableColumn--action {
+  padding-left: 6px !important;
+  padding-right: 14px !important;
+  text-align: right !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller .dataTableColumn--action > * {
+  margin-left: auto;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller .dataTableColumn--action .rowActions {
+  width: 112px;
+  justify-content: flex-end;
 }
 
 .orderPage .orderPriceEditTrigger {
@@ -8786,7 +8797,7 @@ body {
   gap: 8px;
   margin-bottom: 11px;
   color: var(--blue-ink);
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.12em;
@@ -8806,7 +8817,7 @@ body {
 .topbar h1 {
   max-width: none;
   color: var(--ink);
-  font-size: clamp(1.9rem, 2.4vw, 2.55rem);
+  font-size: calc(1rem + 3px);
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -8816,7 +8827,7 @@ body {
   max-width: none;
   margin-top: 13px;
   color: var(--muted);
-  font-size: 0.94rem;
+  font-size: 0.86rem;
   font-weight: 650;
   line-height: 1.55;
 }
@@ -12088,6 +12099,95 @@ body {
   box-shadow: var(--shadow);
 }
 
+.adAccountAuditIssuePanel.tablePanel {
+  min-height: 0;
+}
+
+.adAccountAuditInlineToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 48px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 8px 10px;
+}
+
+.adAccountAuditInlineToolbar.isClear {
+  border-color: rgba(167, 243, 208, 0.86);
+  background: rgba(240, 253, 244, 0.72);
+}
+
+.adAccountAuditInlineStatus {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.adAccountAuditStateIcon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.adAccountAuditStateIcon.isWarning {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.adAccountAuditStateIcon.isClear {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.adAccountAuditInlineCopy {
+  display: grid;
+  min-width: min(360px, 100%);
+  gap: 1px;
+  margin-right: 4px;
+}
+
+.adAccountAuditInlineCopy h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 820;
+  line-height: 1.15;
+}
+
+.adAccountAuditInlineCopy p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.adAccountAuditClearState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid rgba(167, 243, 208, 0.82);
+  border-radius: 14px;
+  background: rgba(240, 253, 244, 0.72);
+  color: #047857;
+  font-size: 0.82rem;
+  font-weight: 760;
+  padding: 0 14px;
+}
+
 .tableScroller table,
 .uiDataTableScroller > table {
   font-size: 0.86rem;
@@ -14182,13 +14282,13 @@ body {
   }
 
   .csOkrPage .topbar h1 {
-    font-size: clamp(1.54rem, 7.4vw, 1.9rem);
+    font-size: calc(0.92rem + 3px);
     line-height: 1.06;
   }
 
   .csOkrPage .topbar p {
     max-width: 100%;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     line-height: 1.35;
   }
 
@@ -14491,13 +14591,13 @@ body {
   }
 
   .csOkrPage .topbar h1 {
-    font-size: clamp(1.64rem, 7.8vw, 2rem) !important;
+    font-size: calc(0.92rem + 3px) !important;
     line-height: 1.08 !important;
   }
 
   .csOkrPage .topbar p {
     max-width: 92%;
-    font-size: 0.84rem !important;
+    font-size: 0.78rem !important;
     line-height: 1.42 !important;
   }
 
@@ -14948,7 +15048,7 @@ body {
 
   .marketingMonitoringPage .topbar h1 {
     margin: 0;
-    font-size: 1.42rem;
+    font-size: calc(0.92rem + 3px);
     line-height: 1.12;
   }
 
@@ -15328,7 +15428,7 @@ body {
 }
 
 .dailyAdsDesktopTable table {
-  width: 1520px;
+  width: max(100%, 1520px);
   min-width: 1520px;
   table-layout: fixed;
 }
@@ -15563,6 +15663,22 @@ body {
   background: #f8fafc;
 }
 
+.dailyAdsApiProviderStatus.is-loading {
+  position: relative;
+  overflow: hidden;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.dailyAdsApiProviderStatus.is-loading::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: dailyAdsLoadingSweep 1.35s ease-in-out infinite;
+}
+
 .dailyAdsApiProviderStatus.is-error {
   border-color: #fed7aa;
   background: #fff7ed;
@@ -15576,8 +15692,26 @@ body {
   color: #64748b;
 }
 
+.dailyAdsApiProviderStatus.is-loading strong {
+  color: #2563eb;
+}
+
 .dailyAdsApiProviderStatus.is-error strong {
   color: #c2410c;
+}
+
+.dailyAdsRecapLoadingBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.35;
+  padding: 9px 12px;
 }
 
 .dailyAdsRecapTableViewport {
@@ -15669,6 +15803,33 @@ body {
   color: #334155;
   font-size: 0.84rem;
   font-weight: 620;
+}
+
+.dailyAdsRecapSkeletonLine {
+  display: block;
+  width: 100%;
+  max-width: 150px;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e2e8f0, #f8fafc, #e2e8f0);
+  background-size: 220% 100%;
+  animation: dailyAdsSkeletonPulse 1.25s ease-in-out infinite;
+}
+
+@keyframes dailyAdsLoadingSweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes dailyAdsSkeletonPulse {
+  0% {
+    background-position: 220% 0;
+  }
+
+  100% {
+    background-position: -220% 0;
+  }
 }
 
 .dailyAdsRecapText {
@@ -16132,7 +16293,7 @@ body {
 
   .dailyAdsPage .topbar h1 {
     margin: 0;
-    font-size: 1.42rem;
+    font-size: calc(0.92rem + 3px);
     line-height: 1.12;
   }
 
@@ -17457,13 +17618,13 @@ body {
   }
 
   .topbar h1 {
-    font-size: 1.5rem;
+    font-size: calc(0.92rem + 3px);
     line-height: 1.12;
   }
 
   .topbar p {
     margin-top: 9px;
-    font-size: 0.86rem;
+    font-size: 0.8rem;
     line-height: 1.45;
   }
 
@@ -17749,7 +17910,7 @@ body {
 }
 
 .debtPage .topbar h1 {
-  font-size: clamp(1.85rem, 2.1vw, 2.38rem);
+  font-size: calc(1rem + 3px);
   line-height: 1.04;
 }
 
@@ -20559,7 +20720,7 @@ body {
 
   .operationalReportPage .topbar h1 {
     margin: 0;
-    font-size: 1.42rem;
+    font-size: calc(0.92rem + 3px);
     line-height: 1.12;
     letter-spacing: 0;
   }
@@ -22710,6 +22871,28 @@ body {
   background: #f8fbff !important;
 }
 
+.orderPage .orderDataTable.uiDataTableScroller tbody td {
+  vertical-align: top !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller tbody td.dataTableColumn--align-center,
+.orderPage .orderDataTable.uiDataTableScroller tbody td.text-center {
+  text-align: center !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller tbody td.dataTableColumn--align-center > *,
+.orderPage .orderDataTable.uiDataTableScroller tbody td.text-center > * {
+  margin-top: 0 !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller tbody td.dataTableColumn--action {
+  vertical-align: top !important;
+}
+
+.orderPage .orderDataTable.uiDataTableScroller tbody td.dataTableColumn--action .rowActions {
+  align-items: flex-start !important;
+}
+
 .orderDetailDialog {
   width: min(1120px, calc(100vw - 48px));
   max-height: min(88dvh, 900px);
@@ -24107,7 +24290,7 @@ body {
 
   .orderPage .topbar h1 {
     margin: 0;
-    font-size: 1.42rem;
+    font-size: calc(0.92rem + 3px);
     line-height: 1.12;
     letter-spacing: 0;
   }
@@ -24466,7 +24649,7 @@ body {
   }
 
   .orderPage .topbar h1 {
-    font-size: 1.3rem;
+    font-size: calc(0.9rem + 3px);
   }
 
   .orderHeaderIconButton.uiButton,
@@ -26605,7 +26788,7 @@ body {
   }
 
   .contactsPage .topbar h1 {
-    font-size: clamp(1.44rem, 8vw, 1.72rem);
+    font-size: calc(0.92rem + 3px);
     line-height: 1.1;
   }
 
@@ -27094,6 +27277,31 @@ body {
   border-radius: 0 !important;
   border: 0 !important;
   box-shadow: none !important;
+}
+
+.csDashboardFilterPanel.filterPanel {
+  padding: 14px;
+}
+
+.csDashboardFilterControl.uiSelectTrigger,
+.csDashboardDatePicker.uiPeriodPicker {
+  height: 44px !important;
+  min-height: 44px !important;
+  border-radius: 14px;
+  font-size: 0.82rem;
+  font-weight: 760;
+}
+
+.csDashboardDatePicker.uiPeriodPicker.uiPeriodPicker--foundation {
+  padding-inline: 14px;
+}
+
+.csDashboardDatePicker.uiPeriodPicker > span,
+.csDashboardFilterControl.uiSelectTrigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .advertiserDashboardHeaderActions {
@@ -27784,6 +27992,39 @@ body {
   background: #f8fbff !important;
 }
 
+.advertiserDashboardDateSummary,
+.csDashboardDateSummary {
+  width: 100%;
+  align-items: stretch;
+}
+
+.advertiserDashboardDateSummary {
+  grid-template-columns: minmax(154px, 1.12fr) repeat(10, minmax(76px, 1fr)) !important;
+}
+
+.csDashboardDateSummary {
+  grid-template-columns: minmax(154px, 1.12fr) repeat(11, minmax(72px, 1fr)) !important;
+}
+
+.advertiserDashboardDateSummary > div,
+.csDashboardDateSummary > div {
+  min-width: 0;
+}
+
+.advertiserDashboardDateSummary > div:not(:first-child),
+.csDashboardDateSummary > div:not(:first-child) {
+  padding-left: clamp(8px, 0.7vw, 14px) !important;
+  padding-right: clamp(8px, 0.7vw, 14px) !important;
+}
+
+.advertiserDashboardDateSummary :where(.font-mono.font-bold),
+.csDashboardDateSummary :where(.font-mono.font-bold) {
+  max-width: 100%;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  white-space: nowrap !important;
+}
+
 .dark .advertiserDashboardFilterPanel.filterPanel,
 .dark .advertiserDashboardControl.uiInput,
 .dark .advertiserDashboardControl.uiSelectTrigger,
@@ -27988,7 +28229,7 @@ body {
   }
 
   .advertiserDashboardPage .topbar h1 {
-    font-size: clamp(1.5rem, 7.4vw, 1.88rem);
+    font-size: calc(0.92rem + 3px);
     line-height: 1.06;
   }
 

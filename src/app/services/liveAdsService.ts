@@ -119,6 +119,8 @@ export interface MetaSnapshotDatasetResponse {
     upsertedCount?: number;
     servedFrom?: string;
     skippedSync?: boolean;
+    fallbackReason?: string | null;
+    syncError?: string | null;
   };
 }
 
@@ -837,6 +839,33 @@ export async function syncMetaSnapshotDataset({
   force?: boolean;
   minFreshMinutes?: number;
 }) {
+  const fallbackToStoredSnapshots = async (syncError: string) => {
+    const fallbackPayload = await fetchMetaSnapshotDataset({
+      from,
+      to,
+      businessId,
+      accountId,
+      includeLastKnown: true,
+    });
+
+    if ((fallbackPayload.rows || []).length === 0) {
+      throw new Error(syncError);
+    }
+
+    return {
+      ...fallbackPayload,
+      metadata: {
+        ...fallbackPayload.metadata,
+        servedFrom:
+          fallbackPayload.metadata?.servedFrom === 'database-latest-known'
+            ? 'database-latest-known'
+            : 'meta-sync-fallback',
+        fallbackReason: syncError,
+        syncError,
+      },
+    } as MetaSnapshotDatasetResponse;
+  };
+
   const response = await fetch(`${functionsBaseUrl}/meta/sync-snapshots`, {
     method: 'POST',
     headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
@@ -852,7 +881,8 @@ export async function syncMetaSnapshotDataset({
 
   const payload = await response.json().catch(() => ({} as ServiceErrorPayload));
   if (!response.ok) {
-    throw new Error(payload.error || 'Sinkronisasi snapshot Meta gagal.');
+    const rawMessage = payload.error || 'Sinkronisasi snapshot Meta gagal.';
+    return fallbackToStoredSnapshots(rawMessage);
   }
 
   return payload as MetaSnapshotDatasetResponse;

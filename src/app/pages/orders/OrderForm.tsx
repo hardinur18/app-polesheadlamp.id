@@ -1554,6 +1554,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
         <MasterDataFormDialogContent
           size="wide"
           className="orderFormSheet orderFormDialog masterDataManagedForm"
+          preventOutsideClose={false}
           onEscapeKeyDown={(e) => {
             e.preventDefault();
             handleClose();

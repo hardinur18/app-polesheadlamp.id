@@ -610,8 +610,12 @@ export function ProofAssetLibraryPage() {
 
       <OperationalTableCard className="proofAssetTablePanel">
         {loading ? (
-          <div className="flex min-h-[320px] items-center justify-center">
+          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
             <Loader2 className="h-7 w-7 animate-spin text-blue-600" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Memuat galeri bukti...</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Mengambil metadata aset dari database.</p>
+            </div>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center gap-3 pb-10">

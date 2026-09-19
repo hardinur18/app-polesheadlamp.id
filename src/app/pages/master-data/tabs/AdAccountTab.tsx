@@ -1337,11 +1337,6 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     isUnmatchedAccount,
   ]);
 
-  const unpairedApiAccounts = useMemo(
-    () => allApiAccounts.filter((account) => !getApiMappingForAccount(account)),
-    [allApiAccounts, getApiMappingForAccount],
-  );
-
   const mappingAuditRows = useMemo<MappingAuditIssue[]>(() => {
     const rows: MappingAuditIssue[] = [];
 
@@ -1432,18 +1427,6 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
         }
       });
 
-    unpairedApiAccounts.forEach((apiAccount) => {
-      rows.push({
-        id: `api:${apiAccount.platformKey}:${apiAccount.externalAccountId}`,
-        source: 'api',
-        severity: 'warning',
-        title: 'Akun API belum dipasangkan',
-        detail: 'Registry live sudah ada, tetapi belum terhubung ke master akun iklan internal.',
-        action: 'pair-api',
-        apiAccount,
-      });
-    });
-
     const severityRank: Record<MappingAuditIssue['severity'], number> = { danger: 0, warning: 1 };
     return rows.sort((left, right) =>
       severityRank[left.severity] - severityRank[right.severity] ||
@@ -1457,26 +1440,26 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     hasLiveMapping,
     isIntegrationEnabled,
     isUnmatchedAccount,
-    unpairedApiAccounts,
   ]);
 
   const auditSummary = useMemo(() => {
     const activeAccounts = rawFilteredData.filter((account) => account.status === 'active');
-    const pairedApiCount = allApiAccounts.length - unpairedApiAccounts.length;
+    const pairedActiveAccountCount = activeAccounts.filter(hasLiveMapping).length;
+    const unpairedActiveAccountCount = activeAccounts.length - pairedActiveAccountCount;
     return {
       activeAccounts: activeAccounts.length,
-      pairedApiCount,
-      unpairedApiCount: unpairedApiAccounts.length,
+      pairedApiCount: pairedActiveAccountCount,
+      unpairedApiCount: unpairedActiveAccountCount,
       missingOwnerCount: mappingAuditRows.filter((row) => row.source === 'account' && row.action === 'assign-owner').length,
       missingCsCount: mappingAuditRows.filter((row) => row.source === 'account' && row.action === 'assign-cs').length,
       missingSubChannelCount: mappingAuditRows.filter((row) => row.source === 'account' && row.action === 'assign-subchannel').length,
       apiIssueCount: mappingAuditRows.filter((row) =>
-        row.action === 'pair-api' || row.action === 'match-live'
+        row.action === 'match-live'
       ).length,
       dangerCount: mappingAuditRows.filter((row) => row.severity === 'danger').length,
       warningCount: mappingAuditRows.filter((row) => row.severity === 'warning').length,
     };
-  }, [allApiAccounts.length, mappingAuditRows, rawFilteredData, unpairedApiAccounts.length]);
+  }, [hasLiveMapping, mappingAuditRows, rawFilteredData]);
 
   const viewTabs = [
     { id: 'audit' as const, label: 'Audit Mapping', count: mappingAuditRows.length },
@@ -2783,113 +2766,56 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   };
 
   const renderMappingAuditPanel = () => {
-    const summaryItems = [
-      {
-        label: 'Akun aktif',
-        value: auditSummary.activeAccounts,
-        helper: 'Diperiksa di audit',
-        onClick: () => setAccountView('all'),
-      },
-      {
-        label: 'API belum paired',
-        value: auditSummary.unpairedApiCount,
-        helper: `${auditSummary.pairedApiCount} sudah paired`,
-        onClick: () => setAccountView('api'),
-      },
-      {
-        label: 'Belum advertiser',
-        value: auditSummary.missingOwnerCount,
-        helper: 'Owner assignment kosong',
-        onClick: () => setAccountView('assignment'),
-      },
-      {
-        label: 'Belum CS/sub-channel',
-        value: auditSummary.missingCsCount + auditSummary.missingSubChannelCount,
-        helper: 'Perlu relasi operasional',
-        onClick: () => setAccountView('assignment'),
-      },
-      {
-        label: 'Issue API/live',
-        value: auditSummary.apiIssueCount,
-        helper: 'Pairing atau match live',
-        onClick: () => setAccountView('api'),
-      },
-    ];
+    const renderAuditToolbar = (isClear: boolean) => (
+      <div className={cn('adAccountAuditInlineToolbar', isClear && 'isClear')}>
+        <div className="adAccountAuditInlineStatus">
+          <span className={cn('adAccountAuditStateIcon', isClear ? 'isClear' : 'isWarning')}>
+            {isClear ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          </span>
+          <div className="adAccountAuditInlineCopy">
+            <h3>{isClear ? 'Mapping akun iklan clear' : 'Audit Mapping Akun Iklan'}</h3>
+            <p>
+              {isClear
+                ? 'Semua akun aktif pada filter ini sudah punya relasi utama.'
+                : 'Fokus hanya akun aktif dan relasi yang perlu dibereskan.'}
+            </p>
+          </div>
+          {!isClear && (
+            <>
+              <span className={cn('assignmentStatusPill', auditSummary.dangerCount > 0 ? 'is-partial' : 'is-ready')}>
+                <span className="assignmentStatusDot" />
+                <span>{auditSummary.dangerCount} prioritas</span>
+              </span>
+              <span className={cn('assignmentStatusPill', auditSummary.warningCount > 0 ? 'is-partial' : 'is-ready')}>
+                <span className="assignmentStatusDot" />
+                <span>{auditSummary.warningCount} warning</span>
+              </span>
+            </>
+          )}
+        </div>
+        <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
+          <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
+          Refresh API
+        </Button>
+      </div>
+    );
 
     if (mappingAuditRows.length === 0) {
       return (
-        <div className="space-y-4">
-          <div className="tablePanel p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  <CheckCircle2 className="h-5 w-5" />
-                </span>
-                <div>
-                  <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">Mapping akun iklan clear</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Semua akun aktif yang terlihat di filter ini sudah punya relasi utama dan registry API tidak menyisakan akun yang belum dipasangkan.
-                  </p>
-                </div>
-              </div>
-              <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
-                <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
-                Refresh API
-              </Button>
-            </div>
+        <div className="space-y-3">
+          {renderAuditToolbar(true)}
+          <div className="adAccountAuditClearState">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Tidak ada issue mapping pada filter ini.</span>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="space-y-4">
-        <div className="tablePanel p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
-                <AlertTriangle className="h-5 w-5" />
-              </span>
-              <div>
-                <h3 className="text-base font-bold text-slate-950 dark:text-slate-50">Audit Mapping Akun Iklan</h3>
-                <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-                  Checklist ini memastikan master akun iklan sudah menjadi sumber relasi utama untuk advertiser, CS, sub-channel, dan pairing API/live.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span className={cn('assignmentStatusPill', auditSummary.dangerCount > 0 ? 'is-partial' : 'is-ready')}>
-                    <span className="assignmentStatusDot" />
-                    <span>{auditSummary.dangerCount} prioritas</span>
-                  </span>
-                  <span className={cn('assignmentStatusPill', auditSummary.warningCount > 0 ? 'is-partial' : 'is-ready')}>
-                    <span className="assignmentStatusDot" />
-                    <span>{auditSummary.warningCount} warning</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <Button variant="outline" onClick={() => void refreshApiFoundation()} disabled={apiSyncing}>
-              <RefreshCw className={apiSyncing ? 'animate-spin' : undefined} />
-              Refresh API
-            </Button>
-          </div>
-
-          <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-            {summaryItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/60 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-900/70 dark:hover:bg-blue-950/30"
-                onClick={item.onClick}
-              >
-                <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</span>
-                <strong className="mt-1 block text-2xl font-black text-slate-950 dark:text-slate-50">{item.value}</strong>
-                <span className="mt-1 block text-xs font-medium text-slate-500 dark:text-slate-400">{item.helper}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="tablePanel">
+      <div className="space-y-3">
+        {renderAuditToolbar(false)}
+        <div className="tablePanel adAccountAuditIssuePanel">
           <div className="hidden md:block">
             <DataTable
               actionWidth={130}

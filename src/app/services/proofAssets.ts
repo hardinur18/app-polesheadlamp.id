@@ -5,9 +5,14 @@ import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 export const PROOF_ASSETS_BUCKET = 'proof-assets';
 
 const PROOF_ASSET_MASTER_TYPE = 'proof_asset';
+const PROOF_ASSET_APP_DATA_TYPE = 'proof_assets';
 const PROOF_ASSET_MASTER_URL = buildMakeServerUrl(`/master/${PROOF_ASSET_MASTER_TYPE}`);
+const PROOF_ASSET_APP_DATA_URL = buildMakeServerUrl(`/app-data/${PROOF_ASSET_APP_DATA_TYPE}`);
 const PROOF_ASSET_UPLOAD_URL = buildMakeServerUrl('/upload-image');
 const PROOF_ASSET_LEGACY_UPLOAD_URL = buildMakeServerUrl('/meta/messaging/whatsapp/media-upload');
+const PROOF_ASSET_LIST_LIMIT = 500;
+const PROOF_ASSET_FETCH_TIMEOUT_MS = 8_000;
+const PROOF_ASSET_LEGACY_FETCH_TIMEOUT_MS = 2_500;
 const PROOF_ASSET_UPLOAD_TARGET_BYTES = 760 * 1024;
 const PROOF_ASSET_RETRY_UPLOAD_TARGET_BYTES = 320 * 1024;
 const PROOF_ASSET_FINAL_RETRY_UPLOAD_TARGET_BYTES = 80 * 1024;
@@ -133,6 +138,25 @@ async function readJsonResponse<T>(response: Response, fallback: string): Promis
   return payload as T;
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = PROOF_ASSET_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: init.signal || controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Load Galeri Bukti terlalu lama. Coba refresh lagi.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export function normalizeProofAssetTags(value: string | string[]) {
   const values = Array.isArray(value)
     ? value
@@ -224,15 +248,169 @@ function mapProofAssetToRecord(input: ProofAssetInput, existing?: ProofAsset | n
   };
 }
 
-async function fetchProofAssetRecords() {
-  const response = await fetch(PROOF_ASSET_MASTER_URL, {
+function mapProofAssetToDatabaseRecord(input: ProofAssetInput, existing?: ProofAsset | null) {
+  const record = mapProofAssetToRecord(input, existing);
+
+  return {
+    id: record.id,
+    title: record.title,
+    vehicle_type_id: record.vehicleTypeId || null,
+    year: record.year || null,
+    image_path: record.imagePath,
+    tags: normalizeProofAssetTags(record.tags || []),
+    caption: record.caption || null,
+    is_active: Boolean(record.isActive),
+    usage_count: Math.max(0, parseNumber(record.usageCount, 0)),
+    created_at: record.createdAt || new Date().toISOString(),
+    created_by: record.createdBy || null,
+  };
+}
+
+async function fetchProofAssetAppDataRecords() {
+  const url = new URL(PROOF_ASSET_APP_DATA_URL);
+  url.searchParams.set('from', '0');
+  url.searchParams.set('to', String(PROOF_ASSET_LIST_LIMIT - 1));
+  url.searchParams.set('orderBy', 'created_at');
+  url.searchParams.set('ascending', 'false');
+
+  const response = await fetchWithTimeout(url, {
     headers: await getSessionBackedEdgeHeaders(),
   });
+  const payload = await readJsonResponse<{ rows?: ProofAssetStorageRecord[] }>(response, 'Gagal memuat Galeri Bukti.');
+  return Array.isArray(payload.rows) ? payload.rows : [];
+}
+
+async function fetchProofAssetDirectRecords() {
+  const { data, error } = await supabase
+    .from(PROOF_ASSET_APP_DATA_TYPE)
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(0, PROOF_ASSET_LIST_LIMIT - 1);
+
+  if (error) throw error;
+  return (data || []) as ProofAssetStorageRecord[];
+}
+
+async function fetchProofAssetLegacyRecords(timeoutMs = PROOF_ASSET_LEGACY_FETCH_TIMEOUT_MS) {
+  const response = await fetchWithTimeout(PROOF_ASSET_MASTER_URL, {
+    headers: await getSessionBackedEdgeHeaders(),
+  }, timeoutMs);
   return readJsonResponse<ProofAssetStorageRecord[]>(response, 'Gagal memuat Galeri Bukti.');
 }
 
+async function fetchProofAssetRecords() {
+  try {
+    const records = await fetchProofAssetAppDataRecords();
+    if (records.length > 0) return records;
+
+    return await fetchProofAssetLegacyRecords().catch(() => records);
+  } catch (appDataError) {
+    try {
+      const records = await fetchProofAssetDirectRecords();
+      if (records.length > 0) return records;
+
+      return await fetchProofAssetLegacyRecords().catch(() => records);
+    } catch {
+      return fetchProofAssetLegacyRecords(PROOF_ASSET_FETCH_TIMEOUT_MS).catch(() => {
+        throw appDataError;
+      });
+    }
+  }
+}
+
+async function createProofAssetRecord(record: ProofAssetStorageRecord) {
+  const dbRecord = mapProofAssetToDatabaseRecord({
+    id: cleanText(record.id || '') || createProofAssetId(),
+    title: cleanText(record.title || record.name || ''),
+    vehicleTypeId: cleanText(record.vehicleTypeId || record.vehicle_type_id || '') || null,
+    year: parseOptionalYear(record.year),
+    imagePath: cleanText(record.imagePath || record.image_path || ''),
+    tags: normalizeProofAssetTags(record.tags || []),
+    caption: cleanText(record.caption || '') || null,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : record.is_active !== false,
+    createdBy: cleanText(record.createdBy || record.created_by || '') || null,
+  });
+
+  const response = await fetchWithTimeout(PROOF_ASSET_APP_DATA_URL, {
+    method: 'POST',
+    headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+    body: JSON.stringify(dbRecord),
+  });
+  const payload = await readJsonResponse<{ row?: ProofAssetStorageRecord }>(response, 'Gagal menyimpan aset.');
+  return payload.row || dbRecord;
+}
+
+async function createProofAssetDirectRecord(record: ProofAssetStorageRecord) {
+  const dbRecord = mapProofAssetToDatabaseRecord({
+    id: cleanText(record.id || '') || createProofAssetId(),
+    title: cleanText(record.title || record.name || ''),
+    vehicleTypeId: cleanText(record.vehicleTypeId || record.vehicle_type_id || '') || null,
+    year: parseOptionalYear(record.year),
+    imagePath: cleanText(record.imagePath || record.image_path || ''),
+    tags: normalizeProofAssetTags(record.tags || []),
+    caption: cleanText(record.caption || '') || null,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : record.is_active !== false,
+    createdBy: cleanText(record.createdBy || record.created_by || '') || null,
+  });
+
+  const { data, error } = await supabase
+    .from(PROOF_ASSET_APP_DATA_TYPE)
+    .insert(dbRecord)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return (data || dbRecord) as ProofAssetStorageRecord;
+}
+
+async function updateProofAssetRecord(id: string, record: ProofAssetStorageRecord) {
+  const dbRecord = mapProofAssetToDatabaseRecord({
+    id,
+    title: cleanText(record.title || record.name || ''),
+    vehicleTypeId: cleanText(record.vehicleTypeId || record.vehicle_type_id || '') || null,
+    year: parseOptionalYear(record.year),
+    imagePath: cleanText(record.imagePath || record.image_path || ''),
+    tags: normalizeProofAssetTags(record.tags || []),
+    caption: cleanText(record.caption || '') || null,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : record.is_active !== false,
+    createdBy: cleanText(record.createdBy || record.created_by || '') || null,
+  }, mapProofAssetFromRecord(record));
+
+  const response = await fetchWithTimeout(`${PROOF_ASSET_APP_DATA_URL}/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+    body: JSON.stringify(dbRecord),
+  });
+  const payload = await readJsonResponse<{ row?: ProofAssetStorageRecord }>(response, 'Gagal menyimpan aset.');
+  return payload.row || dbRecord;
+}
+
+async function updateProofAssetDirectRecord(id: string, record: ProofAssetStorageRecord) {
+  const dbRecord = mapProofAssetToDatabaseRecord({
+    id,
+    title: cleanText(record.title || record.name || ''),
+    vehicleTypeId: cleanText(record.vehicleTypeId || record.vehicle_type_id || '') || null,
+    year: parseOptionalYear(record.year),
+    imagePath: cleanText(record.imagePath || record.image_path || ''),
+    tags: normalizeProofAssetTags(record.tags || []),
+    caption: cleanText(record.caption || '') || null,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : record.is_active !== false,
+    createdBy: cleanText(record.createdBy || record.created_by || '') || null,
+  }, mapProofAssetFromRecord(record));
+
+  const { data, error } = await supabase
+    .from(PROOF_ASSET_APP_DATA_TYPE)
+    .update(dbRecord)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return (data || dbRecord) as ProofAssetStorageRecord;
+}
+
 async function saveProofAssetRecord(record: ProofAssetStorageRecord) {
-  const response = await fetch(PROOF_ASSET_MASTER_URL, {
+  const response = await fetchWithTimeout(PROOF_ASSET_MASTER_URL, {
     method: 'POST',
     headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
     body: JSON.stringify(record),
@@ -251,14 +429,18 @@ export async function listProofAssets() {
 
 export async function createProofAsset(input: ProofAssetInput) {
   const record = mapProofAssetToRecord(input);
-  const savedRecord = await saveProofAssetRecord(record);
+  const savedRecord = await createProofAssetRecord(record)
+    .catch(() => createProofAssetDirectRecord(record))
+    .catch(() => saveProofAssetRecord(record));
   return mapProofAssetFromRecord(savedRecord);
 }
 
 export async function updateProofAsset(id: string, input: Omit<ProofAssetInput, 'id' | 'createdBy'>) {
   const existing = (await listProofAssets()).find((asset) => asset.id === id) || null;
   const record = mapProofAssetToRecord({ ...input, id }, existing);
-  const savedRecord = await saveProofAssetRecord(record);
+  const savedRecord = await updateProofAssetRecord(id, record)
+    .catch(() => updateProofAssetDirectRecord(id, record))
+    .catch(() => saveProofAssetRecord(record));
   return mapProofAssetFromRecord(savedRecord);
 }
 
@@ -279,16 +461,32 @@ export async function incrementProofAssetUsage(id: string) {
   }, existing);
 
   record.usageCount = existing.usageCount + 1;
-  const savedRecord = await saveProofAssetRecord(record);
+  const savedRecord = await updateProofAssetRecord(id, record)
+    .catch(() => updateProofAssetDirectRecord(id, record))
+    .catch(() => saveProofAssetRecord(record));
   return mapProofAssetFromRecord(savedRecord);
 }
 
 export async function deleteProofAsset(id: string) {
-  const response = await fetch(`${PROOF_ASSET_MASTER_URL}/${encodeURIComponent(id)}`, {
+  const response = await fetchWithTimeout(`${PROOF_ASSET_APP_DATA_URL}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: await getSessionBackedEdgeHeaders(),
+  }).catch(() => null);
+
+  if (response?.ok) return;
+
+  const { error } = await supabase
+    .from(PROOF_ASSET_APP_DATA_TYPE)
+    .delete()
+    .eq('id', id);
+
+  if (!error) return;
+
+  const legacyResponse = await fetchWithTimeout(`${PROOF_ASSET_MASTER_URL}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: await getSessionBackedEdgeHeaders(),
   });
-  await readJsonResponse(response, 'Gagal menghapus aset.');
+  await readJsonResponse(legacyResponse, 'Gagal menghapus aset.');
 }
 
 async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {

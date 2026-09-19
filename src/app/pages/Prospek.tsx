@@ -2111,7 +2111,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                           title="Tidak ada data prospek ditemukan"
                           description={
                             leads.length === 0
-                              ? 'Data prospek belum masuk ke state lokal. Sistem sedang mencoba muat data terbaru.'
+                              ? 'Belum ada prospek pada periode ini.'
                               : 'Coba ubah filter, tanggal, atau kata kunci pencarian.'
                           }
                         />
@@ -2323,7 +2323,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   title="Tidak ada data prospek ditemukan"
                   description={
                     leads.length === 0
-                      ? 'Data prospek belum masuk ke state lokal. Sistem sedang mencoba muat data terbaru.'
+                      ? 'Belum ada prospek pada periode ini.'
                       : 'Coba ubah filter, tanggal, atau kata kunci pencarian.'
                   }
                 />
@@ -2802,7 +2802,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       </Dialog>
 
       <Dialog open={!!detailLead} onOpenChange={(open) => !open && setDetailLead(null)}>
-        <MasterDataFormDialogContent size="wide" className="leadDetailDialog">
+        <MasterDataFormDialogContent size="wide" className="leadDetailDialog" preventOutsideClose={false}>
           <MasterDataFormHeader
             icon={UserIcon}
             title="Detail Prospek"

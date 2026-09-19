@@ -1868,14 +1868,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
         icon={Users}
       />
 
-      <OperationalFilterPanel>
+      <OperationalFilterPanel className="csDashboardFilterPanel">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
           <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(180px,240px)_minmax(180px,240px)_minmax(260px,360px)]">
             {isOwner && (
               <div className="space-y-1.5">
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400">CS</div>
                 <Select value={selectedCsId} onValueChange={setSelectedCsId}>
-                  <SelectTrigger className="h-10 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <SelectTrigger className="csDashboardFilterControl bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
                     <SelectValue placeholder="Pilih CS" />
                   </SelectTrigger>
                   <SelectContent className="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
@@ -1893,7 +1893,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Platform</div>
               <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
-                <SelectTrigger className="h-10 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <SelectTrigger className="csDashboardFilterControl bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
                   <SelectValue placeholder="Pilih platform" />
                 </SelectTrigger>
                 <SelectContent className="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
@@ -1906,7 +1906,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
             </div>
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Periode</div>
-              <FoundationDateRangePicker date={dateRange} setDate={handleDateRangeChange} />
+              <FoundationDateRangePicker className="csDashboardDatePicker" date={dateRange} setDate={handleDateRangeChange} />
             </div>
           </div>
 

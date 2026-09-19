@@ -175,6 +175,9 @@ export interface GoogleAdsSnapshotDatasetResponse {
     rateLimited?: boolean;
     retryAfterSeconds?: number | null;
     cooldownMessage?: string | null;
+    fallbackReason?: string | null;
+    reconnectRequired?: boolean;
+    syncError?: string | null;
   };
 }
 
@@ -662,6 +665,34 @@ export async function syncGoogleAdsSnapshotDataset({
   force?: boolean;
   minFreshMinutes?: number;
 }) {
+  const fallbackToStoredSnapshots = async (syncError: string) => {
+    const snapshotPayload = await fetchGoogleAdsSnapshotDataset({
+      from,
+      to,
+      managerId,
+      customerId,
+      includeLastKnown: true,
+    });
+
+    if ((snapshotPayload.rows || []).length === 0) {
+      throw new Error(syncError);
+    }
+
+    return {
+      ...snapshotPayload,
+      metadata: {
+        ...snapshotPayload.metadata,
+        servedFrom:
+          snapshotPayload.metadata?.servedFrom === 'database-latest-known'
+            ? 'database-latest-known'
+            : 'google-sync-fallback',
+        fallbackReason: syncError,
+        reconnectRequired: /oauth|token|invalid_grant|unauthori[sz]ed|reconnect/i.test(syncError),
+        syncError,
+      },
+    } as GoogleAdsSnapshotDatasetResponse;
+  };
+
   const activeCooldown = readGoogleSyncCooldown();
   if (activeCooldown) {
     const payload = await fetchGoogleAdsSnapshotDataset({
@@ -729,7 +760,7 @@ export async function syncGoogleAdsSnapshotDataset({
       } as GoogleAdsSnapshotDatasetResponse;
     }
 
-    throw new Error(rawMessage);
+    return fallbackToStoredSnapshots(rawMessage);
   }
 
   clearGoogleSyncCooldown();

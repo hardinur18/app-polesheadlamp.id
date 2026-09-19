@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Plus, Search, Filter, AlertCircle, CheckCircle2, User, LayoutList, LayoutGrid, Eye, Route, Copy } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Plus, Search, Filter, AlertCircle, CheckCircle2, User, LayoutList, LayoutGrid, Eye, Route, Copy, Loader2 } from 'lucide-react';
 import { cn } from '../components/ui/StatusBadge';
 import { useMasterData, type TechnicianSchedule } from './master-data/context';
 import type { Branch, Lead, Order, ProspectBooking } from './master-data/data';
@@ -19,6 +19,12 @@ import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
 } from '@/app/services/orderScheduleValidation';
+import {
+  mapOrderFromDB,
+  mapProspectBookingFromDB,
+} from './master-data/context/internal/mappers/transactionMappers';
+import { mapBranchFromDB } from './master-data/context/internal/mappers/masterDataEntityMappers';
+import { mapScheduleFromDB } from './master-data/context/internal/mappers/miscMappers';
 import {
   Select,
   SelectContent,
@@ -245,6 +251,13 @@ const isInactiveScheduleItem = (item: ScheduleItem) => INACTIVE_SCHEDULE_STATUSE
 const normalizeScheduleSearchText = (value?: string | null) =>
   (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
+const mergeScheduleRowsById = <T extends { id: string }>(priorityRows: T[], fallbackRows: T[]) => {
+  const rowsById = new Map<string, T>();
+  fallbackRows.forEach((row) => rowsById.set(row.id, row));
+  priorityRows.forEach((row) => rowsById.set(row.id, row));
+  return Array.from(rowsById.values());
+};
+
 const isShortMapsUrl = (value: string) =>
   value.includes('goo.gl') ||
   value.includes('maps.app.goo.gl') ||
@@ -393,20 +406,35 @@ export default function Schedule() {
     prospectBookings: rawProspectBookings,
     leads,
     users,
-    activeBranches: branches,
+    branches: rawBranches,
+    activeBranches: rawActiveBranches,
     services,
-    technicianSchedules,
+    technicianSchedules: rawTechnicianSchedules,
     addLead,
     deleteLead,
     addProspectBooking,
+    ensureOrdersForDateRange,
+    ensureProspectBookingsForDateRange,
+    ensureTechnicianSchedulesForDateRange,
     currentUser,
     currentRole,
+    isOrdersLoading,
+    isOperationalDataLoading,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const isAdminManagementUser = isAdminManagementRole(currentRole);
   const isAdvertiserUser = isAdvertiserRole(currentRole);
   const isCsUser = isCsRole(currentRole);
+  const [scheduleRangeBranches, setScheduleRangeBranches] = useState<Branch[]>([]);
+  const branches = useMemo(() => {
+    const directActiveBranches = scheduleRangeBranches.filter((branch) => branch.status === 'active');
+    if (rawActiveBranches.length > 0) {
+      return mergeScheduleRowsById(directActiveBranches, rawActiveBranches).filter((branch) => branch.status === 'active');
+    }
+    if (directActiveBranches.length > 0) return directActiveBranches;
+    return rawBranches.filter((branch) => branch.status === 'active');
+  }, [rawActiveBranches, rawBranches, scheduleRangeBranches]);
   const serviceNameById = useMemo(() => {
     return new Map(services.map((service) => [service.id, service.name]));
   }, [services]);
@@ -416,14 +444,30 @@ export default function Schedule() {
   const branchById = useMemo(() => {
     return new Map(branches.map((branch) => [branch.id, branch]));
   }, [branches]);
+  const [scheduleRangeOrders, setScheduleRangeOrders] = useState<Order[]>([]);
+  const [scheduleRangeBookings, setScheduleRangeBookings] = useState<ProspectBooking[]>([]);
+  const [scheduleRangeTechnicianSchedules, setScheduleRangeTechnicianSchedules] = useState<TechnicianSchedule[]>([]);
+
+  const mergedRawOrders = useMemo(
+    () => mergeScheduleRowsById(scheduleRangeOrders, rawOrders),
+    [rawOrders, scheduleRangeOrders]
+  );
+  const mergedRawProspectBookings = useMemo(
+    () => mergeScheduleRowsById(scheduleRangeBookings, rawProspectBookings),
+    [rawProspectBookings, scheduleRangeBookings]
+  );
+  const technicianSchedules = useMemo(
+    () => mergeScheduleRowsById(scheduleRangeTechnicianSchedules, rawTechnicianSchedules),
+    [rawTechnicianSchedules, scheduleRangeTechnicianSchedules]
+  );
 
   // Filter orders for Advertiser
   const orders = useMemo(() => {
       if (isAdvertiserUser) {
-          return rawOrders.filter(o => o.advertiserId === currentUser?.id);
+          return mergedRawOrders.filter(o => o.advertiserId === currentUser?.id);
       }
-      return rawOrders;
-  }, [currentUser, isAdvertiserUser, rawOrders]);
+      return mergedRawOrders;
+  }, [currentUser, isAdvertiserUser, mergedRawOrders]);
 
   const nonScheduleLeadIds = useMemo(() => {
     return new Set(
@@ -434,7 +478,7 @@ export default function Schedule() {
   }, [leads]);
 
   const prospectBookings = useMemo(() => {
-    const visibleBookings = rawProspectBookings.filter((booking) =>
+    const visibleBookings = mergedRawProspectBookings.filter((booking) =>
       !booking.orderId &&
       !INACTIVE_SCHEDULE_STATUSES.has(booking.status) &&
       (!booking.leadId || !nonScheduleLeadIds.has(booking.leadId))
@@ -443,7 +487,7 @@ export default function Schedule() {
       return visibleBookings.filter((booking) => booking.advertiserId === currentUser?.id);
     }
     return visibleBookings;
-  }, [currentUser, isAdvertiserUser, nonScheduleLeadIds, rawProspectBookings]);
+  }, [currentUser, isAdvertiserUser, mergedRawProspectBookings, nonScheduleLeadIds]);
 
   const [view, setView] = useState<ScheduleView>('month');
   const [listDateMode, setListDateMode] = useState<'all' | 'daily'>('all');
@@ -470,6 +514,8 @@ export default function Schedule() {
   const [isAddProspectOpen, setIsAddProspectOpen] = useState(false);
   const [addProspectContext, setAddProspectContext] = useState<AddProspectFormRequest | null>(null);
   const [leadFormInstanceKey, setLeadFormInstanceKey] = useState(0);
+  const [isScheduleRangeLoading, setIsScheduleRangeLoading] = useState(false);
+  const [scheduleRangeError, setScheduleRangeError] = useState<string | null>(null);
   const canOpenAddProspectFromTimeline = hasPermission('leads.create');
 
   useEffect(() => {
@@ -482,6 +528,78 @@ export default function Schedule() {
 
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const monthStart = format(startOfMonth(currentDate), 'yyyy-MM-dd');
+    const monthEnd = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+
+    setIsScheduleRangeLoading(true);
+    setScheduleRangeError(null);
+
+    const loadScheduleRangeSnapshot = async () => {
+      const [ordersResult, bookingsResult, schedulesResult, branchesResult] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('*')
+          .gte('service_date', monthStart)
+          .lte('service_date', monthEnd)
+          .order('service_date', { ascending: false })
+          .range(0, 1499),
+        supabase
+          .from('prospect_bookings')
+          .select('*')
+          .gte('schedule_date', monthStart)
+          .lte('schedule_date', monthEnd)
+          .order('schedule_date', { ascending: false })
+          .range(0, 1499),
+        supabase
+          .from('technician_schedules')
+          .select('*')
+          .gte('date', monthStart)
+          .lte('date', monthEnd)
+          .order('date', { ascending: false })
+          .range(0, 1499),
+        supabase
+          .from('branches')
+          .select('*')
+          .eq('status', 'active')
+          .range(0, 499),
+      ]);
+
+      if (ordersResult.error) throw ordersResult.error;
+      if (bookingsResult.error) throw bookingsResult.error;
+      if (schedulesResult.error) throw schedulesResult.error;
+      if (branchesResult.error) throw branchesResult.error;
+      if (isCancelled) return;
+
+      setScheduleRangeOrders((ordersResult.data || []).map(mapOrderFromDB));
+      setScheduleRangeBookings((bookingsResult.data || []).map(mapProspectBookingFromDB));
+      setScheduleRangeTechnicianSchedules((schedulesResult.data || []).map(mapScheduleFromDB));
+      setScheduleRangeBranches((branchesResult.data || []).map(mapBranchFromDB));
+    };
+
+    Promise.all([
+      ensureOrdersForDateRange({ from: monthStart, to: monthEnd, mode: 'service' }),
+      ensureProspectBookingsForDateRange({ from: monthStart, to: monthEnd }),
+      ensureTechnicianSchedulesForDateRange({ from: monthStart, to: monthEnd }),
+      loadScheduleRangeSnapshot(),
+    ])
+      .catch((error) => {
+        if (isCancelled) return;
+        console.error('Failed to load schedule month orders:', error);
+        setScheduleRangeError('Data jadwal bulan ini belum berhasil dimuat. Coba refresh data.');
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsScheduleRangeLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentMonthKey, ensureOrdersForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange]);
 
   const openAddProspectFromTimeline = (request: AddProspectFormRequest) => {
     if (!canOpenAddProspectFromTimeline) return;
@@ -1505,6 +1623,12 @@ export default function Schedule() {
 
   // --- HANDLERS ---
   const isAvailabilityView = view === 'availability';
+  const activeScheduleTotal = (view === 'list' && listDateMode === 'daily') ? dailyStats.totalOrders : monthlyStats.totalOrders;
+  const showScheduleLoadingNotice = !isAvailabilityView && (
+    isScheduleRangeLoading ||
+    (isOrdersLoading && activeScheduleTotal === 0)
+  );
+  const showScheduleDeferredNotice = !isAvailabilityView && !showScheduleLoadingNotice && isOperationalDataLoading && rawProspectBookings.length === 0;
   const canOpenInteractiveSchedule = !isAdvertiserUser;
   const canShowAvailabilityView = !isAdvertiserUser;
   const canShowCsFilter = view !== 'availability' && isAdminManagementUser;
@@ -3445,6 +3569,23 @@ export default function Schedule() {
 
       {/* Dynamic Content */}
       <div className="flex-1 md:min-h-0 flex flex-col md:overflow-hidden px-4 md:px-0 pb-20 md:pb-0">
+        {(showScheduleLoadingNotice || showScheduleDeferredNotice || scheduleRangeError) && (
+          <div
+            className={cn(
+              "mb-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold",
+              scheduleRangeError
+                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+                : "border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+            )}
+          >
+            {!scheduleRangeError && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            <span>
+              {scheduleRangeError || (showScheduleLoadingNotice
+                ? 'Memuat jadwal bulan aktif...'
+                : 'Menyinkronkan data booking dan ketersediaan...')}
+            </span>
+          </div>
+        )}
         {view === 'month' && renderMonthlyView()}
         {view === 'day' && renderDailyView()}
         {view === 'list' && renderListView()}

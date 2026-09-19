@@ -110,7 +110,7 @@ type AdsProviderKey = 'meta' | 'google' | 'tiktok';
 type ApiRecapProviderStatus = {
   key: AdsProviderKey;
   label: string;
-  state: 'success' | 'empty' | 'error';
+  state: 'loading' | 'success' | 'empty' | 'error';
   count: number;
   message: string;
 };
@@ -188,6 +188,12 @@ type ApiRecapPreviewRow = {
     status: 'new' | 'update' | 'skip' | 'unmapped';
     reason: string;
     existing?: DailyAd;
+};
+
+type ApiRecapBuildResult = {
+    rows: ApiRecapPreviewRow[];
+    ignoredZeroActivityCount: number;
+    ignoredInactiveAccountCount: number;
 };
 
 type DailyAdFormData = {
@@ -1010,11 +1016,12 @@ export function IklanHarian() {
   const buildExistingDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId'>) =>
     `${row.date}|${row.adAccountId}`;
 
-  const resolveAdAccountForSnapshot = (
+  const resolveAdAccountForSnapshotFrom = (
     snapshot: MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow,
+    candidateAdAccounts: AdAccount[],
   ) => {
     if (snapshot.internalAdAccountId) {
-      const account = adAccounts.find((item) => item.id === snapshot.internalAdAccountId);
+      const account = candidateAdAccounts.find((item) => item.id === snapshot.internalAdAccountId);
       if (account) return account;
     }
 
@@ -1055,7 +1062,7 @@ export function IklanHarian() {
             );
 
     if (integrationConfig?.adAccountId) {
-      const account = adAccounts.find((item) => item.id === integrationConfig.adAccountId);
+      const account = candidateAdAccounts.find((item) => item.id === integrationConfig.adAccountId);
       if (account) return account;
     }
 
@@ -1069,7 +1076,7 @@ export function IklanHarian() {
     const internalByUniqueNumber = new Map<string, AdAccount>();
     const duplicateNumberKeys = new Set<string>();
 
-    for (const account of adAccounts.filter((account) => platformCandidates.includes(account.platformId))) {
+    for (const account of candidateAdAccounts.filter((account) => platformCandidates.includes(account.platformId))) {
       const numberKey = getTrailingNumberKey(account.accountName);
       if (!numberKey) continue;
       if (internalByUniqueNumber.has(numberKey)) {
@@ -1082,7 +1089,7 @@ export function IklanHarian() {
       }
     }
 
-    return adAccounts.find((account) => {
+    return candidateAdAccounts.find((account) => {
       if (!platformCandidates.includes(account.platformId)) return false;
       const internalNameKey = normalizeAdAccountLookupKey(account.accountName);
       const internalFlexibleKeys = buildFlexibleAdAccountLookupKeys(account.accountName);
@@ -1094,17 +1101,91 @@ export function IklanHarian() {
     }) || (snapshotNumberKey ? internalByUniqueNumber.get(snapshotNumberKey) : undefined);
   };
 
+  const resolveAdAccountForSnapshot = (
+    snapshot: MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow,
+  ) => resolveAdAccountForSnapshotFrom(
+    snapshot,
+    adAccounts.filter((account) => account.status === 'active'),
+  );
+
+  const resolveInactiveAdAccountForSnapshot = (
+    snapshot: MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow,
+  ) => {
+    const inactiveAdAccounts = adAccounts.filter((account) => account.status !== 'active');
+
+    if (snapshot.internalAdAccountId) {
+      const linkedAccount = inactiveAdAccounts.find((account) => account.id === snapshot.internalAdAccountId);
+      if (linkedAccount) return linkedAccount;
+    }
+
+    const platformKey = snapshot.platformKey;
+    const configs = apiRecapIntegrationConfigsRef.current;
+    const externalAccountId = normalizeExternalAccountId(snapshot.externalAccountId);
+    const externalAccountName = normalizeAdAccountLookupKey(snapshot.externalAccountName);
+    const matchingConfig =
+      platformKey === 'meta'
+        ? configs.meta.find((config) =>
+            config.enabled && (
+              normalizeExternalAccountId(config.liveMetaAccountId) === externalAccountId ||
+              normalizeAdAccountLookupKey(config.liveMetaAccountName) === externalAccountName
+            )
+          )
+        : platformKey === 'google'
+          ? configs.google.find((config) =>
+              config.enabled && (
+                normalizeExternalAccountId(config.liveGoogleCustomerId) === externalAccountId ||
+                normalizeAdAccountLookupKey(config.liveGoogleCustomerName) === externalAccountName
+              )
+            )
+          : configs.tiktok.find((config) =>
+              config.enabled && (
+                normalizeExternalAccountId(config.liveTikTokAdvertiserId) === externalAccountId ||
+                normalizeAdAccountLookupKey(config.liveTikTokAdvertiserName) === externalAccountName
+              )
+            );
+
+    if (matchingConfig?.adAccountId) {
+      const linkedAccount = inactiveAdAccounts.find((account) => account.id === matchingConfig.adAccountId);
+      if (linkedAccount) return linkedAccount;
+    }
+
+    const platformCandidates = platforms
+      .filter((platform) => getAdsProviderKeyByPlatformName(platform.name) === platformKey)
+      .map((platform) => platform.id);
+
+    return inactiveAdAccounts.find((account) => {
+      if (!platformCandidates.includes(account.platformId)) return false;
+      return normalizeAdAccountLookupKey(account.accountName) === externalAccountName;
+    });
+  };
+
   const buildApiRecapRows = (
     snapshotRows: Array<MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow>,
     sourceLabel: string,
-  ) => {
+  ): ApiRecapBuildResult => {
     const existingByKey = new Map(dailyAds.map((row) => [buildExistingDailyAdKey(row), row]));
+    let ignoredZeroActivityCount = 0;
+    let ignoredInactiveAccountCount = 0;
 
-    return snapshotRows.map<ApiRecapPreviewRow>((snapshot) => {
+    const actionableSnapshots = snapshotRows.filter((snapshot) => {
+      const spend = Number(snapshot.spend) || 0;
+      const leads = Math.round(Number(snapshot.conversions) || 0);
+      const hasActivity = spend > 0 || leads > 0;
+      if (!hasActivity) ignoredZeroActivityCount += 1;
+      return hasActivity;
+    });
+
+    const rows = actionableSnapshots.flatMap<ApiRecapPreviewRow>((snapshot) => {
+      const inactiveAccount = resolveInactiveAdAccountForSnapshot(snapshot);
+      if (inactiveAccount) {
+        ignoredInactiveAccountCount += 1;
+        return [];
+      }
+
       const account = resolveAdAccountForSnapshot(snapshot);
 
       if (!account) {
-        return {
+        return [{
           id: `${sourceLabel}:${snapshot.snapshotDate}:${snapshot.externalAccountId}`,
           date: snapshot.snapshotDate,
           platformId: snapshot.platformId || '',
@@ -1119,7 +1200,7 @@ export function IklanHarian() {
           advertiserName: 'Belum dipetakan',
           status: 'unmapped',
           reason: 'Akun live belum dipasangkan ke akun internal.',
-        };
+        }];
       }
 
       const advertiserId = resolveOwnerForDate(account.id, snapshot.snapshotDate, account.advertiserId);
@@ -1155,7 +1236,7 @@ export function IklanHarian() {
         }
       }
 
-      return {
+      return [{
         id: `${sourceLabel}:${snapshot.snapshotDate}:${snapshot.externalAccountId}`,
         date: snapshot.snapshotDate,
         platformId: account.platformId,
@@ -1173,8 +1254,14 @@ export function IklanHarian() {
         status,
         reason,
         existing,
-      };
+      }];
     });
+
+    return {
+      rows,
+      ignoredZeroActivityCount,
+      ignoredInactiveAccountCount,
+    };
   };
 
   useEffect(() => {
@@ -1251,7 +1338,7 @@ export function IklanHarian() {
       key: AdsProviderKey;
       label: string;
       enabledConfigCount: number;
-      request: Promise<ApiRecapPreviewRow[]>;
+      request: Promise<ApiRecapBuildResult>;
     }> = [];
 
     if (shouldLoadProvider('meta')) {
@@ -1308,28 +1395,54 @@ export function IklanHarian() {
         return;
       }
 
-      const results = await Promise.allSettled(tasks.map((task) => task.request));
       const rows: ApiRecapPreviewRow[] = [];
       const errors: string[] = [];
-      const providerStatuses: ApiRecapProviderStatus[] = [];
 
-      results.forEach((result, index) => {
-        const task = tasks[index];
-        if (result.status === 'fulfilled') {
-          rows.push(...result.value);
-          providerStatuses.push({
+      setApiRecapProviderStatuses(tasks.map((task) => ({
+        key: task.key,
+        label: task.label,
+        state: 'loading',
+        count: 0,
+        message: 'Mengambil snapshot provider...',
+      })));
+
+      const sortPreviewRows = (previewRows: ApiRecapPreviewRow[]) => previewRows.sort((left, right) => {
+        if (left.date !== right.date) return left.date.localeCompare(right.date);
+        return left.accountName.localeCompare(right.accountName);
+      });
+
+      const updateProviderStatus = (status: ApiRecapProviderStatus) => {
+        setApiRecapProviderStatuses((current) =>
+          current.map((provider) => provider.key === status.key ? status : provider),
+        );
+      };
+
+      await Promise.allSettled(tasks.map(async (task) => {
+        try {
+          const buildResult = await task.request;
+          const providerRows = buildResult.rows;
+          rows.push(...providerRows);
+          setApiRecapRows(sortPreviewRows([...rows]));
+          const ignoredMessage = buildResult.ignoredZeroActivityCount > 0
+            ? ` ${buildResult.ignoredZeroActivityCount} snapshot kosong dilewati.`
+            : '';
+          const inactiveMessage = buildResult.ignoredInactiveAccountCount > 0
+            ? ` ${buildResult.ignoredInactiveAccountCount} akun OFF dilewati.`
+            : '';
+          updateProviderStatus({
             key: task.key,
             label: task.label,
-            state: result.value.length > 0 ? 'success' : 'empty',
-            count: result.value.length,
-            message: result.value.length > 0
-              ? `${result.value.length} snapshot terbaca.`
-              : getEmptyApiRecapMessage(task.key, task.enabledConfigCount),
+            state: providerRows.length > 0 ? 'success' : 'empty',
+            count: providerRows.length,
+            message: providerRows.length > 0
+              ? `${providerRows.length} snapshot terbaca.${ignoredMessage}${inactiveMessage}`
+              : `${getEmptyApiRecapMessage(task.key, task.enabledConfigCount)}${ignoredMessage}${inactiveMessage}`,
           });
-        } else {
-          const message = getApiRecapErrorMessage(task.key, result.reason);
+        } catch (reason) {
+          const message = getApiRecapErrorMessage(task.key, reason);
           errors.push(`${task.label}: ${message}`);
-          providerStatuses.push({
+          setApiRecapErrors([...errors]);
+          updateProviderStatus({
             key: task.key,
             label: task.label,
             state: 'error',
@@ -1337,14 +1450,9 @@ export function IklanHarian() {
             message,
           });
         }
-      });
-
-      setApiRecapRows(rows.sort((left, right) => {
-        if (left.date !== right.date) return left.date.localeCompare(right.date);
-        return left.accountName.localeCompare(right.accountName);
       }));
+
       setApiRecapErrors(errors);
-      setApiRecapProviderStatuses(providerStatuses);
 
       if (rows.length === 0 && errors.length === 0) {
         toast.info('Tidak ada snapshot API untuk periode ini.');
@@ -2788,11 +2896,23 @@ export function IklanHarian() {
                   >
                     <div>
                       <span>{provider.label}</span>
-                      <strong>{provider.state === 'error' ? 'Error' : `${provider.count} row`}</strong>
+                      <strong>
+                        {provider.state === 'loading'
+                          ? 'Memuat'
+                          : provider.state === 'error'
+                            ? 'Error'
+                            : `${provider.count} row`}
+                      </strong>
                     </div>
                     <small>{provider.message}</small>
                   </div>
                 ))}
+              </div>
+            )}
+            {isApiRecapLoading && (
+              <div className="dailyAdsRecapLoadingBanner">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Preview dimuat per platform. Data yang selesai lebih dulu akan tampil langsung.</span>
               </div>
             )}
           </div>
@@ -2806,12 +2926,6 @@ export function IklanHarian() {
           )}
 
           <div className="dailyAdsRecapTableViewport px-6 py-3">
-            {isApiRecapLoading ? (
-              <div className="flex h-full items-center justify-center text-slate-500">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Menarik snapshot API...
-              </div>
-            ) : (
               <div className="dailyAdsRecapTableWrap">
                 <Table className="dailyAdsRecapTable">
                   <colgroup>
@@ -2837,7 +2951,17 @@ export function IklanHarian() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {apiRecapRows.length === 0 ? (
+                    {isApiRecapLoading && apiRecapRows.length === 0 ? (
+                      Array.from({ length: 6 }).map((_, index) => (
+                        <TableRow key={`api-recap-skeleton-${index}`}>
+                          {Array.from({ length: 8 }).map((__, cellIndex) => (
+                            <TableCell key={`api-recap-skeleton-${index}-${cellIndex}`}>
+                              <span className="dailyAdsRecapSkeletonLine" />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : apiRecapRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                           Belum ada data preview.
@@ -2876,7 +3000,6 @@ export function IklanHarian() {
                   </TableBody>
                 </Table>
               </div>
-            )}
           </div>
 
           <DialogFooter className="dailyAdsRecapFooter border-t border-slate-200 px-6 py-4 dark:border-slate-700">

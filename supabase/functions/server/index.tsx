@@ -39,8 +39,12 @@ const DEFAULT_ALLOWED_CORS_ORIGINS = [
   "https://www.polesheadlamp.id",
   "https://polesheadlamp-id.pages.dev",
   "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
   "http://localhost:4173",
   "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://127.0.0.1:5175",
   "http://127.0.0.1:4173",
 ];
 
@@ -861,6 +865,17 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     create: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
     edit: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
     delete: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
+  },
+  proof_assets: {
+    table: "proof_assets",
+    read: ["proof_assets.view"],
+    create: ["proof_assets.create"],
+    edit: ["proof_assets.edit"],
+    delete: ["proof_assets.delete"],
+    orderBy: "created_at",
+    ascending: false,
+    maxLimit: 500,
+    filterableColumns: ["vehicle_type_id", "is_active", "created_at"],
   },
   technician_schedules: {
     table: "technician_schedules",

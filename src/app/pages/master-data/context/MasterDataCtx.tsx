@@ -344,6 +344,8 @@ interface MasterDataContextType {
   isLeadsLoading: boolean;
   ensureOrdersForDateRange: (range: { from: string; to: string; mode?: 'service' | 'lead' }) => Promise<void>;
   ensureLeadsForDateRange: (range: { from: string; to: string }) => Promise<void>;
+  ensureProspectBookingsForDateRange: (range: { from: string; to: string }) => Promise<void>;
+  ensureTechnicianSchedulesForDateRange: (range: { from: string; to: string }) => Promise<void>;
 
   // Setters (if needed for local state updates before refresh)
   setAreas: React.Dispatch<React.SetStateAction<Area[]>>;
@@ -410,8 +412,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const [realtimeRetryKey, setRealtimeRetryKey] = useState(0);
   const fetchedOrderDateRangesRef = React.useRef(new Set<string>());
   const fetchedLeadDateRangesRef = React.useRef(new Set<string>());
+  const fetchedProspectBookingDateRangesRef = React.useRef(new Set<string>());
+  const fetchedTechnicianScheduleDateRangesRef = React.useRef(new Set<string>());
   const fetchingOrderDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const fetchingLeadDateRangesRef = React.useRef(new Map<string, Promise<void>>());
+  const fetchingProspectBookingDateRangesRef = React.useRef(new Map<string, Promise<void>>());
+  const fetchingTechnicianScheduleDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const leadSocialContactsRef = React.useRef<Record<string, LeadSocialFields>>({});
   const leadSpamDailyInputsUseFallbackRef = React.useRef(false);
 
@@ -678,6 +684,23 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     ];
   };
 
+  const toBusinessDayUtcRange = (fromDateKey: string, toDateKey = fromDateKey) => {
+    const parseDateKey = (dateKey: string) => {
+      const [year, month, day] = dateKey.split('-').map(Number);
+      return { year, month, day };
+    };
+    const fromParts = parseDateKey(fromDateKey);
+    const toParts = parseDateKey(toDateKey);
+    const jakartaOffsetMs = 7 * 60 * 60 * 1000;
+    const startMs = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day, 0, 0, 0, 0) - jakartaOffsetMs;
+    const endMs = Date.UTC(toParts.year, toParts.month - 1, toParts.day, 23, 59, 59, 999) - jakartaOffsetMs;
+
+    return {
+      fromIso: new Date(startMs).toISOString(),
+      toIso: new Date(endMs).toISOString(),
+    };
+  };
+
   const fetchTodayOrdersDirectly = async (todayKey: string, mapper?: (data: any[]) => any[]) => {
     const { data, error } = await supabase
       .from('orders')
@@ -695,11 +718,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   };
 
   const fetchTodayLeadsDirectly = async (todayKey: string, mapper?: (data: any[]) => any[]) => {
+    const { fromIso, toIso } = toBusinessDayUtcRange(todayKey);
     const { data, error } = await supabase
       .from('leads')
       .select('*')
-      .gte('created_at', `${todayKey}T00:00:00`)
-      .lte('created_at', `${todayKey}T23:59:59.999`)
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso)
       .order('created_at', { ascending: false })
       .range(0, 249);
 
@@ -805,13 +829,14 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     if (inFlight) return inFlight;
 
     const request = (async () => {
+      const { fromIso, toIso } = toBusinessDayUtcRange(from, to);
       const nextRows = await fetchRangeRows(
         'leads',
         {
           orderBy: 'created_at',
           ascending: false,
-          gte: { created_at: `${from}T00:00:00` },
-          lte: { created_at: `${to}T23:59:59.999` },
+          gte: { created_at: fromIso },
+          lte: { created_at: toIso },
         },
         (rows) => rows.map((lead) => mapLeadFromDB(lead, leadSocialContactsRef.current[lead.id])),
         500,
@@ -827,6 +852,86 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     });
 
     fetchingLeadDateRangesRef.current.set(rangeKey, request);
+    return request;
+  }, []);
+
+  const ensureProspectBookingsForDateRange = React.useCallback(async ({
+    from,
+    to,
+  }: {
+    from: string;
+    to: string;
+  }) => {
+    if (!from || !to) return;
+
+    const rangeKey = `${from}:${to}`;
+    if (fetchedProspectBookingDateRangesRef.current.has(rangeKey)) return;
+    const inFlight = fetchingProspectBookingDateRangesRef.current.get(rangeKey);
+    if (inFlight) return inFlight;
+
+    const request = (async () => {
+      const nextRows = await fetchRangeRows(
+        'prospect_bookings',
+        {
+          orderBy: 'schedule_date',
+          ascending: false,
+          gte: { schedule_date: from },
+          lte: { schedule_date: to },
+        },
+        (rows) => rows.map(mapProspectBookingFromDB),
+        500,
+        true,
+      );
+
+      if (nextRows.length > 0) {
+        setProspectBookings((previousRows) => mergeRowsById(nextRows, previousRows));
+      }
+      fetchedProspectBookingDateRangesRef.current.add(rangeKey);
+    })().finally(() => {
+      fetchingProspectBookingDateRangesRef.current.delete(rangeKey);
+    });
+
+    fetchingProspectBookingDateRangesRef.current.set(rangeKey, request);
+    return request;
+  }, []);
+
+  const ensureTechnicianSchedulesForDateRange = React.useCallback(async ({
+    from,
+    to,
+  }: {
+    from: string;
+    to: string;
+  }) => {
+    if (!from || !to) return;
+
+    const rangeKey = `${from}:${to}`;
+    if (fetchedTechnicianScheduleDateRangesRef.current.has(rangeKey)) return;
+    const inFlight = fetchingTechnicianScheduleDateRangesRef.current.get(rangeKey);
+    if (inFlight) return inFlight;
+
+    const request = (async () => {
+      const nextRows = await fetchRangeRows(
+        'technician_schedules',
+        {
+          orderBy: 'date',
+          ascending: false,
+          gte: { date: from },
+          lte: { date: to },
+        },
+        (rows) => rows.map(mapScheduleFromDB),
+        500,
+        true,
+      );
+
+      if (nextRows.length > 0) {
+        setTechnicianSchedules((previousRows) => mergeRowsById(nextRows, previousRows));
+      }
+      fetchedTechnicianScheduleDateRangesRef.current.add(rangeKey);
+    })().finally(() => {
+      fetchingTechnicianScheduleDateRangesRef.current.delete(rangeKey);
+    });
+
+    fetchingTechnicianScheduleDateRangesRef.current.set(rangeKey, request);
     return request;
   }, []);
 
@@ -1354,19 +1459,69 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const addUser = (user: User) => setUsers(prev => [user, ...prev]);
   const updateUser = (user: User) => setUsers(prev => prev.map(item => item.id === user.id ? user : item)); // Local update
   const refetchUsersFromProfiles = async () => {
-    const rows: any[] = [];
-    let page = 0;
     const pageSize = 1000;
+    const loadPages = async (loader: (from: number, to: number) => Promise<any[]>) => {
+      const rows: any[] = [];
+      let page = 0;
 
-    while (true) {
-      const { rows: pageRows, forbidden } = await fetchAppDataPage('profiles', page * pageSize, (page + 1) * pageSize - 1);
-      if (forbidden) return;
-      rows.push(...pageRows);
-      if (pageRows.length < pageSize) break;
-      page += 1;
+      while (true) {
+        const pageRows = await loader(page * pageSize, (page + 1) * pageSize - 1);
+        rows.push(...pageRows);
+        if (pageRows.length < pageSize) break;
+        page += 1;
+      }
+
+      return rows;
+    };
+
+    const profileSources: { source: string; users: User[] }[] = [];
+
+    try {
+      const directRows = await loadPages((from, to) => fetchDirectAppDataPage('profiles', from, to));
+      profileSources.push({ source: 'direct', users: mapProfilesToUsers(directRows) });
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[MasterData] direct profiles fetch failed', error);
+      }
     }
 
-    setUsers(mapProfilesToUsers(rows));
+    try {
+      const appDataRows = await loadPages(async (from, to) => {
+        const { rows } = await fetchAppDataPage('profiles', from, to);
+        return rows;
+      });
+      profileSources.push({ source: 'app-data', users: mapProfilesToUsers(appDataRows) });
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[MasterData] app-data profiles fetch failed', error);
+      }
+    }
+
+    const bestSource = profileSources.sort((a, b) => b.users.length - a.users.length)[0];
+    if (!bestSource || bestSource.users.length === 0) return;
+
+    setUsers(prev => {
+      const isDowngradeToCurrentUserOnly = prev.length > bestSource.users.length && bestSource.users.length <= 1;
+      if (isDowngradeToCurrentUserOnly) {
+        if (import.meta.env.DEV) {
+          console.warn('[MasterData] ignoring incomplete profiles refresh', {
+            source: bestSource.source,
+            previousUsers: prev.length,
+            nextUsers: bestSource.users.length,
+          });
+        }
+        return prev;
+      }
+
+      if (import.meta.env.DEV) {
+        console.info('[MasterData] profiles refreshed', {
+          source: bestSource.source,
+          users: bestSource.users.length,
+        });
+      }
+
+      return bestSource.users;
+    });
   };
   
   const createSystemUser = async (data: any) => {
@@ -2356,8 +2511,12 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     setIsLeadsLoading(true);
     fetchedOrderDateRangesRef.current.clear();
     fetchedLeadDateRangesRef.current.clear();
+    fetchedProspectBookingDateRangesRef.current.clear();
+    fetchedTechnicianScheduleDateRangesRef.current.clear();
     fetchingOrderDateRangesRef.current.clear();
     fetchingLeadDateRangesRef.current.clear();
+    fetchingProspectBookingDateRangesRef.current.clear();
+    fetchingTechnicianScheduleDateRangesRef.current.clear();
 
     const fetchCatalog = createMasterDataFetchCatalog({
       setAreas,
@@ -2460,14 +2619,15 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
           if (import.meta.env.DEV) {
             console.warn('[MasterData] direct today leads fetch failed, falling back to app-data', directError);
           }
+          const { fromIso, toIso } = toBusinessDayUtcRange(todayKey);
           await fetchData(leadFetch.table, leadFetch.setter, leadFetch.mapper, {
             progressive: true,
             pageSize: 250,
             appData: {
               orderBy: 'created_at',
               ascending: false,
-              gte: { created_at: `${todayKey}T00:00:00` },
-              lte: { created_at: `${todayKey}T23:59:59.999` },
+              gte: { created_at: fromIso },
+              lte: { created_at: toIso },
             },
           });
         }
@@ -2783,7 +2943,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     setAreas,
     currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
-    ensureOrdersForDateRange, ensureLeadsForDateRange,
+    ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange,
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
@@ -2791,7 +2951,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
     technicianSchedules,
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
-    ensureOrdersForDateRange, ensureLeadsForDateRange
+    ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange
   ]);
 
   return (

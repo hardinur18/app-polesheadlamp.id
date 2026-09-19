@@ -57,7 +57,7 @@ import { Label } from "../components/ui/label"
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { logActivity } from '@/app/services/auditService';
-import { AdAccount, AdAccountAssignment, Order, WATemplate } from './master-data/data';
+import { AdAccount, AdAccountAssignment, Branch, Order, User, WATemplate } from './master-data/data';
 import { getTodayDateKey } from './master-data/dateKeys';
 import { FoundationDateRangePicker } from '../components/ui/date-range-picker';
 import { startOfDay, endOfDay } from 'date-fns';
@@ -301,6 +301,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const { hasPermission, isOrderLocked } = usePermissions();
   const ordersInitialLoading = isOrdersLoading && orders.length === 0;
   const [isDateRangeLoading, setIsDateRangeLoading] = useState(false);
+  const [serviceNameFallbackMap, setServiceNameFallbackMap] = useState<Record<string, string>>({});
+  const [vehicleNameFallbackMap, setVehicleNameFallbackMap] = useState<Record<string, string>>({});
+  const [userLookupFallbackMap, setUserLookupFallbackMap] = useState<Record<string, Pick<User, 'id' | 'name' | 'phone' | 'branchId'>>>({});
+  const [branchLookupFallbackMap, setBranchLookupFallbackMap] = useState<Record<string, Pick<Branch, 'id' | 'name' | 'code' | 'city' | 'status'>>>({});
 
   const nonScheduleLeadIds = useMemo(
     () => new Set(
@@ -333,8 +337,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   }, [orders, scheduleConflictByItemKey]);
 
   // --- Hooks ---
-  const { userMap, branchMap, areaMap, serviceMap, platformMap, subChannelMap, paymentMap, vehicleMap } =
-    useOrderLookupMaps({ users, branches, areas, services, platforms, subChannels, payments, vehicles });
+  const { userMap, branchMap, areaMap, platformMap, subChannelMap, paymentMap } =
+    useOrderLookupMaps({ users, branches: allBranches, areas, services, platforms, subChannels, payments, vehicles });
 
   const filters = useOrderFilters({
     orders, users, services, vehicles, branches, platforms, subChannels, cancelReasons, currentUser, currentRole,
@@ -411,6 +415,164 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     selectedIds, setSelectedIds, sortConfig, requestSort,
     sortedOrders, totalPages, paginatedOrders, handleSelectAll, handleSelectRow,
   } = pagination;
+
+  const loadedServiceIds = useMemo(
+    () => new Set(services.map((service) => service.id)),
+    [services],
+  );
+  const loadedVehicleIds = useMemo(
+    () => new Set(vehicles.map((vehicle) => vehicle.id)),
+    [vehicles],
+  );
+  const loadedUserIds = useMemo(
+    () => new Set(users.map((user) => user.id)),
+    [users],
+  );
+  const loadedBranchIds = useMemo(
+    () => new Set(allBranches.map((branch) => branch.id)),
+    [allBranches],
+  );
+  const missingOrderServiceLookupKey = useMemo(() => {
+    const ids = new Set<string>();
+    paginatedOrders.forEach((order) => {
+      if (order.serviceId && !loadedServiceIds.has(order.serviceId) && !serviceNameFallbackMap[order.serviceId]) {
+        ids.add(order.serviceId);
+      }
+    });
+    return Array.from(ids).sort().join('|');
+  }, [loadedServiceIds, paginatedOrders, serviceNameFallbackMap]);
+  const missingOrderVehicleLookupKey = useMemo(() => {
+    const ids = new Set<string>();
+    paginatedOrders.forEach((order) => {
+      if (order.vehicleId && !loadedVehicleIds.has(order.vehicleId) && !vehicleNameFallbackMap[order.vehicleId]) {
+        ids.add(order.vehicleId);
+      }
+    });
+    return Array.from(ids).sort().join('|');
+  }, [loadedVehicleIds, paginatedOrders, vehicleNameFallbackMap]);
+  const missingOrderUserLookupKey = useMemo(() => {
+    const ids = new Set<string>();
+    paginatedOrders.forEach((order) => {
+      [order.technicianId, order.csId].forEach((userId) => {
+        if (userId && !loadedUserIds.has(userId) && !userLookupFallbackMap[userId]) {
+          ids.add(userId);
+        }
+      });
+    });
+    return Array.from(ids).sort().join('|');
+  }, [loadedUserIds, paginatedOrders, userLookupFallbackMap]);
+  const missingOrderBranchLookupKey = useMemo(() => {
+    const ids = new Set<string>();
+    paginatedOrders.forEach((order) => {
+      if (order.branchId && !loadedBranchIds.has(order.branchId) && !branchLookupFallbackMap[order.branchId]) {
+        ids.add(order.branchId);
+      }
+    });
+    return Array.from(ids).sort().join('|');
+  }, [branchLookupFallbackMap, loadedBranchIds, paginatedOrders]);
+
+  useEffect(() => {
+    const serviceIds = missingOrderServiceLookupKey ? missingOrderServiceLookupKey.split('|') : [];
+    const vehicleIds = missingOrderVehicleLookupKey ? missingOrderVehicleLookupKey.split('|') : [];
+    const userIds = missingOrderUserLookupKey ? missingOrderUserLookupKey.split('|') : [];
+    const branchIds = missingOrderBranchLookupKey ? missingOrderBranchLookupKey.split('|') : [];
+    if (serviceIds.length === 0 && vehicleIds.length === 0 && userIds.length === 0 && branchIds.length === 0) return;
+
+    let isCancelled = false;
+
+    const fetchMissingOrderLookupNames = async () => {
+      const [serviceResult, vehicleResult, userResult, branchResult] = await Promise.all([
+        serviceIds.length > 0
+          ? supabase.from('services').select('id,name').in('id', serviceIds)
+          : Promise.resolve({ data: [], error: null }),
+        vehicleIds.length > 0
+          ? supabase.from('vehicle_types').select('id,name').in('id', vehicleIds)
+          : Promise.resolve({ data: [], error: null }),
+        userIds.length > 0
+          ? supabase.from('profiles').select('id,name,phone,branch_id').in('id', userIds)
+          : Promise.resolve({ data: [], error: null }),
+        branchIds.length > 0
+          ? supabase.from('branches').select('id,name,code,city,status').in('id', branchIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (isCancelled) return;
+
+      if (serviceResult.error && import.meta.env.DEV) {
+        console.warn('[Pesanan] failed to resolve service names', serviceResult.error);
+      }
+      if (vehicleResult.error && import.meta.env.DEV) {
+        console.warn('[Pesanan] failed to resolve vehicle names', vehicleResult.error);
+      }
+      if (userResult.error && import.meta.env.DEV) {
+        console.warn('[Pesanan] failed to resolve operational users', userResult.error);
+      }
+      if (branchResult.error && import.meta.env.DEV) {
+        console.warn('[Pesanan] failed to resolve operational branches', branchResult.error);
+      }
+
+      if (serviceResult.data?.length) {
+        setServiceNameFallbackMap((current) => {
+          const next = { ...current };
+          serviceResult.data.forEach((service: { id?: string; name?: string | null }) => {
+            if (service.id && service.name) next[service.id] = service.name;
+          });
+          return next;
+        });
+      }
+
+      if (vehicleResult.data?.length) {
+        setVehicleNameFallbackMap((current) => {
+          const next = { ...current };
+          vehicleResult.data.forEach((vehicle: { id?: string; name?: string | null }) => {
+            if (vehicle.id && vehicle.name) next[vehicle.id] = vehicle.name;
+          });
+          return next;
+        });
+      }
+
+      if (userResult.data?.length) {
+        setUserLookupFallbackMap((current) => {
+          const next = { ...current };
+          userResult.data.forEach((profile: { id?: string; name?: string | null; phone?: string | null; branch_id?: string | null }) => {
+            if (profile.id && profile.name) {
+              next[profile.id] = {
+                id: profile.id,
+                name: profile.name,
+                phone: profile.phone || '',
+                branchId: profile.branch_id || undefined,
+              };
+            }
+          });
+          return next;
+        });
+      }
+
+      if (branchResult.data?.length) {
+        setBranchLookupFallbackMap((current) => {
+          const next = { ...current };
+          branchResult.data.forEach((branch: { id?: string; name?: string | null; code?: string | null; city?: string | null; status?: Branch['status'] | null }) => {
+            if (branch.id && branch.name) {
+              next[branch.id] = {
+                id: branch.id,
+                name: branch.name,
+                code: branch.code || undefined,
+                city: branch.city || '',
+                status: branch.status || 'active',
+              };
+            }
+          });
+          return next;
+        });
+      }
+    };
+
+    void fetchMissingOrderLookupNames();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [missingOrderBranchLookupKey, missingOrderServiceLookupKey, missingOrderUserLookupKey, missingOrderVehicleLookupKey]);
 
   const statusActions = useOrderStatusActions({ updateOrder, currentUser });
   const {
@@ -616,10 +778,12 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const orderTableDragRef = React.useRef({
     active: false,
     dragging: false,
+    orderId: null as string | null,
     pointerId: null as number | null,
     scrollLeft: 0,
     startX: 0,
   });
+  const suppressNextOrderRowClickRef = React.useRef(false);
   const suppressOrderTableClickRef = React.useRef(false);
   const orderStatusDragRef = React.useRef({
     active: false,
@@ -637,8 +801,14 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
   // --- Helpers ---
   const getTechnicianName = useCallback((id?: string) => users.find(u => u.id === id)?.name || '-', [users]);
-  const getServiceName = useCallback((id?: string) => services.find(s => s.id === id)?.name || '-', [services]);
-  const getVehicleName = useCallback((id?: string) => vehicles.find(v => v.id === id)?.name || '-', [vehicles]);
+  const getServiceName = useCallback(
+    (id?: string) => (id ? services.find(s => s.id === id)?.name || serviceNameFallbackMap[id] || '-' : '-'),
+    [serviceNameFallbackMap, services],
+  );
+  const getVehicleName = useCallback(
+    (id?: string) => (id ? vehicles.find(v => v.id === id)?.name || vehicleNameFallbackMap[id] || '-' : '-'),
+    [vehicleNameFallbackMap, vehicles],
+  );
   const getTechnicianOffSchedule = useCallback(
     (technicianId?: string | null, serviceDate?: string | null) =>
       getTechnicianDaySchedule(technicianId, serviceDate, technicianSchedules),
@@ -745,6 +915,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     target.removeAttribute('data-dragging');
     orderTableDragRef.current.active = false;
     orderTableDragRef.current.dragging = false;
+    orderTableDragRef.current.orderId = null;
     orderTableDragRef.current.pointerId = null;
   };
 
@@ -821,6 +992,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   }, [setSelectedIds]);
 
   const handleOrderRowClick = (event: React.MouseEvent<HTMLTableRowElement>, order: Order) => {
+    if (suppressNextOrderRowClickRef.current) {
+      suppressNextOrderRowClickRef.current = false;
+      return;
+    }
     if (!canViewOrderDetails || isOrderRowInteractiveTarget(event.target, event.currentTarget)) return;
 
     handleViewDetail(order);
@@ -851,6 +1026,15 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
   const parseInlinePrice = (value: string) => parseInt(value.replace(/\D/g, ''), 10) || 0;
 
+  const handleOrderTableClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressOrderTableClickRef.current || orderTableDragRef.current.dragging) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressOrderTableClickRef.current = false;
+      suppressNextOrderRowClickRef.current = false;
+    }
+  };
+
   const openInlinePriceEditor = (order: Order) => {
     setEditingPriceId(order.id);
     setTempPrice(order.price.toLocaleString('id-ID'));
@@ -874,11 +1058,16 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
     const scroller = event.currentTarget;
     if (scroller.scrollWidth <= scroller.clientWidth) return;
+    const orderRow = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLTableRowElement>('tr[data-order-id]')
+      : null;
 
     suppressOrderTableClickRef.current = false;
+    suppressNextOrderRowClickRef.current = false;
     orderTableDragRef.current = {
       active: true,
       dragging: false,
+      orderId: orderRow?.dataset.orderId || null,
       pointerId: event.pointerId,
       scrollLeft: scroller.scrollLeft,
       startX: event.clientX,
@@ -904,10 +1093,26 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     const drag = orderTableDragRef.current;
     if (!drag.active || drag.pointerId !== event.pointerId) return;
 
+    const shouldOpenDetail =
+      !drag.dragging &&
+      canViewOrderDetails &&
+      !!drag.orderId &&
+      !isOrderRowInteractiveTarget(event.target);
+
+    const targetOrder = shouldOpenDetail
+      ? paginatedOrders.find((order) => order.id === drag.orderId) || orders.find((order) => order.id === drag.orderId)
+      : null;
+
     if (drag.dragging) {
       suppressOrderTableClickRef.current = true;
       window.setTimeout(() => {
         suppressOrderTableClickRef.current = false;
+      }, 0);
+    } else if (targetOrder) {
+      suppressNextOrderRowClickRef.current = true;
+      handleViewDetail(targetOrder);
+      window.setTimeout(() => {
+        suppressNextOrderRowClickRef.current = false;
       }, 0);
     }
     resetOrderTableDrag(event.currentTarget, event.pointerId);
@@ -1042,7 +1247,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     const documentationToneClass = documentationSummary.isComplete
       ? 'text-emerald-600 hover:text-emerald-700'
       : documentationSummary.isEmpty
-        ? 'text-red-500 hover:text-red-600'
+        ? 'text-slate-500 hover:text-slate-700'
         : 'text-amber-600 hover:text-amber-700';
     const documentationBadgeClass = documentationSummary.isComplete
       ? 'bg-emerald-500 text-white'
@@ -1163,9 +1368,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             </OrderActionButton>
           )}
 
-          {canViewOrderDetails && !documentationSummary.isEmpty && (
+          {canViewOrderDetails && (
             <OrderActionButton
-              label={documentationSummary.tooltip}
+              label={documentationSummary.isEmpty ? 'Dokumentasi' : documentationSummary.tooltip}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -1174,9 +1379,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
               className={`${iconClass} ${documentationToneClass}`}
             >
               <Camera className="h-4 w-4" />
-              <span className={`absolute -right-1 -top-1 flex h-4 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold ring-2 ring-white dark:ring-slate-900 ${documentationBadgeClass}`}>
-                {documentationSummary.label}
-              </span>
+              {!documentationSummary.isEmpty && (
+                <span className={`absolute -right-1 -top-1 flex h-4 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold ring-2 ring-white dark:ring-slate-900 ${documentationBadgeClass}`}>
+                  {documentationSummary.label}
+                </span>
+              )}
             </OrderActionButton>
           )}
 
@@ -1215,9 +1422,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   className={ORDER_MENU_ITEM_CLASS}
                 >
                   <Camera className="h-4 w-4" /> Dokumentasi
-                  <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${documentationSummary.isComplete ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : documentationSummary.isEmpty ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
-                    {documentationSummary.label}
-                  </span>
+                  {!documentationSummary.isEmpty && (
+                    <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${documentationSummary.isComplete ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                      {documentationSummary.label}
+                    </span>
+                  )}
                 </DropdownMenuItem>
               )}
               {canViewOrderPayments && (
@@ -2144,7 +2353,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
               </div>
             )}
             <DataTable
-              actionWidth={canShowOrderActions ? 86 : undefined}
+              actionWidth={canShowOrderActions ? 128 : undefined}
               cellY={14}
               className="orderDataTable"
               columns={createDataTableColumns([
@@ -2158,10 +2367,16 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 { preset: 'compact', minWidth: 148, width: 'clamp(148px, 10vw, 180px)' },
                 'status',
                 'status',
-                canShowOrderActions && 'action',
+                canShowOrderActions && { preset: 'action', minWidth: 128, width: '128px' },
               ])}
-              minWidth={showOrderSelection ? 1600 : 1552}
+              minWidth={showOrderSelection ? 1656 : 1608}
               dragScroll={false}
+              onClickCapture={handleOrderTableClickCapture}
+              onPointerDown={handleOrderTablePointerDown}
+              onPointerMove={handleOrderTablePointerMove}
+              onPointerUp={handleOrderTablePointerEnd}
+              onPointerCancel={handleOrderTablePointerEnd}
+              onPointerLeave={handleOrderTablePointerEnd}
               rowMinHeight={82}
               textMax={340}
             >
@@ -2360,13 +2575,13 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         <div className="flex flex-col gap-1 max-w-[240px]">
                           <span 
                             className="text-[11px] font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap overflow-hidden text-ellipsis" 
-                            title={serviceMap[order.serviceId]?.name || order.serviceId}
+                            title={getServiceName(order.serviceId)}
                           >
-                            {serviceMap[order.serviceId]?.name || order.serviceId}
+                            {getServiceName(order.serviceId)}
                           </span>
                           <div className="flex items-center gap-1">
                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {vehicleMap[order.vehicleId]?.name || order.vehicleId} ({order.units || 1})
+                                {getVehicleName(order.vehicleId)} ({order.units || 1})
                              </span>
                           </div>
                           
@@ -2473,9 +2688,15 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                       <TableCell className="py-6 align-top">
                         <div className="flex flex-col gap-2">
                            {(() => {
-                             const technician = userMap[order.technicianId];
-                             const cs = userMap[order.csId];
-                             const branch = branchMap[order.branchId];
+                             const technician = order.technicianId
+                               ? userMap[order.technicianId] || userLookupFallbackMap[order.technicianId]
+                               : null;
+                             const cs = order.csId
+                               ? userMap[order.csId] || userLookupFallbackMap[order.csId]
+                               : null;
+                             const branch = order.branchId
+                               ? branchMap[order.branchId] || branchLookupFallbackMap[order.branchId]
+                               : null;
                              const area = areaMap[order.areaId];
                              
                              return (

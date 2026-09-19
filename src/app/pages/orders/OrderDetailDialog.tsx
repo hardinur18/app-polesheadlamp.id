@@ -203,7 +203,7 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <MasterDataFormDialogContent size="wide" className="orderDetailDialog">
+      <MasterDataFormDialogContent size="wide" className="orderDetailDialog" preventOutsideClose={false}>
         <MasterDataFormHeader
           icon={User}
           title={
