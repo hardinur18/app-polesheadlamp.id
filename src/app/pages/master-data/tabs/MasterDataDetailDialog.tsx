@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '../../../components/ui/button';
 import { TableStatusIcon } from '../../../components/ui/data-table';
 import { MasterDataDialogBody } from '../../../components/ui/master-data-ui';
+import { getBankLogoPublicUrl } from '@/app/services/bankLogoService';
 
 interface MasterDataDetailDialogProps {
   open: boolean;
@@ -58,8 +59,22 @@ export const MasterDataDetailDialog: React.FC<MasterDataDetailDialogProps> = ({
             
             {type === 'payment' && (
                 <>
-                    <DetailRow label="Nomor Rekening" value={item.accountNumber} />
-                    <DetailRow label="Atas Nama" value={item.accountHolder} />
+                    <DetailRow label="Jenis" value={item.accountType === 'qris' ? 'QRIS' : 'Bank Transfer'} />
+                    <DetailRow label={item.accountType === 'qris' ? 'Kode / Label QRIS' : 'Nomor Rekening'} value={item.accountNumber} />
+                    <DetailRow label={item.accountType === 'qris' ? 'Nama Merchant' : 'Atas Nama'} value={item.accountHolder} />
+                    {item.accountType === 'qris' && item.qrisImagePath ? (
+                      <div className="masterDataDetailRow">
+                        <span className="masterDataDetailLabel">Gambar QRIS</span>
+                        <span className="masterDataDetailValue">
+                          <img
+                            src={getBankLogoPublicUrl(item.qrisImagePath)}
+                            alt="QRIS"
+                            className="h-28 w-28 rounded-lg border border-slate-200 object-contain"
+                          />
+                        </span>
+                      </div>
+                    ) : null}
+                    {item.notes ? <DetailRow label="Catatan" value={item.notes} /> : null}
                 </>
             )}
 

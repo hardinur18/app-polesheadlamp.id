@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search, Plus, MapPin, Calendar, Clock, Map as MapIcon, Eye, MoreVertical,
   CheckCircle2, XCircle, Timer, Truck, Edit, Trash2, Package, RefreshCw, Banknote, Loader2, MessageCircle, Camera, CreditCard,
-  User as UserIcon, Building2, ChevronDown, Settings, Megaphone, Filter, FileSpreadsheet, FileDown, FileUp, FileText, Ruler, Lock, AlertTriangle, Phone, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList
+  User as UserIcon, Building2, ChevronDown, Settings, Megaphone, Filter, FileSpreadsheet, FileDown, FileUp, FileText, Ruler, Lock, AlertTriangle, Phone, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, QrCode
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -2150,13 +2150,17 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                  </Select>
                               </div>
                               <div className="space-y-2">
-                                 <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Akun Bank</Label>
+                                 <Label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">Akun Pembayaran</Label>
                                  <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-                                    <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-10"><SelectValue placeholder="Semua Bank" /></SelectTrigger>
+                                    <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-10"><SelectValue placeholder="Semua Akun" /></SelectTrigger>
                                     <SelectContent className="z-[200]">
-                                       <SelectItem value="all">Semua Bank</SelectItem>
+                                       <SelectItem value="all">Semua Akun</SelectItem>
                                        {payments.map(p => (
-                                           <SelectItem key={p.id} value={p.id}>{p.bankName} - {p.accountNumber}</SelectItem>
+                                           <SelectItem key={p.id} value={p.id}>
+                                             {p.accountType === 'qris'
+                                               ? `${p.bankName} - ${p.accountHolder || 'QRIS'}`
+                                               : `${p.bankName} - ${p.accountNumber}`}
+                                           </SelectItem>
                                        ))}
                                     </SelectContent>
                                  </Select>
@@ -2858,10 +2862,36 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
                       <TableCell className="py-6 text-center align-top">
                         <div className="flex items-center justify-center gap-1">
-                           <div className="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
-                             {order.paymentType || '-'}
-                             {order.paymentType === 'Transfer' && order.paymentMethodId && ` - ${payments.find(p => p.id === order.paymentMethodId)?.bankName}`}
-                           </div>
+                           {(() => {
+                             const payment = order.paymentType === 'Transfer' && order.paymentMethodId
+                               ? payments.find(p => p.id === order.paymentMethodId)
+                               : null;
+                             const isQrisPayment = payment?.accountType === 'qris';
+                             const paymentLabel = `${order.paymentType || '-'}${payment ? ` - ${isQrisPayment ? 'QRIS' : payment.bankName}` : ''}`;
+
+                             if (isQrisPayment && canViewOrderPayments) {
+                               return (
+                                 <button
+                                   type="button"
+                                   onClick={(event) => {
+                                     event.stopPropagation();
+                                     handleViewPayment(order);
+                                   }}
+                                   className="inline-flex items-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                   title="Lihat gambar QRIS"
+                                 >
+                                   <QrCode className="h-3.5 w-3.5" />
+                                   {paymentLabel}
+                                 </button>
+                               );
+                             }
+
+                             return (
+                               <div className="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                                 {paymentLabel}
+                               </div>
+                             );
+                           })()}
                            {hasPermission('order.payment.edit_type') && !isOrderLocked(order.status) && (
                            <DropdownMenu>
                              <DropdownMenuTrigger asChild>

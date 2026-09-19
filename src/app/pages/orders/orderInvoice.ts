@@ -1,5 +1,6 @@
 import brandIcon from '@/assets/polesheadlamp-app-logo-round.png';
 import brandWordmark from '../../../../File PNG/Polesheadlamp.id (1).png';
+import { getBankLogoPublicUrl } from '@/app/services/bankLogoService';
 import { Area, Branch, Order, PaymentMethod, Platform, ServiceType, SubChannel, User, VehicleType } from '../master-data/data';
 
 export type OrderInvoiceContext = {
@@ -173,6 +174,13 @@ const buildInvoiceHtml = ({
   const signatureUrl = resolveSignatureUrl(order) || DEFAULT_SIGNATURE_URL;
   const signatureName = DEFAULT_SIGNATURE_NAME;
   const normalizedWarrantyText = warrantyText.trim() || DEFAULT_WARRANTY_TEXT;
+  const isQrisPayment = paymentMethod?.accountType === 'qris';
+  const qrisImageUrl = isQrisPayment ? getBankLogoPublicUrl(paymentMethod?.qrisImagePath) : '';
+  const paymentAccountText = paymentMethod
+    ? isQrisPayment
+      ? `${paymentMethod.bankName} - ${paymentMethod.accountHolder || 'QRIS'}`
+      : `${paymentMethod.bankName} - ${paymentMethod.accountNumber || '-'}`
+    : '-';
 
   return `<!DOCTYPE html>
 <html lang="id">
@@ -390,6 +398,48 @@ const buildInvoiceHtml = ({
         white-space: normal;
       }
 
+      .qris-payment-box {
+        align-items: center;
+        border: 1px solid #1f1f1f;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 128px minmax(0, 1fr);
+        margin-top: 18px;
+        padding: 12px;
+      }
+
+      .qris-payment-image {
+        align-items: center;
+        background: #ffffff;
+        border: 1px solid var(--soft-line);
+        display: flex;
+        height: 128px;
+        justify-content: center;
+        overflow: hidden;
+        width: 128px;
+      }
+
+      .qris-payment-image img {
+        display: block;
+        height: 100%;
+        object-fit: contain;
+        width: 100%;
+      }
+
+      .qris-payment-title {
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+      }
+
+      .qris-payment-copy {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.55;
+      }
+
       .meta-note {
         margin-top: 14px;
         font-size: 11px;
@@ -493,6 +543,10 @@ const buildInvoiceHtml = ({
           font-size: 12px;
         }
 
+        .qris-payment-box {
+          grid-template-columns: 1fr;
+        }
+
         .title {
           font-size: 38px;
           margin-bottom: 22px;
@@ -570,7 +624,24 @@ const buildInvoiceHtml = ({
         ${buildFieldRow('Jadwal Service', scheduleLine)}
         ${buildFieldRow('Area', branchLine)}
         ${buildFieldRow('Status Pembayaran', receiptStatus)}
+        ${buildFieldRow('Akun Pembayaran', paymentAccountText)}
       </div>
+
+      ${isQrisPayment && qrisImageUrl
+        ? `<div class="qris-payment-box">
+        <div class="qris-payment-image">
+          <img src="${escapeHtml(qrisImageUrl)}" alt="QRIS ${escapeHtml(paymentMethod?.bankName || '')}" />
+        </div>
+        <div>
+          <div class="qris-payment-title">Scan QRIS untuk pembayaran</div>
+          <div class="qris-payment-copy">
+            Merchant: <strong>${escapeHtml(paymentMethod?.accountHolder || paymentMethod?.bankName || 'QRIS')}</strong><br />
+            Nominal: <strong>${escapeHtml(formatCurrency(order.price))}</strong><br />
+            ${paymentMethod?.notes ? escapeHtml(paymentMethod.notes) : 'Pastikan nominal dan nama merchant sudah sesuai sebelum pembayaran.'}
+          </div>
+        </div>
+      </div>`
+        : ''}
 
       ${includeWarranty
         ? `<div class="fields section-gap">

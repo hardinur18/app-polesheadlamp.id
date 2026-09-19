@@ -70,7 +70,18 @@ export interface Area { id: string; name: string; branchId: string; status: 'act
 export interface ServiceType { id: string; name: string; category: string; description?: string; price: number; status: 'active' | 'inactive'; }
 export interface TechnicianTeam { id: string; name: string; branchId: string; leaderId?: string; memberIds?: string[]; status: 'active' | 'inactive'; }
 export interface AdSource { id: string; name: string; adAccountId: string; defaultCsName?: string; status: 'active' | 'inactive'; }
-export interface PaymentMethod { id: string; bankName: string; accountNumber: string; accountHolder: string; status: 'active' | 'inactive'; logoPath?: string | null; }
+export type PaymentAccountType = 'bank' | 'qris';
+export interface PaymentMethod {
+  id: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  status: 'active' | 'inactive';
+  logoPath?: string | null;
+  accountType?: PaymentAccountType;
+  qrisImagePath?: string | null;
+  notes?: string | null;
+}
 export interface VehicleType { id: string; name: string; category: string; status: 'active' | 'inactive'; }
 export type LeadStatus = 'Pending' | 'Follow Up' | 'Booking' | 'Closing' | 'Cancel';
 export type LeadSocialPlatform = 'instagram' | 'tiktok';

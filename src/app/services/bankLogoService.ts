@@ -28,6 +28,11 @@ export function buildBankLogoPath(bankAccountId: string, file: File) {
   return `${cleanId}/logo.${getLogoExtension(file)}`;
 }
 
+export function buildPaymentQrPath(bankAccountId: string, file: File) {
+  const cleanId = bankAccountId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'payment';
+  return `${cleanId}/qris.${getLogoExtension(file)}`;
+}
+
 export function getBankLogoPublicUrl(path: string | null | undefined) {
   if (!path) return '';
   if (/^https?:\/\//i.test(path) || path.startsWith('data:') || path.startsWith('blob:')) return path;
@@ -57,7 +62,36 @@ export async function uploadBankLogo(
     });
 
   if (error) {
-    throw new Error(error.message || 'Logo bank gagal diupload.');
+    throw new Error(`Logo akun pembayaran gagal diupload: ${error.message || 'Storage menolak upload.'}`);
+  }
+
+  if (options.removePrevious !== false && previousPath && previousPath !== nextPath && !/^https?:\/\//i.test(previousPath)) {
+    await supabase.storage.from(BANK_LOGOS_BUCKET).remove([previousPath]).catch(() => undefined);
+  }
+
+  return nextPath;
+}
+
+export async function uploadPaymentQrImage(
+  bankAccountId: string,
+  file: File,
+  previousPath?: string | null,
+  options: UploadBankLogoOptions = {},
+) {
+  const validationMessage = validateBankLogoFile(file);
+  if (validationMessage) throw new Error(validationMessage.replace('Logo', 'Gambar QRIS'));
+
+  const nextPath = buildPaymentQrPath(bankAccountId, file);
+  const { error } = await supabase.storage
+    .from(BANK_LOGOS_BUCKET)
+    .upload(nextPath, file, {
+      cacheControl: '31536000',
+      contentType: file.type,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(`Gambar QRIS gagal diupload: ${error.message || 'Storage menolak upload.'}`);
   }
 
   if (options.removePrevious !== false && previousPath && previousPath !== nextPath && !/^https?:\/\//i.test(previousPath)) {

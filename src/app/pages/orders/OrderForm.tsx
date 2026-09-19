@@ -2201,7 +2201,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                       <SelectContent>
                         {payments.map(p => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.bankName} - {p.accountNumber}
+                            {p.accountType === 'qris'
+                              ? `${p.bankName} - ${p.accountHolder || 'QRIS'}`
+                              : `${p.bankName} - ${p.accountNumber}`}
                           </SelectItem>
                         ))}
                       </SelectContent>

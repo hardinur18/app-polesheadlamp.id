@@ -148,6 +148,9 @@ export const mapPaymentFromDB = (p: any): PaymentMethod => ({
   accountHolder: p.account_holder,
   status: p.status,
   logoPath: p.logo_path || p.logoPath || null,
+  accountType: p.account_type || p.accountType || 'bank',
+  qrisImagePath: p.qris_image_path || p.qrisImagePath || null,
+  notes: p.notes || null,
 });
 
 export const mapPaymentToDB = (p: PaymentMethod) => ({
@@ -157,6 +160,9 @@ export const mapPaymentToDB = (p: PaymentMethod) => ({
   account_holder: p.accountHolder,
   status: p.status,
   logo_path: p.logoPath || null,
+  account_type: p.accountType || 'bank',
+  qris_image_path: p.qrisImagePath || null,
+  notes: p.notes || null,
 });
 
 export const mapRoleFromDB = (r: any): RoleItem => ({

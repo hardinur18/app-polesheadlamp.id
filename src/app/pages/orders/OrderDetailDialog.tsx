@@ -382,9 +382,11 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
             <FoundationDetailField label="Total Biaya">{formatCurrency(order.price)}</FoundationDetailField>
             <FoundationDetailField label="Status Pembayaran">{order.paymentStatus || 'Unpaid'}</FoundationDetailField>
             <FoundationDetailField label="Metode">{order.paymentType || '-'}</FoundationDetailField>
-            <FoundationDetailField label="Detail Bank">
+            <FoundationDetailField label="Detail Pembayaran">
               {order.paymentType === 'Transfer' && paymentMethod
-                ? `${paymentMethod.bankName} / ${paymentMethod.accountNumber}`
+                ? paymentMethod.accountType === 'qris'
+                  ? `${paymentMethod.bankName} / ${paymentMethod.accountHolder || 'QRIS'}`
+                  : `${paymentMethod.bankName} / ${paymentMethod.accountNumber}`
                 : '-'}
             </FoundationDetailField>
           </FoundationDetailFieldGrid>

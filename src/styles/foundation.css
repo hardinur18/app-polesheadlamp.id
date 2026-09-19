@@ -12722,6 +12722,73 @@ body {
   font-weight: 500;
 }
 
+.statusPill {
+  align-items: center;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  color: #475569;
+  display: inline-flex;
+  gap: 5px;
+  min-height: 24px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.statusPill.bank {
+  background: #eef6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.statusPill.qris,
+.statusPill.qrisReady {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #047857;
+}
+
+.statusPill.qrisMissing {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #c2410c;
+}
+
+.qrisImageUploader {
+  align-items: center;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  padding: 16px;
+}
+
+.qrisImagePreview {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  color: #64748b;
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 820;
+  height: 132px;
+  justify-content: center;
+  overflow: hidden;
+  width: 132px;
+}
+
+.qrisImagePreview img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
 .masterDataFormActions {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), #ffffff 30%);
   bottom: 0;
@@ -12731,6 +12798,17 @@ body {
   padding-top: 16px;
   position: sticky;
   z-index: 3;
+}
+
+@media (max-width: 640px) {
+  .qrisImageUploader {
+    grid-template-columns: 1fr;
+  }
+
+  .qrisImagePreview {
+    height: 180px;
+    width: 100%;
+  }
 }
 
 .masterDataFormActions .uiButton {

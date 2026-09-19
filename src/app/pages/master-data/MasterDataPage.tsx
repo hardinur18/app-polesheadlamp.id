@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Building2, Users, Database, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText
+  Building2, Users, Database, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText, QrCode
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '../../components/ui/tabs';
 import { NoticeStack, type NoticeItem } from '../../components/ui/notice-stack';
@@ -138,7 +138,7 @@ const MasterDataContent: React.FC<{
     { id: 'platforms', label: 'Platform Iklan', icon: LayoutGrid },
     { id: 'sub-channels', label: 'Sub Channel', icon: Share2 },
     { id: 'ad-accounts', label: 'Akun Iklan', icon: Monitor },
-    { id: 'payments', label: 'Akun Bank', icon: Wallet },
+    { id: 'payments', label: 'Akun Pembayaran', icon: Wallet },
     { id: 'operational-expense-categories', label: 'Kategori Finance', icon: ReceiptText },
     { id: 'roles', label: 'Role', icon: Users },
   ];
@@ -271,7 +271,7 @@ const MasterDataContent: React.FC<{
           <TabsContent value="payments" className="mt-0 focus-visible:ring-0">
             <GenericMasterTab 
               currentRole={currentRole} 
-              title="Akun Bank" 
+              title="Akun Pembayaran"
               type="payment"
               data={payments}
               onAdd={addPayment}
@@ -279,8 +279,31 @@ const MasterDataContent: React.FC<{
               onDelete={deletePayment}
               icon={Wallet}
               columns={[
-                { header: 'No. Rekening', accessor: 'accountNumber', width: 'w-1/4' },
-                { header: 'Atas Nama', accessor: 'accountHolder', width: 'w-1/4' }
+                {
+                  header: 'Jenis',
+                  accessor: 'accountType',
+                  width: 'w-[14%]',
+                  render: (item) => (
+                    <span className={item.accountType === 'qris' ? 'statusPill qris' : 'statusPill bank'}>
+                      {item.accountType === 'qris' ? 'QRIS' : 'Bank'}
+                    </span>
+                  ),
+                },
+                { header: 'No. Rekening / Kode', accessor: 'accountNumber', width: 'w-1/5' },
+                { header: 'Atas Nama / Merchant', accessor: 'accountHolder', width: 'w-1/4' },
+                {
+                  header: 'QRIS',
+                  accessor: 'qrisImagePath',
+                  width: 'w-[14%]',
+                  render: (item) => item.accountType === 'qris'
+                    ? (
+                      <span className={`statusPill ${item.qrisImagePath ? 'qrisReady' : 'qrisMissing'}`}>
+                        <QrCode className="h-3.5 w-3.5" />
+                        {item.qrisImagePath ? 'Siap' : 'Belum'}
+                      </span>
+                    )
+                    : '-',
+                },
               ]}
             />
           </TabsContent>

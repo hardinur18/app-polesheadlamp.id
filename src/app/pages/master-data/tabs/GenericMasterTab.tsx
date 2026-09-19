@@ -47,7 +47,7 @@ import { cn } from '../../../components/ui/utils';
 import { getVehicleNameValidationMessage, normalizeVehicleName } from '../vehicleValidation';
 import { deletePlatformLogo, uploadPlatformLogo } from '@/app/services/platformLogoService';
 import { BankLogo } from '../../../components/ui/bank-logo';
-import { deleteBankLogo, uploadBankLogo } from '@/app/services/bankLogoService';
+import { deleteBankLogo, uploadBankLogo, uploadPaymentQrImage } from '@/app/services/bankLogoService';
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200, 300];
 
@@ -154,7 +154,9 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       status: formData.status
     };
     let uploadedLogoPath: string | null = null;
+    let uploadedQrisPath: string | null = null;
     let previousLogoToDelete: string | null = null;
+    let previousQrisToDelete: string | null = null;
 
     if (type === 'vehicle') {
       const vehicleName = normalizeVehicleName(formData.name);
@@ -166,10 +168,16 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       cleanData.name = vehicleName;
       cleanData.category = formData.category;
     } else if (type === 'payment') {
+      cleanData.name = formData.name;
       cleanData.bankName = formData.name;
-      cleanData.accountNumber = formData.accountNumber;
+      cleanData.accountType = formData.accountType || 'bank';
+      cleanData.accountNumber = cleanData.accountType === 'qris'
+        ? formData.accountNumber?.trim() || 'QRIS'
+        : formData.accountNumber;
       cleanData.accountHolder = formData.accountHolder;
       cleanData.logoPath = editingItem?.logoPath || null;
+      cleanData.qrisImagePath = editingItem?.qrisImagePath || null;
+      cleanData.notes = formData.description || null;
     } else if (type === 'sub_channel') {
       cleanData.name = formData.name;
       cleanData.platformId = formData.platformId;
@@ -203,6 +211,21 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
               previousLogoToDelete = editingItem.logoPath;
             }
           }
+          if (type === 'payment') {
+            if ((cleanData.accountType !== 'qris' || formData.removeQris) && editingItem.qrisImagePath) {
+              cleanData.qrisImagePath = null;
+              previousQrisToDelete = editingItem.qrisImagePath;
+            }
+            if (cleanData.accountType === 'qris' && formData.qrisFile instanceof File) {
+              cleanData.qrisImagePath = await uploadPaymentQrImage(editingItem.id, formData.qrisFile, editingItem.qrisImagePath, {
+                removePrevious: false,
+              });
+              uploadedQrisPath = cleanData.qrisImagePath;
+              if (editingItem.qrisImagePath && editingItem.qrisImagePath !== cleanData.qrisImagePath) {
+                previousQrisToDelete = editingItem.qrisImagePath;
+              }
+            }
+          }
         }
         const updatePayload = { ...cleanData, id: editingItem.id };
         if (onUpdate) {
@@ -214,6 +237,11 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
           const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
           await deleteLogo(previousLogoToDelete).catch((error) => {
             console.warn(`Gagal membersihkan logo ${type === 'payment' ? 'bank' : 'platform'} lama:`, error);
+          });
+        }
+        if (previousQrisToDelete) {
+          await deleteBankLogo(previousQrisToDelete).catch((error) => {
+            console.warn('Gagal membersihkan QRIS lama:', error);
           });
         }
         toast.success(`${title} berhasil diperbarui`);
@@ -231,6 +259,10 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
           const uploadLogo = type === 'payment' ? uploadBankLogo : uploadPlatformLogo;
           cleanData.logoPath = await uploadLogo(newId, formData.logoFile, null);
           uploadedLogoPath = cleanData.logoPath;
+        }
+        if (type === 'payment' && cleanData.accountType === 'qris' && formData.qrisFile instanceof File) {
+          cleanData.qrisImagePath = await uploadPaymentQrImage(newId, formData.qrisFile, null);
+          uploadedQrisPath = cleanData.qrisImagePath;
         }
         const newItem = {
           id: newId,
@@ -262,6 +294,11 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
         const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
         await deleteLogo(uploadedLogoPath).catch(() => undefined);
       }
+      if (!editingItem && uploadedQrisPath) {
+        await deleteBankLogo(uploadedQrisPath).catch(() => undefined);
+      } else if (editingItem && uploadedQrisPath && uploadedQrisPath !== editingItem.qrisImagePath) {
+        await deleteBankLogo(uploadedQrisPath).catch(() => undefined);
+      }
       console.error("Form submission error:", error);
       toast.error(`Terjadi kesalahan: ${error.message || "Gagal menyimpan data"}`); 
     }
@@ -273,6 +310,11 @@ export const GenericMasterTab: React.FC<GenericMasterTabProps> = ({
       const deleteLogo = type === 'payment' ? deleteBankLogo : deletePlatformLogo;
       await deleteLogo(deletedItem.logoPath).catch((error) => {
         console.warn(`Gagal menghapus logo ${type === 'payment' ? 'bank' : 'platform'}:`, error);
+      });
+    }
+    if (type === 'payment' && deletedItem?.qrisImagePath) {
+      await deleteBankLogo(deletedItem.qrisImagePath).catch((error) => {
+        console.warn('Gagal menghapus gambar QRIS:', error);
       });
     }
     if (onDelete) {
