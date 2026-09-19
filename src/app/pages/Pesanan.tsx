@@ -895,6 +895,15 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     setIsDetailOpen(true);
   }, []);
 
+  const handleOpenPhotoViewer = useCallback((
+    order: Order,
+    event?: React.SyntheticEvent<HTMLElement>,
+  ) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    setPhotoViewerOrder(order);
+  }, []);
+
   const isOrderRowInteractiveTarget = (target: EventTarget | null, currentTarget?: HTMLElement) => {
     if (!(target instanceof HTMLElement)) return false;
     const interactiveElement = target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR);
@@ -1373,10 +1382,17 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           {canViewOrderDetails && (
             <OrderActionButton
               label={documentationSummary.isEmpty ? 'Dokumentasi' : documentationSummary.tooltip}
-              onClick={(event) => {
-                event.preventDefault();
+              onPointerDownCapture={(event) => {
                 event.stopPropagation();
-                setPhotoViewerOrder(order);
+                suppressOrderTableClickRef.current = false;
+                suppressNextOrderRowClickRef.current = false;
+              }}
+              onPointerUp={(event) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                handleOpenPhotoViewer(order, event);
+              }}
+              onClick={(event) => {
+                handleOpenPhotoViewer(order, event);
               }}
               className={`${iconClass} ${documentationToneClass}`}
             >
@@ -1417,9 +1433,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
               {canViewOrderDetails && (
                 <DropdownMenuItem
                   onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setPhotoViewerOrder(order);
+                    handleOpenPhotoViewer(order, event);
                   }}
                   className={ORDER_MENU_ITEM_CLASS}
                 >
