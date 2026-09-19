@@ -899,7 +899,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     if (!(target instanceof HTMLElement)) return false;
     const interactiveElement = target.closest(ORDER_TABLE_INTERACTIVE_SELECTOR);
     if (!interactiveElement) return false;
-    return currentTarget ? currentTarget.contains(interactiveElement) && interactiveElement !== currentTarget : true;
+    // Radix dropdown content is portaled outside the table row, but React still bubbles
+    // menu item clicks through the row component tree. Treat those as row-safe actions.
+    return interactiveElement !== currentTarget;
   };
 
   const isOrderCardInteractiveTarget = (target: EventTarget | null, currentTarget: HTMLElement) => {
