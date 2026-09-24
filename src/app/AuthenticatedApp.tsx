@@ -28,6 +28,32 @@ const hasCachedSupabaseSession = () => {
   ));
 };
 
+const readCachedSupabaseSession = (): Session | null => {
+  if (typeof window === 'undefined') return null;
+
+  for (const key of Object.keys(window.localStorage)) {
+    if (!key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw);
+      const session = (Array.isArray(parsed) ? parsed[0] : parsed) as Session | null;
+      if (!session?.access_token) continue;
+
+      const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
+      if (expiresAtMs && expiresAtMs <= Date.now()) continue;
+
+      return session;
+    } catch (error) {
+      console.warn('Failed to read cached Supabase session.', error);
+    }
+  }
+
+  return null;
+};
+
 const createLocalSession = (): Session => {
   const email = localStorage.getItem('rhi-v2-local-email') || 'owner@polesheadlamp.id';
   const now = Math.floor(Date.now() / 1000);
@@ -83,6 +109,10 @@ export const AuthenticatedApp = () => {
       setLoading(false);
     };
 
+    const settleCachedAuthState = () => {
+      settleAuthState(readCachedSupabaseSession());
+    };
+
     const handleAuthError = (error: unknown, retry?: () => void, attempt = 0) => {
       if (!isActive) return;
 
@@ -101,9 +131,7 @@ export const AuthenticatedApp = () => {
       }
 
       console.warn('Network connection issue during auth check. Keeping cached login instead of forcing logout.');
-      if (!hasCachedSupabaseSession()) {
-        settleAuthState(null);
-      }
+      settleCachedAuthState();
     };
 
     const resolveValidSession = async (nextSession: Session | null) => {
@@ -112,8 +140,10 @@ export const AuthenticatedApp = () => {
         return;
       }
 
-      const { error: userError } = await supabase.auth.getUser(nextSession.access_token);
-      if (!userError) {
+      const expiresAtMs = nextSession.expires_at ? nextSession.expires_at * 1000 : 0;
+      const shouldRefresh = !expiresAtMs || expiresAtMs - Date.now() < 60_000;
+
+      if (!shouldRefresh) {
         settleAuthState(nextSession);
         return;
       }
@@ -139,10 +169,8 @@ export const AuthenticatedApp = () => {
 
     const bootTimeout = window.setTimeout(() => {
       if (!isActive) return;
-      console.warn('Auth bootstrap timed out. Keeping loading state to avoid forced logout.');
-      if (!hasCachedSupabaseSession()) {
-        settleAuthState(null);
-      }
+      console.warn('Auth bootstrap timed out. Falling back to cached session if available.');
+      settleCachedAuthState();
     }, AUTH_BOOT_TIMEOUT_MS);
 
     // 1. Listen for auth changes
@@ -169,6 +197,7 @@ export const AuthenticatedApp = () => {
           if (isRetryableAuthError(error)) {
             console.warn('Network error during session check. Not clearing auth session:', error.message);
             if (hasCachedSupabaseSession()) {
+              settleCachedAuthState();
               return;
             }
           } else {
@@ -272,7 +301,7 @@ export const AuthenticatedApp = () => {
   }
 
   return (
-    <MasterDataProvider session={session}>
+    <MasterDataProvider session={session} activePath={canonicalPath}>
       <PermissionsProvider>
         <AppLayout />
       </PermissionsProvider>

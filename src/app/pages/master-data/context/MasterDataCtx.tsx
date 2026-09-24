@@ -133,8 +133,58 @@ type MutationOptions = {
 const shouldUseLocalProfileFallback =
   import.meta.env.VITE_AUTH_MODE === 'local';
 
-const CURRENT_USER_PROFILE_TIMEOUT_MS = 45_000;
+const CURRENT_USER_PROFILE_TIMEOUT_MS = 8_000;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
+
+const getDeferredBootstrapTablesForPath = (path: string) => {
+  const normalizedPath = path.toLowerCase();
+  const tables = new Set<string>();
+
+  const add = (...tableNames: string[]) => {
+    tableNames.forEach((tableName) => tables.add(tableName));
+  };
+
+  if (
+    normalizedPath.startsWith('/dashboard') ||
+    normalizedPath.startsWith('/reports') ||
+    normalizedPath.startsWith('/ads')
+  ) {
+    add('daily_ads', 'lead_spam_daily_inputs');
+  }
+
+  if (
+    normalizedPath.startsWith('/orders') ||
+    normalizedPath.startsWith('/leads') ||
+    normalizedPath.startsWith('/schedule') ||
+    normalizedPath.startsWith('/monitoring') ||
+    normalizedPath.startsWith('/technician')
+  ) {
+    add('prospect_bookings', 'technician_schedules');
+  }
+
+  if (normalizedPath.startsWith('/leads')) {
+    add('lead_social_contacts');
+  }
+
+  if (
+    normalizedPath.startsWith('/orders') ||
+    normalizedPath.startsWith('/leads') ||
+    normalizedPath.startsWith('/technician') ||
+    normalizedPath.startsWith('/whatsapp')
+  ) {
+    add('wa_templates');
+  }
+
+  if (
+    normalizedPath.startsWith('/audit-logs') ||
+    normalizedPath.startsWith('/reports') ||
+    normalizedPath.startsWith('/finance')
+  ) {
+    add('audit_logs');
+  }
+
+  return tables;
+};
 
 const readCachedCurrentUser = (userId: string): User | undefined => {
   if (typeof window === 'undefined' || !userId) return undefined;
@@ -363,7 +413,11 @@ interface MasterDataContextType {
 
 const MasterDataContext = createContext<MasterDataContextType | undefined>(undefined);
 
-export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Session | null }> = ({ children, session }) => {
+export const MasterDataProvider: React.FC<{
+  children: ReactNode;
+  session?: Session | null;
+  activePath?: string;
+}> = ({ children, session, activePath = '/dashboard' }) => {
   // State Definitions
   const [areas, setAreas] = useState<Area[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -1567,30 +1621,33 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       return rows;
     };
 
-    const profileSources: { source: string; users: User[] }[] = [];
+    let directUsers: User[] = [];
 
     try {
       const directRows = await loadPages((from, to) => fetchDirectAppDataPage('profiles', from, to));
-      profileSources.push({ source: 'direct', users: mapProfilesToUsers(directRows) });
+      directUsers = mapProfilesToUsers(directRows);
     } catch (error) {
       if (import.meta.env.DEV) {
         console.warn('[MasterData] direct profiles fetch failed', error);
       }
     }
 
-    try {
-      const appDataRows = await loadPages(async (from, to) => {
-        const { rows } = await fetchAppDataPage('profiles', from, to);
-        return rows;
-      });
-      profileSources.push({ source: 'app-data', users: mapProfilesToUsers(appDataRows) });
-    } catch (error) {
-      if (import.meta.env.DEV) {
-        console.warn('[MasterData] app-data profiles fetch failed', error);
+    let bestSource = { source: 'direct', users: directUsers };
+
+    if (directUsers.length === 0) {
+      try {
+        const appDataRows = await loadPages(async (from, to) => {
+          const { rows } = await fetchAppDataPage('profiles', from, to);
+          return rows;
+        });
+        bestSource = { source: 'app-data', users: mapProfilesToUsers(appDataRows) };
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn('[MasterData] app-data profiles fetch failed', error);
+        }
       }
     }
 
-    const bestSource = profileSources.sort((a, b) => b.users.length - a.users.length)[0];
     if (!bestSource || bestSource.users.length === 0) return;
 
     setUsers(prev => {
@@ -2598,6 +2655,11 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
   const shouldFetchFullOperationalHistory =
     isAdminManagementRole(currentRole) || isFinanceRole(currentRole);
 
+  const deferredBootstrapTables = React.useMemo(
+    () => getDeferredBootstrapTablesForPath(activePath || '/dashboard'),
+    [activePath],
+  );
+
   // Initial Fetch (Waterfall)
   useEffect(() => {
     let isCancelled = false;
@@ -2809,11 +2871,22 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
       setIsOperationalDataLoading(true);
 
-      const otherTransactionalFetches = fetchCatalog.transactional.filter(({ table }) => table !== 'orders' && table !== 'leads');
+      const otherTransactionalFetches = fetchCatalog.transactional.filter(({ table }) =>
+        table !== 'orders' &&
+        table !== 'leads' &&
+        deferredBootstrapTables.has(table)
+      );
       const operationalFetches = otherTransactionalFetches.map(({ table, setter, mapper }) =>
         fetchData(table, setter, mapper)
       );
-      operationalFetches.push(fetchLeadSocialContacts());
+      if (deferredBootstrapTables.has('lead_social_contacts')) {
+        operationalFetches.push(fetchLeadSocialContacts());
+      }
+
+      if (operationalFetches.length === 0 && !deferredBootstrapTables.has('audit_logs') && !deferredBootstrapTables.has('technician_schedules')) {
+        setIsOperationalDataLoading(false);
+        return;
+      }
 
       Promise.allSettled(operationalFetches).finally(() => {
         if (!isCancelled) {
@@ -2823,7 +2896,9 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
 
       scheduleDeferredTask('master-data.support-bootstrap', 1_500, () => {
         fetchCatalog.support.forEach(({ table, setter, mapper }) => {
-          fetchData(table, setter, mapper);
+          if (deferredBootstrapTables.has(table)) {
+            fetchData(table, setter, mapper);
+          }
         });
       }, 2_500);
     };
@@ -2840,7 +2915,7 @@ export const MasterDataProvider: React.FC<{ children: ReactNode; session?: Sessi
       deferredTimers.forEach((timerId) => window.clearTimeout(timerId));
     };
 
-  }, [currentRole, refreshTrigger, shouldFetchFullOperationalHistory]);
+  }, [currentRole, refreshTrigger, shouldFetchFullOperationalHistory, deferredBootstrapTables]);
 
   // --- REALTIME SUBSCRIPTIONS ---
   useEffect(() => {

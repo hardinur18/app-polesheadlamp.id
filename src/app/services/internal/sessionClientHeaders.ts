@@ -7,7 +7,21 @@ type EdgeHeadersOptions = {
   includeJsonContentType?: boolean;
 };
 
+let inFlightAccessTokenRefresh: Promise<string> | null = null;
+
 async function refreshSessionAccessToken() {
+  if (inFlightAccessTokenRefresh) {
+    return inFlightAccessTokenRefresh;
+  }
+
+  inFlightAccessTokenRefresh = refreshSessionAccessTokenNow().finally(() => {
+    inFlightAccessTokenRefresh = null;
+  });
+
+  return inFlightAccessTokenRefresh;
+}
+
+async function refreshSessionAccessTokenNow() {
   const {
     data: { session: cachedSession },
   } = await supabase.auth.getSession();
@@ -67,20 +81,9 @@ export async function getSessionAccessToken() {
   }
 
   const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
-  const shouldRefresh = !expiresAtMs || expiresAtMs - Date.now() < 60_000;
+  const shouldRefresh = !expiresAtMs || expiresAtMs - Date.now() < 120_000;
 
   if (shouldRefresh) {
-    return refreshSessionAccessToken();
-  }
-
-  const { error: userError } = await supabase.auth.getUser(session.access_token);
-
-  if (userError) {
-    if (isRetryableAuthError(userError)) {
-      console.warn('[Auth] User token validation temporarily failed; continuing with cached token.');
-      return session.access_token;
-    }
-
     return refreshSessionAccessToken();
   }
 
