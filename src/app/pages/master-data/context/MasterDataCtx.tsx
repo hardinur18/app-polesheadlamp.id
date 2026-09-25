@@ -4,7 +4,7 @@ import { Session } from '@supabase/supabase-js';
 import { getSessionBackedEdgeHeaders } from '../../../services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '../../../services/internal/functionsBaseUrl';
 import { recordPerfMetric, startPerfTimer } from '@/app/utils/perfTelemetry';
-import { isAdminManagementRole, isFinanceRole } from '@/app/data/roleHelpers';
+import { isAdminManagementRole, isFinanceRole, isTechnicianRole } from '@/app/data/roleHelpers';
 import { getPreviousDateKey, getTodayDateKey } from '../dateKeys';
 import { 
   Area, Branch,
@@ -138,6 +138,7 @@ const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
 
 const getDeferredBootstrapTablesForPath = (path: string) => {
   const normalizedPath = path.toLowerCase();
+  const isTechnicianMobilePath = normalizedPath.startsWith('/technician/mobile');
   const tables = new Set<string>();
 
   const add = (...tableNames: string[]) => {
@@ -157,7 +158,7 @@ const getDeferredBootstrapTablesForPath = (path: string) => {
     normalizedPath.startsWith('/leads') ||
     normalizedPath.startsWith('/schedule') ||
     normalizedPath.startsWith('/monitoring') ||
-    normalizedPath.startsWith('/technician')
+    (normalizedPath.startsWith('/technician') && !isTechnicianMobilePath)
   ) {
     add('prospect_bookings', 'technician_schedules');
   }
@@ -2655,6 +2656,17 @@ export const MasterDataProvider: React.FC<{
   const shouldFetchFullOperationalHistory =
     isAdminManagementRole(currentRole) || isFinanceRole(currentRole);
 
+  const normalizedActivePath = React.useMemo(
+    () => (activePath || '/dashboard').toLowerCase(),
+    [activePath],
+  );
+  const isTechnicianMobileOperationalPath = normalizedActivePath.startsWith('/technician/mobile');
+  const shouldUseTechnicianLightBootstrap =
+    isTechnicianRole(currentRole) &&
+    (isTechnicianMobileOperationalPath || normalizedActivePath.startsWith('/dashboard'));
+  const shouldWaitForCurrentUserBeforeOperationalBootstrap =
+    Boolean(session?.user) && !isCurrentUserResolved;
+
   const deferredBootstrapTables = React.useMemo(
     () => getDeferredBootstrapTablesForPath(activePath || '/dashboard'),
     [activePath],
@@ -2749,10 +2761,41 @@ export const MasterDataProvider: React.FC<{
       deferredTimers.push(timerId);
     };
 
+    const cleanup = () => {
+      isCancelled = true;
+      if (idleApi.cancelIdleCallback) {
+        idleRequestIds.forEach((idleRequestId) => {
+          idleApi.cancelIdleCallback?.(idleRequestId);
+        });
+      }
+      deferredTimers.forEach((timerId) => window.clearTimeout(timerId));
+    };
+
+    if (shouldWaitForCurrentUserBeforeOperationalBootstrap) {
+      setIsOrdersLoading(false);
+      setIsLeadsLoading(false);
+      setIsOperationalDataLoading(false);
+      recordPerfMetric('master-data.operational-bootstrap', 0, 'deferred', {
+        reason: 'current_user_pending',
+        path: normalizedActivePath,
+      });
+      return cleanup;
+    }
+
     const orderFetch = fetchCatalog.transactional.find(({ table }) => table === 'orders');
     if (orderFetch) {
       const fetchPriorityOrders = async () => {
         const todayKey = getTodayDateKey();
+
+        if (shouldUseTechnicianLightBootstrap) {
+          orderFetch.setter([]);
+          recordPerfMetric('master-data.today-orders-bootstrap', 0, 'skipped', {
+            reason: 'technician_mobile_uses_scoped_endpoint',
+            role: currentRole,
+            path: normalizedActivePath,
+          });
+          return;
+        }
 
         try {
           orderFetch.setter(await fetchTodayOrdersDirectly(todayKey, orderFetch.mapper));
@@ -2809,6 +2852,16 @@ export const MasterDataProvider: React.FC<{
     if (leadFetch) {
       const fetchPriorityLeads = async () => {
         const todayKey = getTodayDateKey();
+
+        if (shouldUseTechnicianLightBootstrap) {
+          leadFetch.setter([]);
+          recordPerfMetric('master-data.today-leads-bootstrap', 0, 'skipped', {
+            reason: 'technician_mobile_does_not_use_global_leads',
+            role: currentRole,
+            path: normalizedActivePath,
+          });
+          return;
+        }
 
         try {
           leadFetch.setter(await fetchTodayLeadsDirectly(todayKey, leadFetch.mapper));
@@ -2905,23 +2958,26 @@ export const MasterDataProvider: React.FC<{
 
     scheduleIdleTask(runDeferredOperationalFetches, 1_600);
 
-    return () => {
-      isCancelled = true;
-      if (idleApi.cancelIdleCallback) {
-        idleRequestIds.forEach((idleRequestId) => {
-          idleApi.cancelIdleCallback?.(idleRequestId);
-        });
-      }
-      deferredTimers.forEach((timerId) => window.clearTimeout(timerId));
-    };
+    return cleanup;
 
-  }, [currentRole, refreshTrigger, shouldFetchFullOperationalHistory, deferredBootstrapTables]);
+  }, [
+    currentRole,
+    refreshTrigger,
+    shouldFetchFullOperationalHistory,
+    deferredBootstrapTables,
+    isCurrentUserResolved,
+    normalizedActivePath,
+    shouldUseTechnicianLightBootstrap,
+    shouldWaitForCurrentUserBeforeOperationalBootstrap,
+  ]);
 
   // --- REALTIME SUBSCRIPTIONS ---
   useEffect(() => {
     let isRealtimeDisposed = false;
     let recoveryRefreshTimer: number | undefined;
     let recoveryResubscribeTimer: number | undefined;
+    const reducedRealtimeForTechnicianMobile =
+      isTechnicianRole(currentRole) && isTechnicianMobileOperationalPath;
 
     const scheduleRealtimeRecovery = (status: string) => {
       if (isRealtimeDisposed) return;
@@ -2948,8 +3004,10 @@ export const MasterDataProvider: React.FC<{
     };
 
     // Channel for high-frequency updates (Orders, Leads, Profiles)
-    const channel = supabase.channel(`realtime_master_data_${realtimeRetryKey}`)
-      .on(
+    let channel = supabase.channel(`realtime_master_data_${realtimeRetryKey}`);
+
+    if (!reducedRealtimeForTechnicianMobile) {
+      channel = channel.on(
         'postgres_changes', 
         { event: '*', schema: 'public', table: 'orders' }, 
         (payload) => {
@@ -2991,8 +3049,9 @@ export const MasterDataProvider: React.FC<{
              setOrders(prev => prev.filter(item => item.id !== payload.old.id));
           }
         }
-      )
-      .on(
+      );
+
+      channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'leads' },
         (payload) => {
@@ -3011,8 +3070,9 @@ export const MasterDataProvider: React.FC<{
              setLeads(prev => prev.filter(item => item.id !== payload.old.id));
           }
         }
-      )
-      .on(
+      );
+
+      channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'prospect_bookings' },
         (payload) => {
@@ -3031,8 +3091,9 @@ export const MasterDataProvider: React.FC<{
             setProspectBookings(prev => prev.filter(item => item.id !== payload.old.id));
           }
         }
-      )
-      .on(
+      );
+
+      channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'lead_spam_daily_inputs' },
         (payload) => {
@@ -3046,8 +3107,9 @@ export const MasterDataProvider: React.FC<{
             setLeadSpamDailyInputs((prev) => prev.filter((item) => item.id !== payload.old.id));
           }
         }
-      )
-      .on(
+      );
+
+      channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'technician_schedules' },
         (payload) => {
@@ -3066,8 +3128,10 @@ export const MasterDataProvider: React.FC<{
             setTechnicianSchedules(prev => prev.filter(item => item.id !== payload.old.id));
           }
         }
-      )
-      .on(
+      );
+    }
+
+    channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles' },
         (payload) => {
@@ -3107,7 +3171,7 @@ export const MasterDataProvider: React.FC<{
       }
       supabase.removeChannel(channel);
     };
-  }, [realtimeRetryKey]);
+  }, [currentRole, isTechnicianMobileOperationalPath, realtimeRetryKey]);
 
   // Use useMemo to prevent unnecessary re-renders
   const value = React.useMemo(() => ({

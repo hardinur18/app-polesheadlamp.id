@@ -2942,6 +2942,48 @@ app.delete("/make-server-f781cd00/shifts/:userId/:date", async (c) => {
 
 // --- SPECIALIZED MOBILE ENDPOINTS (OPTIMIZED) ---
 
+const MOBILE_TECHNICIAN_ORDER_COLUMNS = [
+  'id',
+  'lead_date',
+  'customer_name',
+  'customer_phone',
+  'address',
+  'service_date',
+  'service_time',
+  'service_id',
+  'service_category',
+  'maps_url',
+  'vehicle_id',
+  'price',
+  'units',
+  'platform_id',
+  'sub_channel_id',
+  'cs_id',
+  'advertiser_id',
+  'technician_id',
+  'branch_id',
+  'area_id',
+  'status',
+  'payment_type',
+  'payment_method_id',
+  'income',
+  'payment_status',
+  'payment_validation',
+  'affiliate_name',
+  'lat',
+  'lng',
+  'lead_id',
+  'photos',
+  'payload',
+  'notes',
+  'cancel_reason',
+  'cancel_reason_note',
+  'created_at',
+  'start_travel_at',
+  'start_work_at',
+  'finished_at',
+].join(',');
+
 // Get Technician Specific Orders (Server-Side Filtering via Supabase SQL)
 app.get("/make-server-f781cd00/mobile/technician-orders/:userId", async (c) => {
   const userId = c.req.param("userId");
@@ -2985,7 +3027,7 @@ app.get("/make-server-f781cd00/mobile/technician-orders/:userId", async (c) => {
     // 2. Fetch Orders directly from SQL Table
     let query = supabase
         .from('orders')
-        .select('*')
+        .select(MOBILE_TECHNICIAN_ORDER_COLUMNS)
         .eq('technician_id', userId);
 
     if (dateStr) {
