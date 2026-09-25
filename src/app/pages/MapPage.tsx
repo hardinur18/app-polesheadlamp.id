@@ -1,13 +1,13 @@
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { MapCard } from '../components/ui/MapCard';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { MapPin, UserCog, User, Loader2, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { getCoordinatesFromUrl } from '../../utils/mapUtils';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
 import L from 'leaflet';
 import { Order } from './master-data/data';
+import { mapOrderFromDB } from './master-data/context/internal/mappers/transactionMappers';
 
 const TECH_COLORS = [
   '#2563EB', // Blue 600
@@ -33,6 +33,26 @@ const CS_COLORS = [
 
 type ViewMode = 'technician' | 'cs';
 
+const MAP_ORDER_LIMIT = 500;
+const MAP_ORDER_COLUMNS = [
+  'id',
+  'address',
+  'status',
+  'lat',
+  'lng',
+  'branch_id',
+  'technician_id',
+  'cs_id',
+  'service_category',
+].join(',');
+
+const getBoundsKey = (bounds: L.LatLngBounds) => [
+  bounds.getSouth(),
+  bounds.getNorth(),
+  bounds.getWest(),
+  bounds.getEast(),
+].map((value) => value.toFixed(4)).join(':');
+
 export const MapPage = () => {
   const { branches, users } = useMasterData(); // Don't pull 'orders' from global context to save memory
   const [filterBranch, setFilterBranch] = useState('all');
@@ -42,39 +62,47 @@ export const MapPage = () => {
   // Lazy Loading States
   const [lazyOrders, setLazyOrders] = useState<Order[]>([]);
   const [loadingMap, setLoadingMap] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [autoFit, setAutoFit] = useState(true); // Only auto-fit on first load
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const requestSerialRef = useRef(0);
+  const lastBoundsKeyRef = useRef<string | null>(null);
 
   // Fetch orders based on map bounds
   const fetchOrdersInBounds = useCallback(async (bounds: L.LatLngBounds) => {
-    setLoadingMap(true);
-    try {
-        const minLat = bounds.getSouth();
-        const maxLat = bounds.getNorth();
-        const minLng = bounds.getWest();
-        const maxLng = bounds.getEast();
+    const minLat = bounds.getSouth();
+    const maxLat = bounds.getNorth();
+    const minLng = bounds.getWest();
+    const maxLng = bounds.getEast();
 
-        // Query Supabase directly
-        // Limit to 500 points to prevent browser crash if area is too large
+    if (![minLat, maxLat, minLng, maxLng].every(Number.isFinite)) return;
+
+    const requestId = requestSerialRef.current + 1;
+    requestSerialRef.current = requestId;
+    setLoadingMap(true);
+    setMapError(null);
+
+    try {
+        // Query only map columns. Full order rows make the map slower and are not needed here.
         const { data, error } = await supabase
             .from('orders')
-            .select('*')
+            .select(MAP_ORDER_COLUMNS)
             .neq('status', 'cancelled')
+            .not('lat', 'is', null)
+            .not('lng', 'is', null)
             .gte('lat', minLat)
             .lte('lat', maxLat)
             .gte('lng', minLng)
             .lte('lng', maxLng)
-            .limit(500);
+            .limit(MAP_ORDER_LIMIT);
 
         if (error) throw error;
+        if (requestId !== requestSerialRef.current) return;
 
         if (data) {
-            // Transform and merge if necessary, or just replace
-            // Replacing is better for memory management in Lazy Loading
-            // @ts-ignore
-            setLazyOrders(data);
+            setLazyOrders(data.map(mapOrderFromDB));
             
-            if (data.length === 500) {
+            if (data.length === MAP_ORDER_LIMIT) {
                 toast.warning("Area terlalu luas. Hanya menampilkan 500 pesanan teratas.", {
                     id: 'map-limit-warning', // Prevent duplicate toasts
                     duration: 3000
@@ -82,15 +110,28 @@ export const MapPage = () => {
             }
         }
     } catch (err) {
+        if (requestId !== requestSerialRef.current) return;
         console.error("Error fetching map points:", err);
+        setMapError('Gagal memuat titik order di area ini. Coba zoom lebih dekat atau geser peta lagi.');
+        toast.error('Peta gagal memuat data order area ini.', {
+            id: 'map-fetch-error',
+            duration: 3000
+        });
     } finally {
-        setLoadingMap(false);
+        if (requestId === requestSerialRef.current) {
+            setLoadingMap(false);
+        }
     }
   }, []);
 
-  const handleBoundsChange = useCallback((bounds: L.LatLngBounds) => {
-      // Disable auto-fit after user interaction starts
-      setAutoFit(false);
+  const handleBoundsChange = useCallback((bounds: L.LatLngBounds, meta?: { userInitiated: boolean }) => {
+      const boundsKey = getBoundsKey(bounds);
+      if (lastBoundsKeyRef.current === boundsKey) return;
+      lastBoundsKeyRef.current = boundsKey;
+
+      if (meta?.userInitiated) {
+          setAutoFit(false);
+      }
 
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
@@ -98,6 +139,11 @@ export const MapPage = () => {
           fetchOrdersInBounds(bounds);
       }, 800); // 800ms debounce
   }, [fetchOrdersInBounds]);
+
+  useEffect(() => () => {
+      requestSerialRef.current += 1;
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+  }, []);
 
   // Prepare points for the map
   const mapPoints = useMemo(() => {
@@ -373,6 +419,12 @@ export const MapPage = () => {
             onBoundsChange={handleBoundsChange}
             autoFit={autoFit}
          />
+
+         {mapError && (
+            <div className="absolute bottom-6 left-4 right-4 md:left-6 md:right-auto md:max-w-md rounded-lg border border-red-200 bg-white/95 px-4 py-3 text-xs font-medium text-red-700 shadow-lg backdrop-blur dark:border-red-900/50 dark:bg-slate-900/95 dark:text-red-300 z-[450]">
+                {mapError}
+            </div>
+         )}
          
          {/* Custom Legend */}
          {isLegendOpen && (

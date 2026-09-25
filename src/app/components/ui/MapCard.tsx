@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, LayerGroup, Tooltip, Circle, ScaleControl, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
-// import 'leaflet/dist/leaflet.css'; // Disabled to prevent bundler errors with assets
+import 'leaflet/dist/leaflet.css';
 import { IndicatorBadge as Badge, BadgeStatus } from './IndicatorBadge';
 import { Clock, Ruler, User as UserIcon, Navigation, Building2, Layers, Timer, AlertTriangle, Info, Type, Calendar, X } from 'lucide-react';
 
@@ -52,7 +52,7 @@ interface MapCardProps {
   showLocationControl?: boolean; // Compatibility prop for callers that control location UI externally
   disableRouting?: boolean; // Disable OSRM routing fetches
   onLegendClick?: () => void; // Callback for legend button
-  onBoundsChange?: (bounds: L.LatLngBounds) => void;
+  onBoundsChange?: (bounds: L.LatLngBounds, meta?: { userInitiated: boolean }) => void;
   autoFit?: boolean;
   height?: string;
   width?: string;
@@ -216,21 +216,60 @@ const FitBounds = ({ groups, branches, autoFit = true }: { groups: RouteGroup[],
     return null;
 };
 
-const MapEvents = ({ onBoundsChange }: { onBoundsChange?: (bounds: L.LatLngBounds) => void }) => {
+const MapSizeInvalidator = () => {
     const map = useMap();
+
+    useEffect(() => {
+        const invalidate = () => {
+            try {
+                map.invalidateSize(false);
+            } catch (error) {
+                console.warn('Map invalidateSize error:', error);
+            }
+        };
+
+        const frameId = window.requestAnimationFrame(invalidate);
+        const timeoutId = window.setTimeout(invalidate, 250);
+        const container = map.getContainer();
+        const observer = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(invalidate)
+            : null;
+
+        observer?.observe(container);
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+            window.clearTimeout(timeoutId);
+            observer?.disconnect();
+        };
+    }, [map]);
+
+    return null;
+};
+
+const MapEvents = ({ onBoundsChange }: { onBoundsChange?: (bounds: L.LatLngBounds, meta?: { userInitiated: boolean }) => void }) => {
+    const map = useMap();
+    const userInitiatedRef = useRef(false);
     
     useEffect(() => {
         if (!onBoundsChange) return;
 
-        const handleMoveEnd = () => {
-            onBoundsChange(map.getBounds());
+        const markUserInteraction = () => {
+            userInitiatedRef.current = true;
         };
 
-        // Trigger once on mount
-        handleMoveEnd();
+        const handleMoveEnd = () => {
+            onBoundsChange(map.getBounds(), { userInitiated: userInitiatedRef.current });
+        };
 
+        const frameId = window.requestAnimationFrame(handleMoveEnd);
+
+        map.on('dragstart zoomstart', markUserInteraction);
         map.on('moveend', handleMoveEnd);
+
         return () => {
+            window.cancelAnimationFrame(frameId);
+            map.off('dragstart zoomstart', markUserInteraction);
             map.off('moveend', handleMoveEnd);
         };
     }, [map, onBoundsChange]);
@@ -357,20 +396,6 @@ export function MapCard({
     width = '100%', 
     className = '' 
 }: MapCardProps) {
-  useEffect(() => {
-    // Inject Leaflet CSS from CDN to avoid bundler issues with relative asset paths
-    const linkId = 'leaflet-css-cdn';
-    if (!document.getElementById(linkId)) {
-        const link = document.createElement('link');
-        link.id = linkId;
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
-        link.crossOrigin = '';
-        document.head.appendChild(link);
-    }
-  }, []);
-
   const defaultCenter: [number, number] = [-6.2088, 106.8456];
   const [internalShowRadius, setInternalShowRadius] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
@@ -589,10 +614,13 @@ export function MapCard({
             <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                updateWhenIdle={true}
+                keepBuffer={2}
             />
             
             <ScaleControl position="bottomleft" imperial={false} />
             
+            <MapSizeInvalidator />
             <FitBounds groups={displayGroups} branches={filteredBranches} autoFit={autoFit} />
             <MapEvents onBoundsChange={onBoundsChange} />
 
