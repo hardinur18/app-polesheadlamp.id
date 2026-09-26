@@ -134,6 +134,7 @@ const shouldUseLocalProfileFallback =
   import.meta.env.VITE_AUTH_MODE === 'local';
 
 const CURRENT_USER_PROFILE_TIMEOUT_MS = 8_000;
+const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
 
 const getDeferredBootstrapTablesForPath = (path: string) => {
@@ -1340,9 +1341,7 @@ export const MasterDataProvider: React.FC<{
     
     let isMounted = true;
     const abortController = new AbortController();
-    let didProfileSyncTimeout = false;
     let profileRetryTimeoutId: number | undefined;
-    let keepProfileResolving = false;
     setCurrentUserId('');
     setRealUser(undefined);
     setCurrentUserIssue(undefined);
@@ -1396,7 +1395,6 @@ export const MasterDataProvider: React.FC<{
         if (!shouldUseLocalProfileFallback) {
           setCurrentUserIssue(reason);
           scheduleProfileRetry(reason);
-          keepProfileResolving = reason.code === 'profile_timeout' || reason.code === 'profile_query_error';
           return false;
         }
 
@@ -1417,72 +1415,42 @@ export const MasterDataProvider: React.FC<{
         return true;
       };
 
-      try {
-        // Add a small delay to prevent race conditions on rapid re-renders
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        if (!isMounted) return;
+      const fetchCurrentProfileFromAppData = async () => {
+        let timeoutId: number | undefined;
+        const appDataLookup = (async () => {
+          let page = 0;
 
-        const profileQuery = supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .abortSignal(abortController.signal)
-          .maybeSingle();
+          while (page < 20) {
+            const from = page * CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE;
+            const to = from + CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE - 1;
+            const { rows } = await fetchAppDataPage('profiles', from, to, {
+              eq: { id: session.user.id },
+              orderBy: 'created_at',
+              ascending: false,
+            });
+            const profile = rows.find((row: any) => row?.id === session.user.id);
+            if (profile) return profile;
+            if (rows.length < CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE) break;
+            page += 1;
+          }
 
-        const profileTimeout = new Promise<{ timedOut: true }>((resolve) => {
-          profileSyncTimeoutId = window.setTimeout(() => {
-            didProfileSyncTimeout = true;
-            abortController.abort();
-            resolve({ timedOut: true });
-          }, CURRENT_USER_PROFILE_TIMEOUT_MS);
+          return null;
+        })();
+
+        const timeout = new Promise<null>((resolve) => {
+          timeoutId = window.setTimeout(() => resolve(null), CURRENT_USER_PROFILE_TIMEOUT_MS);
         });
 
-        const profileResult = await Promise.race([profileQuery, profileTimeout]);
-        
-        if (!isMounted) return;
-
-        if ('timedOut' in profileResult) {
-          console.warn("[MasterData] Profile fetch timed out");
-          applyLocalFallbackUser({
-            code: 'profile_timeout',
-            message: 'Koneksi ke data profil timeout. Coba refresh atau login ulang.',
-          });
-          return;
-        }
-
-        const { data: profile, error } = profileResult;
-
-        if (error) {
-          // Ignore abort errors - they're expected on cleanup
-          if (error.message?.includes('abort') || error.message?.includes('AbortError')) {
-            if (didProfileSyncTimeout) {
-              console.warn("[MasterData] Profile fetch timed out");
-            } else {
-              console.log("[MasterData] Profile fetch aborted (cleanup)");
-            }
-            return;
+        try {
+          return await Promise.race([appDataLookup, timeout]);
+        } finally {
+          if (timeoutId !== undefined) {
+            window.clearTimeout(timeoutId);
           }
-          console.error("[MasterData] Profile fetch error:", error.message);
-          applyLocalFallbackUser({
-            code: 'profile_query_error',
-            message: error.message || 'Profil login tidak bisa dibaca dari database.',
-          });
-          return;
         }
+      };
 
-        if (!profile) {
-          console.warn('[MasterData] Active auth session has no matching profile row:', {
-            userId: session.user.id,
-            email: session.user.email,
-          });
-          applyLocalFallbackUser({
-            code: 'profile_not_found',
-            message: 'Sesi browser masih aktif, tetapi akun ini belum punya profil internal di app v2.',
-          });
-          return;
-        }
-
+      const applyProfile = (profile: any) => {
         console.log(`[MasterData] Syncing user profile - Role: ${profile.role}, Status: ${profile.status}`);
 
         const normalizedStatus = typeof profile.status === 'string' ? profile.status.trim().toLowerCase() : '';
@@ -1531,18 +1499,96 @@ export const MasterDataProvider: React.FC<{
            if (exists) return prev.map(u => u.id === mappedUser.id ? mappedUser : u);
            return [mappedUser, ...prev];
         });
+      };
+
+      const applyProfileFallback = async (reason: CurrentUserIssue) => {
+        try {
+          const fallbackProfile = await fetchCurrentProfileFromAppData();
+          if (fallbackProfile) {
+            console.warn('[MasterData] Direct profile sync failed, using app-data profile fallback:', {
+              reason: reason.code,
+              userId: fallbackProfile.id,
+            });
+            applyProfile(fallbackProfile);
+            return true;
+          }
+        } catch (fallbackError) {
+          console.warn('[MasterData] app-data profile fallback failed:', fallbackError);
+        }
+
+        return applyLocalFallbackUser(reason);
+      };
+
+      try {
+        // Add a small delay to prevent race conditions on rapid re-renders
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (!isMounted) return;
+
+        const profileQuery = supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .abortSignal(abortController.signal)
+          .maybeSingle();
+
+        const profileTimeout = new Promise<{ timedOut: true }>((resolve) => {
+          profileSyncTimeoutId = window.setTimeout(() => {
+            abortController.abort();
+            resolve({ timedOut: true });
+          }, CURRENT_USER_PROFILE_TIMEOUT_MS);
+        });
+
+        const profileResult = await Promise.race([profileQuery, profileTimeout]);
+        
+        if (!isMounted) return;
+
+        if ('timedOut' in profileResult) {
+          console.warn("[MasterData] Profile fetch timed out");
+          await applyProfileFallback({
+            code: 'profile_timeout',
+            message: 'Koneksi ke data profil timeout. Coba refresh atau login ulang.',
+          });
+          return;
+        }
+
+        const { data: profile, error } = profileResult;
+
+        if (error) {
+          // Ignore abort errors - they're expected on cleanup
+          if (error.message?.includes('abort') || error.message?.includes('AbortError')) {
+            console.log("[MasterData] Profile fetch aborted (cleanup)");
+            return;
+          }
+          console.error("[MasterData] Profile fetch error:", error.message);
+          await applyProfileFallback({
+            code: 'profile_query_error',
+            message: error.message || 'Profil login tidak bisa dibaca dari database.',
+          });
+          return;
+        }
+
+        if (!profile) {
+          console.warn('[MasterData] Active auth session has no matching profile row:', {
+            userId: session.user.id,
+            email: session.user.email,
+          });
+          await applyProfileFallback({
+            code: 'profile_not_found',
+            message: 'Sesi browser masih aktif, tetapi akun ini belum punya profil internal di app v2.',
+          });
+          return;
+        }
+
+        applyProfile(profile);
       } catch (err: any) {
         // Ignore abort errors
         if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
-          if (didProfileSyncTimeout) {
-            console.warn("[MasterData] Profile fetch timed out");
-          } else {
-            console.log("[MasterData] Profile fetch aborted (cleanup)");
-          }
+          console.log("[MasterData] Profile fetch aborted (cleanup)");
           return;
         }
         console.error("[MasterData] Unexpected error syncing user:", err);
-        applyLocalFallbackUser({
+        await applyProfileFallback({
           code: 'profile_query_error',
           message: err?.message || 'Terjadi error saat sinkronisasi profil login.',
         });
@@ -1550,7 +1596,7 @@ export const MasterDataProvider: React.FC<{
         if (profileSyncTimeoutId !== undefined) {
           window.clearTimeout(profileSyncTimeoutId);
         }
-        if (isMounted && !keepProfileResolving) {
+        if (isMounted) {
           setIsCurrentUserResolved(true);
         }
       }

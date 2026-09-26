@@ -348,7 +348,7 @@ export function AppLayout() {
   const isRecoverableCurrentUserIssue =
     currentUserIssue?.code === 'profile_timeout' ||
     currentUserIssue?.code === 'profile_query_error';
-  const hasInvalidRoleSession = isCurrentUserResolved && !currentUser && !isRecoverableCurrentUserIssue;
+  const hasInvalidRoleSession = isCurrentUserResolved && !currentUser;
   const currentUserIssueTitle = (() => {
     switch (currentUserIssue?.code) {
       case 'profile_not_found':
@@ -721,24 +721,22 @@ export function AppLayout() {
         <p className="loginHint">
           {currentUserIssueHint} Login ulang akan membersihkan session lama dari browser ini.
         </p>
-        <Button onClick={handleLogout} variant="outline">
-          Bersihkan Session
-        </Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          {isRecoverableCurrentUserIssue && (
+            <Button onClick={() => window.location.reload()} variant="default">
+              Coba Muat Ulang
+            </Button>
+          )}
+          <Button onClick={handleLogout} variant="outline">
+            Bersihkan Session
+          </Button>
+        </div>
       </section>
     </main>
   );
 
   if (hasInvalidRoleSession) {
     return <RoleConfigurationRequired />;
-  }
-
-  if (isCurrentUserResolved && !currentUser && isRecoverableCurrentUserIssue) {
-    return (
-      <AppLoadingScreen
-        label="Menyambungkan profile"
-        detail="Koneksi database sedang lambat. App mencoba ulang otomatis..."
-      />
-    );
   }
 
   if (!isCurrentUserResolved) {

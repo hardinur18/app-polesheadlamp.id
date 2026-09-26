@@ -806,6 +806,7 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     read: USER_REFERENCE_READ_PERMISSIONS,
     edit: ["users.edit"],
     delete: ["users.delete"],
+    filterableColumns: ["id", "email", "role", "status", "branch_id"],
   },
   affiliates: {
     table: "affiliates",
