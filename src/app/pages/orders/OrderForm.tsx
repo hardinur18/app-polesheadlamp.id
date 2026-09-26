@@ -155,6 +155,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [recommendedBranches, setRecommendedBranches] = useState<{ id: string, name: string, distance: number }[]>([]);
   const [mapsUrlError, setMapsUrlError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const lastInitializedSourceRef = useRef<string | null>(null);
 
   const formSourceKey = initialData?.id
@@ -1110,6 +1111,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   }, [formData.technicianId, users]);
 
   const handleChange = (field: keyof Order, value: any) => {
+    setSubmitError(null);
     setFormData(prev => {
       const normalizedValue = field === 'serviceTime' ? normalizeOrderTime(value) : value;
       const next = {
@@ -1135,6 +1137,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       return next;
     });
     setIsDirty(true);
+  };
+
+  const reportSubmitError = (message: string) => {
+    setSubmitError(message);
+    toast.error(message);
   };
 
   const handleCsOwnerChange = (csId: string) => {
@@ -1330,7 +1337,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       !canUseLeadConversionAttribution;
 
     if (requiresMasterAdAccount && !selectedOption?.isComplete) {
-      toast.error('Pilih akun iklan yang lengkap dari Master Data Akun Iklan.');
+      reportSubmitError('Pilih akun iklan yang lengkap dari Master Data Akun Iklan.');
       return;
     }
 
@@ -1361,7 +1368,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     ].filter(Boolean);
 
     if (invalidAttributionLabels.length > 0) {
-      toast.error(`Pilihan ${invalidAttributionLabels.join(', ')} tidak sesuai Master Data Akun Iklan. Pilih ulang sebelum menyimpan.`);
+      reportSubmitError(`Pilihan ${invalidAttributionLabels.join(', ')} tidak sesuai Master Data Akun Iklan. Pilih ulang sebelum menyimpan.`);
       return;
     }
 
@@ -1402,25 +1409,25 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
         setMapsUrlError('Maps URL wajib diisi.');
       }
       const missingLabels = missingFields.map(field => requiredFieldLabels[field] || String(field));
-      toast.error(`Mohon lengkapi field wajib: ${missingLabels.join(', ')}`);
+      reportSubmitError(`Mohon lengkapi field wajib: ${missingLabels.join(', ')}`);
       return;
     }
 
     const normalizedPrice = Number(sanitizedData.price);
     if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
-      toast.error('Harga harus berupa angka 0 atau lebih.');
+      reportSubmitError('Harga harus berupa angka 0 atau lebih.');
       return;
     }
     sanitizedData.price = normalizedPrice;
 
     // Validate cancel reason when status is cancelled or reschedule
     if ((sanitizedData.status === 'cancelled' || sanitizedData.status === 'reschedule') && !sanitizedData.cancelReason) {
-      toast.error('Mohon pilih alasan ' + (sanitizedData.status === 'cancelled' ? 'pembatalan' : 'jadwal ulang'));
+      reportSubmitError('Mohon pilih alasan ' + (sanitizedData.status === 'cancelled' ? 'pembatalan' : 'jadwal ulang'));
       return;
     }
 
     if (blockingScheduleMessage) {
-      toast.error(blockingScheduleMessage);
+      reportSubmitError(blockingScheduleMessage);
       return;
     }
 
@@ -1443,7 +1450,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
        const coords = await validateMapsUrl(sanitizedData.mapsUrl, true);
        if (!coords) {
            setMapsUrlError("URL Maps tidak valid. Mohon periksa kembali linknya.");
-           toast.error("URL Maps tidak valid. Tidak dapat menyimpan pesanan.");
+           reportSubmitError("URL Maps tidak valid. Tidak dapat menyimpan pesanan.");
            setIsSubmitting(false);
            return;
        }
@@ -1455,7 +1462,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
         ignoredBookingLeadIds,
       });
       if (dbConflict) {
-        toast.error(dbConflict);
+        reportSubmitError(dbConflict);
         setIsSubmitting(false);
         return;
       }
@@ -1493,7 +1500,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       if (onSuccess) await onSuccess((savedOrder || sanitizedData) as Order);
       onClose();
     } catch (error: any) {
-      toast.error(error?.message || 'Gagal menyimpan pesanan');
+      reportSubmitError(error?.message || 'Gagal menyimpan pesanan');
     } finally {
       setIsSubmitting(false);
     }
@@ -2279,8 +2286,13 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                   </div>
                </div>
             </FormSection>
-            
+
           </form>
+          {submitError && (
+            <div className="mx-4 mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium leading-relaxed text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+              {submitError}
+            </div>
+          )}
           </MasterDataDialogBody>
 
           <DialogFooter className="orderFormFooter masterDataFormActions">

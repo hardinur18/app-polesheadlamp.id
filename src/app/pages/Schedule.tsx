@@ -403,6 +403,7 @@ export default function Schedule() {
     addProspectBooking,
     currentUser,
     currentRole,
+    isMasterDataLoading,
     isOrdersLoading,
     isOperationalDataLoading,
     ensureOrdersForDateRange,
@@ -1582,6 +1583,7 @@ export default function Schedule() {
   const isAvailabilityView = view === 'availability';
   const activeScheduleTotal = (view === 'list' && listDateMode === 'daily') ? dailyStats.totalOrders : monthlyStats.totalOrders;
   const showScheduleLoadingNotice = !isAvailabilityView && (
+    isMasterDataLoading ||
     isScheduleRangeLoading ||
     (isOrdersLoading && activeScheduleTotal === 0)
   );

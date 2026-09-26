@@ -1681,17 +1681,24 @@ export const MasterDataProvider: React.FC<{
 
     let bestSource = { source: 'direct', users: directUsers };
 
-    if (directUsers.length === 0) {
-      try {
-        const appDataRows = await loadPages(async (from, to) => {
-          const { rows } = await fetchAppDataPage('profiles', from, to);
-          return rows;
-        });
-        bestSource = { source: 'app-data', users: mapProfilesToUsers(appDataRows) };
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.warn('[MasterData] app-data profiles fetch failed', error);
-        }
+    try {
+      const appDataRows = await loadPages(async (from, to) => {
+        const { rows } = await fetchAppDataPage('profiles', from, to);
+        return rows;
+      });
+      const appDataUsers = mapProfilesToUsers(appDataRows);
+      const directTechnicianCount = directUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+      const appDataTechnicianCount = appDataUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+      const shouldPreferAppData =
+        appDataUsers.length > directUsers.length ||
+        (appDataTechnicianCount > 0 && directTechnicianCount === 0);
+
+      if (shouldPreferAppData) {
+        bestSource = { source: 'app-data', users: appDataUsers };
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[MasterData] app-data profiles fetch failed', error);
       }
     }
 
