@@ -809,6 +809,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     startX: 0,
   });
   const suppressOrderStatusClickRef = React.useRef(false);
+  const photoViewerOpenGuardRef = React.useRef<{ orderId: string; at: number } | null>(null);
   const deleteOrderTarget = useMemo(
     () => (deleteId ? orders.find((order) => order.id === deleteId) || null : null),
     [deleteId, orders],
@@ -917,6 +918,12 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   ) => {
     event?.preventDefault();
     event?.stopPropagation();
+    const now = Date.now();
+    const recentOpen = photoViewerOpenGuardRef.current;
+    if (recentOpen?.orderId === order.id && now - recentOpen.at < 400) {
+      return;
+    }
+    photoViewerOpenGuardRef.current = { orderId: order.id, at: now };
     setPhotoViewerTab(getInitialPhotoTab(order));
     setExpandedPhotoTabs({});
     setUploadedFiles([]);
@@ -1405,12 +1412,28 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           )}
 
           {canViewOrderDetails && (
-            <OrderActionButton
-              label={documentationSummary.isEmpty ? 'Dokumentasi' : documentationSummary.tooltip}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={documentationSummary.isEmpty ? 'Dokumentasi' : documentationSummary.tooltip}
+              title={documentationSummary.isEmpty ? 'Dokumentasi' : documentationSummary.tooltip}
+              onPointerDownCapture={(event) => {
+                event.stopPropagation();
+                suppressOrderTableClickRef.current = false;
+                suppressNextOrderRowClickRef.current = false;
+              }}
+              onPointerUp={(event) => {
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                handleOpenPhotoViewer(order, event);
+              }}
+              onTouchEnd={(event) => {
+                handleOpenPhotoViewer(order, event);
+              }}
               onClick={(event) => {
                 handleOpenPhotoViewer(order, event);
               }}
-              className={`${iconClass} ${documentationToneClass}`}
+              className={`${ORDER_ACTION_ICON_CLASS} ${iconClass} ${documentationToneClass}`.trim()}
             >
               <Camera className="h-4 w-4" />
               {!documentationSummary.isEmpty && (
@@ -1418,7 +1441,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   {documentationSummary.label}
                 </span>
               )}
-            </OrderActionButton>
+            </Button>
           )}
 
           <DropdownMenu>
@@ -3664,6 +3687,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             title="Dokumentasi Pekerjaan"
             size="lg"
             className="orderPhotoDialog"
+            preventOutsideClose
         >
             {photoViewerOrder && (
                 <div className="h-[500px] flex flex-col">
