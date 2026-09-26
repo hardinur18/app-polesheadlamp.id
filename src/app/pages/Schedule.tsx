@@ -14,18 +14,12 @@ import {
 } from '@/app/data/roleHelpers';
 import { getCoordinatesFromUrl, expandShortUrl } from '@/utils/mapUtils';
 import { copyToClipboard } from '@/lib/clipboard';
-import { supabase } from '@/lib/supabaseClient';
 import { startPerfTimer } from '@/app/utils/perfTelemetry';
 import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
 } from '@/app/services/orderScheduleValidation';
-import {
-  mapOrderFromDB,
-  mapProspectBookingFromDB,
-} from './master-data/context/internal/mappers/transactionMappers';
-import { mapBranchFromDB } from './master-data/context/internal/mappers/masterDataEntityMappers';
-import { mapScheduleFromDB } from './master-data/context/internal/mappers/miscMappers';
+import { supabase } from '@/lib/supabaseClient';
 import {
   Select,
   SelectContent,
@@ -252,13 +246,6 @@ const isInactiveScheduleItem = (item: ScheduleItem) => INACTIVE_SCHEDULE_STATUSE
 const normalizeScheduleSearchText = (value?: string | null) =>
   (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-const mergeScheduleRowsById = <T extends { id: string }>(priorityRows: T[], fallbackRows: T[]) => {
-  const rowsById = new Map<string, T>();
-  fallbackRows.forEach((row) => rowsById.set(row.id, row));
-  priorityRows.forEach((row) => rowsById.set(row.id, row));
-  return Array.from(rowsById.values());
-};
-
 const isShortMapsUrl = (value: string) =>
   value.includes('goo.gl') ||
   value.includes('maps.app.goo.gl') ||
@@ -418,21 +405,21 @@ export default function Schedule() {
     currentRole,
     isOrdersLoading,
     isOperationalDataLoading,
+    ensureOrdersForDateRange,
+    ensureProspectBookingsForDateRange,
+    ensureTechnicianSchedulesForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const isAdminManagementUser = isAdminManagementRole(currentRole);
   const isAdvertiserUser = isAdvertiserRole(currentRole);
   const isCsUser = isCsRole(currentRole);
-  const [scheduleRangeBranches, setScheduleRangeBranches] = useState<Branch[]>([]);
   const branches = useMemo(() => {
-    const directActiveBranches = scheduleRangeBranches.filter((branch) => branch.status === 'active');
     if (rawActiveBranches.length > 0) {
-      return mergeScheduleRowsById(directActiveBranches, rawActiveBranches).filter((branch) => branch.status === 'active');
+      return rawActiveBranches.filter((branch) => branch.status === 'active');
     }
-    if (directActiveBranches.length > 0) return directActiveBranches;
     return rawBranches.filter((branch) => branch.status === 'active');
-  }, [rawActiveBranches, rawBranches, scheduleRangeBranches]);
+  }, [rawActiveBranches, rawBranches]);
   const serviceNameById = useMemo(() => {
     return new Map(services.map((service) => [service.id, service.name]));
   }, [services]);
@@ -442,30 +429,15 @@ export default function Schedule() {
   const branchById = useMemo(() => {
     return new Map(branches.map((branch) => [branch.id, branch]));
   }, [branches]);
-  const [scheduleRangeOrders, setScheduleRangeOrders] = useState<Order[]>([]);
-  const [scheduleRangeBookings, setScheduleRangeBookings] = useState<ProspectBooking[]>([]);
-  const [scheduleRangeTechnicianSchedules, setScheduleRangeTechnicianSchedules] = useState<TechnicianSchedule[]>([]);
-
-  const mergedRawOrders = useMemo(
-    () => mergeScheduleRowsById(scheduleRangeOrders, rawOrders),
-    [rawOrders, scheduleRangeOrders]
-  );
-  const mergedRawProspectBookings = useMemo(
-    () => mergeScheduleRowsById(scheduleRangeBookings, rawProspectBookings),
-    [rawProspectBookings, scheduleRangeBookings]
-  );
-  const technicianSchedules = useMemo(
-    () => mergeScheduleRowsById(scheduleRangeTechnicianSchedules, rawTechnicianSchedules),
-    [rawTechnicianSchedules, scheduleRangeTechnicianSchedules]
-  );
+  const technicianSchedules = rawTechnicianSchedules;
 
   // Filter orders for Advertiser
   const orders = useMemo(() => {
       if (isAdvertiserUser) {
-          return mergedRawOrders.filter(o => o.advertiserId === currentUser?.id);
+          return rawOrders.filter(o => o.advertiserId === currentUser?.id);
       }
-      return mergedRawOrders;
-  }, [currentUser, isAdvertiserUser, mergedRawOrders]);
+      return rawOrders;
+  }, [currentUser, isAdvertiserUser, rawOrders]);
 
   const nonScheduleLeadIds = useMemo(() => {
     return new Set(
@@ -476,7 +448,7 @@ export default function Schedule() {
   }, [leads]);
 
   const prospectBookings = useMemo(() => {
-    const visibleBookings = mergedRawProspectBookings.filter((booking) =>
+    const visibleBookings = rawProspectBookings.filter((booking) =>
       !booking.orderId &&
       !INACTIVE_SCHEDULE_STATUSES.has(booking.status) &&
       (!booking.leadId || !nonScheduleLeadIds.has(booking.leadId))
@@ -485,7 +457,7 @@ export default function Schedule() {
       return visibleBookings.filter((booking) => booking.advertiserId === currentUser?.id);
     }
     return visibleBookings;
-  }, [currentUser, isAdvertiserUser, mergedRawProspectBookings, nonScheduleLeadIds]);
+  }, [currentUser, isAdvertiserUser, rawProspectBookings, nonScheduleLeadIds]);
 
   const [view, setView] = useState<ScheduleView>('month');
   const [listDateMode, setListDateMode] = useState<'all' | 'daily'>('all');
@@ -542,58 +514,19 @@ export default function Schedule() {
       });
 
       try {
-        const [ordersResult, bookingsResult, schedulesResult, branchesResult] = await Promise.all([
-          supabase
-            .from('orders')
-            .select('*')
-            .gte('service_date', monthStart)
-            .lte('service_date', monthEnd)
-            .order('service_date', { ascending: false })
-            .range(0, 1499),
-          supabase
-            .from('prospect_bookings')
-            .select('*')
-            .gte('schedule_date', monthStart)
-            .lte('schedule_date', monthEnd)
-            .order('schedule_date', { ascending: false })
-            .range(0, 1499),
-          supabase
-            .from('technician_schedules')
-            .select('*')
-            .gte('date', monthStart)
-            .lte('date', monthEnd)
-            .order('date', { ascending: false })
-            .range(0, 1499),
-          supabase
-            .from('branches')
-            .select('*')
-            .eq('status', 'active')
-            .range(0, 499),
+        await Promise.all([
+          ensureOrdersForDateRange({ from: monthStart, to: monthEnd, mode: 'service' }),
+          ensureProspectBookingsForDateRange({ from: monthStart, to: monthEnd }),
+          ensureTechnicianSchedulesForDateRange({ from: monthStart, to: monthEnd }),
         ]);
 
-        if (ordersResult.error) throw ordersResult.error;
-        if (bookingsResult.error) throw bookingsResult.error;
-        if (schedulesResult.error) throw schedulesResult.error;
-        if (branchesResult.error) throw branchesResult.error;
         if (isCancelled) {
           endTimer('skipped', { reason: 'cancelled' });
           return;
         }
 
-        const orderRows = (ordersResult.data || []).map(mapOrderFromDB);
-        const bookingRows = (bookingsResult.data || []).map(mapProspectBookingFromDB);
-        const scheduleRows = (schedulesResult.data || []).map(mapScheduleFromDB);
-        const branchRows = (branchesResult.data || []).map(mapBranchFromDB);
-
-        setScheduleRangeOrders(orderRows);
-        setScheduleRangeBookings(bookingRows);
-        setScheduleRangeTechnicianSchedules(scheduleRows);
-        setScheduleRangeBranches(branchRows);
         endTimer('ok', {
-          orders: orderRows.length,
-          bookings: bookingRows.length,
-          technicianSchedules: scheduleRows.length,
-          branches: branchRows.length,
+          source: 'master-data-range-loader',
         });
       } catch (error) {
         endTimer('error', {
@@ -618,7 +551,12 @@ export default function Schedule() {
     return () => {
       isCancelled = true;
     };
-  }, [currentMonthKey]);
+  }, [
+    currentMonthKey,
+    ensureOrdersForDateRange,
+    ensureProspectBookingsForDateRange,
+    ensureTechnicianSchedulesForDateRange,
+  ]);
 
   const openAddProspectFromTimeline = (request: AddProspectFormRequest) => {
     if (!canOpenAddProspectFromTimeline) return;
