@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
 const LOGIN_TIMEOUT_MS = 45_000;
+const LOGIN_MAX_ATTEMPTS = 3;
+const LOGIN_RETRY_BASE_DELAY_MS = 900;
 
 const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -28,20 +30,61 @@ const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, messa
   }
 };
 
+const isRetryableLoginError = (err: unknown) => {
+  if (err instanceof Error) {
+    return (
+      err.name === 'AuthRetryableFetchError' ||
+      err.name === 'AbortError' ||
+      err.message.includes('Failed to fetch') ||
+      err.message.includes('timeout') ||
+      err.message.includes('Koneksi Supabase timeout') ||
+      err.message === '{}' ||
+      err.message.trim() === ''
+    );
+  }
+
+  return false;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+type PasswordSignInResult = Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
+
+const signInWithRetry = async (email: string, password: string): Promise<PasswordSignInResult> => {
+  let lastRetryableResult: PasswordSignInResult | null = null;
+
+  for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        LOGIN_TIMEOUT_MS,
+        'Login timeout. Koneksi ke server auth terlalu lama.',
+      );
+
+      if (!result.error || !isRetryableLoginError(result.error) || attempt === LOGIN_MAX_ATTEMPTS) {
+        return result;
+      }
+
+      lastRetryableResult = result;
+    } catch (err) {
+      if (!isRetryableLoginError(err) || attempt === LOGIN_MAX_ATTEMPTS) {
+        throw err;
+      }
+    }
+
+    await sleep(LOGIN_RETRY_BASE_DELAY_MS * attempt);
+  }
+
+  return lastRetryableResult as PasswordSignInResult;
+};
+
 const getLoginErrorMessage = (err: unknown) => {
   if (err instanceof Error) {
     if (err.message === 'Invalid login credentials') {
       return 'Email atau password salah. Silakan cek kembali.';
     }
 
-    if (
-      err.name === 'AuthRetryableFetchError' ||
-      err.name === 'AbortError' ||
-      err.message.includes('Failed to fetch') ||
-      err.message.includes('timeout') ||
-      err.message === '{}' ||
-      err.message.trim() === ''
-    ) {
+    if (isRetryableLoginError(err)) {
       return 'Koneksi ke server auth sedang lambat atau gagal. Coba lagi beberapa detik lagi.';
     }
 
@@ -78,14 +121,7 @@ export const LoginPage = () => {
       }
 
       // LOGIN LOGIC
-      const { error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }),
-        LOGIN_TIMEOUT_MS,
-        'Login timeout. Koneksi ke server auth terlalu lama.',
-      );
+      const { error } = await signInWithRetry(email.trim(), password);
       if (error) throw error;
 
       // FIX: Reset activity timer to prevent immediate auto-logout due to old session data
