@@ -20,6 +20,18 @@ export function Upload({
 }: UploadProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const previewsRef = React.useRef<string[]>([]);
+
+  React.useEffect(() => () => {
+    previewsRef.current.forEach((src) => URL.revokeObjectURL(src));
+    previewsRef.current = [];
+  }, []);
+
+  const replacePreviews = (nextPreviews: string[]) => {
+    previewsRef.current.forEach((src) => URL.revokeObjectURL(src));
+    previewsRef.current = nextPreviews;
+    setPreviews(nextPreviews);
+  };
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -40,7 +52,7 @@ export function Upload({
       
       if (preview) {
         const newPreviews = updatedFiles.map(file => URL.createObjectURL(file));
-        setPreviews(newPreviews);
+        replacePreviews(newPreviews);
       }
     }
   };
@@ -48,6 +60,11 @@ export function Upload({
   const removeFile = (index: number) => {
     const newFiles = files.filter((_, i) => i !== index);
     const newPreviews = previews.filter((_, i) => i !== index);
+    const removedPreview = previews[index];
+    if (removedPreview) {
+      URL.revokeObjectURL(removedPreview);
+    }
+    previewsRef.current = newPreviews;
     setFiles(newFiles);
     setPreviews(newPreviews);
     onChange?.(newFiles);

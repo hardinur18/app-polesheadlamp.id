@@ -155,11 +155,12 @@ const ORDER_DOCUMENTATION_ITEMS = [
   { key: 'payment', label: 'Bayar' },
   { key: 'signature', label: 'TTD' },
 ] as const;
+type OrderDocumentationKey = typeof ORDER_DOCUMENTATION_ITEMS[number]['key'];
+const ORDER_PHOTO_INITIAL_LIMIT = 4;
 
 function getOrderDocumentationSummary(order: Order) {
-  const photos = (order.photos || {}) as Record<string, unknown>;
   const items = ORDER_DOCUMENTATION_ITEMS.map((item) => {
-    const count = Array.isArray(photos[item.key]) ? (photos[item.key] as unknown[]).length : 0;
+    const count = getOrderPhotoUrls(order, item.key).length;
     return { ...item, count };
   });
   const completed = items.filter((item) => item.count > 0).length;
@@ -176,6 +177,19 @@ function getOrderDocumentationSummary(order: Order) {
       ? 'Dokumentasi lengkap'
       : `Dokumentasi belum lengkap: ${missingLabels.join(', ')}`,
   };
+}
+
+function getOrderPhotoUrls(order: Order | null | undefined, type: OrderDocumentationKey) {
+  const value = (order?.photos as Record<string, unknown> | null | undefined)?.[type];
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  return Array.isArray(value) ? value.filter((url): url is string => typeof url === 'string' && url.trim().length > 0) : [];
+}
+
+function getInitialPhotoTab(order: Order): OrderDocumentationKey {
+  return ORDER_DOCUMENTATION_ITEMS.find((item) => getOrderPhotoUrls(order, item.key).length > 0)?.key || 'before';
 }
 
 function OrderActionButton({
@@ -770,6 +784,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [photoViewerOrder, setPhotoViewerOrder] = useState<Order | null>(null);
+  const [photoViewerTab, setPhotoViewerTab] = useState<OrderDocumentationKey>('before');
+  const [expandedPhotoTabs, setExpandedPhotoTabs] = useState<Partial<Record<OrderDocumentationKey, boolean>>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
@@ -901,7 +917,16 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   ) => {
     event?.preventDefault();
     event?.stopPropagation();
+    setPhotoViewerTab(getInitialPhotoTab(order));
+    setExpandedPhotoTabs({});
+    setUploadedFiles([]);
     setPhotoViewerOrder(order);
+  }, []);
+
+  const handleClosePhotoViewer = useCallback(() => {
+    setPhotoViewerOrder(null);
+    setExpandedPhotoTabs({});
+    setUploadedFiles([]);
   }, []);
 
   const isOrderRowInteractiveTarget = (target: EventTarget | null, currentTarget?: HTMLElement) => {
@@ -1382,15 +1407,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           {canViewOrderDetails && (
             <OrderActionButton
               label={documentationSummary.isEmpty ? 'Dokumentasi' : documentationSummary.tooltip}
-              onPointerDownCapture={(event) => {
-                event.stopPropagation();
-                suppressOrderTableClickRef.current = false;
-                suppressNextOrderRowClickRef.current = false;
-              }}
-              onPointerUp={(event) => {
-                if (event.pointerType === 'mouse' && event.button !== 0) return;
-                handleOpenPhotoViewer(order, event);
-              }}
               onClick={(event) => {
                 handleOpenPhotoViewer(order, event);
               }}
@@ -3644,34 +3660,48 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         {/* Photo Viewer Modal */}
         <Modal
             isOpen={!!photoViewerOrder}
-            onClose={() => setPhotoViewerOrder(null)}
+            onClose={handleClosePhotoViewer}
             title="Dokumentasi Pekerjaan"
             size="lg"
             className="orderPhotoDialog"
         >
             {photoViewerOrder && (
                 <div className="h-[500px] flex flex-col">
-                    <Tabs defaultValue="before" className="w-full flex-1 flex flex-col">
+                    <Tabs
+                        value={photoViewerTab}
+                        onValueChange={(value) => setPhotoViewerTab(value as OrderDocumentationKey)}
+                        className="w-full flex-1 flex flex-col"
+                    >
                         <TabsList className="grid w-full grid-cols-4 mb-4 bg-slate-100 dark:bg-slate-800 p-1">
-                            <TabsTrigger value="before" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">Sebelum ({(photoViewerOrder.photos as any)?.before?.length || 0})</TabsTrigger>
-                            <TabsTrigger value="after" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">Sesudah ({(photoViewerOrder.photos as any)?.after?.length || 0})</TabsTrigger>
+                            <TabsTrigger value="before" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">Sebelum ({getOrderPhotoUrls(photoViewerOrder, 'before').length})</TabsTrigger>
+                            <TabsTrigger value="after" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">Sesudah ({getOrderPhotoUrls(photoViewerOrder, 'after').length})</TabsTrigger>
                             <TabsTrigger value="payment" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">
-                                Bayar ({(photoViewerOrder.photos as any)?.payment?.length === 0 && (photoViewerOrder.photos as any)?.paymentDeleted ? <span className="text-red-500 font-medium">Dihapus</span> : (photoViewerOrder.photos as any)?.payment?.length || 0})
+                                Bayar ({getOrderPhotoUrls(photoViewerOrder, 'payment').length === 0 && (photoViewerOrder.photos as any)?.paymentDeleted ? <span className="text-red-500 font-medium">Dihapus</span> : getOrderPhotoUrls(photoViewerOrder, 'payment').length})
                             </TabsTrigger>
-                            <TabsTrigger value="signature" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">TTD ({(photoViewerOrder.photos as any)?.signature?.length || 0})</TabsTrigger>
+                            <TabsTrigger value="signature" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">TTD ({getOrderPhotoUrls(photoViewerOrder, 'signature').length})</TabsTrigger>
                         </TabsList>
                         
-                        {['before', 'after', 'payment', 'signature'].map((type) => (
+                        {ORDER_DOCUMENTATION_ITEMS.map((item) => {
+                            const type = item.key;
+                            const urls = getOrderPhotoUrls(photoViewerOrder, type);
+                            const isExpanded = Boolean(expandedPhotoTabs[type]);
+                            const visibleUrls = isExpanded ? urls : urls.slice(0, ORDER_PHOTO_INITIAL_LIMIT);
+                            const hiddenCount = Math.max(0, urls.length - visibleUrls.length);
+
+                            return (
                              <TabsContent key={type} value={type} className="flex-1 overflow-y-auto min-h-0 p-1">
-                                {(photoViewerOrder.photos as any)?.[type]?.length > 0 ? (
-                                    <div className={`grid gap-4 pb-4 ${type === 'payment' ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                                        {(photoViewerOrder.photos as any)[type].map((url: string, idx: number) => (
-                                            <div key={idx} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex justify-center items-center">
+                                {urls.length > 0 ? (
+                                    <>
+                                    <div className={`grid gap-4 pb-4 ${type === 'payment' || type === 'signature' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                                        {visibleUrls.map((url: string, idx: number) => (
+                                            <div key={`${type}-${url}-${idx}`} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex justify-center items-center">
                                                 <img 
                                                     src={url} 
                                                     alt={`${type} ${idx + 1}`} 
                                                     className="w-full h-[300px] sm:h-[400px] object-contain" 
                                                     loading="lazy"
+                                                    decoding="async"
+                                                    draggable={false}
                                                 />
                                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
                                                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -3687,6 +3717,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                             </div>
                                         ))}
                                     </div>
+                                    {hiddenCount > 0 && (
+                                        <div className="pb-4 text-center">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setExpandedPhotoTabs((prev) => ({ ...prev, [type]: true }))}
+                                            >
+                                                Tampilkan {hiddenCount} foto lagi
+                                            </Button>
+                                        </div>
+                                    )}
+                                    </>
                                 ) : (
                                     <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl mb-4">
                                         {type === 'payment' && (photoViewerOrder.photos as any)?.paymentDeleted ? (
@@ -3738,10 +3781,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                                 </Button>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
-                             </TabsContent>
-                        ))}
+                                     </div>
+                                 )}
+                              </TabsContent>
+                            );
+                        })}
                     </Tabs>
                 </div>
             )}
