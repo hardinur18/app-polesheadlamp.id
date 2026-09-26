@@ -2297,7 +2297,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
 
           <DialogFooter className="orderFormFooter masterDataFormActions">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting} className="w-full sm:w-auto mt-2 sm:mt-0">Batal</Button>
-          <Button type="submit" form="order-form" disabled={isSubmitting || !!blockingScheduleMessage} className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[140px]">
+          <Button type="submit" form="order-form" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[140px]">
             {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan...</> : "Simpan Pesanan"}
           </Button>
           </DialogFooter>
