@@ -20,6 +20,33 @@ function addUtcDays(date, days) {
   return next;
 }
 
+function parseDate(value) {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function buildDateWindows(from, to, chunkDays, base) {
+  const windows = [];
+  let cursor = parseDate(from);
+  const end = parseDate(to);
+
+  while (cursor <= end) {
+    const chunkStart = formatDate(cursor);
+    const chunkEndDate = addUtcDays(cursor, chunkDays - 1);
+    const chunkEnd = formatDate(chunkEndDate <= end ? chunkEndDate : end);
+
+    windows.push({
+      ...base,
+      from: chunkStart,
+      to: chunkEnd,
+      label: `${base.label}-${chunkStart}`,
+    });
+
+    cursor = addUtcDays(parseDate(chunkEnd), 1);
+  }
+
+  return windows;
+}
+
 function parseRetryAfterSeconds(message) {
   const matched = String(message).match(/retry in\s+(\d+)\s+seconds?/i);
   if (!matched) return null;
@@ -111,6 +138,7 @@ async function callFunction(url, anonKey, userToken, body, extraHeaders = {}) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const historyDays = Math.max(1, Number(args['history-days'] || 90));
+  const historyChunkDays = Math.min(31, Math.max(1, Number(args['history-chunk-days'] || 14)));
   const historyMinFreshMinutes = Math.max(0, Number(args['history-min-fresh'] || 720));
   const todayMinFreshMinutes = Math.max(0, Number(args['today-min-fresh'] || 10));
   const authSoftFail =
@@ -140,12 +168,10 @@ async function main() {
   const summaries = [];
 
   const windows = [
-    {
+    ...buildDateWindows(historyFrom, yesterday, historyChunkDays, {
       label: 'history',
-      from: historyFrom,
-      to: yesterday,
       minFreshMinutes: historyMinFreshMinutes,
-    },
+    }),
     {
       label: 'today',
       from: today,
