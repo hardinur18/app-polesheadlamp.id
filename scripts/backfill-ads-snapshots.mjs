@@ -136,6 +136,7 @@ async function main() {
     email_confirm: true,
     user_metadata: {
       name: 'Codex Backfill',
+      role: 'Owner',
     },
   });
 

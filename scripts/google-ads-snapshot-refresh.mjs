@@ -149,6 +149,7 @@ async function main() {
     email_confirm: true,
     user_metadata: {
       name: 'Codex Google Snapshot Refresh',
+      role: 'Owner',
     },
   });
 
