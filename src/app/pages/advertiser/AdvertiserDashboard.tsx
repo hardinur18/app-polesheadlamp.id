@@ -1018,6 +1018,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       advertiserId: string;
       assignment: ReturnType<typeof adAccountCsLookup.resolveAssignment>;
       apiMetrics: AdvertiserCsAccountMetric[];
+      operationalAds: typeof baseData.ads;
       leads: typeof leads;
       orders: typeof orders;
     };
@@ -1050,6 +1051,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         advertiserId,
         assignment,
         apiMetrics: [],
+        operationalAds: [],
         leads: [],
         orders: [],
       };
@@ -1076,6 +1078,21 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       const group = getGroup(metric.date, account);
       if (!group) continue;
       group.apiMetrics.push(metric);
+    }
+
+    for (const ad of baseData.ads) {
+      if (!ad.date || ad.date < rangeParams.from || ad.date > rangeParams.to) continue;
+      if (targetAdvertiserId && ad.advertiserId !== targetAdvertiserId) continue;
+      if (platformFilter !== 'all' && ad.platformId !== platformFilter) continue;
+      if (subChannelFilter !== 'all' && ad.subChannelId !== subChannelFilter) continue;
+      if (accountFilter !== 'all' && ad.adAccountId !== accountFilter) continue;
+      if (csFilter !== 'all' && ad.csId !== csFilter) continue;
+
+      const account = activeAccountById.get(ad.adAccountId);
+      if (!account) continue;
+      const group = getGroup(ad.date, account);
+      if (!group) continue;
+      group.operationalAds.push(ad);
     }
 
     const selectBestGroup = (candidates: AssignedAccountGroup[] | undefined, subChannelId?: string | null) => {
@@ -1126,6 +1143,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
     const getGroupActivityScore = (group: AssignedAccountGroup) =>
       group.apiMetrics.reduce((sum, metric) => sum + metric.spend + metric.leads, 0) +
+      group.operationalAds.reduce((sum, ad) => sum + (Number(ad.amountSpent) || 0) + (Number(ad.leadsDashboard) || 0), 0) +
       group.leads.length +
       group.orders.length;
     const shouldAttachScopeSpam = (group: AssignedAccountGroup) => {
@@ -1144,14 +1162,24 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
     const rows: CsPerformanceRow[] = [];
     for (const group of groups.values()) {
-      const spendDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.spend, 0);
-      const spendTotal = group.apiMetrics.reduce(
+      const apiSpendDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.spend, 0);
+      const apiSpendTotal = group.apiMetrics.reduce(
         (sum, metric) => sum + metric.spend * (1 + ((metric.ppn || 0) + (metric.fee || 0)) / 100),
         0,
       );
+      const apiLeadsDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.leads, 0);
+      const hasApiMetrics = group.apiMetrics.some((metric) => metric.spend > 0 || metric.leads > 0);
+      const operationalSpendDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.amountSpent) || 0), 0);
+      const operationalSpendTotal = group.operationalAds.reduce(
+        (sum, ad) => sum + (Number(ad.amountSpent) || 0) + (Number(ad.ppnAmount) || 0) + (Number(ad.feeAmount) || 0),
+        0,
+      );
+      const operationalLeadsDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.leadsDashboard) || 0), 0);
+      const spendDashboard = hasApiMetrics ? apiSpendDashboard : operationalSpendDashboard;
+      const spendTotal = hasApiMetrics ? apiSpendTotal : operationalSpendTotal;
+      const leadsDashboard = hasApiMetrics ? apiLeadsDashboard : operationalLeadsDashboard;
       const completedOrders = group.orders.filter((order) => order.status === 'done');
       const revenue = completedOrders.reduce((sum, order) => sum + (order.income || order.price || 0), 0);
-      const leadsDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.leads, 0);
       const orderCount = group.orders.length;
       const doneCount = completedOrders.length;
       const spamCount = spamByScope.get(getScopeKey(
@@ -1191,7 +1219,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         costPerDoneTotal: doneCount > 0 ? spendTotal / doneCount : 0,
         roas: spendDashboard > 0 ? revenue / spendDashboard : 0,
         roasTotal: spendTotal > 0 ? revenue / spendTotal : 0,
-        source: group.apiMetrics.length > 0 ? 'api' : 'operational',
+        source: hasApiMetrics ? 'api' : 'operational',
       });
     }
 
@@ -1204,8 +1232,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       });
   }, [
     activeAdvertiserAccounts,
+    accountFilter,
     adAccountCsLookup,
     apiAdsByDateAccount,
+    baseData.ads,
     csFilter,
     getAdAccountAdvertiserId,
     leadSpamDailyInputs,
@@ -1215,6 +1245,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     platformFilter,
     rangeParams,
     subChannels,
+    subChannelFilter,
     targetAdvertiserId,
     users,
   ]);
