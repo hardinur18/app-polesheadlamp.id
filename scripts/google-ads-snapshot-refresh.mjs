@@ -138,7 +138,7 @@ async function callFunction(url, anonKey, userToken, body, extraHeaders = {}) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const historyDays = Math.max(1, Number(args['history-days'] || 90));
-  const historyChunkDays = Math.min(31, Math.max(1, Number(args['history-chunk-days'] || 14)));
+  const historyChunkDays = Math.min(31, Math.max(1, Number(args['history-chunk-days'] || 3)));
   const historyMinFreshMinutes = Math.max(0, Number(args['history-min-fresh'] || 720));
   const todayMinFreshMinutes = Math.max(0, Number(args['today-min-fresh'] || 10));
   const authSoftFail =
@@ -182,6 +182,10 @@ async function main() {
 
   for (const window of windows) {
     try {
+      console.log(
+        `Google Ads snapshot ${window.label}: ${window.from} s/d ${window.to} (minFresh=${window.minFreshMinutes}m)`,
+      );
+
       const payload = await callFunction(
         `${functionsBaseUrl}/google/sync-snapshots`,
         anonKey,
@@ -193,6 +197,10 @@ async function main() {
           minFreshMinutes: window.minFreshMinutes,
         },
         { 'x-service-role-key': serviceRoleKey },
+      );
+
+      console.log(
+        `Google Ads snapshot ${window.label} ok: rows=${payload?.metadata?.rowCount || 0}, upserted=${payload?.metadata?.upsertedCount || 0}, source=${payload?.metadata?.servedFrom || 'unknown'}`,
       );
 
       summaries.push({
