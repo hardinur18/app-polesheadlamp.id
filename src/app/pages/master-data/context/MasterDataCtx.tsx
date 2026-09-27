@@ -2706,13 +2706,20 @@ export const MasterDataProvider: React.FC<{
     return deleteItem('lead_spam_daily_inputs', id, setLeadSpamDailyInputs, options);
   };
 
-  const shouldFetchFullOperationalHistory =
-    isAdminManagementRole(currentRole) || isFinanceRole(currentRole);
-
   const normalizedActivePath = React.useMemo(
     () => (activePath || '/dashboard').toLowerCase(),
     [activePath],
   );
+  const canFetchFullOperationalHistory =
+    isAdminManagementRole(currentRole) || isFinanceRole(currentRole);
+  const shouldFetchFullOperationalHistory =
+    canFetchFullOperationalHistory &&
+    (
+      normalizedActivePath.startsWith('/dashboard') ||
+      normalizedActivePath.startsWith('/reports') ||
+      normalizedActivePath.startsWith('/finance') ||
+      normalizedActivePath.startsWith('/ads')
+    );
   const isTechnicianMobileOperationalPath = normalizedActivePath.startsWith('/technician/mobile');
   const shouldUseTechnicianLightBootstrap =
     isTechnicianRole(currentRole) &&
