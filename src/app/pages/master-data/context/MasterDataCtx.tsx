@@ -944,7 +944,7 @@ export const MasterDataProvider: React.FC<{
         },
         (rows) => rows.map(mapOrderFromDB),
         500,
-        true,
+        false,
       );
 
       if (nextRows.length > 0) {
@@ -985,7 +985,7 @@ export const MasterDataProvider: React.FC<{
         },
         (rows) => rows.map((lead) => mapLeadFromDB(lead, leadSocialContactsRef.current[lead.id])),
         500,
-        true,
+        false,
       );
 
       if (nextRows.length > 0) {
@@ -1025,7 +1025,7 @@ export const MasterDataProvider: React.FC<{
         },
         (rows) => rows.map(mapProspectBookingFromDB),
         500,
-        true,
+        false,
       );
 
       if (nextRows.length > 0) {
@@ -1065,7 +1065,7 @@ export const MasterDataProvider: React.FC<{
         },
         (rows) => rows.map(mapScheduleFromDB),
         500,
-        true,
+        false,
       );
 
       if (nextRows.length > 0) {
