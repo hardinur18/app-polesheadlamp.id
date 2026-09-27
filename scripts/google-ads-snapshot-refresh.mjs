@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 function parseArgs(argv) {
   const parsed = {};
 
@@ -72,14 +70,20 @@ function emitGithubWarning(title, message) {
   );
 }
 
-async function callFunction(url, anonKey, userToken, body) {
+async function callFunction(url, anonKey, userToken, body, extraHeaders = {}) {
+  const headers = {
+    Authorization: `Bearer ${anonKey}`,
+    'Content-Type': 'application/json',
+    ...extraHeaders,
+  };
+
+  if (userToken) {
+    headers['x-client-token'] = userToken;
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${anonKey}`,
-      'x-client-token': userToken,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -133,128 +137,82 @@ async function main() {
     );
   }
 
-  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const publicClient = createClient(supabaseUrl, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const tempEmail = `codex-google-refresh-${Date.now()}@polesheadlamp.local`;
-  const tempPassword = `CodexGoogle!${Math.random().toString(36).slice(2, 10)}`;
-
-  const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
-    email: tempEmail,
-    password: tempPassword,
-    email_confirm: true,
-    user_metadata: {
-      name: 'Codex Google Snapshot Refresh',
-      role: 'Owner',
-    },
-  });
-
-  if (createError || !createdUser.user) {
-    throw new Error(
-      `Supabase Auth admin createUser gagal: ${
-        createError ? formatError(createError) : 'user tidak terbentuk'
-      }`,
-    );
-  }
-
   const summaries = [];
 
-  try {
-    const { data: signInData, error: signInError } = await publicClient.auth.signInWithPassword({
-      email: tempEmail,
-      password: tempPassword,
-    });
+  const windows = [
+    {
+      label: 'history',
+      from: historyFrom,
+      to: yesterday,
+      minFreshMinutes: historyMinFreshMinutes,
+    },
+    {
+      label: 'today',
+      from: today,
+      to: today,
+      minFreshMinutes: todayMinFreshMinutes,
+    },
+  ].filter((window) => window.from <= window.to);
 
-    if (signInError || !signInData.session?.access_token) {
-      throw new Error(
-        `Supabase Auth signInWithPassword gagal: ${
-          signInError ? formatError(signInError) : 'session token kosong'
-        }`,
+  for (const window of windows) {
+    try {
+      const payload = await callFunction(
+        `${functionsBaseUrl}/google/sync-snapshots`,
+        anonKey,
+        '',
+        {
+          from: window.from,
+          to: window.to,
+          force: false,
+          minFreshMinutes: window.minFreshMinutes,
+        },
+        { 'x-service-role-key': serviceRoleKey },
       );
-    }
 
-    const userToken = signInData.session.access_token;
+      summaries.push({
+        label: window.label,
+        from: window.from,
+        to: window.to,
+        status: 'ok',
+        rowCount: payload?.metadata?.rowCount || 0,
+        upsertedCount: payload?.metadata?.upsertedCount || 0,
+        servedFrom: payload?.metadata?.servedFrom || 'unknown',
+        lastSyncedAt: payload?.metadata?.lastSyncedAt || null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const retryAfterSeconds = parseRetryAfterSeconds(message);
 
-    const windows = [
-      {
-        label: 'history',
-        from: historyFrom,
-        to: yesterday,
-        minFreshMinutes: historyMinFreshMinutes,
-      },
-      {
-        label: 'today',
-        from: today,
-        to: today,
-        minFreshMinutes: todayMinFreshMinutes,
-      },
-    ].filter((window) => window.from <= window.to);
-
-    for (const window of windows) {
-      try {
-        const payload = await callFunction(
-          `${functionsBaseUrl}/google/sync-snapshots`,
-          anonKey,
-          userToken,
-          {
-            from: window.from,
-            to: window.to,
-            force: false,
-            minFreshMinutes: window.minFreshMinutes,
-          },
-        );
-
+      if (retryAfterSeconds) {
         summaries.push({
           label: window.label,
           from: window.from,
           to: window.to,
-          status: 'ok',
-          rowCount: payload?.metadata?.rowCount || 0,
-          upsertedCount: payload?.metadata?.upsertedCount || 0,
-          servedFrom: payload?.metadata?.servedFrom || 'unknown',
-          lastSyncedAt: payload?.metadata?.lastSyncedAt || null,
+          status: 'rate-limited',
+          retryAfterSeconds,
+          retryAfterLabel: formatRetryDelay(retryAfterSeconds),
+          message,
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const retryAfterSeconds = parseRetryAfterSeconds(message);
-
-        if (retryAfterSeconds) {
-          summaries.push({
-            label: window.label,
-            from: window.from,
-            to: window.to,
-            status: 'rate-limited',
-            retryAfterSeconds,
-            retryAfterLabel: formatRetryDelay(retryAfterSeconds),
-            message,
-          });
-          break;
-        }
-
-        if (authSoftFail && isGoogleAuthDisconnectError(error)) {
-          const message =
-            'Google Ads OAuth perlu reconnect. Snapshot lama tetap dipakai sampai token diperbarui.';
-
-          emitGithubWarning('Google Ads OAuth disconnected', message);
-          summaries.push({
-            label: window.label,
-            from: window.from,
-            to: window.to,
-            status: 'auth-disconnected',
-            message,
-          });
-          break;
-        }
-
-        throw error;
+        break;
       }
+
+      if (authSoftFail && isGoogleAuthDisconnectError(error)) {
+        const message =
+          'Google Ads OAuth perlu reconnect. Snapshot lama tetap dipakai sampai token diperbarui.';
+
+        emitGithubWarning('Google Ads OAuth disconnected', message);
+        summaries.push({
+          label: window.label,
+          from: window.from,
+          to: window.to,
+          status: 'auth-disconnected',
+          message,
+        });
+        break;
+      }
+
+      throw error;
     }
-  } finally {
-    await adminClient.auth.admin.deleteUser(createdUser.user.id).catch(() => undefined);
   }
 
   console.log(JSON.stringify({ ok: true, summaries }, null, 2));

@@ -85,7 +85,7 @@ app.use(
   "/*",
   cors({
     origin: resolveCorsOrigin,
-    allowHeaders: ["Content-Type", "Authorization", "x-client-token", "X-Client-Token"],
+    allowHeaders: ["Content-Type", "Authorization", "x-client-token", "X-Client-Token", "x-service-role-key"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,

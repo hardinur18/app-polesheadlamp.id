@@ -308,6 +308,17 @@ type AdsPermissionAccess =
 const ADS_VIEW_PERMISSIONS: PermissionKey[] = ["monitoring.marketing.view"];
 const ADS_MANAGE_PERMISSIONS: PermissionKey[] = ["ads.manage"];
 
+function isTrustedServiceRoleRequest(c: any) {
+  const expected = readString(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+  const provided = readString(
+    c.req.header("x-service-role-key") ||
+      c.req.header("x-supabase-service-role-key") ||
+      c.req.header("x-scheduler-secret"),
+  );
+
+  return Boolean(expected && provided && provided === expected);
+}
+
 async function requireAnyAdsPermission(
   c: any,
   permissions: readonly PermissionKey[],
@@ -1527,8 +1538,10 @@ app.get("/snapshots", async (c) => {
 
 app.post("/sync-snapshots", async (c) => {
   try {
-    const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
-    if (!access.ok) return access.error;
+    if (!isTrustedServiceRoleRequest(c)) {
+      const access = await requireAnyAdsPermission(c, ADS_VIEW_PERMISSIONS);
+      if (!access.ok) return access.error;
+    }
 
     const body = await readJsonBody(c);
     const from = typeof body?.from === "string" ? body.from : readString(c.req.query("from"));
