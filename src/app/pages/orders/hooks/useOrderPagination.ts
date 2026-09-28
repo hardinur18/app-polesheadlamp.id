@@ -1,6 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Order } from '../../master-data/data';
 
+const normalizePrice = (value: Order['price']) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 interface UseOrderPaginationParams {
   filteredOrders: Order[];
   filteredOrdersBase: Order[];
@@ -26,16 +32,18 @@ export function useOrderPagination({
   }, [filteredOrdersBase, statusFilter, cancelReasonFilter]);
 
   const requestSort = useCallback((key: string) => {
+    setCurrentPage(1);
     setSortConfig(prev => {
-      let direction: 'asc' | 'desc' | null = 'asc';
-      if (prev && prev.key === key) {
-        if (prev.direction === 'asc') {
-          direction = 'desc';
-        } else if (prev.direction === 'desc') {
-          direction = null;
-        }
+      const firstDirection: 'asc' | 'desc' = key === 'price' ? 'desc' : 'asc';
+      if (!prev || prev.key !== key) {
+        return { key, direction: firstDirection };
       }
-      return direction ? { key, direction } : null;
+
+      if (key === 'price') {
+        return prev.direction === 'desc' ? { key, direction: 'asc' } : null;
+      }
+
+      return prev.direction === 'asc' ? { key, direction: 'desc' } : null;
     });
   }, []);
 
@@ -45,7 +53,9 @@ export function useOrderPagination({
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         if (sortConfig.key === 'price') {
-          return sortConfig.direction === 'asc' ? (a.price - b.price) : (b.price - a.price);
+          const priceA = normalizePrice(a.price);
+          const priceB = normalizePrice(b.price);
+          return sortConfig.direction === 'asc' ? (priceA - priceB) : (priceB - priceA);
         }
         return 0;
       });

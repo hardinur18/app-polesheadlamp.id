@@ -2455,19 +2455,25 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 pl-4">ID Order</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Jadwal</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Pelanggan</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200 transition-colors group select-none" onClick={() => requestSort('price')} title="Klik untuk urutkan harga">
-                    <div className="flex w-full items-center justify-between gap-2">
-                        <span>Layanan & Harga</span>
-                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors group-hover:bg-slate-100 group-hover:text-slate-700 dark:group-hover:bg-slate-800 dark:group-hover:text-slate-200" aria-hidden="true">
-                          {sortConfig?.key === 'price' ? (
-                               sortConfig.direction === 'asc'
-                               ? <ArrowUp className="w-3.5 h-3.5 text-orange-500" />
-                               : <ArrowDown className="w-3.5 h-3.5 text-orange-500" />
-                          ) : (
-                               <ArrowUpDown className="w-3.5 h-3.5" />
-                          )}
-                        </span>
-                    </div>
+                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-md text-left uppercase tracking-wider transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-slate-950"
+                      onClick={() => requestSort('price')}
+                      title="Klik untuk urutkan harga"
+                      aria-label="Urutkan layanan dan harga"
+                    >
+                      <span>Layanan & Harga</span>
+                      <span className="inline-flex items-center justify-center text-slate-400" aria-hidden="true">
+                        {sortConfig?.key === 'price' ? (
+                          sortConfig.direction === 'asc'
+                            ? <ArrowUp className="w-3.5 h-3.5 text-orange-500" />
+                            : <ArrowDown className="w-3.5 h-3.5 text-orange-500" />
+                        ) : (
+                          <ArrowUpDown className="w-3.5 h-3.5" />
+                        )}
+                      </span>
+                    </button>
                   </TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Operasional</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 text-center">Metode Bayar</TableHead>
