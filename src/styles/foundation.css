@@ -8131,7 +8131,6 @@
     minmax(190px, 0.72fr)
     minmax(188px, 0.68fr)
     minmax(340px, 1.55fr)
-    minmax(150px, 0.48fr)
     minmax(132px, 0.44fr);
   width: 100%;
   min-width: 0;
@@ -8145,7 +8144,6 @@
     minmax(188px, 0.62fr)
     minmax(300px, 1.18fr)
     minmax(220px, 0.78fr)
-    minmax(150px, 0.48fr)
     minmax(132px, 0.38fr);
 }
 
@@ -8153,7 +8151,6 @@
 .orderFilterMode,
 .orderSearchSlot,
 .orderCancelReason,
-.orderFilterSort,
 .orderFilterAction {
   width: 100%;
   min-width: 0;
@@ -8508,10 +8505,6 @@
     width: 100%;
   }
 
-  .orderFilterSort {
-    width: 100%;
-  }
-
   .orderFilterAction {
     width: 100%;
   }
@@ -8532,7 +8525,6 @@
   .orderFilterMode,
   .orderFilterDate,
   .orderCancelReason,
-  .orderFilterSort,
   .orderFilterAction,
   .orderSearchSlot {
     grid-column: auto;
@@ -24617,7 +24609,6 @@ body {
 
   .orderPage .orderFilterMode,
   .orderPage .orderFilterDate,
-  .orderPage .orderFilterSort,
   .orderPage .orderCancelReason {
     grid-column: auto !important;
   }

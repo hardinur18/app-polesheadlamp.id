@@ -426,21 +426,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   });
   const {
     currentPage, setCurrentPage, itemsPerPage, setItemsPerPage,
-    selectedIds, setSelectedIds, sortConfig, setSortConfig, requestSort,
+    selectedIds, setSelectedIds, sortConfig, requestSort,
     sortedOrders, totalPages, paginatedOrders, handleSelectAll, handleSelectRow,
   } = pagination;
-  const priceSortValue = sortConfig?.key === 'price' ? sortConfig.direction : 'none';
-  const handlePriceSortChange = useCallback((value: string) => {
-    if (value === 'none') {
-      setSortConfig(null);
-      return;
-    }
-
-    setSortConfig({
-      key: 'price',
-      direction: value === 'desc' ? 'desc' : 'asc',
-    });
-  }, [setSortConfig]);
 
   const loadedServiceIds = useMemo(
     () => new Set(services.map((service) => service.id)),
@@ -1937,19 +1925,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                 />
               </div>
 
-              <div className="orderFilterSort">
-                <Select value={priceSortValue} onValueChange={handlePriceSortChange}>
-                  <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
-                    <SelectValue placeholder="Urut Harga" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Urut Harga</SelectItem>
-                    <SelectItem value="desc">Harga tertinggi</SelectItem>
-                    <SelectItem value="asc">Harga terendah</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               {statusFilter === 'cancelled' && (
                 <div className="orderCancelReason">
                   <Select value={cancelReasonFilter} onValueChange={setCancelReasonFilter}>
@@ -2480,16 +2455,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 pl-4">ID Order</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Jadwal</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Pelanggan</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200 transition-colors group select-none" onClick={() => requestSort('price')}>
-                    <div className="flex items-center gap-1">
-                        Layanan & Harga
-                        {sortConfig?.key === 'price' ? (
-                             sortConfig.direction === 'asc' ? 
-                             <ArrowUp className="w-3.5 h-3.5 text-orange-500" /> : 
-                             <ArrowDown className="w-3.5 h-3.5 text-orange-500" />
-                        ) : (
-                             <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
+                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 cursor-pointer hover:text-slate-900 dark:hover:text-slate-200 transition-colors group select-none" onClick={() => requestSort('price')} title="Klik untuk urutkan harga">
+                    <div className="flex w-full items-center justify-between gap-2">
+                        <span>Layanan & Harga</span>
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors group-hover:bg-slate-100 group-hover:text-slate-700 dark:group-hover:bg-slate-800 dark:group-hover:text-slate-200" aria-hidden="true">
+                          {sortConfig?.key === 'price' ? (
+                               sortConfig.direction === 'asc'
+                               ? <ArrowUp className="w-3.5 h-3.5 text-orange-500" />
+                               : <ArrowDown className="w-3.5 h-3.5 text-orange-500" />
+                          ) : (
+                               <ArrowUpDown className="w-3.5 h-3.5" />
+                          )}
+                        </span>
                     </div>
                   </TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Operasional</TableHead>
