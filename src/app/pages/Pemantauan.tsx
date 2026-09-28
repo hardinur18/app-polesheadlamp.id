@@ -14,7 +14,7 @@ import {
 import { FoundationDateRangePicker } from '@/app/components/ui/period-filter-picker';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
-import { startOfDay, endOfDay, isSameDay, isWithinInterval, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { endOfDay, endOfMonth, endOfYear, format, isSameDay, isWithinInterval, startOfDay, startOfMonth, startOfYear } from 'date-fns';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger, SheetClose } from '../components/ui/sheet';
 import { DateRange } from 'react-day-picker';
 import { Order } from './master-data/data';
@@ -48,7 +48,8 @@ export function Pemantauan() {
     platforms = [], 
     areas = [], 
     vehicles = [], 
-    payments = [] 
+    payments = [],
+    ensureOrdersForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   
@@ -102,6 +103,23 @@ export function Pemantauan() {
     setIsSidebarOpen(false);
     hasAppliedMobileDefaults.current = true;
   }, [isMobile]);
+
+  React.useEffect(() => {
+    if (!dateRange?.from) return;
+
+    const from = format(dateRange.from, 'yyyy-MM-dd');
+    const to = format(dateRange.to || dateRange.from, 'yyyy-MM-dd');
+
+    void ensureOrdersForDateRange({ from, to, mode: 'service' }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.warn('[Pemantauan] Failed to load orders for selected service date range', error);
+      }
+    });
+  }, [
+    dateRange?.from?.getTime(),
+    dateRange?.to?.getTime(),
+    ensureOrdersForDateRange,
+  ]);
 
   // Lists for Filters
   const csUsers = users.filter(u => isCsRole(u.role) && u.status === 'active');
@@ -186,10 +204,12 @@ export function Pemantauan() {
        // Date Filter
        let matchesDate = true;
        if (dateRange?.from) {
-          const orderDate = new Date(`${order.serviceDate}T${order.serviceTime}`);
+          const orderDate = order.serviceDate ? new Date(`${order.serviceDate}T00:00:00`) : null;
           const start = startOfDay(dateRange.from);
           const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-          matchesDate = isWithinInterval(orderDate, { start, end });
+          matchesDate = orderDate !== null && !Number.isNaN(orderDate.getTime())
+            ? isWithinInterval(orderDate, { start, end })
+            : false;
        }
 
        return matchesSearch && matchesTechnician && matchesService && matchesAdvertiser && matchesBranch && matchesDate && matchesPlatform && matchesVehicle && matchesServiceCategory && matchesArea && matchesPaymentType && matchesPaymentMethod && matchesPaymentStatus && matchesPaymentValidation && matchesAffiliate;
