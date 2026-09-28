@@ -514,6 +514,9 @@ function DailyRateMetric({ value }: { value: number }) {
 const getApiStatusLabel = (status: ApiAdsStatus) => {
   if (status === 'ready') return 'Connected';
   if (status === 'loading') return 'Loading';
+  if (status === 'empty') return 'Data kosong';
+  if (status === 'error') return 'API error';
+  if (status === 'idle') return 'Belum dimuat';
   return 'Unconnect';
 };
 

@@ -107,6 +107,11 @@ const getOrderDateKey = (order: { leadDate?: string; serviceDate?: string; creat
 const normalizeLookupKey = (value?: string | null) =>
   (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
 
+const isActiveDataStatus = (status?: string | null) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  return !normalized || normalized === 'active' || normalized === 'aktif' || normalized === 'enabled' || normalized === 'on';
+};
+
 const resolvePlatformKey = (value?: string | null) => {
   const normalized = normalizeLookupKey(value);
   if (normalized.includes('google')) return 'google';
@@ -118,6 +123,9 @@ const resolvePlatformKey = (value?: string | null) => {
 const apiStatusLabel = (status: ApiAdsStatus) => {
   if (status === 'ready') return 'Connected';
   if (status === 'loading') return 'Loading';
+  if (status === 'empty') return 'Data kosong';
+  if (status === 'error') return 'API error';
+  if (status === 'idle') return 'Belum dimuat';
   return 'Unconnect';
 };
 
@@ -417,7 +425,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         const datedAssignment = adAccountAssignments
           .filter((assignment) =>
             assignment.adAccountId === adAccountId &&
-            assignment.status === 'active' &&
+            isActiveDataStatus(assignment.status) &&
             assignment.startDate <= date &&
             (!assignment.endDate || assignment.endDate >= date)
           )
@@ -429,7 +437,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       const openAssignment = adAccountAssignments
         .filter((assignment) =>
           assignment.adAccountId === adAccountId &&
-          assignment.status === 'active' &&
+          isActiveDataStatus(assignment.status) &&
           !assignment.endDate
         )
         .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
@@ -448,7 +456,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         const datedOwner = adAccountOwnerAssignments
           .filter((assignment) =>
             assignment.adAccountId === adAccountId &&
-            assignment.status === 'active' &&
+            isActiveDataStatus(assignment.status) &&
             assignment.startDate <= date &&
             (!assignment.endDate || assignment.endDate >= date)
           )
@@ -460,7 +468,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       const openOwner = adAccountOwnerAssignments
         .filter((assignment) =>
           assignment.adAccountId === adAccountId &&
-          assignment.status === 'active' &&
+          isActiveDataStatus(assignment.status) &&
           !assignment.endDate
         )
         .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
@@ -474,7 +482,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       return adAccountOwnerAssignments.some((assignment) =>
         assignment.adAccountId === adAccountId &&
         assignment.advertiserId === advertiserId &&
-        assignment.status === 'active' &&
+        isActiveDataStatus(assignment.status) &&
         (!rangeParams || (
           assignment.startDate <= rangeParams.to &&
           (!assignment.endDate || assignment.endDate >= rangeParams.from)
@@ -514,7 +522,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
   const activeAdvertiserAccounts = useMemo(() => {
     return adAccounts.filter((account) =>
-      account.status === 'active' &&
+      isActiveDataStatus(account.status) &&
       accountMatchesTargetAdvertiser(account) &&
       (platformFilter === 'all' || account.platformId === platformFilter) &&
       (accountFilter === 'all' || account.id === accountFilter),
@@ -524,7 +532,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const csAccountOptions = useMemo(() => {
     return adAccounts
       .filter((account) =>
-        account.status === 'active' &&
+        isActiveDataStatus(account.status) &&
         accountMatchesTargetAdvertiser(account) &&
         (platformFilter === 'all' || account.platformId === platformFilter),
       )
@@ -535,7 +543,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     const platformIds = new Set(
       adAccounts
         .filter((account) =>
-          account.status === 'active' &&
+          isActiveDataStatus(account.status) &&
           accountMatchesTargetAdvertiser(account),
         )
         .map((account) => account.platformId)
@@ -832,7 +840,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     const byName = new Map<string, (typeof adAccounts)[number]>();
 
     for (const account of adAccounts) {
-      if (account.status !== 'active') continue;
+      if (!isActiveDataStatus(account.status)) continue;
       if (!accountMatchesTargetAdvertiser(account)) continue;
       byId.set(account.id, account);
       byName.set(normalizeLookupKey(account.accountName), account);
@@ -1349,6 +1357,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         missingOwnerAccounts: [] as typeof activeAdvertiserAccounts,
         missingCsAccounts: [] as typeof activeAdvertiserAccounts,
         unmappedSnapshots: [] as ApiUnmappedSnapshot[],
+        masterWarnings: [] as string[],
         isClean: true,
       };
     }
@@ -1361,7 +1370,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     const missingOwnerAccounts = activeAdvertiserAccounts.filter((account) =>
       !adAccountOwnerAssignments.some((assignment) =>
         assignment.adAccountId === account.id &&
-        assignment.status === 'active' &&
+        isActiveDataStatus(assignment.status) &&
         Boolean(assignment.advertiserId) &&
         overlapsRange(assignment.startDate, assignment.endDate),
       )
@@ -1370,21 +1379,29 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     const missingCsAccounts = activeAdvertiserAccounts.filter((account) =>
       !adAccountAssignments.some((assignment) =>
         assignment.adAccountId === account.id &&
-        assignment.status === 'active' &&
+        isActiveDataStatus(assignment.status) &&
         Boolean(assignment.csId) &&
         overlapsRange(assignment.startDate, assignment.endDate),
       )
     );
 
     const unmappedSnapshots = apiUnmappedSnapshots.filter((row) => row.spend > 0 || row.leads > 0);
+    const masterWarnings: string[] = [];
+
+    if (adAccounts.length === 0) {
+      masterWarnings.push('Master akun iklan belum terbaca dari database.');
+    } else if (activeAdvertiserAccounts.length === 0 && accountFilter === 'all' && platformFilter === 'all') {
+      masterWarnings.push('Tidak ada akun iklan aktif pada filter advertiser ini.');
+    }
 
     return {
       missingOwnerAccounts,
       missingCsAccounts,
       unmappedSnapshots,
-      isClean: missingOwnerAccounts.length === 0 && missingCsAccounts.length === 0 && unmappedSnapshots.length === 0,
+      masterWarnings,
+      isClean: masterWarnings.length === 0 && missingOwnerAccounts.length === 0 && missingCsAccounts.length === 0 && unmappedSnapshots.length === 0,
     };
-  }, [activeAdvertiserAccounts, adAccountAssignments, adAccountOwnerAssignments, apiUnmappedSnapshots, rangeParams]);
+  }, [accountFilter, activeAdvertiserAccounts, adAccountAssignments, adAccountOwnerAssignments, adAccounts.length, apiUnmappedSnapshots, platformFilter, rangeParams]);
 
   const csPerformanceBreakdowns = useMemo(() => {
     type BreakdownRow = {
@@ -1540,7 +1557,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     const csIds = new Set<string>();
     for (const account of activeAdvertiserAccounts) {
       for (const assignment of adAccountAssignments) {
-        if (assignment.adAccountId !== account.id || assignment.status !== 'active' || !assignment.csId) continue;
+        if (assignment.adAccountId !== account.id || !isActiveDataStatus(assignment.status) || !assignment.csId) continue;
         if (rangeParams && assignment.startDate > rangeParams.to) continue;
         if (rangeParams && assignment.endDate && assignment.endDate < rangeParams.from) continue;
         csIds.add(assignment.csId);
@@ -1634,7 +1651,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                           <SelectContent>
                              <SelectItem value="all">Semua Advertiser</SelectItem>
                              {users
-                               .filter(u => isAdvertiserRole(u.role) && u.status === 'active')
+                               .filter(u => isAdvertiserRole(u.role) && isActiveDataStatus(u.status))
                                .map(u => (
                                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                                ))
@@ -2470,13 +2487,23 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                       <span>
                         {csPerformanceDiagnostics.isClean
                           ? 'Akun aktif, assignment, dan snapshot API sudah terbaca untuk filter aktif.'
-                          : 'Beberapa akun belum lengkap sehingga angka bisa kosong atau tidak teratribusi.'}
+                          : 'Data master/API belum lengkap sehingga angka bisa kosong atau tidak teratribusi.'}
                       </span>
                     </div>
                   </div>
 
                   {!csPerformanceDiagnostics.isClean && (
                     <div className="advertiserDashboardMappingHealthItems">
+                      {csPerformanceDiagnostics.masterWarnings.map((warning) => (
+                        <div key={warning} className="advertiserDashboardMappingHealthItem">
+                          <div className="advertiserDashboardMappingHealthItemLabel">Sumber data belum siap</div>
+                          <div className="advertiserDashboardMappingHealthItemValue">Perlu refresh</div>
+                          <div className="advertiserDashboardMappingHealthItemList">
+                            {warning}
+                          </div>
+                        </div>
+                      ))}
+
                       {csPerformanceDiagnostics.missingOwnerAccounts.length > 0 && (
                         <div className="advertiserDashboardMappingHealthItem">
                           <div className="advertiserDashboardMappingHealthItemLabel">Owner assignment kosong</div>

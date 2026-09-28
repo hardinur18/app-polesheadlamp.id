@@ -426,9 +426,21 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   });
   const {
     currentPage, setCurrentPage, itemsPerPage, setItemsPerPage,
-    selectedIds, setSelectedIds, sortConfig, requestSort,
+    selectedIds, setSelectedIds, sortConfig, setSortConfig, requestSort,
     sortedOrders, totalPages, paginatedOrders, handleSelectAll, handleSelectRow,
   } = pagination;
+  const priceSortValue = sortConfig?.key === 'price' ? sortConfig.direction : 'none';
+  const handlePriceSortChange = useCallback((value: string) => {
+    if (value === 'none') {
+      setSortConfig(null);
+      return;
+    }
+
+    setSortConfig({
+      key: 'price',
+      direction: value === 'desc' ? 'desc' : 'asc',
+    });
+  }, [setSortConfig]);
 
   const loadedServiceIds = useMemo(
     () => new Set(services.map((service) => service.id)),
@@ -1923,6 +1935,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+              </div>
+
+              <div className="orderFilterSort">
+                <Select value={priceSortValue} onValueChange={handlePriceSortChange}>
+                  <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
+                    <SelectValue placeholder="Urut Harga" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Urut Harga</SelectItem>
+                    <SelectItem value="desc">Harga tertinggi</SelectItem>
+                    <SelectItem value="asc">Harga terendah</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {statusFilter === 'cancelled' && (

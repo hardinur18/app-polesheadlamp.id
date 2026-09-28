@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Session } from '@supabase/supabase-js';
 import { getSessionBackedEdgeHeaders } from '../../../services/internal/sessionClientHeaders';
 import { buildMakeServerUrl } from '../../../services/internal/functionsBaseUrl';
+import { fetchWithTimeout, isRequestTimeoutError } from '../../../services/internal/fetchWithTimeout';
 import { recordPerfMetric, startPerfTimer } from '@/app/utils/perfTelemetry';
 import { isAdminManagementRole, isFinanceRole, isTechnicianRole } from '@/app/data/roleHelpers';
 import { getPreviousDateKey, getTodayDateKey } from '../dateKeys';
@@ -136,6 +137,80 @@ const shouldUseLocalProfileFallback =
 const CURRENT_USER_PROFILE_TIMEOUT_MS = 8_000;
 const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
+const APP_DATA_FETCH_TIMEOUT_MS = 10_000;
+const DIRECT_APP_DATA_FETCH_TIMEOUT_MS = 8_000;
+const MASTER_DATA_CACHE_PREFIX = 'rhi-v2-master-data-cache';
+const MASTER_DATA_CACHE_MAX_BYTES = 900_000;
+const CACHEABLE_MASTER_TABLES = new Set([
+  'profiles',
+  'branches',
+  'areas',
+  'services',
+  'vehicle_types',
+  'ad_platforms',
+  'ad_sub_channels',
+  'ad_accounts',
+  'ad_account_assignments',
+  'ad_account_owner_assignments',
+  'ad_sources',
+  'payment_methods',
+  'roles',
+  'wa_templates',
+]);
+const CACHEABLE_RANGE_TABLES = new Set([
+  'orders',
+  'leads',
+  'daily_ads',
+  'lead_spam_daily_inputs',
+  'prospect_bookings',
+  'technician_schedules',
+]);
+
+const buildCacheKey = (table: string, suffix = 'full') =>
+  `${MASTER_DATA_CACHE_PREFIX}:${table}:${suffix}`;
+
+const safeReadCachedRows = (table: string, suffix = 'full') => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(buildCacheKey(table, suffix));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.rows) ? parsed.rows : null;
+  } catch {
+    return null;
+  }
+};
+
+const safeWriteCachedRows = (table: string, rows: any[], suffix = 'full') => {
+  if (typeof window === 'undefined' || rows.length === 0) return;
+
+  try {
+    const payload = JSON.stringify({
+      cachedAt: new Date().toISOString(),
+      rows,
+    });
+    if (payload.length > MASTER_DATA_CACHE_MAX_BYTES) return;
+    window.localStorage.setItem(buildCacheKey(table, suffix), payload);
+  } catch {
+    // Cache is best-effort only.
+  }
+};
+
+const buildRangeCacheSuffix = (options: {
+  orderBy?: string;
+  ascending?: boolean;
+  eq?: Record<string, string>;
+  gte?: Record<string, string>;
+  lte?: Record<string, string>;
+}) =>
+  `range:${JSON.stringify({
+    orderBy: options.orderBy || '',
+    ascending: options.ascending ?? true,
+    eq: options.eq || {},
+    gte: options.gte || {},
+    lte: options.lte || {},
+  })}`;
 
 const getDeferredBootstrapTablesForPath = (path: string) => {
   const normalizedPath = path.toLowerCase();
@@ -492,9 +567,14 @@ export const MasterDataProvider: React.FC<{
   const leadSpamMasterUrl = buildMakeServerUrl('/master/lead_spam_daily_input');
 
   const fetchLeadSpamDailyInputsFallback = async () => {
-    const response = await fetch(leadSpamMasterUrl, {
-      headers: await getSessionBackedEdgeHeaders(),
-    });
+    const response = await fetchWithTimeout(
+      leadSpamMasterUrl,
+      {
+        headers: await getSessionBackedEdgeHeaders(),
+      },
+      APP_DATA_FETCH_TIMEOUT_MS,
+      'Fallback input spam terlalu lama merespons.',
+    );
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -511,11 +591,16 @@ export const MasterDataProvider: React.FC<{
       createdAt: item.createdAt || now,
       updatedAt: now,
     };
-    const response = await fetch(leadSpamMasterUrl, {
-      method: 'POST',
-      headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-      body: JSON.stringify(payload),
-    });
+    const response = await fetchWithTimeout(
+      leadSpamMasterUrl,
+      {
+        method: 'POST',
+        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+        body: JSON.stringify(payload),
+      },
+      APP_DATA_FETCH_TIMEOUT_MS,
+      'Simpan fallback input spam terlalu lama merespons.',
+    );
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -526,10 +611,15 @@ export const MasterDataProvider: React.FC<{
   };
 
   const deleteLeadSpamDailyInputFallback = async (id: string) => {
-    const response = await fetch(`${leadSpamMasterUrl}/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: await getSessionBackedEdgeHeaders(),
-    });
+    const response = await fetchWithTimeout(
+      `${leadSpamMasterUrl}/${encodeURIComponent(id)}`,
+      {
+        method: 'DELETE',
+        headers: await getSessionBackedEdgeHeaders(),
+      },
+      APP_DATA_FETCH_TIMEOUT_MS,
+      'Hapus fallback input spam terlalu lama merespons.',
+    );
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -577,8 +667,19 @@ export const MasterDataProvider: React.FC<{
       query = query.order(options.orderBy, { ascending: options.ascending ?? true });
     }
 
+    const abortController = new AbortController();
+    const timeoutId = globalThis.setTimeout(
+      () => abortController.abort(),
+      DIRECT_APP_DATA_FETCH_TIMEOUT_MS,
+    );
+
     try {
-      const { data, error } = await query.range(from, to);
+      const rangedQuery = query.range(from, to);
+      const executableQuery =
+        typeof (rangedQuery as any).abortSignal === 'function'
+          ? (rangedQuery as any).abortSignal(abortController.signal)
+          : rangedQuery;
+      const { data, error } = await executableQuery;
       if (error) throw error;
 
       const rows = data || [];
@@ -589,6 +690,8 @@ export const MasterDataProvider: React.FC<{
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      globalThis.clearTimeout(timeoutId);
     }
   };
 
@@ -646,9 +749,14 @@ export const MasterDataProvider: React.FC<{
     });
 
     try {
-      const response = await fetch(url.toString(), {
-        headers: await getSessionBackedEdgeHeaders(),
-      });
+      const response = await fetchWithTimeout(
+        url.toString(),
+        {
+          headers: await getSessionBackedEdgeHeaders(),
+        },
+        APP_DATA_FETCH_TIMEOUT_MS,
+        `Load ${table} terlalu lama. Server data sedang lambat.`,
+      );
 
       if (response.status === 403) {
         const rows = await fetchDirectAppDataPage(table, from, to, options);
@@ -710,6 +818,26 @@ export const MasterDataProvider: React.FC<{
         forbidden: false,
       };
     } catch (error) {
+      if (!isRequestTimeoutError(error)) {
+        try {
+          const rows = await fetchDirectAppDataPage(table, from, to, options);
+          if (import.meta.env.DEV) {
+            console.info('[MasterData] app-data request failed, using direct Supabase fallback', {
+              table,
+              rows: rows.length,
+            });
+          }
+          endTimer('fallback', { reason: 'request_failed', rows: rows.length });
+          return { rows, forbidden: false };
+        } catch (fallbackError) {
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] direct Supabase request fallback failed', {
+              table,
+              error: fallbackError,
+            });
+          }
+        }
+      }
       endTimer('error', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -720,11 +848,16 @@ export const MasterDataProvider: React.FC<{
   const createAppDataRow = async (table: string, payload: any) => {
     const endTimer = startPerfTimer('master-data.create-row', { table });
     try {
-      const response = await fetch(appDataUrl(table), {
-        method: 'POST',
-        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-        body: JSON.stringify(payload),
-      });
+      const response = await fetchWithTimeout(
+        appDataUrl(table),
+        {
+          method: 'POST',
+          headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+          body: JSON.stringify(payload),
+        },
+        APP_DATA_FETCH_TIMEOUT_MS,
+        `Simpan ${table} terlalu lama. Coba ulang beberapa detik lagi.`,
+      );
 
       if (!response.ok) {
         const error = await readAppDataError(response, `Gagal menyimpan ${table}`);
@@ -746,11 +879,16 @@ export const MasterDataProvider: React.FC<{
   const updateAppDataRow = async (table: string, id: string, payload: any) => {
     const endTimer = startPerfTimer('master-data.update-row', { table });
     try {
-      const response = await fetch(appDataUrl(table, id), {
-        method: 'PUT',
-        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-        body: JSON.stringify(payload),
-      });
+      const response = await fetchWithTimeout(
+        appDataUrl(table, id),
+        {
+          method: 'PUT',
+          headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+          body: JSON.stringify(payload),
+        },
+        APP_DATA_FETCH_TIMEOUT_MS,
+        `Update ${table} terlalu lama. Coba ulang beberapa detik lagi.`,
+      );
 
       if (!response.ok) {
         const error = await readAppDataError(response, `Gagal memperbarui ${table}`);
@@ -772,10 +910,15 @@ export const MasterDataProvider: React.FC<{
   const deleteAppDataRow = async (table: string, id: string) => {
     const endTimer = startPerfTimer('master-data.delete-row', { table });
     try {
-      const response = await fetch(appDataUrl(table, id), {
-        method: 'DELETE',
-        headers: await getSessionBackedEdgeHeaders(),
-      });
+      const response = await fetchWithTimeout(
+        appDataUrl(table, id),
+        {
+          method: 'DELETE',
+          headers: await getSessionBackedEdgeHeaders(),
+        },
+        APP_DATA_FETCH_TIMEOUT_MS,
+        `Hapus ${table} terlalu lama. Coba ulang beberapa detik lagi.`,
+      );
 
       if (!response.ok) {
         const error = await readAppDataError(response, `Gagal menghapus ${table}`);
@@ -905,8 +1048,21 @@ export const MasterDataProvider: React.FC<{
       }
 
       endTimer('ok', { pages: page, rows: allData.length });
+      if (CACHEABLE_RANGE_TABLES.has(table)) {
+        safeWriteCachedRows(table, allData, buildRangeCacheSuffix(options));
+      }
       return mapFetchedRows(allData, mapper);
     } catch (error) {
+      if (CACHEABLE_RANGE_TABLES.has(table)) {
+        const cachedRows = safeReadCachedRows(table, buildRangeCacheSuffix(options));
+        if (cachedRows?.length) {
+          endTimer('fallback', { reason: 'cache', rows: cachedRows.length });
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] range fetch failed, using cached rows', { table, error });
+          }
+          return mapFetchedRows(cachedRows, mapper);
+        }
+      }
       endTimer('error', {
         pages: page,
         rows: allData.length,
@@ -1143,6 +1299,9 @@ export const MasterDataProvider: React.FC<{
       if (!options.progressive || allData.length === 0) {
         setter(mapFetchedRows(allData, mapper));
       }
+      if (CACHEABLE_MASTER_TABLES.has(table)) {
+        safeWriteCachedRows(table, allData);
+      }
       endTimer('ok', { pages: page + 1, rows: allData.length });
     } catch (e) {
       if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(e)) {
@@ -1155,6 +1314,16 @@ export const MasterDataProvider: React.FC<{
       endTimer('error', {
         error: e instanceof Error ? e.message : String(e),
       });
+      if (CACHEABLE_MASTER_TABLES.has(table)) {
+        const cachedRows = safeReadCachedRows(table);
+        if (cachedRows?.length) {
+          setter(mapFetchedRows(cachedRows, mapper));
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] full fetch failed, using cached rows', { table, error: e });
+          }
+          return;
+        }
+      }
       console.error(`Error fetching ${table}:`, e);
     }
   };

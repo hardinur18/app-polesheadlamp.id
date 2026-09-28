@@ -1,4 +1,5 @@
 import { buildMakeServerUrl } from './internal/functionsBaseUrl';
+import { fetchWithTimeout } from './internal/fetchWithTimeout';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 import type { ServiceErrorPayload } from './internal/serviceTypes';
 
@@ -394,7 +395,7 @@ async function fetchGoogleAdsLiveBreakdownFromServer({
     url.searchParams.set('customerId', customerId);
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     headers: await getSessionBackedEdgeHeaders(),
   });
 
@@ -417,7 +418,7 @@ async function fetchGoogleAdsLiveBreakdownFromServer({
 }
 
 export async function fetchGoogleAdsTokenHealth() {
-  const response = await fetch(`${googleAdsFunctionsBaseUrl}/google/token-health`, {
+  const response = await fetchWithTimeout(`${googleAdsFunctionsBaseUrl}/google/token-health`, {
     headers: await getSessionBackedEdgeHeaders(),
   });
 
@@ -435,7 +436,7 @@ export async function fetchGoogleAdsAuthorizeUrl(redirectUri?: string) {
     url.searchParams.set('redirectUri', redirectUri);
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     headers: await getSessionBackedEdgeHeaders(),
   });
 
@@ -454,7 +455,7 @@ export async function exchangeGoogleAdsAuthorizationCode({
   code: string;
   redirectUri?: string;
 }) {
-  const response = await fetch(`${googleAdsFunctionsBaseUrl}/google/exchange-code`, {
+  const response = await fetchWithTimeout(`${googleAdsFunctionsBaseUrl}/google/exchange-code`, {
     method: 'POST',
     headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
     body: JSON.stringify({
@@ -473,7 +474,7 @@ export async function exchangeGoogleAdsAuthorizationCode({
 
 export async function fetchGoogleAdsIntegrationConfigs() {
   try {
-    const response = await fetch(`${googleAdsFunctionsBaseUrl}/google/integration-configs`, {
+    const response = await fetchWithTimeout(`${googleAdsFunctionsBaseUrl}/google/integration-configs`, {
       headers: await getSessionBackedEdgeHeaders(),
     });
 
@@ -514,7 +515,7 @@ export async function saveGoogleAdsIntegrationConfig(
   writeGoogleIntegrationConfigsToStorage(mergedLocalConfigs);
 
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${googleAdsFunctionsBaseUrl}/google/integration-configs/${adAccountId}`,
       {
         method: 'POST',
@@ -638,7 +639,7 @@ export async function fetchGoogleAdsSnapshotDataset({
     url.searchParams.set('customerId', customerId);
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     headers: await getSessionBackedEdgeHeaders(),
   });
 
@@ -718,7 +719,7 @@ export async function syncGoogleAdsSnapshotDataset({
     } as GoogleAdsSnapshotDatasetResponse;
   }
 
-  const response = await fetch(`${googleAdsFunctionsBaseUrl}/google/sync-snapshots`, {
+  const response = await fetchWithTimeout(`${googleAdsFunctionsBaseUrl}/google/sync-snapshots`, {
     method: 'POST',
     headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
     body: JSON.stringify({

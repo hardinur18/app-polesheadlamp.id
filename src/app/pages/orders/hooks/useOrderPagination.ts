@@ -82,6 +82,7 @@ export function useOrderPagination({
     itemsPerPage, setItemsPerPage,
     selectedIds, setSelectedIds,
     sortConfig,
+    setSortConfig,
     requestSort,
     sortedOrders,
     totalPages,

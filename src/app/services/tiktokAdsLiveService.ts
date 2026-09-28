@@ -1,4 +1,5 @@
 import { buildMakeServerUrl } from './internal/functionsBaseUrl';
+import { fetchWithTimeout } from './internal/fetchWithTimeout';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 import type { ServiceErrorPayload } from './internal/serviceTypes';
 
@@ -178,7 +179,7 @@ function writeTikTokIntegrationConfigsToStorage(configs: TikTokAdsIntegrationCon
 }
 
 async function fetchTikTokJson<T>(url: string, init?: RequestInit) {
-  const response = await fetch(url, init);
+  const response = await fetchWithTimeout(url, init);
   const payload = await response.json().catch(() => ({} as ServiceErrorPayload));
 
   if (!response.ok) {
@@ -197,7 +198,7 @@ export function getCachedTikTokAdvertisers() {
 }
 
 export async function fetchTikTokAdsTokenHealth() {
-  const response = await fetch(`${tiktokAdsFunctionsBaseUrl}/tiktok/token-health`, {
+  const response = await fetchWithTimeout(`${tiktokAdsFunctionsBaseUrl}/tiktok/token-health`, {
     headers: await getSessionBackedEdgeHeaders(),
   });
 

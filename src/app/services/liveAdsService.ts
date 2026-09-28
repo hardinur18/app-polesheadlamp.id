@@ -1,4 +1,5 @@
 import { buildMakeServerUrl } from './internal/functionsBaseUrl';
+import { fetchWithTimeout } from './internal/fetchWithTimeout';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 import type { ServiceErrorPayload } from './internal/serviceTypes';
 
@@ -192,7 +193,7 @@ function ensureMetaDirectFallbackAllowed() {
 }
 
 async function fetchMetaJson(url: string, init?: RequestInit) {
-  const response = await fetch(url, init);
+  const response = await fetchWithTimeout(url, init);
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || (!Array.isArray(payload) && payload?.error)) {
@@ -618,7 +619,7 @@ async function fetchMetaLiveBreakdownFromServer({
     url.searchParams.set('accountId', accountId);
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     headers: await getSessionBackedEdgeHeaders(),
   });
 
@@ -633,7 +634,7 @@ async function fetchMetaLiveBreakdownFromServer({
 
 export async function fetchAdsIntegrationConfigs() {
   try {
-    const response = await fetch(`${functionsBaseUrl}/meta/integration-configs`, {
+    const response = await fetchWithTimeout(`${functionsBaseUrl}/meta/integration-configs`, {
       headers: await getSessionBackedEdgeHeaders(),
     });
     const payload = await response.json().catch(() => ({} as ServiceErrorPayload));
@@ -672,7 +673,7 @@ export async function saveAdsIntegrationConfig(
   writeIntegrationConfigsToStorage(mergedLocalConfigs);
 
   try {
-    const response = await fetch(`${functionsBaseUrl}/meta/integration-configs/${adAccountId}`, {
+    const response = await fetchWithTimeout(`${functionsBaseUrl}/meta/integration-configs/${adAccountId}`, {
       method: 'POST',
       headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
       body: JSON.stringify({
@@ -812,7 +813,7 @@ export async function fetchMetaSnapshotDataset({
     url.searchParams.set('includeLastKnown', 'true');
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await fetchWithTimeout(url.toString(), {
     headers: await getSessionBackedEdgeHeaders(),
   });
 
@@ -866,7 +867,7 @@ export async function syncMetaSnapshotDataset({
     } as MetaSnapshotDatasetResponse;
   };
 
-  const response = await fetch(`${functionsBaseUrl}/meta/sync-snapshots`, {
+  const response = await fetchWithTimeout(`${functionsBaseUrl}/meta/sync-snapshots`, {
     method: 'POST',
     headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
     body: JSON.stringify({
