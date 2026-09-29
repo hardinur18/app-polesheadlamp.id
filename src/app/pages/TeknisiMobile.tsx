@@ -88,6 +88,8 @@ export function TeknisiMobile() {
   // Local state for server-side fetched orders to reduce lag
   const [serverOrders, setServerOrders] = useState<any[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  const ordersFetchAbortRef = useRef<AbortController | null>(null);
+  const ordersFetchSerialRef = useRef(0);
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
@@ -169,34 +171,57 @@ export function TeknisiMobile() {
   }, [selectedDate, currentUser, selectedTechId]);
 
   // Fetch Orders Server Side (Optimized)
-  const fetchServerOrders = async () => {
+  useEffect(() => {
         const targetTechId = isTechnicianRole(currentUser?.role) ? currentUser.id : selectedTechId;
-        if (!targetTechId) return;
-        
+        if (!targetTechId) {
+            setServerOrders([]);
+            setIsOrdersLoading(false);
+            return;
+        }
+
+        ordersFetchAbortRef.current?.abort();
+        const abortController = new AbortController();
+        ordersFetchAbortRef.current = abortController;
+        const requestId = ordersFetchSerialRef.current + 1;
+        ordersFetchSerialRef.current = requestId;
+
+        const fetchServerOrders = async () => {
         setIsOrdersLoading(true);
         try {
             const dateKey = format(selectedDate, 'yyyy-MM-dd');
             const url = buildMakeServerUrl(`/mobile/technician-orders/${targetTechId}?date=${dateKey}`);
             
             const headers = await getSessionBackedEdgeHeaders();
-            const res = await fetch(url, { headers });
+            if (abortController.signal.aborted) return;
+
+            const res = await fetch(url, { headers, signal: abortController.signal });
             
             if (res.ok) {
                 const data = await res.json();
+                if (requestId !== ordersFetchSerialRef.current) return;
                 // Ensure data is array
                 setServerOrders(Array.isArray(data) ? data : []);
             }
         } catch (e) {
+            if ((e as any)?.name === 'AbortError') return;
             console.error("Fetch orders error", e);
             // toast.error("Gagal memuat jadwal"); // Silent error better for auto-fetch
         } finally {
-            setIsOrdersLoading(false);
+            if (ordersFetchAbortRef.current === abortController) {
+                ordersFetchAbortRef.current = null;
+            }
+            if (requestId === ordersFetchSerialRef.current) {
+                setIsOrdersLoading(false);
+            }
         }
-  };
+        };
 
-  useEffect(() => {
-     fetchServerOrders();
-  }, [selectedDate, selectedTechId, currentUser]);
+        void fetchServerOrders();
+
+        return () => {
+            abortController.abort();
+        };
+  }, [selectedDate, selectedTechId, currentUser?.id, currentUser?.role]);
 
   // Routes Calculation
   const myRoutes = useMemo(() => {
@@ -207,23 +232,29 @@ export function TeknisiMobile() {
       let lastLat = -6.2088;
       let lastLng = 106.8456;
 
-      if (userOrders.length > 0 && userOrders[0].lat && userOrders[0].lng) {
-          lastLat = userOrders[0].lat;
-          lastLng = userOrders[0].lng;
+      const firstOrderWithCoordinates = userOrders.find((o) => Number.isFinite(Number(o.lat)) && Number.isFinite(Number(o.lng)));
+      if (firstOrderWithCoordinates) {
+          lastLat = Number(firstOrderWithCoordinates.lat);
+          lastLng = Number(firstOrderWithCoordinates.lng);
       }
 
       return userOrders.map((o, index) => {
-          let lat = o.lat || -6.2088;
-          let lng = o.lng || 106.8456;
+          const rawLat = Number(o.lat);
+          const rawLng = Number(o.lng);
+          const hasCoordinates = Number.isFinite(rawLat) && Number.isFinite(rawLng);
+          const lat = hasCoordinates ? rawLat : lastLat;
+          const lng = hasCoordinates ? rawLng : lastLng;
           
           let dist = 0;
-          if (index > 0) {
+          if (index > 0 && hasCoordinates) {
               dist = getDistance(lastLat, lastLng, lat, lng);
               cumulativeDistance += dist;
           }
           
-          lastLat = lat;
-          lastLng = lng;
+          if (hasCoordinates) {
+              lastLat = lat;
+              lastLng = lng;
+          }
 
           // Normalize Status for Badge/Pin
           let currentStatus = o.status;
@@ -245,12 +276,13 @@ export function TeknisiMobile() {
               distanceFromPrev: dist,
               orderIndex: index + 1,
               mapStatus,
-              effectiveStatus: currentStatus
+              effectiveStatus: currentStatus,
+              hasCoordinates,
           };
       });
   }, [serverOrders]); // Dependency changed from 'orders' to 'serverOrders'
 
-  const mapRoutes = useMemo(() => myRoutes.map(o => ({
+  const mapRoutes = useMemo(() => myRoutes.filter(o => o.hasCoordinates).map(o => ({
         id: o.id,
         name: o.customerName,
         address: o.address,

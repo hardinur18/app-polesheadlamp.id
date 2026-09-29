@@ -986,6 +986,27 @@ export const MasterDataProvider: React.FC<{
     return mapFetchedRows(data || [], mapper);
   };
 
+  const fetchTodayTechnicianOrdersDirectly = async (
+    todayKey: string,
+    technicianId: string,
+    mapper?: (data: any[]) => any[],
+  ) => {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('technician_id', technicianId)
+      .gte('service_date', todayKey)
+      .lte('service_date', todayKey)
+      .order('service_date', { ascending: false })
+      .range(0, 149);
+
+    if (error) {
+      throw error;
+    }
+
+    return mapFetchedRows(data || [], mapper);
+  };
+
   const fetchTodayLeadsDirectly = async (todayKey: string, mapper?: (data: any[]) => any[]) => {
     const { fromIso, toIso } = toBusinessDayUtcRange(todayKey);
     const { data, error } = await supabase
@@ -2890,9 +2911,17 @@ export const MasterDataProvider: React.FC<{
       normalizedActivePath.startsWith('/ads')
     );
   const isTechnicianMobileOperationalPath = normalizedActivePath.startsWith('/technician/mobile');
+  const isTechnicianOrdersOperationalPath = normalizedActivePath.startsWith('/orders');
   const shouldUseTechnicianLightBootstrap =
     isTechnicianRole(currentRole) &&
     (isTechnicianMobileOperationalPath || normalizedActivePath.startsWith('/dashboard'));
+  const shouldSkipGlobalOperationalBootstrapForTechnician =
+    isTechnicianRole(currentRole) &&
+    (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath || normalizedActivePath.startsWith('/dashboard'));
+  const shouldUseTechnicianScopedOrdersBootstrap =
+    isTechnicianRole(currentRole) &&
+    isTechnicianOrdersOperationalPath &&
+    Boolean(currentUser?.id);
   const shouldWaitForCurrentUserBeforeOperationalBootstrap =
     Boolean(session?.user) && !isCurrentUserResolved;
 
@@ -3027,20 +3056,28 @@ export const MasterDataProvider: React.FC<{
         }
 
         try {
-          orderFetch.setter(await fetchTodayOrdersDirectly(todayKey, orderFetch.mapper));
+          const priorityOrders =
+            shouldUseTechnicianScopedOrdersBootstrap && currentUser?.id
+              ? await fetchTodayTechnicianOrdersDirectly(todayKey, currentUser.id, orderFetch.mapper)
+              : await fetchTodayOrdersDirectly(todayKey, orderFetch.mapper);
+          orderFetch.setter(priorityOrders);
         } catch (directError) {
           if (import.meta.env.DEV) {
             console.warn('[MasterData] direct today orders fetch failed, falling back to app-data', directError);
           }
+          const appData: AppDataPageOptions = {
+            orderBy: 'service_date',
+            ascending: false,
+            gte: { service_date: todayKey },
+            lte: { service_date: todayKey },
+          };
+          if (shouldUseTechnicianScopedOrdersBootstrap && currentUser?.id) {
+            appData.eq = { technician_id: currentUser.id };
+          }
           await fetchData(orderFetch.table, orderFetch.setter, orderFetch.mapper, {
             progressive: true,
             pageSize: 250,
-            appData: {
-              orderBy: 'service_date',
-              ascending: false,
-              gte: { service_date: todayKey },
-              lte: { service_date: todayKey },
-            },
+            appData,
           });
         }
 
@@ -3082,10 +3119,10 @@ export const MasterDataProvider: React.FC<{
       const fetchPriorityLeads = async () => {
         const todayKey = getTodayDateKey();
 
-        if (shouldUseTechnicianLightBootstrap) {
+        if (shouldSkipGlobalOperationalBootstrapForTechnician) {
           leadFetch.setter([]);
           recordPerfMetric('master-data.today-leads-bootstrap', 0, 'skipped', {
-            reason: 'technician_mobile_does_not_use_global_leads',
+            reason: 'technician_does_not_use_global_leads_here',
             role: currentRole,
             path: normalizedActivePath,
           });
@@ -3196,8 +3233,11 @@ export const MasterDataProvider: React.FC<{
     deferredBootstrapTables,
     isCurrentUserResolved,
     normalizedActivePath,
+    shouldSkipGlobalOperationalBootstrapForTechnician,
     shouldUseTechnicianLightBootstrap,
+    shouldUseTechnicianScopedOrdersBootstrap,
     shouldWaitForCurrentUserBeforeOperationalBootstrap,
+    currentUser?.id,
   ]);
 
   // --- REALTIME SUBSCRIPTIONS ---
@@ -3205,8 +3245,8 @@ export const MasterDataProvider: React.FC<{
     let isRealtimeDisposed = false;
     let recoveryRefreshTimer: number | undefined;
     let recoveryResubscribeTimer: number | undefined;
-    const reducedRealtimeForTechnicianMobile =
-      isTechnicianRole(currentRole) && isTechnicianMobileOperationalPath;
+    const reducedRealtimeForTechnician =
+      isTechnicianRole(currentRole) && (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath);
 
     const scheduleRealtimeRecovery = (status: string) => {
       if (isRealtimeDisposed) return;
@@ -3235,7 +3275,7 @@ export const MasterDataProvider: React.FC<{
     // Channel for high-frequency updates (Orders, Leads, Profiles)
     let channel = supabase.channel(`realtime_master_data_${realtimeRetryKey}`);
 
-    if (!reducedRealtimeForTechnicianMobile) {
+    if (!reducedRealtimeForTechnician) {
       channel = channel.on(
         'postgres_changes', 
         { event: '*', schema: 'public', table: 'orders' }, 
@@ -3358,6 +3398,27 @@ export const MasterDataProvider: React.FC<{
           }
         }
       );
+    } else if (isTechnicianOrdersOperationalPath && currentUser?.id) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders', filter: `technician_id=eq.${currentUser.id}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newItem = mapOrderFromDB(payload.new);
+            setOrders(prev => [newItem, ...prev.filter(item => item.id !== newItem.id)]);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedItem = mapOrderFromDB(payload.new);
+            setOrders(prev => {
+              const exists = prev.some(item => item.id === updatedItem.id);
+              return exists
+                ? prev.map(item => item.id === updatedItem.id ? updatedItem : item)
+                : [updatedItem, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setOrders(prev => prev.filter(item => item.id !== payload.old.id));
+          }
+        }
+      );
     }
 
     channel = channel.on(
@@ -3400,7 +3461,7 @@ export const MasterDataProvider: React.FC<{
       }
       supabase.removeChannel(channel);
     };
-  }, [currentRole, isTechnicianMobileOperationalPath, realtimeRetryKey]);
+  }, [currentRole, isTechnicianMobileOperationalPath, isTechnicianOrdersOperationalPath, realtimeRetryKey, currentUser?.id]);
 
   // Use useMemo to prevent unnecessary re-renders
   const value = React.useMemo(() => ({

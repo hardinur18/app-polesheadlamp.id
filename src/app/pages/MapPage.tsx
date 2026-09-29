@@ -33,7 +33,7 @@ const CS_COLORS = [
 
 type ViewMode = 'technician' | 'cs';
 
-const MAP_ORDER_LIMIT = 500;
+const MAP_ORDER_LIMIT = 250;
 const MAP_ORDER_COLUMNS = [
   'id',
   'address',
@@ -51,7 +51,7 @@ const getBoundsKey = (bounds: L.LatLngBounds) => [
   bounds.getNorth(),
   bounds.getWest(),
   bounds.getEast(),
-].map((value) => value.toFixed(4)).join(':');
+].map((value) => value.toFixed(3)).join(':');
 
 export const MapPage = () => {
   const { branches, users } = useMasterData(); // Don't pull 'orders' from global context to save memory
@@ -66,6 +66,7 @@ export const MapPage = () => {
   const [autoFit, setAutoFit] = useState(true); // Only auto-fit on first load
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const requestSerialRef = useRef(0);
+  const requestAbortRef = useRef<AbortController | null>(null);
   const lastBoundsKeyRef = useRef<string | null>(null);
 
   // Fetch orders based on map bounds
@@ -79,12 +80,15 @@ export const MapPage = () => {
 
     const requestId = requestSerialRef.current + 1;
     requestSerialRef.current = requestId;
+    requestAbortRef.current?.abort();
+    const abortController = new AbortController();
+    requestAbortRef.current = abortController;
     setLoadingMap(true);
     setMapError(null);
 
     try {
         // Query only map columns. Full order rows make the map slower and are not needed here.
-        const { data, error } = await supabase
+        const query = supabase
             .from('orders')
             .select(MAP_ORDER_COLUMNS)
             .neq('status', 'cancelled')
@@ -94,22 +98,30 @@ export const MapPage = () => {
             .lte('lat', maxLat)
             .gte('lng', minLng)
             .lte('lng', maxLng)
+            .order('service_date', { ascending: false })
             .limit(MAP_ORDER_LIMIT);
+        const executableQuery =
+            typeof (query as any).abortSignal === 'function'
+                ? (query as any).abortSignal(abortController.signal)
+                : query;
+        const { data, error } = await executableQuery;
 
         if (error) throw error;
         if (requestId !== requestSerialRef.current) return;
 
         if (data) {
             setLazyOrders(data.map(mapOrderFromDB));
+            setAutoFit(false);
             
             if (data.length === MAP_ORDER_LIMIT) {
-                toast.warning("Area terlalu luas. Hanya menampilkan 500 pesanan teratas.", {
+                toast.warning("Area terlalu luas. Hanya menampilkan 250 pesanan terbaru.", {
                     id: 'map-limit-warning', // Prevent duplicate toasts
                     duration: 3000
                 });
             }
         }
     } catch (err) {
+        if ((err as any)?.name === 'AbortError') return;
         if (requestId !== requestSerialRef.current) return;
         console.error("Error fetching map points:", err);
         setMapError('Gagal memuat titik order di area ini. Coba zoom lebih dekat atau geser peta lagi.');
@@ -118,6 +130,9 @@ export const MapPage = () => {
             duration: 3000
         });
     } finally {
+        if (requestAbortRef.current === abortController) {
+            requestAbortRef.current = null;
+        }
         if (requestId === requestSerialRef.current) {
             setLoadingMap(false);
         }
@@ -142,6 +157,7 @@ export const MapPage = () => {
 
   useEffect(() => () => {
       requestSerialRef.current += 1;
+      requestAbortRef.current?.abort();
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
   }, []);
 
@@ -417,7 +433,7 @@ export const MapPage = () => {
             showLegend={false}
             onLegendClick={() => setIsLegendOpen(true)}
             onBoundsChange={handleBoundsChange}
-            autoFit={autoFit}
+            autoFit={autoFit && lazyOrders.length === 0}
          />
 
          {mapError && (

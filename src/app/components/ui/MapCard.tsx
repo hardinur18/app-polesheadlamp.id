@@ -59,6 +59,9 @@ interface MapCardProps {
   className?: string; 
 }
 
+const isFiniteCoordinate = (lat?: number | null, lng?: number | null) =>
+    Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+
 // Custom Pin Icon
 const createPinIcon = (status: string, index?: number, overrideColor?: string, iconType?: 'home' | 'building') => {
     let color = overrideColor || '#64748B'; 
@@ -177,7 +180,7 @@ const FitBounds = ({ groups, branches, autoFit = true }: { groups: RouteGroup[],
         
         groups.forEach(group => {
             group.points.forEach(p => {
-                if (p.lat && p.lng) {
+                if (isFiniteCoordinate(p.lat, p.lng)) {
                     bounds.extend([p.lat, p.lng]);
                     hasPoints = true;
                 }
@@ -186,7 +189,7 @@ const FitBounds = ({ groups, branches, autoFit = true }: { groups: RouteGroup[],
 
         if (branches) {
             branches.forEach(b => {
-                if (b.lat && b.lng) {
+                if (isFiniteCoordinate(b.lat, b.lng)) {
                     bounds.extend([b.lat, b.lng]);
                     hasPoints = true;
                 }
@@ -229,7 +232,10 @@ const MapSizeInvalidator = () => {
         };
 
         const frameId = window.requestAnimationFrame(invalidate);
-        const timeoutId = window.setTimeout(invalidate, 250);
+        const timeoutIds = [
+            window.setTimeout(invalidate, 250),
+            window.setTimeout(invalidate, 700),
+        ];
         const container = map.getContainer();
         const observer = typeof ResizeObserver !== 'undefined'
             ? new ResizeObserver(invalidate)
@@ -239,7 +245,7 @@ const MapSizeInvalidator = () => {
 
         return () => {
             window.cancelAnimationFrame(frameId);
-            window.clearTimeout(timeoutId);
+            timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
             observer?.disconnect();
         };
     }, [map]);
@@ -262,13 +268,13 @@ const MapEvents = ({ onBoundsChange }: { onBoundsChange?: (bounds: L.LatLngBound
             onBoundsChange(map.getBounds(), { userInitiated: userInitiatedRef.current });
         };
 
-        const frameId = window.requestAnimationFrame(handleMoveEnd);
+        const timeoutId = window.setTimeout(handleMoveEnd, 350);
 
         map.on('dragstart zoomstart', markUserInteraction);
         map.on('moveend', handleMoveEnd);
 
         return () => {
-            window.cancelAnimationFrame(frameId);
+            window.clearTimeout(timeoutId);
             map.off('dragstart zoomstart', markUserInteraction);
             map.off('moveend', handleMoveEnd);
         };
@@ -286,7 +292,7 @@ const SmartPolyline = ({ points, color, disableRouting = false }: { points: Rout
     const pointsKey = JSON.stringify(points.map(p => ({ lat: p.lat, lng: p.lng })));
     
     const validPoints = useMemo(() => {
-        return points.filter(p => p.lat && p.lng);
+        return points.filter(p => isFiniteCoordinate(p.lat, p.lng));
     }, [pointsKey]);
 
     useEffect(() => {
@@ -301,7 +307,7 @@ const SmartPolyline = ({ points, color, disableRouting = false }: { points: Rout
         const straightPath = validPoints.map(p => [p.lat, p.lng] as [number, number]);
         setPath(straightPath);
 
-        if (disableRouting) return; // Skip fetching if disabled
+        if (disableRouting || validPoints.length > 8) return; // Keep large routes light on low-end phones
 
         const fetchRoute = async () => {
             if (!isMounted) return;
@@ -398,7 +404,9 @@ export function MapCard({
 }: MapCardProps) {
   const defaultCenter: [number, number] = [-6.2088, 106.8456];
   const [internalShowRadius, setInternalShowRadius] = useState(true);
-  const [showLabels, setShowLabels] = useState(true);
+  const [showLabels, setShowLabels] = useState(() => (
+      typeof window === 'undefined' ? true : window.innerWidth >= 768
+  ));
   const [showMonthFilter, setShowMonthFilter] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
@@ -457,6 +465,14 @@ export function MapCard({
       : routes.length > 0 
           ? [{ id: 'default', technicianName: 'Rute', color: '#0E7490', points: routes }] 
           : [];
+  const visibleRoutePointCount = useMemo(
+      () => displayGroups.reduce((total, group) => (
+          total + group.points.filter((point) => point.status !== ('branch_start' as any)).length
+      ), 0),
+      [displayGroups],
+  );
+  const shouldRenderRouteLabels = showLabels && visibleRoutePointCount <= 80;
+  const shouldRenderBranchLabels = showLabels && filteredBranches.length <= 40;
 
   return (
     <div 
@@ -608,6 +624,7 @@ export function MapCard({
             zoom={13} 
             scrollWheelZoom={true} 
             zoomControl={false}
+            preferCanvas={true}
             style={{ height: '100%', width: '100%' }}
          >
             <ZoomControl position="bottomleft" />
@@ -615,7 +632,8 @@ export function MapCard({
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 updateWhenIdle={true}
-                keepBuffer={2}
+                updateWhenZooming={false}
+                keepBuffer={1}
             />
             
             <ScaleControl position="bottomleft" imperial={false} />
@@ -657,7 +675,7 @@ export function MapCard({
                                 )}
                             </div>
                         </Popup>
-                        {showLabels && (
+                        {shouldRenderBranchLabels && (
                         <Tooltip 
                             direction="top" 
                             offset={[0, -25]} 
@@ -735,7 +753,7 @@ export function MapCard({
 
                     {/* Draw Markers */}
                     {group.points.map((point, index) => {
-                        if (!point.lat || !point.lng) return null;
+                        if (!isFiniteCoordinate(point.lat, point.lng)) return null;
                         // Skip rendering start points (branch locations) as customer markers if they are marked as such
                         if (point.status === 'branch_start' as any) return null;
 
@@ -791,6 +809,7 @@ export function MapCard({
                                         </div>
                                     </div>
                                 </Popup>
+                                {shouldRenderRouteLabels && (
                                 <Tooltip 
                                     direction="bottom" 
                                     offset={[0, 10]} 
@@ -799,6 +818,7 @@ export function MapCard({
                                 >
                                     <span className="font-bold text-[11px] text-slate-800 uppercase tracking-tight">{point.name}</span>
                                 </Tooltip>
+                                )}
                             </Marker>
                         );
                     })}
