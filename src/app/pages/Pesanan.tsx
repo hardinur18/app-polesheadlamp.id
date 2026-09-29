@@ -2458,7 +2458,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1.5 rounded-md text-left uppercase tracking-wider transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-slate-950"
+                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md text-left uppercase tracking-wider transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-slate-950"
                       onClick={() => requestSort('price')}
                       title="Klik untuk urutkan harga"
                       aria-label="Urutkan layanan dan harga"

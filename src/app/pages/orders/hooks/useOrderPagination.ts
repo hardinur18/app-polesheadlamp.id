@@ -40,10 +40,10 @@ export function useOrderPagination({
       }
 
       if (key === 'price') {
-        return prev.direction === 'desc' ? { key, direction: 'asc' } : null;
+        return { key, direction: prev.direction === 'desc' ? 'asc' : 'desc' };
       }
 
-      return prev.direction === 'asc' ? { key, direction: 'desc' } : null;
+      return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
     });
   }, []);
 
@@ -55,7 +55,8 @@ export function useOrderPagination({
         if (sortConfig.key === 'price') {
           const priceA = normalizePrice(a.price);
           const priceB = normalizePrice(b.price);
-          return sortConfig.direction === 'asc' ? (priceA - priceB) : (priceB - priceA);
+          const priceDelta = sortConfig.direction === 'asc' ? (priceA - priceB) : (priceB - priceA);
+          return priceDelta || a.id.localeCompare(b.id);
         }
         return 0;
       });
