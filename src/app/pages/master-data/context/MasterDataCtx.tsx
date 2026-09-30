@@ -471,7 +471,7 @@ interface MasterDataContextType {
   isOperationalDataLoading: boolean;
   isOrdersLoading: boolean;
   isLeadsLoading: boolean;
-  ensureOrdersForDateRange: (range: { from: string; to: string; mode?: 'service' | 'lead' }) => Promise<void>;
+  ensureOrdersForDateRange: (range: { from: string; to: string; mode?: 'service' | 'lead'; technicianId?: string }) => Promise<void>;
   ensureLeadsForDateRange: (range: { from: string; to: string }) => Promise<void>;
   ensureProspectBookingsForDateRange: (range: { from: string; to: string }) => Promise<void>;
   ensureTechnicianSchedulesForDateRange: (range: { from: string; to: string }) => Promise<void>;
@@ -1097,28 +1097,35 @@ export const MasterDataProvider: React.FC<{
     from,
     to,
     mode = 'service',
+    technicianId,
   }: {
     from: string;
     to: string;
     mode?: 'service' | 'lead';
+    technicianId?: string;
   }) => {
     if (!from || !to) return;
 
     const column = mode === 'lead' ? 'lead_date' : 'service_date';
-    const rangeKey = `${mode}:${from}:${to}`;
+    const rangeKey = `${mode}:${from}:${to}:${technicianId || 'all'}`;
     if (fetchedOrderDateRangesRef.current.has(rangeKey)) return;
     const inFlight = fetchingOrderDateRangesRef.current.get(rangeKey);
     if (inFlight) return inFlight;
 
+    const appDataOptions: AppDataPageOptions = {
+      orderBy: column,
+      ascending: false,
+      gte: { [column]: from },
+      lte: { [column]: to },
+    };
+    if (technicianId) {
+      appDataOptions.eq = { technician_id: technicianId };
+    }
+
     const request = (async () => {
       const nextRows = await fetchRangeRows(
         'orders',
-        {
-          orderBy: column,
-          ascending: false,
-          gte: { [column]: from },
-          lte: { [column]: to },
-        },
+        appDataOptions,
         (rows) => rows.map(mapOrderFromDB),
         500,
         false,
@@ -2911,13 +2918,14 @@ export const MasterDataProvider: React.FC<{
       normalizedActivePath.startsWith('/ads')
     );
   const isTechnicianMobileOperationalPath = normalizedActivePath.startsWith('/technician/mobile');
+  const isTechnicianDashboardOperationalPath = normalizedActivePath.startsWith('/dashboard');
   const isTechnicianOrdersOperationalPath = normalizedActivePath.startsWith('/orders');
   const shouldUseTechnicianLightBootstrap =
     isTechnicianRole(currentRole) &&
-    (isTechnicianMobileOperationalPath || normalizedActivePath.startsWith('/dashboard'));
+    (isTechnicianMobileOperationalPath || isTechnicianDashboardOperationalPath);
   const shouldSkipGlobalOperationalBootstrapForTechnician =
     isTechnicianRole(currentRole) &&
-    (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath || normalizedActivePath.startsWith('/dashboard'));
+    (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath || isTechnicianDashboardOperationalPath);
   const shouldUseTechnicianScopedOrdersBootstrap =
     isTechnicianRole(currentRole) &&
     isTechnicianOrdersOperationalPath &&
@@ -3246,7 +3254,8 @@ export const MasterDataProvider: React.FC<{
     let recoveryRefreshTimer: number | undefined;
     let recoveryResubscribeTimer: number | undefined;
     const reducedRealtimeForTechnician =
-      isTechnicianRole(currentRole) && (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath);
+      isTechnicianRole(currentRole) &&
+      (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath || isTechnicianDashboardOperationalPath);
 
     const scheduleRealtimeRecovery = (status: string) => {
       if (isRealtimeDisposed) return;
@@ -3398,7 +3407,7 @@ export const MasterDataProvider: React.FC<{
           }
         }
       );
-    } else if (isTechnicianOrdersOperationalPath && currentUser?.id) {
+    } else if ((isTechnicianOrdersOperationalPath || isTechnicianDashboardOperationalPath) && currentUser?.id) {
       channel = channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders', filter: `technician_id=eq.${currentUser.id}` },
@@ -3461,7 +3470,14 @@ export const MasterDataProvider: React.FC<{
       }
       supabase.removeChannel(channel);
     };
-  }, [currentRole, isTechnicianMobileOperationalPath, isTechnicianOrdersOperationalPath, realtimeRetryKey, currentUser?.id]);
+  }, [
+    currentRole,
+    isTechnicianMobileOperationalPath,
+    isTechnicianOrdersOperationalPath,
+    isTechnicianDashboardOperationalPath,
+    realtimeRetryKey,
+    currentUser?.id,
+  ]);
 
   // Use useMemo to prevent unnecessary re-renders
   const value = React.useMemo(() => ({

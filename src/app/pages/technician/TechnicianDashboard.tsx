@@ -48,7 +48,7 @@ import {
 } from '@/app/components/ui/operational-page';
 
 export function TechnicianDashboard({ userId }: { userId?: string }) {
-  const { currentUser, orders, users, isOperationalDataLoading } = useMasterData();
+  const { currentUser, orders, users, isOperationalDataLoading, ensureOrdersForDateRange } = useMasterData();
   const { hasPermission } = usePermissions();
 
   // Internal selection state for Owner viewing this dashboard.
@@ -85,6 +85,7 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
     () => new Set(activeTechnicians.map((technician) => technician.id)),
     [activeTechnicians],
   );
+  const [isScopedOrdersLoading, setIsScopedOrdersLoading] = useState(false);
   const isAppDatabaseEmpty = orders.length === 0;
 
   // Pagination State
@@ -95,6 +96,29 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
   React.useEffect(() => {
     setCurrentPage(1);
   }, [dateRange]);
+
+  React.useEffect(() => {
+    if (!rangeParams) return;
+    if (!isOwner && !targetId) return;
+
+    let isCancelled = false;
+    setIsScopedOrdersLoading(true);
+
+    void ensureOrdersForDateRange({
+      from: rangeParams.from,
+      to: rangeParams.to,
+      mode: 'service',
+      technicianId: targetId,
+    }).finally(() => {
+      if (!isCancelled) {
+        setIsScopedOrdersLoading(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [ensureOrdersForDateRange, isOwner, rangeParams, targetId]);
 
   // Filter Orders for Current Technician & Date Range
   const myOrders = useMemo(() => {
@@ -130,7 +154,7 @@ export function TechnicianDashboard({ userId }: { userId?: string }) {
     };
   }, [activeTechnicianIds, activeTechnicians.length, orders, rangeParams]);
 
-  const isDashboardLoading = isOperationalDataLoading;
+  const isDashboardLoading = isOperationalDataLoading || isScopedOrdersLoading;
   const hasDashboardData = myOrders.length > 0;
   const dashboardDataHint = isDashboardLoading
     ? 'Data operasional sedang dimuat dari database.'
