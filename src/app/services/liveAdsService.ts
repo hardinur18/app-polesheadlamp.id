@@ -12,6 +12,7 @@ const META_LIVE_BREAKDOWN_CACHE_INDEX_KEY = 'polesheadlamp_meta_live_breakdown_c
 const META_LIVE_BREAKDOWN_CACHE_PREFIX = 'polesheadlamp_meta_live_breakdown_cache_v1';
 const META_LIVE_REGISTRY_CACHE_KEY = 'polesheadlamp_meta_live_registry_cache_v1';
 const LOCAL_META_DIRECT_FALLBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const META_SNAPSHOT_SYNC_TIMEOUT_MS = 60_000;
 
 export const functionsBaseUrl = buildMakeServerUrl();
 
@@ -832,6 +833,7 @@ export async function syncMetaSnapshotDataset({
   accountId,
   force = false,
   minFreshMinutes = 10,
+  mappedOnly = false,
 }: {
   from: string;
   to: string;
@@ -839,6 +841,7 @@ export async function syncMetaSnapshotDataset({
   accountId?: string;
   force?: boolean;
   minFreshMinutes?: number;
+  mappedOnly?: boolean;
 }) {
   const fallbackToStoredSnapshots = async (syncError: string) => {
     const fallbackPayload = await fetchMetaSnapshotDataset({
@@ -867,18 +870,33 @@ export async function syncMetaSnapshotDataset({
     } as MetaSnapshotDatasetResponse;
   };
 
-  const response = await fetchWithTimeout(`${functionsBaseUrl}/meta/sync-snapshots`, {
-    method: 'POST',
-    headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-    body: JSON.stringify({
-      from,
-      to,
-      businessId: businessId && businessId !== 'all' ? businessId : undefined,
-      accountId: accountId && accountId !== 'all' ? accountId : undefined,
-      force,
-      minFreshMinutes,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${functionsBaseUrl}/meta/sync-snapshots`,
+      {
+        method: 'POST',
+        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+        body: JSON.stringify({
+          from,
+          to,
+          businessId: businessId && businessId !== 'all' ? businessId : undefined,
+          accountId: accountId && accountId !== 'all' ? accountId : undefined,
+          force,
+          minFreshMinutes,
+          mappedOnly,
+        }),
+      },
+      META_SNAPSHOT_SYNC_TIMEOUT_MS,
+      'Sinkronisasi Meta terlalu lama. Menampilkan snapshot terakhir yang tersimpan.',
+    );
+  } catch (error) {
+    const syncError =
+      error instanceof Error
+        ? error.message
+        : 'Sinkronisasi snapshot Meta gagal.';
+    return fallbackToStoredSnapshots(syncError);
+  }
 
   const payload = await response.json().catch(() => ({} as ServiceErrorPayload));
   if (!response.ok) {

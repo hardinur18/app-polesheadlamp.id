@@ -1636,7 +1636,9 @@ async function loadMetaIntegrationConfigMap() {
   for (const config of configs) {
     const accountId = config?.liveMetaAccountId?.trim();
     if (!accountId || !config?.adAccountId) continue;
-    mapped.set(accountId, config);
+    for (const variant of buildMetaExternalAccountIdVariants(accountId)) {
+      mapped.set(variant, config);
+    }
   }
 
   return mapped;
@@ -1661,6 +1663,7 @@ async function syncMetaSnapshotRange(params: {
   requestedAccountId?: string;
   force?: boolean;
   minFreshMinutes?: number;
+  mappedOnly?: boolean;
 }) {
   const latestSyncedAt = await getLatestAdsSnapshotSyncAt({
     platformKey: "meta",
@@ -1668,12 +1671,38 @@ async function syncMetaSnapshotRange(params: {
     to: params.to,
   });
 
+  const [internalAccounts, integrationConfigByAccountId] = await Promise.all([
+    loadInternalAdAccounts(),
+    loadMetaIntegrationConfigMap(),
+  ]);
+  const internalAccountById = new Map(
+    internalAccounts.map((account) => [account.id, account]),
+  );
+  const configuredMetaAccountIdSet = new Set(
+    Array.from(integrationConfigByAccountId.values())
+      .filter((config) => config.enabled && config.liveMetaAccountId)
+      .flatMap((config) => buildMetaExternalAccountIdVariants(config.liveMetaAccountId)),
+  );
+  const shouldLimitToMappedAccounts = Boolean(
+    params.mappedOnly &&
+      !params.requestedAccountId &&
+      configuredMetaAccountIdSet.size > 0,
+  );
+  const filterMappedRows = (rows: AdsDailySnapshotRecord[]) =>
+    shouldLimitToMappedAccounts
+      ? rows.filter((row) =>
+          buildMetaExternalAccountIdVariants(row.externalAccountId).some((accountId) =>
+            configuredMetaAccountIdSet.has(accountId),
+          ),
+        )
+      : rows;
+
   if (!params.force && isSyncFresh(latestSyncedAt, params.minFreshMinutes || 0)) {
-    const rows = await fetchAdsDailySnapshots({
+    const rows = filterMappedRows(await fetchAdsDailySnapshots({
       platformKey: "meta",
       from: params.from,
       to: params.to,
-    });
+    }));
 
     return {
       rows,
@@ -1689,19 +1718,23 @@ async function syncMetaSnapshotRange(params: {
     if (params.requestedBusinessId && account.business?.id !== params.requestedBusinessId) {
       return false;
     }
-    if (params.requestedAccountId && account.id !== params.requestedAccountId) {
+    const accountIdVariants = buildMetaExternalAccountIdVariants(account.id)
+      .concat(buildMetaExternalAccountIdVariants(account.account_id));
+    if (
+      params.requestedAccountId &&
+      !buildMetaExternalAccountIdVariants(params.requestedAccountId).some((accountId) =>
+        accountIdVariants.includes(accountId),
+      )
+    ) {
       return false;
+    }
+    if (shouldLimitToMappedAccounts) {
+      if (!accountIdVariants.some((accountId) => configuredMetaAccountIdSet.has(accountId))) {
+        return false;
+      }
     }
     return true;
   });
-
-  const [internalAccounts, integrationConfigByAccountId] = await Promise.all([
-    loadInternalAdAccounts(),
-    loadMetaIntegrationConfigMap(),
-  ]);
-  const internalAccountById = new Map(
-    internalAccounts.map((account) => [account.id, account]),
-  );
 
   let upsertedCount = 0;
   for (const chunk of listDateChunks(params.from, params.to, 31)) {
@@ -1721,7 +1754,9 @@ async function syncMetaSnapshotRange(params: {
           const snapshotDate = metrics?.date_start || metrics?.date_stop;
           if (!snapshotDate) return null;
 
-          const integrationConfig = integrationConfigByAccountId.get(account.id);
+          const integrationConfig =
+            integrationConfigByAccountId.get(account.id) ||
+            integrationConfigByAccountId.get(account.account_id || "");
           const internalAccount = integrationConfig?.adAccountId
             ? internalAccountById.get(integrationConfig.adAccountId)
             : null;
@@ -1772,11 +1807,11 @@ async function syncMetaSnapshotRange(params: {
     upsertedCount += chunkResult.upsertedCount;
   }
 
-  const rows = await fetchAdsDailySnapshots({
+  const rows = filterMappedRows(await fetchAdsDailySnapshots({
     platformKey: "meta",
     from: params.from,
     to: params.to,
-  });
+  }));
 
   return {
     rows,
@@ -2058,6 +2093,10 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
       typeof body?.force !== "undefined" ? body.force : c.req.query("force"),
       false,
     );
+    const mappedOnly = parseBooleanFlag(
+      typeof body?.mappedOnly !== "undefined" ? body.mappedOnly : c.req.query("mappedOnly"),
+      false,
+    );
     const minFreshMinutes = clampNumber(
       typeof body?.minFreshMinutes !== "undefined"
         ? body.minFreshMinutes
@@ -2082,6 +2121,7 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
       requestedAccountId: requestedAccountId || undefined,
       force,
       minFreshMinutes,
+      mappedOnly,
     });
 
     let rows = result.rows;
@@ -2102,6 +2142,7 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
         servedFrom: result.servedFrom,
         skippedSync: result.skippedSync,
         lastSyncedAt: result.latestSyncedAt,
+        mappedOnly,
       },
     });
   } catch (err: any) {

@@ -1357,6 +1357,7 @@ export function IklanHarian() {
             to: selectedRecapRange.to,
             force: true,
             minFreshMinutes: 0,
+            mappedOnly: true,
           }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.meta)),
         },
       );
