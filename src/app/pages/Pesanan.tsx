@@ -88,6 +88,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import {
   buildActiveScheduleConflictMap,
   getScheduleConflictItemKey,
+  getScheduleSlotConflictKey,
   getTechnicianDaySchedule,
 } from '@/app/services/orderScheduleValidation';
 import {
@@ -328,11 +329,35 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     ),
     [leads],
   );
+  const activeOrderScheduleSlots = useMemo(() => {
+    const slots = new Set<string>();
+
+    orders.forEach((order) => {
+      const slotKey = getScheduleSlotConflictKey({
+        technicianId: order.technicianId,
+        serviceDate: order.serviceDate,
+        serviceTime: order.serviceTime,
+      });
+      if (slotKey) slots.add(slotKey);
+    });
+
+    return slots;
+  }, [orders]);
   const scheduleBlockingProspectBookings = useMemo(
-    () => prospectBookings.filter((booking) =>
-      !booking.leadId || !nonScheduleLeadIds.has(booking.leadId)
-    ),
-    [nonScheduleLeadIds, prospectBookings],
+    () => prospectBookings.filter((booking) => {
+      if (booking.leadId && nonScheduleLeadIds.has(booking.leadId)) {
+        return false;
+      }
+
+      const slotKey = getScheduleSlotConflictKey({
+        technicianId: booking.technicianId,
+        serviceDate: booking.scheduleDate,
+        serviceTime: booking.scheduleTime,
+      });
+
+      return Boolean(slotKey && activeOrderScheduleSlots.has(slotKey));
+    }),
+    [activeOrderScheduleSlots, nonScheduleLeadIds, prospectBookings],
   );
   const scheduleConflictByItemKey = useMemo(
     () => buildActiveScheduleConflictMap(orders, scheduleBlockingProspectBookings),
@@ -341,14 +366,14 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const conflictOrderIds = useMemo(() => {
     const ids = new Set<string>();
 
-    orders.forEach((order) => {
-      if (scheduleConflictByItemKey.has(getScheduleConflictItemKey('order', order.id))) {
-        ids.add(order.id);
+    scheduleConflictByItemKey.forEach((_, itemKey) => {
+      if (itemKey.startsWith('order:')) {
+        ids.add(itemKey.slice('order:'.length));
       }
     });
 
     return ids;
-  }, [orders, scheduleConflictByItemKey]);
+  }, [scheduleConflictByItemKey]);
 
   // --- Hooks ---
   const { userMap, branchMap, areaMap, platformMap, subChannelMap, paymentMap } =
@@ -1544,7 +1569,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   };
 
   // --- Map Data ---
+  const isMapView = viewMode === 'map';
   const routeGroups = useMemo(() => {
+    if (!isMapView) return [];
+
     const getDistance = (lat1?: number, lon1?: number, lat2?: number, lon2?: number) => {
       if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
       const R = 6371;
@@ -1640,9 +1668,11 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
       return { id: techId, technicianName, color, points };
     }).filter(group => group.points.length > 0);
-  }, [filteredOrders, users]);
+  }, [filteredOrders, isMapView, users]);
 
   const branchPoints = useMemo(() => {
+    if (!isMapView) return [];
+
     const parseBranchCoords = (url?: string) => {
       if (!url) return null;
       try {
@@ -1677,7 +1707,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
 
       return null;
     }).filter(Boolean) as { id: string; name: string; code?: string; lat: number; lng: number; address?: string; radius: number }[];
-  }, [branches]);
+  }, [branches, isMapView]);
 
 
   // Access Control Check (Render Level)
@@ -2458,13 +2488,21 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">
                     <button
                       type="button"
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-md text-left uppercase tracking-wider transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:hover:text-slate-200 dark:focus-visible:ring-offset-slate-950"
+                      className="group inline-flex w-full cursor-pointer items-center gap-1.5 rounded-md text-left uppercase tracking-wider text-slate-900 transition-colors hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:text-slate-100 dark:hover:text-orange-400 dark:focus-visible:ring-offset-slate-950"
                       onClick={() => requestSort('price')}
-                      title="Klik untuk urutkan harga"
-                      aria-label="Urutkan layanan dan harga"
+                      title={
+                        sortConfig?.key === 'price'
+                          ? `Harga ${sortConfig.direction === 'asc' ? 'terendah ke tertinggi' : 'tertinggi ke terendah'}`
+                          : 'Klik untuk urutkan harga'
+                      }
+                      aria-label={
+                        sortConfig?.key === 'price'
+                          ? `Urutan harga ${sortConfig.direction === 'asc' ? 'terendah ke tertinggi' : 'tertinggi ke terendah'}`
+                          : 'Urutkan layanan dan harga'
+                      }
                     >
                       <span>Layanan & Harga</span>
-                      <span className="inline-flex items-center justify-center text-slate-400" aria-hidden="true">
+                      <span className="inline-flex items-center justify-center text-slate-400 transition-colors group-hover:text-orange-500" aria-hidden="true">
                         {sortConfig?.key === 'price' ? (
                           sortConfig.direction === 'asc'
                             ? <ArrowUp className="w-3.5 h-3.5 text-orange-500" />
@@ -3491,7 +3529,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
               )}
           </div>
           </>
-          ) : (
+          ) : viewMode === 'map' ? (
              <div className="flex flex-col h-full min-h-[600px] bg-slate-50 dark:bg-slate-900">
                 {/* Map View Header */}
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
@@ -3594,7 +3632,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                    </div>
                 </div>
              </div>
-          )}
+          ) : null}
         </OperationalTableCard>
 
         {/* Mobile WA Template Sheet */}

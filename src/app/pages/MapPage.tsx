@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { MapCard } from '../components/ui/MapCard';
 import { useMasterData } from '@/app/pages/master-data/context';
+import { isOwnerLikeRole } from '@/app/data/roleHelpers';
+import { getTodayDateKey } from '@/app/pages/master-data/dateKeys';
 import { MapPin, UserCog, User, Loader2, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { supabase } from '@/lib/supabaseClient';
@@ -34,10 +36,12 @@ const CS_COLORS = [
 type ViewMode = 'technician' | 'cs';
 
 const MAP_ORDER_LIMIT = 250;
+const NON_OWNER_MAP_HISTORY_MONTHS = 5;
 const MAP_ORDER_COLUMNS = [
   'id',
   'address',
   'status',
+  'service_date',
   'lat',
   'lng',
   'branch_id',
@@ -54,7 +58,7 @@ const getBoundsKey = (bounds: L.LatLngBounds) => [
 ].map((value) => value.toFixed(3)).join(':');
 
 export const MapPage = () => {
-  const { branches, users } = useMasterData(); // Don't pull 'orders' from global context to save memory
+  const { branches, users, currentRole } = useMasterData(); // Don't pull 'orders' from global context to save memory
   const [filterBranch, setFilterBranch] = useState('all');
   const [viewMode, setViewMode] = useState<ViewMode>('technician');
   const [isLegendOpen, setIsLegendOpen] = useState(true);
@@ -68,6 +72,13 @@ export const MapPage = () => {
   const requestSerialRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
   const lastBoundsKeyRef = useRef<string | null>(null);
+  const mapHistoryStartDate = useMemo(() => {
+    if (isOwnerLikeRole(currentRole)) return '';
+
+    const start = new Date();
+    start.setMonth(start.getMonth() - NON_OWNER_MAP_HISTORY_MONTHS);
+    return getTodayDateKey(start);
+  }, [currentRole]);
 
   // Fetch orders based on map bounds
   const fetchOrdersInBounds = useCallback(async (bounds: L.LatLngBounds) => {
@@ -88,7 +99,7 @@ export const MapPage = () => {
 
     try {
         // Query only map columns. Full order rows make the map slower and are not needed here.
-        const query = supabase
+        let query = supabase
             .from('orders')
             .select(MAP_ORDER_COLUMNS)
             .neq('status', 'cancelled')
@@ -97,7 +108,13 @@ export const MapPage = () => {
             .gte('lat', minLat)
             .lte('lat', maxLat)
             .gte('lng', minLng)
-            .lte('lng', maxLng)
+            .lte('lng', maxLng);
+
+        if (mapHistoryStartDate) {
+            query = query.gte('service_date', mapHistoryStartDate);
+        }
+
+        query = query
             .order('service_date', { ascending: false })
             .limit(MAP_ORDER_LIMIT);
         const executableQuery =
@@ -137,7 +154,7 @@ export const MapPage = () => {
             setLoadingMap(false);
         }
     }
-  }, []);
+  }, [mapHistoryStartDate]);
 
   const handleBoundsChange = useCallback((bounds: L.LatLngBounds, meta?: { userInitiated: boolean }) => {
       const boundsKey = getBoundsKey(bounds);
