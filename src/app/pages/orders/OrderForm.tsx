@@ -113,6 +113,70 @@ const ORDER_SOURCE_PLATFORM_NAME: Partial<Record<OrderSourceMode, string>> = {
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
 
+const ORDER_FORM_PATCH_FIELDS: (keyof Order)[] = [
+  'leadDate',
+  'customerName',
+  'customerPhone',
+  'address',
+  'serviceDate',
+  'serviceTime',
+  'serviceId',
+  'serviceCategory',
+  'mapsUrl',
+  'vehicleId',
+  'units',
+  'price',
+  'platformId',
+  'subChannelId',
+  'csId',
+  'advertiserId',
+  'notes',
+  'technicianId',
+  'branchId',
+  'areaId',
+  'status',
+  'paymentType',
+  'paymentMethodId',
+  'income',
+  'paymentStatus',
+  'paymentValidation',
+  'affiliateName',
+  'lat',
+  'lng',
+  'leadId',
+  'cancelReason',
+  'cancelReasonNote',
+  'isFollowedUp',
+  'followedUpBy',
+  'followedUpAt',
+  'followUpNote',
+];
+
+const normalizeOrderPatchCompareValue = (value: unknown) => value === undefined ? null : value;
+
+const areOrderPatchValuesEqual = (left: unknown, right: unknown) => {
+  const normalizedLeft = normalizeOrderPatchCompareValue(left);
+  const normalizedRight = normalizeOrderPatchCompareValue(right);
+
+  if (typeof normalizedLeft === 'object' || typeof normalizedRight === 'object') {
+    return JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
+  }
+
+  return normalizedLeft === normalizedRight;
+};
+
+const buildOrderFormPatch = (previous: Order, next: Partial<Order>) => {
+  const patch: Partial<Order> = {};
+
+  ORDER_FORM_PATCH_FIELDS.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(next, field) && !areOrderPatchValuesEqual(previous[field], next[field])) {
+      patch[field] = next[field] as never;
+    }
+  });
+
+  return patch;
+};
+
 interface OrderFormProps {
   isOpen: boolean;
   onClose: () => void;
@@ -123,7 +187,7 @@ interface OrderFormProps {
 
 export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialData, prefillData, onSuccess }) => {
   const { 
-    addOrder, updateOrder, orders, prospectBookings, leads,
+    addOrder, updateOrderPatch, orders, prospectBookings, leads,
     services, vehicles, platforms, subChannels, users, areas, payments, activeBranches: branches,
     currentUser, currentRole, technicianSchedules, affiliates,
     cancelReasons,
@@ -144,6 +208,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const canEditPaymentType = hasPermission('order.payment.edit_type') || canEditOrderInfo;
   const canEditPaymentStatus = hasPermission('order.payment.edit_status');
   const canValidatePayment = canEditPaymentStatus || hasPermission('finance.manage') || isOwnerLikeUser;
+  const canEditOrderPrice =
+    canEditOrderInfo ||
+    canEditPaymentType ||
+    canEditPaymentStatus ||
+    hasPermission('finance.manage');
 
   const [formData, setFormData] = useState<Partial<Order>>({});
   const [selectedAdAccountId, setSelectedAdAccountId] = useState('');
@@ -1471,7 +1540,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     try {
       let savedOrder: Order | undefined;
       if (initialData) {
-        savedOrder = await updateOrder(sanitizedData as Order);
+        const patch = buildOrderFormPatch(initialData, sanitizedData);
+        savedOrder = Object.keys(patch).length > 0
+          ? await updateOrderPatch(initialData.id, patch, { silent: true })
+          : initialData;
         toast.success('Pesanan berhasil diperbarui');
         if (currentUser) {
           logActivity(
@@ -1514,6 +1586,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       'areaId', 'affiliateName'
     ];
     if (commonFields.includes(field)) {
+      if (field === 'price') {
+        return canEditOrderPrice;
+      }
       return canEditOrderInfo;
     }
     if (field === 'status') {

@@ -293,6 +293,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     vehicles = [],
     deleteOrder,
     updateOrder,
+    updateOrderPatch,
     addOrder,
     branches: allBranches = [],
     activeBranches: branches = [],
@@ -813,6 +814,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   const [expandedPhotoTabs, setExpandedPhotoTabs] = useState<Partial<Record<OrderDocumentationKey, boolean>>>({});
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [savingOrderActionKey, setSavingOrderActionKey] = useState<string | null>(null);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [waSheetOpen, setWaSheetOpen] = useState(false);
   const [waTargetOrder, setWaTargetOrder] = useState<Order | null>(null);
@@ -1108,16 +1110,34 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     setTempPrice(order.price.toLocaleString('id-ID'));
   };
 
+  const saveOrderPatch = async (
+    order: Order,
+    patch: Partial<Order>,
+    successMessage: string,
+    actionKey: string,
+  ) => {
+    const key = `${order.id}:${actionKey}`;
+    setSavingOrderActionKey(key);
+    try {
+      await updateOrderPatch(order.id, patch, { silent: true });
+      toast.success(successMessage);
+    } catch (error: any) {
+      console.error('Failed to update order:', error);
+      toast.error(error?.message || 'Gagal memperbarui pesanan');
+      throw error;
+    } finally {
+      setSavingOrderActionKey((currentKey) => currentKey === key ? null : currentKey);
+    }
+  };
+
   const handleSaveInlinePrice = async (order: Order) => {
     const rawPrice = parseInlinePrice(tempPrice);
 
     try {
-      await updateOrder({ ...order, price: rawPrice });
+      await saveOrderPatch(order, { price: rawPrice }, 'Harga berhasil diperbarui', 'price');
       setEditingPriceId(null);
-      toast.success('Harga berhasil diperbarui');
     } catch (error) {
       console.error('Failed to update order price:', error);
-      toast.error('Harga gagal diperbarui');
     }
   };
 
@@ -2703,6 +2723,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                       <Input 
                                          className="orderPriceInput h-8 w-28 text-sm font-semibold pl-7 pr-2" 
                                          value={tempPrice}
+                                         disabled={savingOrderActionKey === `${order.id}:price`}
                                          onChange={(e) => {
                                              const val = e.target.value.replace(/\D/g, '');
                                              setTempPrice(val ? Number(val).toLocaleString('id-ID') : '');
@@ -2722,6 +2743,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                     className="orderPriceIconAction isSave"
                                     title="Simpan harga"
                                     aria-label="Simpan harga"
+                                    disabled={savingOrderActionKey === `${order.id}:price`}
                                     onMouseDown={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
@@ -2732,13 +2754,16 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                       void handleSaveInlinePrice(order);
                                     }}
                                   >
-                                     <CheckCircle2 className="w-3.5 h-3.5" />
+                                     {savingOrderActionKey === `${order.id}:price`
+                                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                       : <CheckCircle2 className="w-3.5 h-3.5" />}
                                   </button>
                                   <button
                                     type="button"
                                     className="orderPriceIconAction isCancel"
                                     title="Batal"
                                     aria-label="Batal ubah harga"
+                                    disabled={savingOrderActionKey === `${order.id}:price`}
                                     onMouseDown={(event) => {
                                       event.preventDefault();
                                       event.stopPropagation();
@@ -2849,9 +2874,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                              <DropdownMenuLabel>Pilih Teknisi</DropdownMenuLabel>
                                              <DropdownMenuSeparator />
                                              <DropdownMenuItem 
-                                                onClick={() => {
-                                                   // @ts-ignore
-                                                   updateOrder({ ...order, technicianId: null })
+                                                disabled={savingOrderActionKey === `${order.id}:technician`}
+                                                onClick={async () => {
+                                                   try {
+                                                     await saveOrderPatch(
+                                                       order,
+                                                       { technicianId: undefined },
+                                                       'Teknisi dilepas',
+                                                       'technician',
+                                                     );
+                                                   } catch {
+                                                     // Error toast is handled by saveOrderPatch.
+                                                   }
                                                 }}
                                                 className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20"
                                              >
@@ -2863,28 +2897,28 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                                 return (
                                                 <DropdownMenuItem 
                                                    key={tech.id}
-                                                   disabled={isTechnicianOff}
+                                                   disabled={isTechnicianOff || savingOrderActionKey === `${order.id}:technician`}
                                                    onClick={async () => {
                                                       if (isTechnicianOff) {
                                                         return;
                                                       }
                                                       try {
-                                                        // @ts-ignore
                                                         // Auto-update Branch if Technician has one
-                                                        const updates: any = { technicianId: tech.id };
+                                                        const updates: Partial<Order> = { technicianId: tech.id };
                                                         if (tech.branchId) {
                                                             updates.branchId = tech.branchId;
                                                         }
-                                                        await updateOrder({ ...order, ...updates });
+                                                        await saveOrderPatch(
+                                                          order,
+                                                          updates,
+                                                          tech.branchId
+                                                            ? `Teknisi diganti ke ${tech.name} (Cabang disesuaikan)`
+                                                            : `Teknisi diganti ke ${tech.name}`,
+                                                          'technician',
+                                                        );
                                                         
-                                                        if (tech.branchId) {
-                                                            toast.success(`Teknisi diganti ke ${tech.name} (Cabang disesuaikan)`);
-                                                        } else {
-                                                            toast.success(`Teknisi diganti ke ${tech.name}`);
-                                                        }
                                                       } catch (error: any) {
                                                         console.error(error);
-                                                        toast.error(error?.message || `Gagal mengganti teknisi ke ${tech.name}`);
                                                       }
                                                    }}
                                                    className={`cursor-pointer ${order.technicianId === tech.id ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : ''} ${isTechnicianOff ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -2988,11 +3022,20 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                 {['Transfer', 'Cash'].map((type) => (
                                   <DropdownMenuItem 
                                     key={type}
-                                    onClick={() => {
-                                       const updates: any = { paymentType: type };
+                                    disabled={savingOrderActionKey === `${order.id}:paymentType`}
+                                    onClick={async () => {
+                                       const updates: Partial<Order> = { paymentType: type as Order['paymentType'] };
                                        if (type === 'Cash') updates.paymentMethodId = undefined;
-                                       updateOrder({ ...order, ...updates });
-                                       toast.success(`Jenis pembayaran diperbarui: ${type}`);
+                                       try {
+                                         await saveOrderPatch(
+                                           order,
+                                           updates,
+                                           `Jenis pembayaran diperbarui: ${type}`,
+                                           'paymentType',
+                                         );
+                                       } catch {
+                                         // Error toast is handled by saveOrderPatch.
+                                       }
                                     }}
                                     className="text-sm cursor-pointer py-2 px-3 rounded-sm focus:bg-slate-50 dark:focus:bg-slate-700"
                                   >
@@ -3027,9 +3070,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                 {['Unpaid', 'Down Payment', 'Paid'].map((status) => (
                                   <DropdownMenuItem 
                                     key={status}
-                                    onClick={() => {
-                                       updateOrder({ ...order, paymentStatus: status as any });
-                                       toast.success(`Status pembayaran diperbarui: ${status}`);
+                                    disabled={savingOrderActionKey === `${order.id}:paymentStatus`}
+                                    onClick={async () => {
+                                       try {
+                                         await saveOrderPatch(
+                                           order,
+                                           { paymentStatus: status as Order['paymentStatus'] },
+                                           `Status pembayaran diperbarui: ${status}`,
+                                           'paymentStatus',
+                                         );
+                                       } catch {
+                                         // Error toast is handled by saveOrderPatch.
+                                       }
                                     }}
                                     className="text-sm cursor-pointer py-2 px-3 rounded-sm focus:bg-slate-50 dark:focus:bg-slate-700"
                                   >

@@ -95,6 +95,7 @@ import {
   mapProspectBookingFromDB,
   mapProspectBookingToDB,
   mapOrderFromDB,
+  mapOrderPatchToDB,
   mapOrderToDB,
 } from './internal/mappers/transactionMappers';
 import {
@@ -388,6 +389,7 @@ interface MasterDataContextType {
 
   addOrder: (order: Order) => Promise<Order | undefined>;
   updateOrder: (order: Order) => Promise<Order | undefined>;
+  updateOrderPatch: (id: string, patch: Partial<Order>, options?: MutationOptions) => Promise<Order | undefined>;
   deleteOrder: (id: string) => Promise<void>;
 
   addWATemplate: (template: WATemplate) => void;
@@ -2889,6 +2891,23 @@ export const MasterDataProvider: React.FC<{
       });
   };
 
+  const orderPatchHasAnyField = (patch: Partial<Order>, fields: (keyof Order)[]) =>
+    fields.some((field) => Object.prototype.hasOwnProperty.call(patch, field));
+
+  const shouldSyncOrderCrmForPatch = (patch: Partial<Order>) =>
+    orderPatchHasAnyField(patch, ['customerName', 'customerPhone', 'address', 'mapsUrl', 'notes']);
+
+  const shouldSyncOrderLifecycleForPatch = (patch: Partial<Order>) =>
+    orderPatchHasAnyField(patch, [
+      'leadId',
+      'status',
+      'serviceDate',
+      'serviceTime',
+      'technicianId',
+      'branchId',
+      'areaId',
+    ]);
+
   const addOrder = async (item: Order) => {
     validateOrderScheduleBeforeSave(item);
     await validateOrderScheduleFreshBeforeSave(item);
@@ -2916,6 +2935,62 @@ export const MasterDataProvider: React.FC<{
       toast.error('Status pesanan tersimpan, tapi sinkronisasi prospek/booking gagal. Coba refresh lalu ulangi jika masih belum sesuai.');
     }
     return savedOrder;
+  };
+
+  const updateOrderPatch = async (id: string, patch: Partial<Order>, options?: MutationOptions) => {
+    const previousOrder = orders.find((order) => order.id === id);
+    if (!previousOrder) {
+      const error = new Error('Pesanan tidak ditemukan di data lokal. Refresh data lalu coba lagi.');
+      if (!options?.silent) {
+        toast.error(error.message);
+      }
+      throw error;
+    }
+
+    const payload = mapOrderPatchToDB(patch);
+    const payloadKeys = Object.keys(payload);
+    if (payloadKeys.length === 0) {
+      return previousOrder;
+    }
+
+    const nextOrder = { ...previousOrder, ...patch, id };
+
+    try {
+      validateOrderScheduleBeforeSave(nextOrder, previousOrder);
+      await validateOrderScheduleFreshBeforeSave(nextOrder, previousOrder);
+
+      const data = await updateAppDataRow('orders', id, payload);
+      const savedOrder = data ? mapOrderFromDB(data) : nextOrder;
+
+      setOrders((prev) =>
+        prev.map((order) => order.id === id ? { ...order, ...savedOrder } : order),
+      );
+
+      if (!options?.silent) {
+        toast.success('Data berhasil diperbarui');
+      }
+
+      if (shouldSyncOrderCrmForPatch(patch)) {
+        syncOrderCrmContactSnapshot(savedOrder, 'pesanan_update_otomatis');
+      }
+
+      if (shouldSyncOrderLifecycleForPatch(patch)) {
+        try {
+          await syncOrderProspectLifecycle(savedOrder);
+        } catch (error) {
+          console.error('Error syncing order prospect lifecycle:', error);
+          toast.error('Status pesanan tersimpan, tapi sinkronisasi prospek/booking gagal. Coba refresh lalu ulangi jika masih belum sesuai.');
+        }
+      }
+
+      return savedOrder;
+    } catch (e: any) {
+      console.error('Error patching order:', e);
+      if (!options?.silent) {
+        toast.error(`Gagal memperbarui data: ${e.message}`);
+      }
+      throw e;
+    }
   };
   const deleteOrder = (id: string) => deleteItem('orders', id, setOrders, { silent: true, throwOnError: true });
 
@@ -3608,7 +3683,7 @@ export const MasterDataProvider: React.FC<{
     addUser, createSystemUser, updateUser, updateSystemUser, deleteUser, deleteSystemUser, resetUserPassword,
     addLead, updateLead, deleteLead,
     addProspectBooking, updateProspectBooking, deleteProspectBooking,
-    addOrder, updateOrder, deleteOrder,
+    addOrder, updateOrder, updateOrderPatch, deleteOrder,
     addWATemplate, updateWATemplate, deleteWATemplate,
     addDailyAd, updateDailyAd, deleteDailyAd,
     addLeadSpamDailyInput, updateLeadSpamDailyInput, deleteLeadSpamDailyInput,

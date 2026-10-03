@@ -1,5 +1,83 @@
 import { Order, ProspectBooking } from '../../../data';
 
+type OrderDbColumn = keyof ReturnType<typeof mapOrderToDB>;
+
+const ORDER_PATCH_FIELD_MAP: Partial<Record<keyof Order, OrderDbColumn>> = {
+  leadDate: 'lead_date',
+  customerName: 'customer_name',
+  customerPhone: 'customer_phone',
+  address: 'address',
+  serviceDate: 'service_date',
+  serviceTime: 'service_time',
+  serviceId: 'service_id',
+  serviceCategory: 'service_category',
+  mapsUrl: 'maps_url',
+  vehicleId: 'vehicle_id',
+  price: 'price',
+  units: 'units',
+  platformId: 'platform_id',
+  subChannelId: 'sub_channel_id',
+  csId: 'cs_id',
+  advertiserId: 'advertiser_id',
+  technicianId: 'technician_id',
+  branchId: 'branch_id',
+  areaId: 'area_id',
+  status: 'status',
+  paymentType: 'payment_type',
+  paymentMethodId: 'payment_method_id',
+  income: 'income',
+  paymentStatus: 'payment_status',
+  paymentValidation: 'payment_validation',
+  affiliateName: 'affiliate_name',
+  lat: 'lat',
+  lng: 'lng',
+  leadId: 'lead_id',
+  templateHistory: 'template_history',
+  photos: 'photos',
+  startTravelAt: 'start_travel_at',
+  startWorkAt: 'start_work_at',
+  finishedAt: 'finished_at',
+  payload: 'payload',
+  notes: 'notes',
+  cancelReason: 'cancel_reason',
+  cancelReasonNote: 'cancel_reason_note',
+  isFollowedUp: 'is_followed_up',
+  followedUpBy: 'followed_up_by',
+  followedUpAt: 'followed_up_at',
+  followUpNote: 'follow_up_note',
+};
+
+const NULLABLE_ORDER_PATCH_FIELDS = new Set<keyof Order>([
+  'leadDate',
+  'mapsUrl',
+  'platformId',
+  'subChannelId',
+  'csId',
+  'advertiserId',
+  'technicianId',
+  'areaId',
+  'paymentType',
+  'paymentMethodId',
+  'income',
+  'affiliateName',
+  'lat',
+  'lng',
+  'leadId',
+  'templateHistory',
+  'photos',
+  'startTravelAt',
+  'startWorkAt',
+  'finishedAt',
+  'payload',
+  'notes',
+  'cancelReason',
+  'cancelReasonNote',
+  'isFollowedUp',
+  'followedUpBy',
+  'followedUpAt',
+  'followUpNote',
+]);
+
 export const mapProspectBookingFromDB = (booking: any): ProspectBooking => ({
   id: booking.id,
   leadId: booking.lead_id,
@@ -141,3 +219,28 @@ export const mapOrderToDB = (o: Order) => ({
   followed_up_at: o.followedUpAt,
   follow_up_note: o.followUpNote,
 });
+
+export const mapOrderPatchToDB = (patch: Partial<Order>) => {
+  const payload: Record<string, unknown> = {};
+
+  (Object.keys(patch) as (keyof Order)[]).forEach((key) => {
+    if (key === 'id' || key === 'created_at' || key === 'effectiveStatus' || key === 'rating') {
+      return;
+    }
+
+    const column = ORDER_PATCH_FIELD_MAP[key];
+    if (!column) return;
+
+    const value = patch[key];
+    if (value === undefined) {
+      if (NULLABLE_ORDER_PATCH_FIELDS.has(key)) {
+        payload[column] = null;
+      }
+      return;
+    }
+
+    payload[column] = value;
+  });
+
+  return payload;
+};

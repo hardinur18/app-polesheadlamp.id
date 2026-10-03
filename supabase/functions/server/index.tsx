@@ -3421,7 +3421,10 @@ app.put("/make-server-f781cd00/app-data/:type/:id", async (c) => {
     if (error) throw error;
 
     const actor = auth.requester?.actorName || "System";
-    await logActivity(actor, `Update ${type}`, `Updated ${type} ${id}`, "System");
+    runBackgroundTask(
+      `audit update ${type}`,
+      logActivity(actor, `Update ${type}`, `Updated ${type} ${id}`, "System"),
+    );
 
     return c.json({ row: data });
   } catch (err: any) {
