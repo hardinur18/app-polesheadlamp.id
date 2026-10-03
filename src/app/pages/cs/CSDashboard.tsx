@@ -354,8 +354,8 @@ const readInitialDateRange = (): DateRange => {
   };
 };
 
-const buildApiCacheKey = (range: { from: string; to: string } | null) =>
-  range ? `${range.from}:${range.to}` : null;
+const buildApiCacheKey = (range: { from: string; to: string } | null, mappingKey: string) =>
+  range ? `${range.from}:${range.to}:${mappingKey || 'unmapped'}` : null;
 
 const normalizeLookupKey = (value?: string | null) =>
   (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
@@ -955,6 +955,36 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return { byId, byName };
   }, [adAccounts, shouldShowAdAccountInCsView]);
 
+  const adAccountMappingCacheKey = useMemo(() => {
+    const accountPart = adAccounts
+      .filter((account) => account.status === 'active' && shouldShowAdAccountInCsView(account))
+      .map((account) => [
+        account.id,
+        normalizeLookupKey(account.accountName),
+        account.platformId || '',
+        account.advertiserId || '',
+        account.subChannelId || '',
+        account.ppn || 0,
+        account.fee || 0,
+      ].join(':'))
+      .sort()
+      .join('|');
+
+    const assignmentPart = adAccountAssignments
+      .filter((assignment) => assignment.status === 'active')
+      .map((assignment) => [
+        assignment.adAccountId,
+        assignment.csId,
+        assignment.subChannelId || '',
+        assignment.startDate,
+        assignment.endDate || '',
+      ].join(':'))
+      .sort()
+      .join('|');
+
+    return `${accountPart}::${assignmentPart}`;
+  }, [adAccountAssignments, adAccounts, shouldShowAdAccountInCsView]);
+
   const adAccountCsLookup = useMemo(() => {
     const resolveAssignment = (adAccountId?: string, date?: string) => {
       if (!adAccountId) return null;
@@ -994,12 +1024,19 @@ export function CSDashboard({ userId }: { userId?: string }) {
       return;
     }
 
+    if (adAccountLookup.byId.size === 0 && adAccountLookup.byName.size === 0) {
+      setApiAdsMetrics({});
+      setApiAdsByDateAccount({});
+      setApiAdsStatus(isOperationalDataLoading ? 'idle' : 'empty');
+      return;
+    }
+
     let cancelled = false;
     const forceRefresh = apiRefreshNonce !== lastApiRefreshNonceRef.current;
     if (forceRefresh) {
       lastApiRefreshNonceRef.current = apiRefreshNonce;
     }
-    const cacheKey = buildApiCacheKey(rangeParams);
+    const cacheKey = buildApiCacheKey(rangeParams, adAccountMappingCacheKey);
     const cachedSnapshot = !forceRefresh && cacheKey ? csViewApiCache.get(cacheKey) : null;
 
     if (cachedSnapshot) {
@@ -1092,6 +1129,23 @@ export function CSDashboard({ userId }: { userId?: string }) {
         if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || []);
         if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || []);
 
+        const failedSources = [
+          { source: 'meta', result: meta },
+          { source: 'google', result: google },
+          { source: 'tiktok', result: tiktok },
+        ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
+
+        if (failedSources.length === 3) {
+          throw new Error('Semua snapshot API iklan gagal dimuat.');
+        }
+
+        if (failedSources.length > 0) {
+          console.warn('[CS Dashboard] sebagian snapshot API iklan gagal dimuat', failedSources.map((item) => ({
+            source: item.source,
+            error: item.result.reason,
+          })));
+        }
+
         if (cancelled) return;
 
         const hasUsefulApiMetrics = Object.values(next).some((row) => row.spend > 0 || row.leads > 0);
@@ -1123,7 +1177,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [adAccountCsLookup, adAccountLookup, apiRefreshNonce, platforms, rangeParams]);
+  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, isOperationalDataLoading, platforms, rangeParams]);
 
   // Filter Logic
   const filteredData = useMemo(() => {
