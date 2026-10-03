@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Plus, Search, Filter, AlertCircle, CheckCircle2, User, LayoutList, LayoutGrid, Eye, Route, Copy, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Plus, Search, Filter, AlertCircle, CheckCircle2, User, LayoutList, LayoutGrid, Eye, Route, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '../components/ui/StatusBadge';
 import { useMasterData, type TechnicianSchedule } from './master-data/context';
 import type { Branch, Lead, Order, ProspectBooking } from './master-data/data';
@@ -406,6 +406,8 @@ export default function Schedule() {
     isMasterDataLoading,
     isOrdersLoading,
     isOperationalDataLoading,
+    refreshTrigger,
+    triggerRefresh,
     ensureOrdersForDateRange,
     ensureProspectBookingsForDateRange,
     ensureTechnicianSchedulesForDateRange,
@@ -515,19 +517,38 @@ export default function Schedule() {
       });
 
       try {
-        await Promise.all([
+        const loadResults = await Promise.allSettled([
           ensureOrdersForDateRange({ from: monthStart, to: monthEnd, mode: 'service' }),
           ensureProspectBookingsForDateRange({ from: monthStart, to: monthEnd }),
           ensureTechnicianSchedulesForDateRange({ from: monthStart, to: monthEnd }),
         ]);
+        const failedLoads = loadResults
+          .map((result, index) => ({
+            result,
+            source: ['orders', 'prospect_bookings', 'technician_schedules'][index],
+          }))
+          .filter((item): item is { result: PromiseRejectedResult; source: string } => item.result.status === 'rejected');
+        const hasPrimaryScheduleFailure = failedLoads.some((item) => item.source !== 'technician_schedules');
 
         if (isCancelled) {
           endTimer('skipped', { reason: 'cancelled' });
           return;
         }
 
-        endTimer('ok', {
+        if (failedLoads.length > 0) {
+          console.warn('Schedule month snapshot partially failed:', failedLoads.map((item) => ({
+            source: item.source,
+            error: item.result.reason,
+          })));
+        }
+
+        if (hasPrimaryScheduleFailure) {
+          setScheduleRangeError('Sebagian data jadwal bulan ini belum berhasil dimuat. Coba refresh data.');
+        }
+
+        endTimer(hasPrimaryScheduleFailure ? 'partial' : 'ok', {
           source: 'master-data-range-loader',
+          failedSources: failedLoads.map((item) => item.source),
         });
       } catch (error) {
         endTimer('error', {
@@ -557,6 +578,7 @@ export default function Schedule() {
     ensureOrdersForDateRange,
     ensureProspectBookingsForDateRange,
     ensureTechnicianSchedulesForDateRange,
+    refreshTrigger,
   ]);
 
   const openAddProspectFromTimeline = (request: AddProspectFormRequest) => {
@@ -1617,6 +1639,7 @@ export default function Schedule() {
     isScheduleRangeLoading ||
     (isOrdersLoading && activeScheduleTotal === 0)
   );
+  const isRefreshingSchedule = isMasterDataLoading || isScheduleRangeLoading || isOrdersLoading || isOperationalDataLoading;
   const showScheduleDeferredNotice = !isAvailabilityView && !showScheduleLoadingNotice && isOperationalDataLoading && rawProspectBookings.length === 0;
   const canOpenInteractiveSchedule = !isAdvertiserUser;
   const canShowAvailabilityView = !isAdvertiserUser;
@@ -1649,6 +1672,11 @@ export default function Schedule() {
   const datePickerDescription = isMonthScopedView
     ? 'Pilih salah satu hari untuk pindah ke bulan tersebut.'
     : 'Pilih tanggal untuk melihat timeline atau jadwal harian.';
+
+  const handleRefreshSchedule = () => {
+    setScheduleRangeError(null);
+    triggerRefresh();
+  };
 
   const openDatePicker = () => {
     setDatePickerMonth(currentDate);
@@ -3101,6 +3129,16 @@ export default function Schedule() {
                 )}
             </div>
             <div className="scheduleHeaderFilters hidden md:flex items-center justify-end gap-2">
+                 <button
+                    type="button"
+                    onClick={handleRefreshSchedule}
+                    disabled={isRefreshingSchedule}
+                    className="scheduleHeaderFilterButton flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    aria-label="Refresh data jadwal"
+                    title="Refresh data jadwal"
+                 >
+                    <RefreshCw className={cn("h-4 w-4", isRefreshingSchedule && "animate-spin")} />
+                 </button>
                  {!isAdvertiserUser && (
                     <div className="scheduleLateSlotToggle flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">19:00</span>
@@ -3286,6 +3324,15 @@ export default function Schedule() {
                                 <Filter className="w-4 h-4" />
                             </button>
                         )}
+                        <button
+                            onClick={handleRefreshSchedule}
+                            disabled={isRefreshingSchedule}
+                            className="scheduleMobileSquareButton flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            aria-label="Refresh data jadwal"
+                            title="Refresh"
+                        >
+                            <RefreshCw className={cn("w-4 h-4", isRefreshingSchedule && "animate-spin")} />
+                        </button>
 
                     </div>
 
