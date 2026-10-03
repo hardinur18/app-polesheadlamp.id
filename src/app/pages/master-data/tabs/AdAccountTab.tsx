@@ -97,6 +97,17 @@ interface AdAccountTabProps {
 
 type AccountView = 'audit' | 'all' | 'api' | 'live' | 'unmatched' | 'assignment' | 'cs-relations' | 'advertiser-relations';
 
+const ACCOUNT_VIEW_IDS = new Set<AccountView>([
+  'audit',
+  'all',
+  'api',
+  'live',
+  'unmatched',
+  'assignment',
+  'cs-relations',
+  'advertiser-relations',
+]);
+
 type MappingAuditAction =
   | 'pair-api'
   | 'match-live'
@@ -335,6 +346,28 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const canCreate = hasPermission('master_data.create');
   const canEdit = hasPermission('master_data.edit');
   const canDelete = hasPermission('master_data.delete');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const queryView = new URLSearchParams(window.location.search).get('view') as AccountView | null;
+    if (queryView && ACCOUNT_VIEW_IDS.has(queryView) && queryView !== accountView) {
+      setAccountView(queryView);
+    }
+  }, [accountView]);
+
+  const handleAccountViewChange = React.useCallback((nextView: AccountView) => {
+    setAccountView(nextView);
+
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', 'ad-accounts');
+    if (nextView === 'audit') {
+      url.searchParams.delete('view');
+    } else {
+      url.searchParams.set('view', nextView);
+    }
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   const closeFormDialog = React.useCallback(() => {
     setIsFormDirty(false);
@@ -2762,7 +2795,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     }
 
     setSearch(issue.account.accountName);
-    setAccountView('api');
+    handleAccountViewChange('api');
   };
 
   const renderMappingAuditPanel = () => {
@@ -3474,7 +3507,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
             role="tab"
             aria-selected={accountView === tab.id}
             className={cn('adAccountViewSwitchItem', accountView === tab.id && 'isActive')}
-            onClick={() => setAccountView(tab.id)}
+            onClick={() => handleAccountViewChange(tab.id)}
           >
             <span>{tab.label}</span>
             <strong>{tab.count}</strong>

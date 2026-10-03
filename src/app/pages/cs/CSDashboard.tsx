@@ -128,6 +128,18 @@ type CsViewApiCacheEntry = {
   metrics: Record<string, CsAdsDailyMetric>;
   byDateAccount: Record<string, CsAdsAccountMetric>;
   status: ApiAdsStatus;
+  diagnostics: CsApiLoadDiagnostics;
+};
+
+type CsApiLoadDiagnostics = {
+  rawRows: number;
+  matchedRows: number;
+  unmatchedRows: Array<{
+    source: string;
+    externalAccountId?: string | null;
+    externalAccountName?: string | null;
+  }>;
+  failedSources: string[];
 };
 
 type CsViewFilterState = {
@@ -356,6 +368,13 @@ const readInitialDateRange = (): DateRange => {
 
 const buildApiCacheKey = (range: { from: string; to: string } | null, mappingKey: string) =>
   range ? `${range.from}:${range.to}:${mappingKey || 'unmapped'}` : null;
+
+const createEmptyApiLoadDiagnostics = (): CsApiLoadDiagnostics => ({
+  rawRows: 0,
+  matchedRows: 0,
+  unmatchedRows: [],
+  failedSources: [],
+});
 
 const normalizeLookupKey = (value?: string | null) =>
   (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
@@ -589,6 +608,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const [apiAdsMetrics, setApiAdsMetrics] = useState<Record<string, CsAdsDailyMetric>>({});
   const [apiAdsByDateAccount, setApiAdsByDateAccount] = useState<Record<string, CsAdsAccountMetric>>({});
   const [apiAdsStatus, setApiAdsStatus] = useState<ApiAdsStatus>('idle');
+  const [apiLoadDiagnostics, setApiLoadDiagnostics] = useState<CsApiLoadDiagnostics>(() => createEmptyApiLoadDiagnostics());
   const [metaIntegrationConfigs, setMetaIntegrationConfigs] = useState<AdsIntegrationConfig[]>([]);
   const [googleIntegrationConfigs, setGoogleIntegrationConfigs] = useState<GoogleAdsIntegrationConfig[]>([]);
   const [tiktokIntegrationConfigs, setTikTokIntegrationConfigs] = useState<TikTokAdsIntegrationConfig[]>([]);
@@ -1021,6 +1041,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       setApiAdsMetrics({});
       setApiAdsByDateAccount({});
       setApiAdsStatus('idle');
+      setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
       return;
     }
 
@@ -1028,6 +1049,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       setApiAdsMetrics({});
       setApiAdsByDateAccount({});
       setApiAdsStatus(isOperationalDataLoading ? 'idle' : 'empty');
+      setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
       return;
     }
 
@@ -1043,6 +1065,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       setApiAdsMetrics(cachedSnapshot.metrics);
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
       setApiAdsStatus(cachedSnapshot.status);
+      setApiLoadDiagnostics(cachedSnapshot.diagnostics);
       return;
     }
 
@@ -1060,14 +1083,29 @@ export function CSDashboard({ userId }: { userId?: string }) {
       resultByDate: Record<string, CsAdsDailyMetric>,
       resultByDateAccount: Record<string, CsAdsAccountMetric>,
       rows: AdsSnapshotRowLike[],
+      diagnostics: CsApiLoadDiagnostics,
+      source: string,
     ) => {
       for (const row of rows) {
         const date = row.snapshotDate;
         if (!date) continue;
         if (date < rangeParams.from || date > rangeParams.to) continue;
 
+        diagnostics.rawRows += 1;
+
         const adAccount = resolveAdAccount(row);
-        if (!adAccount) continue;
+        if (!adAccount) {
+          if (Number(row.spend) > 0 || Number(row.conversions) > 0) {
+            diagnostics.unmatchedRows.push({
+              source,
+              externalAccountId: row.externalAccountId,
+              externalAccountName: row.externalAccountName,
+            });
+          }
+          continue;
+        }
+
+        diagnostics.matchedRows += 1;
 
         const assignment = adAccountCsLookup.resolveAssignment(adAccount.id, date);
 
@@ -1125,15 +1163,17 @@ export function CSDashboard({ userId }: { userId?: string }) {
         const next: Record<string, CsAdsDailyMetric> = {};
         const nextByAccount: Record<string, CsAdsAccountMetric> = {};
 
-        if (meta.status === 'fulfilled') addSnapshotRows(next, nextByAccount, meta.value.rows || []);
-        if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || []);
-        if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || []);
-
         const failedSources = [
           { source: 'meta', result: meta },
           { source: 'google', result: google },
           { source: 'tiktok', result: tiktok },
         ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
+        const diagnostics = createEmptyApiLoadDiagnostics();
+        diagnostics.failedSources = failedSources.map((item) => item.source);
+
+        if (meta.status === 'fulfilled') addSnapshotRows(next, nextByAccount, meta.value.rows || [], diagnostics, 'meta');
+        if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || [], diagnostics, 'google');
+        if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || [], diagnostics, 'tiktok');
 
         if (failedSources.length === 3) {
           throw new Error('Semua snapshot API iklan gagal dimuat.');
@@ -1155,6 +1195,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
         setApiAdsMetrics(next);
         setApiAdsByDateAccount(nextByAccount);
+        setApiLoadDiagnostics(diagnostics);
         const nextStatus: ApiAdsStatus = hasUsefulApiMetrics || hasUsefulApiAccountMetrics ? 'ready' : 'empty';
         setApiAdsStatus(nextStatus);
         if (cacheKey) {
@@ -1162,12 +1203,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
             metrics: next,
             byDateAccount: nextByAccount,
             status: nextStatus,
+            diagnostics,
           });
         }
       } catch {
         if (cancelled) return;
         setApiAdsMetrics({});
         setApiAdsByDateAccount({});
+        setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
         setApiAdsStatus('error');
       }
     };
@@ -1746,6 +1789,91 @@ export function CSDashboard({ userId }: { userId?: string }) {
       : hasOperationalVisibleRows
         ? 'Operasional'
     : getApiStatusLabel(apiAdsStatus);
+  const csDashboardMappingNotices = useMemo(() => {
+    const canOpenMasterData = hasPermission('master_data.view');
+    const notices: Array<{
+      key: string;
+      title: string;
+      detail: string;
+      href: string;
+      actionLabel: string;
+      tone: 'danger' | 'warning';
+    }> = [];
+    const buildHref = (view: 'api' | 'unmatched' | 'assignment') => `/master-data?tab=ad-accounts&view=${view}`;
+    const uniqueUnmatchedAccounts = new Set(
+      apiLoadDiagnostics.unmatchedRows.map((row) =>
+        `${row.source}:${row.externalAccountId || normalizeLookupKey(row.externalAccountName) || 'unknown'}`,
+      ),
+    );
+    const unassignedRows = detailRows.filter((row) => row.csName === 'CS belum diatur');
+    const failedSources = apiLoadDiagnostics.failedSources.map((source) => source.toUpperCase()).join(', ');
+
+    if (apiAdsStatus === 'error') {
+      notices.push({
+        key: 'api-error',
+        title: 'Snapshot API iklan gagal dimuat',
+        detail: 'Spending dan Lead Dashboard belum bisa dihitung. Cek integrasi API dan refresh snapshot iklan.',
+        href: buildHref('api'),
+        actionLabel: 'Buka Integrasi API',
+        tone: 'danger',
+      });
+    } else if (apiLoadDiagnostics.failedSources.length > 0) {
+      notices.push({
+        key: 'api-partial',
+        title: 'Sebagian API iklan gagal dimuat',
+        detail: `${failedSources} gagal dimuat. Angka yang tampil hanya dari source API yang berhasil.`,
+        href: buildHref('api'),
+        actionLabel: 'Buka Integrasi API',
+        tone: 'warning',
+      });
+    }
+
+    if (uniqueUnmatchedAccounts.size > 0) {
+      notices.push({
+        key: 'api-unmatched',
+        title: 'Ada snapshot API belum match ke akun internal',
+        detail: `${formatCount(uniqueUnmatchedAccounts.size)} akun API punya spend/lead, tapi belum cocok dengan master Akun Iklan.`,
+        href: buildHref('unmatched'),
+        actionLabel: 'Cek Belum Match API',
+        tone: 'warning',
+      });
+    }
+
+    if (unassignedRows.length > 0) {
+      notices.push({
+        key: 'cs-assignment',
+        title: 'Ada akun iklan belum punya assignment CS',
+        detail: `${formatCount(unassignedRows.length)} baris performa jatuh ke "CS belum diatur". Lengkapi assignment agar filter CS akurat.`,
+        href: buildHref('assignment'),
+        actionLabel: 'Cek Assignment CS',
+        tone: 'warning',
+      });
+    }
+
+    if (apiAdsStatus === 'empty' && csKpis.prospects > 0) {
+      notices.push({
+        key: 'api-empty-with-crm',
+        title: 'Prospek CRM ada, tapi snapshot iklan kosong',
+        detail: `Prospek CRM terbaca ${formatCount(csKpis.prospects)}, namun Lead Dashboard dari API iklan masih 0.`,
+        href: buildHref('api'),
+        actionLabel: 'Cek Snapshot API',
+        tone: 'warning',
+      });
+    }
+
+    return notices.map((notice) => ({
+      ...notice,
+      href: canOpenMasterData ? notice.href : '',
+      actionLabel: canOpenMasterData ? notice.actionLabel : 'Hubungi admin',
+    }));
+  }, [
+    apiAdsStatus,
+    apiLoadDiagnostics.failedSources,
+    apiLoadDiagnostics.unmatchedRows,
+    csKpis.prospects,
+    detailRows,
+    hasPermission,
+  ]);
   const dateGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -2051,6 +2179,43 @@ export function CSDashboard({ userId }: { userId?: string }) {
           </div>
         </div>
       </div>
+
+      {csDashboardMappingNotices.length > 0 && (
+        <div className="grid gap-2">
+          {csDashboardMappingNotices.map((notice) => (
+            <div
+              key={notice.key}
+              className={`flex flex-col gap-3 rounded-xl border px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
+                notice.tone === 'danger'
+                  ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200'
+                  : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
+              }`}
+            >
+              <div className="flex min-w-0 items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{notice.title}</div>
+                  <div className="mt-0.5 text-xs leading-relaxed opacity-80">{notice.detail}</div>
+                </div>
+              </div>
+              {notice.href ? (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-current bg-white/70 text-current hover:bg-white dark:bg-slate-950/30 dark:hover:bg-slate-950/50"
+                >
+                  <a href={notice.href}>{notice.actionLabel}</a>
+                </Button>
+              ) : (
+                <span className="shrink-0 rounded-full border border-current/25 px-3 py-1 text-xs font-semibold">
+                  {notice.actionLabel}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <OperationalKpiGrid className="csDashboardKpiGrid">
         <OperationalKpiCard
