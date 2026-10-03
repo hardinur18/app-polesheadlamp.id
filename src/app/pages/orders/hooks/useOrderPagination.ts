@@ -49,19 +49,22 @@ export function useOrderPagination({
 
   // Sorting
   const sortedOrders = useMemo(() => {
-    let sortableItems = [...filteredOrders];
-    if (sortConfig !== null) {
-      sortableItems.sort((a, b) => {
-        if (sortConfig.key === 'price') {
-          const priceA = normalizePrice(a.price);
-          const priceB = normalizePrice(b.price);
-          const priceDelta = sortConfig.direction === 'asc' ? (priceA - priceB) : (priceB - priceA);
-          return priceDelta || a.id.localeCompare(b.id);
-        }
-        return 0;
-      });
+    if (sortConfig?.key !== 'price') {
+      return filteredOrders;
     }
-    return sortableItems;
+
+    const direction = sortConfig.direction === 'asc' ? 1 : -1;
+    return filteredOrders
+      .map((order, index) => ({
+        order,
+        index,
+        price: normalizePrice(order.price),
+      }))
+      .sort((a, b) => {
+        const priceDelta = (a.price - b.price) * direction;
+        return priceDelta || a.index - b.index;
+      })
+      .map(({ order }) => order);
   }, [filteredOrders, sortConfig]);
 
   // Pagination
