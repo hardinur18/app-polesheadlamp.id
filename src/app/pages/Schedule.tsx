@@ -1366,6 +1366,36 @@ export default function Schedule() {
     );
   }, [currentMonthKey, viewScheduleItems]);
 
+  const selectedBranchTechnicianCount = useMemo(
+    () => selectedDisplayBranches.reduce(
+      (total, branch) => total + (activeTechniciansByBranchId.get(branch.id) || []).length,
+      0,
+    ),
+    [activeTechniciansByBranchId, selectedDisplayBranches],
+  );
+
+  const assignedTechnicianIdsInCurrentMonth = useMemo(() => {
+    const technicianIds = new Set<string>();
+    currentMonthScheduleItems.forEach((item) => {
+      if (item.technicianId) technicianIds.add(item.technicianId);
+    });
+    return technicianIds;
+  }, [currentMonthScheduleItems]);
+
+  const isScheduleRosterRole = isAdminManagementUser || isCsUser;
+  const hasLoadedTechnicianProfiles = users.some((user) => isTechnicianRole(user.role));
+  const isTechnicianRosterLoading =
+    isScheduleRosterRole &&
+    selectedDisplayBranches.length > 0 &&
+    selectedBranchTechnicianCount === 0 &&
+    (isMasterDataLoading || isOperationalDataLoading);
+  const isTechnicianRosterPossiblyMissing =
+    isScheduleRosterRole &&
+    selectedDisplayBranches.length > 0 &&
+    selectedBranchTechnicianCount === 0 &&
+    !isTechnicianRosterLoading &&
+    (!hasLoadedTechnicianProfiles || assignedTechnicianIdsInCurrentMonth.size > 0);
+
   const currentDayScheduleItems = useMemo(
     () => scheduleItemsByDate.get(currentDateKey) || [],
     [currentDateKey, scheduleItemsByDate]
@@ -2056,7 +2086,13 @@ export default function Schedule() {
                                     {branchTechs.length === 0 ? (
                                         <div className="flex w-full border-b border-slate-50 dark:border-slate-800">
                                             <div className="sticky left-0 z-20 w-[90px] md:w-[300px] shrink-0 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800"></div>
-                                            <div className="flex-1 p-8 text-center text-xs text-slate-400 italic bg-slate-50/10">Belum ada teknisi</div>
+                                            <div className="flex-1 p-8 text-center text-xs text-slate-400 italic bg-slate-50/10">
+                                                {isTechnicianRosterLoading
+                                                    ? 'Memuat data teknisi...'
+                                                    : isTechnicianRosterPossiblyMissing
+                                                        ? 'Data teknisi belum termuat. Coba refresh halaman.'
+                                                        : 'Belum ada teknisi aktif di cabang ini.'}
+                                            </div>
                                         </div>
                                     ) : (
                                         branchTechs.map((tech) => {
@@ -3001,10 +3037,72 @@ export default function Schedule() {
               <h1 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">Jadwal & Penugasan</h1>
               <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm">Monitoring kapasitas teknisi untuk pesanan dan booking prospek.</p>
             </div>
-            
-            <div className="scheduleHeaderFilters hidden md:flex flex-wrap items-center justify-end gap-2">
+        </div>
+
+        <div className="scheduleViewBar hidden md:flex">
+            <div className="scheduleViewSwitch masterDataTabs flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
+                <button 
+                    onClick={() => { setView('month'); setListDateMode('all'); }}
+                    className={cn(
+                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                        view === 'month' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                    )}
+                >
+                    <CalendarIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Kalender</span>
+                </button>
+                {!isAdvertiserUser && (
+                    <button 
+                        onClick={handleOpenAvailabilityView}
+                        className={cn(
+                            "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                            view === 'availability' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                        )}
+                    >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Ketersediaan</span>
+                    </button>
+                )}
+                {!isAdvertiserUser && (
+                    <button 
+                        onClick={() => { setView('list'); setListDateMode('all'); }}
+                        className={cn(
+                            "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                            view === 'list' && listDateMode === 'all' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                        )}
+                    >
+                        <LayoutList className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">List</span>
+                    </button>
+                )}
+                {!isAdvertiserUser && (
+                    <button 
+                        onClick={() => { setView('list'); setListDateMode('daily'); }}
+                        className={cn(
+                            "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                            view === 'list' && listDateMode === 'daily' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                        )}
+                    >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Harian</span>
+                    </button>
+                )}
+                {!isAdvertiserUser && (
+                    <button 
+                        onClick={() => setView('day')}
+                        className={cn(
+                            "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                            view === 'day' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                        )}
+                    >
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span className="hidden lg:inline">Timeline</span>
+                    </button>
+                )}
+            </div>
+            <div className="scheduleHeaderFilters hidden md:flex items-center justify-end gap-2">
                  {!isAdvertiserUser && (
-                    <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                    <div className="scheduleLateSlotToggle flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">19:00</span>
                         <Switch
                             checked={showLateOperatingSlot}
@@ -3013,50 +3111,77 @@ export default function Schedule() {
                         />
                     </div>
                  )}
-                 {canShowCsFilter && (
-                    <div className="w-[140px]">
-                        <Select value={selectedCSId} onValueChange={setSelectedCSId}>
-                            <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-9 text-xs rounded-xl">
-                                <SelectValue placeholder="Pilih CS" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Semua CS</SelectItem>
-                                {csOptions.map(u => (
-                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                 )}
-                 {canShowTechFilter && (
-                    <div className="w-[140px]">
-                        <Select value={selectedTechId} onValueChange={setSelectedTechId}>
-                            <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-9 text-xs rounded-xl">
-                                <SelectValue placeholder="Pilih Teknisi" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Semua Teknisi</SelectItem>
-                                {techOptions.map(u => (
-                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                 )}
-                 {canShowAdvertiserFilter && (
-                    <div className="w-[140px]">
-                        <Select value={selectedAdvertiserId} onValueChange={setSelectedAdvertiserId}>
-                            <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 h-9 text-xs rounded-xl">
-                                <SelectValue placeholder="Pilih Advertiser" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Semua Advertiser</SelectItem>
-                                {advertiserOptions.map(u => (
-                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                 {(canShowCsFilter || canShowTechFilter || canShowAdvertiserFilter) && (
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button
+                                type="button"
+                                className={cn(
+                                    "scheduleHeaderFilterButton relative flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+                                    (selectedCSId !== 'all' || selectedTechId !== 'all' || selectedAdvertiserId !== 'all') && "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                )}
+                                aria-label="Filter CS, teknisi, dan advertiser"
+                                title="Filter"
+                            >
+                                <Filter className="h-4 w-4" />
+                                {(selectedCSId !== 'all' || selectedTechId !== 'all' || selectedAdvertiserId !== 'all') && (
+                                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-blue-600" />
+                                )}
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="scheduleHeaderFilterMenu w-[280px] rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_18px_48px_-24px_rgba(15,23,42,0.45)] dark:border-slate-700 dark:bg-slate-800" align="end">
+                            <div className="space-y-2">
+                                {canShowCsFilter && (
+                                    <div className="scheduleHeaderFilterField">
+                                        <Label className="text-[11px] font-bold uppercase tracking-wide text-slate-400">CS</Label>
+                                        <Select value={selectedCSId} onValueChange={setSelectedCSId}>
+                                            <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-xs dark:border-slate-700 dark:bg-slate-900">
+                                                <SelectValue placeholder="Pilih CS" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Semua CS</SelectItem>
+                                                {csOptions.map(u => (
+                                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                {canShowTechFilter && (
+                                    <div className="scheduleHeaderFilterField">
+                                        <Label className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Teknisi</Label>
+                                        <Select value={selectedTechId} onValueChange={setSelectedTechId}>
+                                            <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-xs dark:border-slate-700 dark:bg-slate-900">
+                                                <SelectValue placeholder="Pilih Teknisi" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Semua Teknisi</SelectItem>
+                                                {techOptions.map(u => (
+                                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                {canShowAdvertiserFilter && (
+                                    <div className="scheduleHeaderFilterField">
+                                        <Label className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Advertiser</Label>
+                                        <Select value={selectedAdvertiserId} onValueChange={setSelectedAdvertiserId}>
+                                            <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-xs dark:border-slate-700 dark:bg-slate-900">
+                                                <SelectValue placeholder="Pilih Advertiser" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">Semua Advertiser</SelectItem>
+                                                {advertiserOptions.map(u => (
+                                                    <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                  )}
             </div>
         </div>
@@ -3117,79 +3242,16 @@ export default function Schedule() {
                          </button>
                     </div>
 
-                    {/* Desktop: View Toggle & Search Container (Hidden on Mobile) */}
-                    <div className="hidden md:flex items-center gap-2">
-                         {/* View Toggle */}
-                        <div className="scheduleViewSwitch masterDataTabs flex bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5">
-                            <button 
-                                onClick={() => { setView('month'); setListDateMode('all'); }}
-                                className={cn(
-                                    "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                                    view === 'month' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                                )}
-                            >
-                                <CalendarIcon className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">Kalender</span>
-                            </button>
-                            {!isAdvertiserUser && (
-                                <button 
-                                    onClick={handleOpenAvailabilityView}
-                                    className={cn(
-                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                                        view === 'availability' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                                    )}
-                                >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">Ketersediaan</span>
-                                </button>
-                            )}
-                            {!isAdvertiserUser && (
-                                <button 
-                                    onClick={() => { setView('list'); setListDateMode('all'); }}
-                                    className={cn(
-                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                                        view === 'list' && listDateMode === 'all' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                                    )}
-                                >
-                                    <LayoutList className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">List</span>
-                                </button>
-                            )}
-                             {!isAdvertiserUser && (
-                                <button 
-                                    onClick={() => { setView('list'); setListDateMode('daily'); }}
-                                    className={cn(
-                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                                        view === 'list' && listDateMode === 'daily' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                                    )}
-                                >
-                                    <Clock className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">Harian</span>
-                                </button>
-                             )}
-                             {!isAdvertiserUser && (
-                                <button 
-                                    onClick={() => setView('day')}
-                                    className={cn(
-                                        "scheduleViewTab px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                                        view === 'day' ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-                                    )}
-                                >
-                                    <LayoutGrid className="w-3.5 h-3.5" />
-                                    <span className="hidden lg:inline">Timeline</span>
-                                </button>
-                             )}
-                        </div>
-
-                        {/* Search */}
-                        <div className="relative">
+                    {/* Desktop Search (Hidden on Mobile) */}
+                    <div className="scheduleDesktopMainControls hidden md:flex items-center gap-2">
+                        <div className="scheduleDesktopSearch relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                             <input 
                                 type="text"
                                 placeholder="Cari..." 
                                 value={scheduleSearch}
                                 onChange={(event) => setScheduleSearch(event.target.value)}
-                                className="h-9 pl-8 pr-3 w-[150px] lg:w-[200px] text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="h-9 pl-8 pr-3 w-full text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                             />
                         </div>
                     </div>
@@ -3354,7 +3416,7 @@ export default function Schedule() {
                 )}
                 
                 {/* Right Side: Desktop Month Nav & Info */}
-                <div className="hidden md:flex items-center gap-4">
+                <div className="scheduleDesktopDateInfo hidden md:flex items-center gap-4">
                      <div className="flex items-center gap-1">
                         <button
                           onClick={handlePrev}
@@ -3400,7 +3462,7 @@ export default function Schedule() {
                             </span>
                         )}
                         {view !== 'availability' && (
-                        <span className="hidden sm:inline">
+                        <span className="scheduleDesktopHint hidden sm:inline">
                             {view === 'month' || view === 'list'
                                 ? `${selectedBranchId === 'all' ? 'Semua Cabang' : branchById.get(selectedBranchId)?.name} • ${activeTechnicians.length} Teknisi`
                                 : "Geser timeline untuk melihat jadwal jam"

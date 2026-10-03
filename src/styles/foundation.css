@@ -7556,7 +7556,36 @@
 }
 
 .scheduleHeaderFilters {
-  max-width: 720px;
+  gap: 10px !important;
+  flex-shrink: 0;
+  max-width: none;
+}
+
+.scheduleHeaderFilterSelect {
+  min-width: 0;
+}
+
+.scheduleHeaderFilterSelect .uiSelectTrigger {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.scheduleHeaderFilterSelect--cs {
+  width: 172px;
+}
+
+.scheduleHeaderFilterSelect--tech {
+  width: 190px;
+}
+
+.scheduleHeaderFilterSelect--advertiser {
+  width: 218px;
+}
+
+.scheduleHeaderFilterButton {
+  height: 42px;
+  min-height: 42px;
+  width: 42px;
 }
 
 .scheduleHeaderFilters .uiSelectTrigger,
@@ -7574,6 +7603,15 @@
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.94) !important;
   box-shadow: 0 18px 42px -36px rgba(15, 23, 42, 0.35) !important;
+}
+
+.scheduleViewBar {
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0 0 10px;
+  min-width: 0;
+  width: 100%;
 }
 
 .scheduleToolbarInner {
@@ -7598,6 +7636,117 @@
 
 .scheduleToolbarTopRow {
   min-width: 0;
+}
+
+.scheduleDesktopMainControls,
+.scheduleDesktopDateInfo,
+.scheduleDesktopSearch {
+  min-width: 0;
+}
+
+.scheduleDesktopHint {
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .scheduleHeaderFilters {
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .scheduleLateSlotToggle {
+    min-height: 42px;
+    min-width: 118px;
+    justify-content: space-between;
+  }
+
+  .scheduleLateSlotToggle [data-slot="switch"] {
+    height: 1.15rem !important;
+    min-height: 1.15rem !important;
+    width: 2rem !important;
+  }
+
+  .scheduleToolbarInner {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    width: 100%;
+  }
+
+  .scheduleToolbarTopRow {
+    display: grid !important;
+    grid-template-columns: minmax(178px, 220px) minmax(0, 1fr);
+    align-items: center;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .scheduleDesktopMainControls {
+    display: grid !important;
+    grid-template-columns: minmax(220px, 1fr);
+    align-items: center;
+    width: 100%;
+  }
+
+  .scheduleViewSwitch {
+    flex-shrink: 1;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .scheduleViewSwitch::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scheduleDesktopSearch {
+    width: 100%;
+  }
+
+  .scheduleDesktopDateInfo {
+    justify-content: flex-end;
+    min-width: max-content;
+  }
+
+  .scheduleDesktopHint {
+    max-width: 240px;
+    white-space: normal;
+    line-height: 1.25;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .scheduleHeaderFilters {
+    justify-content: flex-end;
+  }
+
+  .scheduleToolbarInner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scheduleDesktopDateInfo {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 980px) {
+  .scheduleHeaderFilterSelect--cs,
+  .scheduleHeaderFilterSelect--tech,
+  .scheduleHeaderFilterSelect--advertiser {
+    width: min(100%, 180px);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  .scheduleToolbarTopRow {
+    grid-template-columns: minmax(168px, 200px) minmax(0, 1fr);
+  }
+
+  .scheduleDesktopSearch {
+    max-width: none;
+  }
 }
 
 .scheduleMobileFilterPanel {

@@ -5,7 +5,7 @@ import { getSessionBackedEdgeHeaders } from '../../../services/internal/sessionC
 import { buildMakeServerUrl } from '../../../services/internal/functionsBaseUrl';
 import { fetchWithTimeout, isRequestTimeoutError } from '../../../services/internal/fetchWithTimeout';
 import { recordPerfMetric, startPerfTimer } from '@/app/utils/perfTelemetry';
-import { isAdminManagementRole, isFinanceRole, isTechnicianRole } from '@/app/data/roleHelpers';
+import { isAdminManagementRole, isCsRole, isFinanceRole, isTechnicianRole } from '@/app/data/roleHelpers';
 import { getPreviousDateKey, getTodayDateKey } from '../dateKeys';
 import { 
   Area, Branch,
@@ -322,6 +322,13 @@ const buildLocalProfileFallbackUser = (session: Session): User => ({
   joinDate: new Date().toISOString().slice(0, 10),
   phone: '',
 });
+
+const mergeUsersById = (nextUsers: User[], previousUsers: User[]) => {
+  const merged = new Map<string, User>();
+  previousUsers.forEach((user) => merged.set(user.id, user));
+  nextUsers.forEach((user) => merged.set(user.id, user));
+  return Array.from(merged.values());
+};
 
 export type CurrentUserIssue =
   | { code: 'profile_not_found'; message: string }
@@ -838,6 +845,65 @@ export const MasterDataProvider: React.FC<{
           }
         }
       }
+      endTimer('error', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
+
+  const fetchAppDataPageStrict = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
+    const endTimer = startPerfTimer('master-data.app-data-page-strict', {
+      table,
+      from,
+      to,
+      orderBy: options.orderBy,
+    });
+    const url = new URL(appDataUrl(table));
+    url.searchParams.set('from', String(from));
+    url.searchParams.set('to', String(to));
+    if (options.orderBy) {
+      url.searchParams.set('orderBy', options.orderBy);
+    }
+    if (typeof options.ascending === 'boolean') {
+      url.searchParams.set('ascending', options.ascending ? 'true' : 'false');
+    }
+    Object.entries(options.eq || {}).forEach(([column, value]) => {
+      url.searchParams.set(`eq_${column}`, value);
+    });
+    Object.entries(options.gte || {}).forEach(([column, value]) => {
+      url.searchParams.set(`gte_${column}`, value);
+    });
+    Object.entries(options.lte || {}).forEach(([column, value]) => {
+      url.searchParams.set(`lte_${column}`, value);
+    });
+
+    try {
+      const response = await fetchWithTimeout(
+        url.toString(),
+        {
+          headers: await getSessionBackedEdgeHeaders(),
+        },
+        APP_DATA_FETCH_TIMEOUT_MS,
+        `Load ${table} terlalu lama. Server data sedang lambat.`,
+      );
+
+      if (response.status === 403) {
+        endTimer('skipped', { reason: 'forbidden' });
+        return { rows: [], forbidden: true };
+      }
+
+      if (!response.ok) {
+        const error = await readAppDataError(response, `Gagal memuat ${table}`);
+        endTimer('error', { status: response.status, error: error.message });
+        throw error;
+      }
+
+      const body = await response.json();
+      const rows = Array.isArray(body?.rows) ? body.rows : [];
+      endTimer('ok', { rows: rows.length });
+      return { rows, forbidden: false };
+    } catch (error) {
       endTimer('error', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1902,13 +1968,18 @@ export const MasterDataProvider: React.FC<{
     if (!bestSource || bestSource.users.length === 0) return;
 
     setUsers(prev => {
+      const previousActiveTechnicianCount = prev.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+      const nextActiveTechnicianCount = bestSource.users.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
       const isDowngradeToCurrentUserOnly = prev.length > bestSource.users.length && bestSource.users.length <= 1;
-      if (isDowngradeToCurrentUserOnly) {
+      const isDowngradeToMissingTechnicians = previousActiveTechnicianCount > 0 && nextActiveTechnicianCount === 0;
+      if (isDowngradeToCurrentUserOnly || isDowngradeToMissingTechnicians) {
         if (import.meta.env.DEV) {
           console.warn('[MasterData] ignoring incomplete profiles refresh', {
             source: bestSource.source,
             previousUsers: prev.length,
             nextUsers: bestSource.users.length,
+            previousActiveTechnicians: previousActiveTechnicianCount,
+            nextActiveTechnicians: nextActiveTechnicianCount,
           });
         }
         return prev;
@@ -1922,6 +1993,44 @@ export const MasterDataProvider: React.FC<{
       }
 
       return bestSource.users;
+    });
+  };
+
+  const refetchScheduleUsersFromProfiles = async () => {
+    const pageSize = 1000;
+    const rows: any[] = [];
+    let page = 0;
+
+    while (true) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const { rows: pageRows, forbidden } = await fetchAppDataPageStrict('profiles', from, to, {
+        orderBy: 'created_at',
+        ascending: false,
+      });
+      if (forbidden) return;
+      rows.push(...pageRows);
+      if (pageRows.length < pageSize) break;
+      page += 1;
+    }
+
+    const scheduleUsers = mapProfilesToUsers(rows);
+    const activeTechnicianCount = scheduleUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+    if (scheduleUsers.length === 0 || activeTechnicianCount === 0) return;
+
+    setUsers((prev) => {
+      const previousActiveTechnicianCount = prev.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+      const mergedUsers = mergeUsersById(scheduleUsers, prev);
+
+      if (import.meta.env.DEV) {
+        console.info('[MasterData] schedule profiles refreshed', {
+          users: scheduleUsers.length,
+          activeTechnicians: activeTechnicianCount,
+          previousActiveTechnicians: previousActiveTechnicianCount,
+        });
+      }
+
+      return mergedUsers;
     });
   };
   
@@ -2907,6 +3016,7 @@ export const MasterDataProvider: React.FC<{
     () => (activePath || '/dashboard').toLowerCase(),
     [activePath],
   );
+  const isScheduleOperationalPath = normalizedActivePath.startsWith('/schedule');
   const canFetchFullOperationalHistory =
     isAdminManagementRole(currentRole) || isFinanceRole(currentRole);
   const shouldFetchFullOperationalHistory =
@@ -2930,6 +3040,9 @@ export const MasterDataProvider: React.FC<{
     isTechnicianRole(currentRole) &&
     isTechnicianOrdersOperationalPath &&
     Boolean(currentUser?.id);
+  const shouldEnsureScheduleUserRoster =
+    isScheduleOperationalPath &&
+    (isAdminManagementRole(currentRole) || isCsRole(currentRole));
   const shouldWaitForCurrentUserBeforeOperationalBootstrap =
     Boolean(session?.user) && !isCurrentUserResolved;
 
@@ -2986,7 +3099,11 @@ export const MasterDataProvider: React.FC<{
       fetchData(table, setter, mapper)
     );
 
-    Promise.allSettled([...masterFetches, refetchUsersFromProfiles()]).finally(() => {
+    Promise.allSettled([
+      ...masterFetches,
+      refetchUsersFromProfiles(),
+      ...(shouldEnsureScheduleUserRoster ? [refetchScheduleUsersFromProfiles()] : []),
+    ]).finally(() => {
       if (!isCancelled) {
         setIsMasterDataLoading(false);
       }
@@ -3241,6 +3358,7 @@ export const MasterDataProvider: React.FC<{
     deferredBootstrapTables,
     isCurrentUserResolved,
     normalizedActivePath,
+    shouldEnsureScheduleUserRoster,
     shouldSkipGlobalOperationalBootstrapForTechnician,
     shouldUseTechnicianLightBootstrap,
     shouldUseTechnicianScopedOrdersBootstrap,
