@@ -2485,24 +2485,24 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 pl-4">ID Order</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Jadwal</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Pelanggan</TableHead>
-                  <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">
-                    <button
-                      type="button"
-                      className="group inline-flex w-full cursor-pointer items-center gap-1.5 rounded-md text-left uppercase tracking-wider text-slate-900 transition-colors hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:text-slate-100 dark:hover:text-orange-400 dark:focus-visible:ring-offset-slate-950"
-                      onClick={() => requestSort('price')}
-                      title={
-                        sortConfig?.key === 'price'
-                          ? `Harga ${sortConfig.direction === 'asc' ? 'terendah ke tertinggi' : 'tertinggi ke terendah'}`
-                          : 'Klik untuk urutkan harga'
-                      }
-                      aria-label={
-                        sortConfig?.key === 'price'
-                          ? `Urutan harga ${sortConfig.direction === 'asc' ? 'terendah ke tertinggi' : 'tertinggi ke terendah'}`
-                          : 'Urutkan layanan dan harga'
-                      }
-                    >
+                  <TableHead className="font-semibold text-slate-900 dark:text-slate-100 text-[11px] uppercase tracking-wider py-4">
+                    <span className="inline-flex items-center gap-1.5">
                       <span>Layanan & Harga</span>
-                      <span className="inline-flex items-center justify-center text-slate-400 transition-colors group-hover:text-orange-500" aria-hidden="true">
+                      <button
+                        type="button"
+                        className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-orange-50 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:hover:bg-orange-950/30 dark:hover:text-orange-400 dark:focus-visible:ring-offset-slate-950"
+                        onClick={() => requestSort('price')}
+                        title={
+                          sortConfig?.key === 'price'
+                            ? `Harga ${sortConfig.direction === 'asc' ? 'terendah ke tertinggi' : 'tertinggi ke terendah'}`
+                            : 'Klik ikon untuk urutkan harga'
+                        }
+                        aria-label={
+                          sortConfig?.key === 'price'
+                            ? `Urutan harga ${sortConfig.direction === 'asc' ? 'terendah ke tertinggi' : 'tertinggi ke terendah'}`
+                            : 'Urutkan harga'
+                        }
+                      >
                         {sortConfig?.key === 'price' ? (
                           sortConfig.direction === 'asc'
                             ? <ArrowUp className="w-3.5 h-3.5 text-orange-500" />
@@ -2510,8 +2510,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         ) : (
                           <ArrowUpDown className="w-3.5 h-3.5" />
                         )}
-                      </span>
-                    </button>
+                      </button>
+                    </span>
                   </TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4">Operasional</TableHead>
                   <TableHead className="font-semibold text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-wider py-4 text-center">Metode Bayar</TableHead>

@@ -48,12 +48,11 @@ export function useOrderPagination({
   }, []);
 
   // Sorting
-  const sortedOrders = useMemo(() => {
+  const priceSortedOrders = useMemo(() => {
     if (sortConfig?.key !== 'price') {
-      return filteredOrders;
+      return null;
     }
 
-    const direction = sortConfig.direction === 'asc' ? 1 : -1;
     return filteredOrders
       .map((order, index) => ({
         order,
@@ -61,11 +60,21 @@ export function useOrderPagination({
         price: normalizePrice(order.price),
       }))
       .sort((a, b) => {
-        const priceDelta = (a.price - b.price) * direction;
+        const priceDelta = b.price - a.price;
         return priceDelta || a.index - b.index;
       })
       .map(({ order }) => order);
-  }, [filteredOrders, sortConfig]);
+  }, [filteredOrders, sortConfig?.key]);
+
+  const sortedOrders = useMemo(() => {
+    if (sortConfig?.key !== 'price' || !priceSortedOrders) {
+      return filteredOrders;
+    }
+
+    return sortConfig.direction === 'asc'
+      ? [...priceSortedOrders].reverse()
+      : priceSortedOrders;
+  }, [filteredOrders, priceSortedOrders, sortConfig]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
