@@ -129,6 +129,7 @@ type CsViewApiCacheEntry = {
   byDateAccount: Record<string, CsAdsAccountMetric>;
   status: ApiAdsStatus;
   diagnostics: CsApiLoadDiagnostics;
+  cachedAt: number;
 };
 
 type CsApiLoadDiagnostics = {
@@ -156,6 +157,8 @@ type CsViewTab = 'performance' | 'spam-inputs';
 const CS_VIEW_FILTER_STORAGE_KEY = 'polesheadlamp_cs_view_filters_v1';
 const CS_VIEW_MAX_RANGE_DAYS = 62;
 const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
+const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
+const DASHBOARD_API_RESUME_REFRESH_COOLDOWN_MS = 20_000;
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
 
 const formatShortCurrency = (value: number) =>
@@ -634,6 +637,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   ]);
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
+  const lastRealtimeApiRefreshAtRef = React.useRef(0);
   const lastSpamScopeKeyRef = React.useRef('');
   React.useEffect(() => {
     const checkMobile = () => setIsSpamFormMobile(window.innerWidth < 768);
@@ -669,6 +673,43 @@ export function CSDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+
+  React.useEffect(() => {
+    if (!rangeParams || activeTab !== 'performance') return;
+
+    const requestRealtimeApiRefresh = (reason: string, cooldownMs = DASHBOARD_API_RESUME_REFRESH_COOLDOWN_MS) => {
+      if (apiAdsStatus === 'loading') return;
+      if (document.visibilityState !== 'visible') return;
+      if ('onLine' in navigator && !navigator.onLine) return;
+
+      const now = Date.now();
+      if (now - lastRealtimeApiRefreshAtRef.current < cooldownMs) return;
+      lastRealtimeApiRefreshAtRef.current = now;
+      setApiRefreshNonce((value) => value + 1);
+
+      if (import.meta.env.DEV) {
+        console.info('[CS Dashboard] realtime API refresh requested', { reason, range: rangeParams });
+      }
+    };
+
+    const intervalId = window.setInterval(
+      () => requestRealtimeApiRefresh('interval', DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS - 1),
+      DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS,
+    );
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') requestRealtimeApiRefresh('visible');
+    };
+    const handleOnline = () => requestRealtimeApiRefresh('online');
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [activeTab, apiAdsStatus, rangeParams]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -1060,8 +1101,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
     }
     const cacheKey = buildApiCacheKey(rangeParams, adAccountMappingCacheKey);
     const cachedSnapshot = !forceRefresh && cacheKey ? csViewApiCache.get(cacheKey) : null;
+    const isCachedSnapshotFresh = cachedSnapshot
+      ? Date.now() - cachedSnapshot.cachedAt < DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS
+      : false;
+    const effectiveForceRefresh = forceRefresh || Boolean(cachedSnapshot && !isCachedSnapshotFresh);
 
-    if (cachedSnapshot) {
+    if (cachedSnapshot && !effectiveForceRefresh) {
       setApiAdsMetrics(cachedSnapshot.metrics);
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
       setApiAdsStatus(cachedSnapshot.status);
@@ -1149,13 +1194,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
       try {
         const [meta, google, tiktok] = await Promise.allSettled([
-          syncMetaSnapshotDataset({ ...rangeParams, force: forceRefresh, minFreshMinutes: forceRefresh ? 0 : 10 }).catch(() =>
+          syncMetaSnapshotDataset({ ...rangeParams, force: effectiveForceRefresh, minFreshMinutes: effectiveForceRefresh ? 0 : 10 }).catch(() =>
             fetchMetaSnapshotDataset(rangeParams),
           ),
-          syncGoogleAdsSnapshotDataset({ ...rangeParams, force: forceRefresh, minFreshMinutes: forceRefresh ? 0 : 10 }).catch(() =>
+          syncGoogleAdsSnapshotDataset({ ...rangeParams, force: effectiveForceRefresh, minFreshMinutes: effectiveForceRefresh ? 0 : 10 }).catch(() =>
             fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
           ),
-          syncTikTokAdsSnapshotDataset({ ...rangeParams, force: forceRefresh, minFreshMinutes: forceRefresh ? 0 : 10 }).catch(() =>
+          syncTikTokAdsSnapshotDataset({ ...rangeParams, force: effectiveForceRefresh, minFreshMinutes: effectiveForceRefresh ? 0 : 10 }).catch(() =>
             fetchTikTokAdsSnapshotDataset(rangeParams),
           ),
         ]);
@@ -1204,6 +1249,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
             byDateAccount: nextByAccount,
             status: nextStatus,
             diagnostics,
+            cachedAt: Date.now(),
           });
         }
       } catch {
@@ -1779,16 +1825,20 @@ export function CSDashboard({ userId }: { userId?: string }) {
     ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
     : hasConnectedVisibleRows
       ? apiStatusClassName('ready')
-      : hasOperationalVisibleRows
-        ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-    : apiStatusClassName(apiAdsStatus);
+      : apiAdsStatus !== 'idle'
+        ? apiStatusClassName(apiAdsStatus)
+        : hasOperationalVisibleRows
+          ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+          : apiStatusClassName(apiAdsStatus);
   const resolvedApiStatusLabel = isApiScopeMismatch
-    ? 'Operasional'
+    ? 'Perlu mapping'
     : hasConnectedVisibleRows
       ? 'Connected'
-      : hasOperationalVisibleRows
+      : apiAdsStatus !== 'idle'
+        ? getApiStatusLabel(apiAdsStatus)
+        : hasOperationalVisibleRows
         ? 'Operasional'
-    : getApiStatusLabel(apiAdsStatus);
+        : getApiStatusLabel(apiAdsStatus);
   const csDashboardMappingNotices = useMemo(() => {
     const canOpenMasterData = hasPermission('master_data.view');
     const notices: Array<{
