@@ -28396,16 +28396,25 @@ body {
 
 .advertiserDashboardDateSummary,
 .csDashboardDateSummary {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   align-items: stretch;
 }
 
 .advertiserDashboardDateSummary {
-  grid-template-columns: minmax(154px, 1.12fr) repeat(10, minmax(76px, 1fr)) !important;
+  grid-template-columns: minmax(180px, 210px) minmax(138px, 154px) minmax(110px, 126px) minmax(80px, 92px) minmax(98px, 110px) minmax(92px, 104px) minmax(128px, 148px) minmax(138px, 158px) minmax(138px, 158px) minmax(132px, 150px) minmax(82px, 96px) !important;
 }
 
 .csDashboardDateSummary {
-  grid-template-columns: minmax(154px, 1.12fr) repeat(11, minmax(72px, 1fr)) !important;
+  grid-template-columns: minmax(180px, 214px) minmax(140px, 160px) minmax(112px, 130px) minmax(76px, 88px) minmax(96px, 112px) minmax(82px, 94px) minmax(88px, 104px) minmax(124px, 144px) minmax(138px, 158px) minmax(132px, 152px) minmax(128px, 148px) minmax(92px, 108px) !important;
+}
+
+.advertiserDashboardDateGroupButton,
+.csDashboardDateGroupButton {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
 }
 
 .advertiserDashboardDateSummary > div,
@@ -28422,8 +28431,8 @@ body {
 .advertiserDashboardDateSummary :where(.font-mono.font-bold),
 .csDashboardDateSummary :where(.font-mono.font-bold) {
   max-width: 100%;
-  overflow: visible !important;
-  text-overflow: unset !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   white-space: nowrap !important;
 }
 
