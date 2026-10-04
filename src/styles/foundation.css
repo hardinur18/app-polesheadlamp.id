@@ -23606,6 +23606,8 @@ body {
 
 .orderPhotoTabContent {
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding-right: 4px;
 }
 
@@ -24141,8 +24143,26 @@ body {
   }
 
   .orderPhotoViewer {
-    height: min(60dvh, 520px);
-    min-height: 300px;
+    height: auto;
+    min-height: 0;
+  }
+
+  .orderPhotoDialog .appModalBody {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .orderPhotoViewer .uiTabs {
+    min-height: 0;
+  }
+
+  .orderPhotoTabContent {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
   }
 
   .orderPhotoImageFrame {
