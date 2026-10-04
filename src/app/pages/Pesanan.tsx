@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search, Plus, MapPin, Calendar, Clock, Map as MapIcon, Eye, MoreVertical,
   CheckCircle2, XCircle, Timer, Truck, Edit, Trash2, Package, RefreshCw, Banknote, Loader2, MessageCircle, Camera, CreditCard,
-  User as UserIcon, Building2, ChevronDown, Settings, Megaphone, Filter, FileSpreadsheet, FileDown, FileUp, FileText, Ruler, Lock, AlertTriangle, Phone, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, QrCode
+  User as UserIcon, Building2, ChevronDown, Settings, Megaphone, Filter, FileSpreadsheet, FileDown, FileUp, FileText, Ruler, Lock, AlertTriangle, Phone, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, QrCode, ImageOff
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -191,6 +191,71 @@ function getOrderPhotoUrls(order: Order | null | undefined, type: OrderDocumenta
 
 function getInitialPhotoTab(order: Order): OrderDocumentationKey {
   return ORDER_DOCUMENTATION_ITEMS.find((item) => getOrderPhotoUrls(order, item.key).length > 0)?.key || 'before';
+}
+
+function OrderDocumentationImage({
+  src,
+  alt,
+  priority = false,
+}: {
+  src: string;
+  alt: string;
+  priority?: boolean;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [src]);
+
+  return (
+    <div className="orderPhotoImageFrame group">
+      {!loaded && !failed && (
+        <div className="orderPhotoImageLoading">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Memuat foto...</span>
+        </div>
+      )}
+      {failed ? (
+        <div className="orderPhotoImageFallback">
+          <ImageOff className="h-8 w-8" />
+          <span>Foto gagal dimuat</span>
+          <a href={src} target="_blank" rel="noopener noreferrer">
+            Buka file
+          </a>
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className={`orderPhotoImage ${loaded ? 'isLoaded' : ''}`}
+          loading={priority ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={priority ? 'high' : 'auto'}
+          draggable={false}
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+        />
+      )}
+      {!failed && (
+        <>
+          <div className="orderPhotoImageShade" />
+          <div className="orderPhotoImageActions">
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="orderPhotoImageOpen"
+            >
+              Lihat Full Size
+            </a>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function OrderActionButton({
@@ -962,6 +1027,32 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     setExpandedPhotoTabs({});
     setUploadedFiles([]);
   }, []);
+
+  useEffect(() => {
+    if (!photoViewerOrder) return;
+    const latestOrder = orders.find((order) => order.id === photoViewerOrder.id);
+    if (latestOrder && latestOrder !== photoViewerOrder) {
+      setPhotoViewerOrder(latestOrder);
+    }
+  }, [orders, photoViewerOrder]);
+
+  useEffect(() => {
+    if (!photoViewerOrder || typeof window === 'undefined') return;
+    const urls = getOrderPhotoUrls(photoViewerOrder, photoViewerTab).slice(0, ORDER_PHOTO_INITIAL_LIMIT);
+    const preloadedImages = urls.map((url) => {
+      const image = new window.Image();
+      image.decoding = 'async';
+      image.src = url;
+      return image;
+    });
+
+    return () => {
+      preloadedImages.forEach((image) => {
+        image.onload = null;
+        image.onerror = null;
+      });
+    };
+  }, [photoViewerOrder, photoViewerTab]);
 
   const isOrderRowInteractiveTarget = (target: EventTarget | null, currentTarget?: HTMLElement) => {
     if (!(target instanceof HTMLElement)) return false;
@@ -3788,7 +3879,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             preventOutsideClose
         >
             {photoViewerOrder && (
-                <div className="h-[500px] flex flex-col">
+                <div className="orderPhotoViewer flex flex-col">
                     <Tabs
                         value={photoViewerTab}
                         onValueChange={(value) => setPhotoViewerTab(value as OrderDocumentationKey)}
@@ -3811,32 +3902,17 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                             const hiddenCount = Math.max(0, urls.length - visibleUrls.length);
 
                             return (
-                             <TabsContent key={type} value={type} className="flex-1 overflow-y-auto min-h-0 p-1">
+                             <TabsContent key={type} value={type} className="orderPhotoTabContent flex-1 min-h-0 p-1">
                                 {urls.length > 0 ? (
                                     <>
                                     <div className={`grid gap-4 pb-4 ${type === 'payment' || type === 'signature' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                                         {visibleUrls.map((url: string, idx: number) => (
-                                            <div key={`${type}-${url}-${idx}`} className="relative group rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex justify-center items-center">
-                                                <img 
-                                                    src={url} 
-                                                    alt={`${type} ${idx + 1}`} 
-                                                    className="w-full h-[300px] sm:h-[400px] object-contain" 
-                                                    loading="lazy"
-                                                    decoding="async"
-                                                    draggable={false}
-                                                />
-                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
-                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                                    <a 
-                                                        href={url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer"
-                                                        className="bg-white/90 text-slate-900 text-xs px-3 py-1.5 rounded-full font-medium shadow-sm hover:bg-white pointer-events-auto transform scale-95 group-hover:scale-100 transition-transform"
-                                                    >
-                                                        Lihat Full Size
-                                                    </a>
-                                                </div>
-                                            </div>
+                                            <OrderDocumentationImage
+                                                key={`${type}-${url}-${idx}`}
+                                                src={url}
+                                                alt={`${item.label} ${idx + 1}`}
+                                                priority={idx < 2}
+                                            />
                                         ))}
                                     </div>
                                     {hiddenCount > 0 && (
