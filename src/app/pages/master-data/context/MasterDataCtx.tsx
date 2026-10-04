@@ -2431,14 +2431,18 @@ export const MasterDataProvider: React.FC<{
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
   
-  const triggerRefresh = () => {
+  const triggerRefresh = React.useCallback(() => {
       fetchedOrderDateRangesRef.current.clear();
       fetchedLeadDateRangesRef.current.clear();
+      fetchedProspectBookingDateRangesRef.current.clear();
+      fetchedTechnicianScheduleDateRangesRef.current.clear();
       fetchingOrderDateRangesRef.current.clear();
       fetchingLeadDateRangesRef.current.clear();
+      fetchingProspectBookingDateRangesRef.current.clear();
+      fetchingTechnicianScheduleDateRangesRef.current.clear();
       setRefreshTrigger(prev => prev + 1);
       toast.info("Memperbarui data...");
-  };
+  }, []);
 
   // -- TECHNICIAN SCHEDULES
   const addSchedule = async (schedule: TechnicianSchedule) => {

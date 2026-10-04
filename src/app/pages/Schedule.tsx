@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown, Clock, MapPin, Plus, Search, Filter, AlertCircle, CheckCircle2, User, LayoutList, LayoutGrid, Eye, Route, Copy, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '../components/ui/StatusBadge';
 import { useMasterData, type TechnicianSchedule } from './master-data/context';
@@ -67,6 +67,8 @@ import { toast } from 'sonner';
 const ProspectBookingForm = React.lazy(() =>
   import('./leads/ProspectBookingForm').then((module) => ({ default: module.ProspectBookingForm }))
 );
+
+const SCHEDULE_PWA_RESUME_REFRESH_COOLDOWN_MS = 45_000;
 
 type ScheduleItem = {
   id: string;
@@ -489,6 +491,7 @@ export default function Schedule() {
   const [leadFormInstanceKey, setLeadFormInstanceKey] = useState(0);
   const [isScheduleRangeLoading, setIsScheduleRangeLoading] = useState(false);
   const [scheduleRangeError, setScheduleRangeError] = useState<string | null>(null);
+  const lastPwaResumeRefreshAtRef = useRef(0);
   const canOpenAddProspectFromTimeline = hasPermission('leads.create');
 
   useEffect(() => {
@@ -580,6 +583,48 @@ export default function Schedule() {
     ensureTechnicianSchedulesForDateRange,
     refreshTrigger,
   ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    const refreshVisibleSchedule = (reason: string) => {
+      if (document.visibilityState !== 'visible') return;
+      if ('onLine' in navigator && !navigator.onLine) return;
+
+      const now = Date.now();
+      if (now - lastPwaResumeRefreshAtRef.current < SCHEDULE_PWA_RESUME_REFRESH_COOLDOWN_MS) return;
+
+      lastPwaResumeRefreshAtRef.current = now;
+      setScheduleRangeError(null);
+      triggerRefresh();
+
+      if (import.meta.env.DEV) {
+        console.info('[Schedule] refreshed after PWA resume', { reason });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      refreshVisibleSchedule('visibilitychange');
+    };
+    const handleOnline = () => {
+      refreshVisibleSchedule('online');
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        refreshVisibleSchedule('pageshow-bfcache');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, [triggerRefresh]);
 
   const openAddProspectFromTimeline = (request: AddProspectFormRequest) => {
     if (!canOpenAddProspectFromTimeline) return;

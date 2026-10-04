@@ -41,9 +41,10 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: /\/assets\/.*\.(?:js|css)$/i,
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
-              cacheName: 'rhi-runtime-static-v1',
+              cacheName: 'rhi-runtime-static-v2',
+              networkTimeoutSeconds: 8,
               cacheableResponse: {
                 statuses: [0, 200],
               },

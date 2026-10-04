@@ -28,7 +28,8 @@ export const isStaleChunkError = (reason: unknown) => {
 
   return /Failed to fetch dynamically imported module/i.test(text)
     || /Importing a module script failed/i.test(text)
-    || /vite:preloadError/i.test(text);
+    || /vite:preloadError/i.test(text)
+    || /Cannot read properties of undefined \(reading ['"]default['"]\)/i.test(text);
 };
 
 export const reloadOnce = (marker: string, cooldownMs = 10_000) => {

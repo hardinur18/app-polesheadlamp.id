@@ -4,7 +4,7 @@ import { TechnicianDashboard } from './technician/TechnicianDashboard';
 import { CSDashboard } from './cs/CSDashboard';
 import { AdvertiserDashboard } from './advertiser/AdvertiserDashboard';
 import { Megaphone, MessageSquare, Wrench, type LucideIcon } from 'lucide-react';
-import { DASHBOARD_VIEW_PERMISSION_MAP, DashboardViewMode } from '../data/permissions';
+import { DASHBOARD_VIEW_PERMISSION_MAP, type DashboardViewMode } from '../data/permissions';
 import { normalizeRole } from '../data/roleHelpers';
 import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
 
@@ -19,6 +19,10 @@ const DASHBOARD_VIEW_META: Record<DashboardViewMode, { label: string; icon: Luci
   CS: { label: 'CS', icon: MessageSquare },
   Teknisi: { label: 'Teknisi', icon: Wrench },
 };
+
+const isDashboardViewMode = (value: unknown): value is DashboardViewMode => (
+  typeof value === 'string' && value in DASHBOARD_VIEW_PERMISSION_MAP
+);
 
 function DashboardViewContent({ viewMode }: { viewMode: DashboardViewMode }) {
   if (viewMode === 'Teknisi') return <TechnicianDashboard />;
@@ -35,7 +39,9 @@ export default function Dashboard({
   const effectiveRole = normalizeRole(viewMode || currentRole);
   const activeViewMode: DashboardViewMode =
     effectiveRole in DASHBOARD_VIEW_PERMISSION_MAP ? effectiveRole as DashboardViewMode : 'Advertiser';
-  const visibleViewModes = availableViewModes.length > 0 ? availableViewModes : [activeViewMode];
+  const visibleViewModes = (availableViewModes.length > 0 ? availableViewModes : [activeViewMode])
+    .filter(isDashboardViewMode);
+  const safeViewModes = visibleViewModes.length > 0 ? visibleViewModes : [activeViewMode];
   const canSwitchView = visibleViewModes.length > 1 && Boolean(onViewModeChange);
 
   if (!canSwitchView) {
@@ -51,7 +57,7 @@ export default function Dashboard({
       <div className="dashboardViewSwitcherWrap">
         <TabsViewport className="dashboardViewTabsViewport">
           <TabsRail className="dashboardViewTabsRail min-w-max" aria-label="Dashboard view">
-            {visibleViewModes.map((mode) => {
+            {safeViewModes.map((mode) => {
               const Icon = DASHBOARD_VIEW_META[mode].icon;
 
               return (
@@ -69,7 +75,7 @@ export default function Dashboard({
         </TabsViewport>
       </div>
 
-      {visibleViewModes.map((mode) => (
+      {safeViewModes.map((mode) => (
         <TabsContent key={mode} value={mode} className="dashboardViewContent">
           {mode === activeViewMode ? <DashboardViewContent viewMode={mode} /> : null}
         </TabsContent>

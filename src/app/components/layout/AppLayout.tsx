@@ -908,7 +908,18 @@ export function AppLayout() {
         <RefreshCcw className={cn("h-[1.15rem] w-[1.15rem]", isRefreshingData && "animate-spin")} />
       </Button>
 
-      <Toaster position="top-right" richColors />
+      <Toaster
+        position="bottom-right"
+        richColors
+        closeButton
+        duration={2200}
+        visibleToasts={2}
+        gap={8}
+        offset={16}
+        toastOptions={{
+          className: 'appToast',
+        }}
+      />
     </div>
   );
 }

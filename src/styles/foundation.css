@@ -20385,6 +20385,8 @@ body {
 .operationalReportControlStack {
   display: grid;
   gap: 16px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .operationalReportPage {
@@ -20412,9 +20414,12 @@ body {
   border: 1px solid #e4ebf5;
   border-radius: 22px;
   box-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.44);
+  max-width: 100%;
   min-height: 0;
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
   padding: 16px;
+  width: 100%;
 }
 
 .operationalReportMobileFilterToggle {
@@ -20423,6 +20428,7 @@ body {
 
 .operationalReportFilterCollapse {
   display: block;
+  max-width: 100%;
   min-width: 0;
 }
 
@@ -20468,18 +20474,16 @@ body {
   align-items: center;
   display: grid;
   gap: 12px;
+  max-width: 100%;
+  min-width: 0;
   width: 100%;
 }
 
 .operationalReportControlFilters.isDaily {
-  grid-template-areas: "dateType dateRange search technician role status";
-  grid-template-columns:
-    minmax(154px, 0.72fr)
-    minmax(220px, 0.95fr)
-    minmax(320px, 1.6fr)
-    minmax(160px, 0.78fr)
-    minmax(150px, 0.72fr)
-    minmax(160px, 0.78fr);
+  grid-template-areas:
+    "dateType dateRange search"
+    "technician role status";
+  grid-template-columns: minmax(154px, 0.75fr) minmax(220px, 1fr) minmax(320px, 1.45fr);
 }
 
 .operationalReportFilterControl {
@@ -20492,6 +20496,7 @@ body {
 .operationalReportFilterControl button[role="combobox"] {
   height: 48px;
   min-height: 48px;
+  min-width: 0;
   width: 100%;
 }
 
@@ -20503,6 +20508,7 @@ body {
   color: #0f172a;
   font-size: 0.86rem;
   font-weight: 720;
+  max-width: 100%;
 }
 
 .operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker):hover {
@@ -20542,6 +20548,7 @@ body {
   gap: 9px;
   height: 48px !important;
   justify-content: flex-start;
+  max-width: 100%;
   min-height: 48px !important;
   min-width: 0;
   padding-inline: 14px;
@@ -20621,25 +20628,17 @@ body {
 }
 
 .operationalReportControlFilters.isSummary {
-  grid-template-areas: "dateType dateRange search technician role status";
-  grid-template-columns:
-    minmax(154px, 0.72fr)
-    minmax(220px, 0.95fr)
-    minmax(320px, 1.6fr)
-    minmax(160px, 0.78fr)
-    minmax(150px, 0.72fr)
-    minmax(160px, 0.78fr);
+  grid-template-areas:
+    "dateType dateRange search"
+    "technician role status";
+  grid-template-columns: minmax(154px, 0.75fr) minmax(220px, 1fr) minmax(320px, 1.45fr);
 }
 
 .operationalReportControlFilters.isTransactions {
-  grid-template-areas: "transactionTabs dateRange search technician role status";
-  grid-template-columns:
-    minmax(276px, 1fr)
-    minmax(220px, 0.86fr)
-    minmax(310px, 1.42fr)
-    minmax(160px, 0.72fr)
-    minmax(150px, 0.68fr)
-    minmax(160px, 0.72fr);
+  grid-template-areas:
+    "transactionTabs dateRange search"
+    "technician role status";
+  grid-template-columns: minmax(276px, 1.08fr) minmax(220px, 0.95fr) minmax(310px, 1.45fr);
 }
 
 .operationalReportTransactionTabs {
@@ -20690,6 +20689,7 @@ body {
   flex: 0 0 auto;
   gap: 6px;
   height: 48px;
+  min-width: 0;
   padding: 5px;
   width: 100%;
 }
