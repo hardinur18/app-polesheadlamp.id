@@ -8,6 +8,7 @@ const GLOBAL_ROLE_PERMISSIONS_KEY = "global_role_perms:11111111-1111-4111-a111-1
 const ROLE_KEYS = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
 const ROLE_PERMISSIONS_CACHE_TTL_MS = 60_000;
 const USER_CUSTOM_PERMISSIONS_CACHE_TTL_MS = 30_000;
+const REQUESTER_PROFILE_TIMEOUT_MS = 4_000;
 
 const ROLE_ALIASES: Record<string, Role> = {
   owner: "Owner",
@@ -199,6 +200,58 @@ function cacheUserCustomPermissions(userId: string, value: PermissionKey[] | nul
   return cachedValue === null ? null : [...cachedValue];
 }
 
+async function loadRequesterProfile(adminClient: Awaited<ReturnType<typeof createAdminClient>>, userId: string) {
+  if (!adminClient) return null;
+
+  const abortController = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const timeout = new Promise<{ timedOut: true }>((resolve) => {
+      timeoutId = setTimeout(() => {
+        abortController.abort();
+        resolve({ timedOut: true });
+      }, REQUESTER_PROFILE_TIMEOUT_MS);
+    });
+
+    const result = await Promise.race([
+      adminClient
+        .from("profiles")
+        .select("id, email, name, role")
+        .eq("id", userId)
+        .abortSignal(abortController.signal)
+        .maybeSingle(),
+      timeout,
+    ]);
+
+    if ("timedOut" in result) {
+      console.warn("[RequesterAccess] Profile lookup timed out; falling back to auth metadata.", { userId });
+      return null;
+    }
+
+    if (result.error) {
+      console.warn("[RequesterAccess] Profile lookup failed; falling back to auth metadata.", {
+        userId,
+        error: result.error.message,
+      });
+      return null;
+    }
+
+    return (result.data || null) as RequesterProfile | null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("abort")) {
+      console.warn("[RequesterAccess] Profile lookup threw; falling back to auth metadata.", {
+        userId,
+        error: message,
+      });
+    }
+    return null;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export async function getRequesterAccessContext(headers: Headers): Promise<RequesterAccessContext | null> {
   const token = getRequesterToken(headers);
   if (!token) {
@@ -219,11 +272,7 @@ export async function getRequesterAccessContext(headers: Headers): Promise<Reque
     return null;
   }
 
-  const { data: profile } = await adminClient
-    .from("profiles")
-    .select("id, email, name, role")
-    .eq("id", authUser.id)
-    .maybeSingle();
+  const profile = await loadRequesterProfile(adminClient, authUser.id);
 
   const normalizedRole = resolveRole(profile?.role || authUser.user_metadata?.role);
   const isOwner = normalizedRole === "Owner";

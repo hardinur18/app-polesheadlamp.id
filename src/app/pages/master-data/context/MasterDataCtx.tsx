@@ -324,6 +324,47 @@ const buildLocalProfileFallbackUser = (session: Session): User => ({
   phone: '',
 });
 
+const buildSessionMetadataProfileFallback = (session: Session) => {
+  const metadata = session.user.user_metadata || {};
+  const role = typeof metadata.role === 'string' ? metadata.role.trim() : '';
+
+  if (!role) {
+    return null;
+  }
+
+  const name =
+    typeof metadata.name === 'string' && metadata.name.trim()
+      ? metadata.name.trim()
+      : session.user.email?.split('@')[0] || 'User';
+  const status =
+    typeof metadata.status === 'string' && metadata.status.trim()
+      ? metadata.status.trim()
+      : 'active';
+  const branchId =
+    typeof metadata.branch_id === 'string' && metadata.branch_id.trim()
+      ? metadata.branch_id.trim()
+      : typeof metadata.branchId === 'string' && metadata.branchId.trim()
+        ? metadata.branchId.trim()
+        : 'B1';
+
+  return {
+    id: session.user.id,
+    email: session.user.email || '',
+    name,
+    role,
+    status,
+    branch_id: branchId,
+    phone: typeof metadata.phone === 'string' ? metadata.phone : '',
+    join_date:
+      typeof metadata.join_date === 'string'
+        ? metadata.join_date
+        : typeof metadata.joinDate === 'string'
+          ? metadata.joinDate
+          : new Date().toISOString().slice(0, 10),
+    created_at: new Date().toISOString(),
+  };
+};
+
 const mergeUsersById = (nextUsers: User[], previousUsers: User[]) => {
   const merged = new Map<string, User>();
   previousUsers.forEach((user) => merged.set(user.id, user));
@@ -1779,6 +1820,17 @@ export const MasterDataProvider: React.FC<{
           }
         } catch (fallbackError) {
           console.warn('[MasterData] app-data profile fallback failed:', fallbackError);
+        }
+
+        const metadataProfile = buildSessionMetadataProfileFallback(session);
+        if (metadataProfile) {
+          console.warn('[MasterData] Profile sync failed, using auth metadata profile fallback:', {
+            reason: reason.code,
+            userId: metadataProfile.id,
+            role: metadataProfile.role,
+          });
+          applyProfile(metadataProfile);
+          return true;
         }
 
         return applyLocalFallbackUser(reason);
