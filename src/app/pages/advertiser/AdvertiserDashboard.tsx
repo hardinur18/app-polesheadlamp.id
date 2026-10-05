@@ -87,6 +87,7 @@ const advertiserCsPerfCache = new Map<string, {
 }>();
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
 const DASHBOARD_API_RESUME_REFRESH_COOLDOWN_MS = 20_000;
+const DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES = 3;
 
 const formatCurrency = (value: number) =>
   Number.isFinite(value) && value > 0
@@ -915,6 +916,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       ? Date.now() - cachedSnapshot.cachedAt < DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS
       : false;
     const effectiveForceRefresh = forceRefresh || Boolean(cachedSnapshot && !isCachedSnapshotFresh);
+    const shouldForceApiSync = forceRefresh;
+    const apiSyncMinFreshMinutes = shouldForceApiSync ? 0 : DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES;
 
     if (cachedSnapshot && !effectiveForceRefresh) {
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
@@ -991,13 +994,13 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
       try {
         const [meta, google, tiktok] = await Promise.allSettled([
-          syncMetaSnapshotDataset({ ...rangeParams, force: effectiveForceRefresh, minFreshMinutes: effectiveForceRefresh ? 0 : 10 }).catch(() =>
+          syncMetaSnapshotDataset({ ...rangeParams, force: shouldForceApiSync, minFreshMinutes: apiSyncMinFreshMinutes }).catch(() =>
             fetchMetaSnapshotDataset(rangeParams),
           ),
-          syncGoogleAdsSnapshotDataset({ ...rangeParams, force: effectiveForceRefresh, minFreshMinutes: effectiveForceRefresh ? 0 : 10 }).catch(() =>
+          syncGoogleAdsSnapshotDataset({ ...rangeParams, force: shouldForceApiSync, minFreshMinutes: apiSyncMinFreshMinutes }).catch(() =>
             fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
           ),
-          syncTikTokAdsSnapshotDataset({ ...rangeParams, force: effectiveForceRefresh, minFreshMinutes: effectiveForceRefresh ? 0 : 10 }).catch(() =>
+          syncTikTokAdsSnapshotDataset({ ...rangeParams, force: shouldForceApiSync, minFreshMinutes: apiSyncMinFreshMinutes }).catch(() =>
             fetchTikTokAdsSnapshotDataset(rangeParams),
           ),
         ]);

@@ -6,6 +6,8 @@ import type { Role } from "../../../src/app/pages/master-data/data.ts";
 
 const GLOBAL_ROLE_PERMISSIONS_KEY = "global_role_perms:11111111-1111-4111-a111-111111111111";
 const ROLE_KEYS = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+const ROLE_PERMISSIONS_CACHE_TTL_MS = 60_000;
+const USER_CUSTOM_PERMISSIONS_CACHE_TTL_MS = 30_000;
 
 const ROLE_ALIASES: Record<string, Role> = {
   owner: "Owner",
@@ -23,6 +25,11 @@ const ROLE_ALIASES: Record<string, Role> = {
 };
 
 const VALID_PERMISSION_KEYS = new Set<string>(PERMISSIONS.map((permission) => permission.key));
+
+let rolePermissionsCache:
+  | { value: Record<Role, PermissionKey[]>; expiresAt: number }
+  | null = null;
+const userCustomPermissionsCache = new Map<string, { value: PermissionKey[] | null; expiresAt: number }>();
 
 type RequesterProfile = {
   id: string;
@@ -93,11 +100,20 @@ async function createAdminClient() {
 }
 
 async function loadRolePermissionsMap() {
+  const now = Date.now();
+  if (rolePermissionsCache && rolePermissionsCache.expiresAt > now) {
+    return cloneRolePermissionsMap(rolePermissionsCache.value);
+  }
+
   const mergedPermissions = cloneDefaultRolePermissions();
 
   try {
     const storedPermissions = await kv.get(GLOBAL_ROLE_PERMISSIONS_KEY);
     if (!storedPermissions || typeof storedPermissions !== "object") {
+      rolePermissionsCache = {
+        value: cloneRolePermissionsMap(mergedPermissions),
+        expiresAt: now + ROLE_PERMISSIONS_CACHE_TTL_MS,
+      };
       return mergedPermissions;
     }
 
@@ -113,17 +129,28 @@ async function loadRolePermissionsMap() {
     console.error("[RequesterAccess] Failed to load role permissions:", error);
   }
 
+  rolePermissionsCache = {
+    value: cloneRolePermissionsMap(mergedPermissions),
+    expiresAt: now + ROLE_PERMISSIONS_CACHE_TTL_MS,
+  };
+
   return mergedPermissions;
 }
 
 async function loadUserCustomPermissions(userId: string) {
+  const now = Date.now();
+  const cached = userCustomPermissionsCache.get(userId);
+  if (cached && cached.expiresAt > now) {
+    return cached.value === null ? null : [...cached.value];
+  }
+
   try {
     const storedPermissions =
       (await kv.get(`user_perms:${userId}`)) ??
       (await kv.get(`user_permission:${userId}`));
 
     if (Array.isArray(storedPermissions)) {
-      return sanitizePermissionList(storedPermissions);
+      return cacheUserCustomPermissions(userId, sanitizePermissionList(storedPermissions), now);
     }
 
     if (
@@ -131,7 +158,11 @@ async function loadUserCustomPermissions(userId: string) {
       typeof storedPermissions === "object" &&
       Array.isArray((storedPermissions as { perms?: unknown[] }).perms)
     ) {
-      return sanitizePermissionList((storedPermissions as { perms?: unknown[] }).perms);
+      return cacheUserCustomPermissions(
+        userId,
+        sanitizePermissionList((storedPermissions as { perms?: unknown[] }).perms),
+        now,
+      );
     }
 
     if (
@@ -139,14 +170,33 @@ async function loadUserCustomPermissions(userId: string) {
       typeof storedPermissions === "object" &&
       Array.isArray((storedPermissions as { permissions?: unknown[] }).permissions)
     ) {
-      return sanitizePermissionList((storedPermissions as { permissions?: unknown[] }).permissions);
+      return cacheUserCustomPermissions(
+        userId,
+        sanitizePermissionList((storedPermissions as { permissions?: unknown[] }).permissions),
+        now,
+      );
     }
 
-    return null;
+    return cacheUserCustomPermissions(userId, null, now);
   } catch (error) {
     console.error("[RequesterAccess] Failed to load user custom permissions:", error);
     return null;
   }
+}
+
+function cloneRolePermissionsMap(value: Record<Role, PermissionKey[]>) {
+  return Object.fromEntries(
+    ROLE_KEYS.map((role) => [role, [...(value[role] || [])]]),
+  ) as Record<Role, PermissionKey[]>;
+}
+
+function cacheUserCustomPermissions(userId: string, value: PermissionKey[] | null, now = Date.now()) {
+  const cachedValue = value === null ? null : [...value];
+  userCustomPermissionsCache.set(userId, {
+    value: cachedValue,
+    expiresAt: now + USER_CUSTOM_PERMISSIONS_CACHE_TTL_MS,
+  });
+  return cachedValue === null ? null : [...cachedValue];
 }
 
 export async function getRequesterAccessContext(headers: Headers): Promise<RequesterAccessContext | null> {
