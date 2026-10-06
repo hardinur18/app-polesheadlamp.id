@@ -86,8 +86,6 @@ const advertiserCsPerfCache = new Map<string, {
   cachedAt: number;
 }>();
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
-const DASHBOARD_API_RESUME_REFRESH_COOLDOWN_MS = 20_000;
-const DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES = 3;
 
 const formatCurrency = (value: number) =>
   Number.isFinite(value) && value > 0
@@ -343,7 +341,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
-  const lastRealtimeApiRefreshAtRef = React.useRef(0);
 
   // Update selection if prop changes
   React.useEffect(() => {
@@ -353,7 +350,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   React.useEffect(() => {
     if (refreshTrigger === lastMasterRefreshTriggerRef.current) return;
     lastMasterRefreshTriggerRef.current = refreshTrigger;
-    setApiRefreshNonce((value) => value + 1);
   }, [refreshTrigger]);
 
   // Date State
@@ -396,43 +392,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
-
-  React.useEffect(() => {
-    if (!rangeParams || activeTab !== 'cs-performance') return;
-
-    const requestRealtimeApiRefresh = (reason: string, cooldownMs = DASHBOARD_API_RESUME_REFRESH_COOLDOWN_MS) => {
-      if (apiAdsStatus === 'loading') return;
-      if (document.visibilityState !== 'visible') return;
-      if ('onLine' in navigator && !navigator.onLine) return;
-
-      const now = Date.now();
-      if (now - lastRealtimeApiRefreshAtRef.current < cooldownMs) return;
-      lastRealtimeApiRefreshAtRef.current = now;
-      setApiRefreshNonce((value) => value + 1);
-
-      if (import.meta.env.DEV) {
-        console.info('[Advertiser Dashboard] realtime API refresh requested', { reason, range: rangeParams });
-      }
-    };
-
-    const intervalId = window.setInterval(
-      () => requestRealtimeApiRefresh('interval', DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS - 1),
-      DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS,
-    );
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') requestRealtimeApiRefresh('visible');
-    };
-    const handleOnline = () => requestRealtimeApiRefresh('online');
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('online', handleOnline);
-
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('online', handleOnline);
-    };
-  }, [activeTab, apiAdsStatus, rangeParams]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -917,7 +876,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       : false;
     const effectiveForceRefresh = forceRefresh || Boolean(cachedSnapshot && !isCachedSnapshotFresh);
     const shouldForceApiSync = forceRefresh;
-    const apiSyncMinFreshMinutes = shouldForceApiSync ? 0 : DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES;
 
     if (cachedSnapshot && !effectiveForceRefresh) {
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
@@ -993,16 +951,26 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       setApiAdsStatus('loading');
 
       try {
+        const metaLoader = shouldForceApiSync
+          ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+              fetchMetaSnapshotDataset(rangeParams),
+            )
+          : fetchMetaSnapshotDataset(rangeParams);
+        const googleLoader = shouldForceApiSync
+          ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+              fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+            )
+          : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true });
+        const tiktokLoader = shouldForceApiSync
+          ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+              fetchTikTokAdsSnapshotDataset(rangeParams),
+            )
+          : fetchTikTokAdsSnapshotDataset(rangeParams);
+
         const [meta, google, tiktok] = await Promise.allSettled([
-          syncMetaSnapshotDataset({ ...rangeParams, force: shouldForceApiSync, minFreshMinutes: apiSyncMinFreshMinutes }).catch(() =>
-            fetchMetaSnapshotDataset(rangeParams),
-          ),
-          syncGoogleAdsSnapshotDataset({ ...rangeParams, force: shouldForceApiSync, minFreshMinutes: apiSyncMinFreshMinutes }).catch(() =>
-            fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-          ),
-          syncTikTokAdsSnapshotDataset({ ...rangeParams, force: shouldForceApiSync, minFreshMinutes: apiSyncMinFreshMinutes }).catch(() =>
-            fetchTikTokAdsSnapshotDataset(rangeParams),
-          ),
+          metaLoader,
+          googleLoader,
+          tiktokLoader,
         ]);
 
         const nextByAccount: Record<string, AdvertiserCsAccountMetric> = {};

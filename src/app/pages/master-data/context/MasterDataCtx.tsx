@@ -1231,14 +1231,14 @@ export const MasterDataProvider: React.FC<{
       appDataOptions.eq = { technician_id: technicianId };
     }
 
-    const request = (async () => {
-      const nextRows = await fetchRangeRows(
-        'orders',
-        appDataOptions,
-        (rows) => rows.map(mapOrderFromDB),
-        500,
-        false,
-      );
+	    const request = (async () => {
+	      const nextRows = await fetchRangeRows(
+	        'orders',
+	        appDataOptions,
+	        (rows) => rows.map(mapOrderFromDB),
+	        500,
+	        true,
+	      );
 
       if (nextRows.length > 0) {
         setOrders((previousRows) => mergeRowsById(nextRows, previousRows));
@@ -1268,18 +1268,18 @@ export const MasterDataProvider: React.FC<{
 
     const request = (async () => {
       const { fromIso, toIso } = toBusinessDayUtcRange(from, to);
-      const nextRows = await fetchRangeRows(
-        'leads',
-        {
-          orderBy: 'created_at',
-          ascending: false,
-          gte: { created_at: fromIso },
-          lte: { created_at: toIso },
-        },
-        (rows) => rows.map((lead) => mapLeadFromDB(lead, leadSocialContactsRef.current[lead.id])),
-        500,
-        false,
-      );
+	      const nextRows = await fetchRangeRows(
+	        'leads',
+	        {
+	          orderBy: 'created_at',
+	          ascending: false,
+	          gte: { created_at: fromIso },
+	          lte: { created_at: toIso },
+	        },
+	        (rows) => rows.map((lead) => mapLeadFromDB(lead, leadSocialContactsRef.current[lead.id])),
+	        500,
+	        true,
+	      );
 
       if (nextRows.length > 0) {
         setLeads((previousRows) => mergeRowsById(nextRows, previousRows));
@@ -1374,24 +1374,32 @@ export const MasterDataProvider: React.FC<{
   }, []);
 
   // Helper to fetch data from a table
-  const fetchData = async (
-    table: string,
-    setter: React.Dispatch<React.SetStateAction<any[]>>,
-    mapper?: (data: any[]) => any[],
-    options: FetchDataOptions = {},
-  ) => {
-    const endTimer = startPerfTimer('master-data.full-fetch', {
-      table,
-      pageSize: options.pageSize || 1000,
-      progressive: Boolean(options.progressive),
-      orderBy: options.appData?.orderBy,
-    });
-    try {
-      let allData: any[] = [];
-      let page = 0;
-      const pageSize = options.pageSize || 1000;
-      let hasMore = true;
-      const MAX_RECORDS = 50000; // Safety cap
+	  const fetchData = async (
+	    table: string,
+	    setter: React.Dispatch<React.SetStateAction<any[]>>,
+	    mapper?: (data: any[]) => any[],
+	    options: FetchDataOptions = {},
+	  ) => {
+	    const endTimer = startPerfTimer('master-data.full-fetch', {
+	      table,
+	      pageSize: options.pageSize || 1000,
+	      progressive: Boolean(options.progressive),
+	      orderBy: options.appData?.orderBy,
+	    });
+	    try {
+	      let hydratedFromCache = false;
+	      if (CACHEABLE_MASTER_TABLES.has(table)) {
+	        const cachedRows = safeReadCachedRows(table);
+	        if (cachedRows?.length) {
+	          setter(mapFetchedRows(cachedRows, mapper));
+	          hydratedFromCache = true;
+	        }
+	      }
+	      let allData: any[] = [];
+	      let page = 0;
+	      const pageSize = options.pageSize || 1000;
+	      let hasMore = true;
+	      const MAX_RECORDS = 50000; // Safety cap
 
       while (hasMore) {
         const from = page * pageSize;
@@ -1433,9 +1441,14 @@ export const MasterDataProvider: React.FC<{
         }
       }
 
-      if (!options.progressive || allData.length === 0) {
-        setter(mapFetchedRows(allData, mapper));
-      }
+	      if (allData.length === 0 && hydratedFromCache) {
+	        endTimer('fallback', { reason: 'stale-cache', pages: page + 1, rows: 0 });
+	        return;
+	      }
+
+	      if (!options.progressive || allData.length === 0) {
+	        setter(mapFetchedRows(allData, mapper));
+	      }
       if (CACHEABLE_MASTER_TABLES.has(table)) {
         safeWriteCachedRows(table, allData);
       }
