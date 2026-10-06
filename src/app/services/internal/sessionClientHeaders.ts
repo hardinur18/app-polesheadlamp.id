@@ -8,6 +8,7 @@ type EdgeHeadersOptions = {
 };
 
 let inFlightAccessTokenRefresh: Promise<string> | null = null;
+const TOKEN_REFRESH_GRACE_MS = 15_000;
 
 async function refreshSessionAccessToken() {
   if (inFlightAccessTokenRefresh) {
@@ -81,7 +82,7 @@ export async function getSessionAccessToken() {
   }
 
   const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
-  const shouldRefresh = !expiresAtMs || expiresAtMs - Date.now() < 120_000;
+  const shouldRefresh = Boolean(expiresAtMs) && expiresAtMs - Date.now() < TOKEN_REFRESH_GRACE_MS;
 
   if (shouldRefresh) {
     return refreshSessionAccessToken();

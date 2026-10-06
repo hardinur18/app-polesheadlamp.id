@@ -9,6 +9,14 @@ import type { Role } from "../../../src/app/pages/master-data/data.ts";
 const app = new Hono();
 const GLOBAL_ROLE_PERMISSIONS_KEY = "global_role_perms:11111111-1111-4111-a111-111111111111";
 const ROLE_KEYS = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+const ROLE_PERMISSIONS_CACHE_TTL_MS = 60_000;
+const ROLE_SETTINGS_CACHE_TTL_MS = 60_000;
+let rolePermissionsCache:
+  | { value: Record<Role, PermissionKey[]>; expiresAt: number }
+  | null = null;
+let roleSettingsCache:
+  | { value: Record<string, unknown>; expiresAt: number }
+  | null = null;
 const ROLE_ALIASES: Record<string, Role> = {
   owner: "Owner",
   "super admin": "Super Admin",
@@ -45,6 +53,12 @@ function cloneDefaultRolePermissions() {
   ) as Record<Role, PermissionKey[]>;
 }
 
+function cloneRolePermissionsMap(value: Record<Role, PermissionKey[]>) {
+  return Object.fromEntries(
+    ROLE_KEYS.map((role) => [role, [...(value[role] || [])]]),
+  ) as Record<Role, PermissionKey[]>;
+}
+
 function hasSamePermissionSet(left: PermissionKey[], right: PermissionKey[]) {
   if (left.length !== right.length) return false;
 
@@ -66,8 +80,24 @@ async function createAdminClient() {
 }
 
 async function loadRolePermissionsMap() {
+  const now = Date.now();
+  if (rolePermissionsCache && rolePermissionsCache.expiresAt > now) {
+    return cloneRolePermissionsMap(rolePermissionsCache.value);
+  }
+
   const mergedPermissions = cloneDefaultRolePermissions();
-  const storedPermissions = await kv.get(GLOBAL_ROLE_PERMISSIONS_KEY);
+  let storedPermissions: unknown;
+
+  try {
+    storedPermissions = await kv.get(GLOBAL_ROLE_PERMISSIONS_KEY);
+  } catch (error) {
+    console.warn("[Permissions] Failed to load role permissions from KV; using defaults.", error);
+    rolePermissionsCache = {
+      value: cloneRolePermissionsMap(mergedPermissions),
+      expiresAt: now + ROLE_PERMISSIONS_CACHE_TTL_MS,
+    };
+    return mergedPermissions;
+  }
 
   if (storedPermissions && typeof storedPermissions === "object") {
     Object.entries(storedPermissions as Record<string, unknown>).forEach(([roleKey, permissions]) => {
@@ -80,7 +110,34 @@ async function loadRolePermissionsMap() {
     });
   }
 
+  rolePermissionsCache = {
+    value: cloneRolePermissionsMap(mergedPermissions),
+    expiresAt: now + ROLE_PERMISSIONS_CACHE_TTL_MS,
+  };
+
   return mergedPermissions;
+}
+
+async function loadRoleSettings() {
+  const now = Date.now();
+  if (roleSettingsCache && roleSettingsCache.expiresAt > now) {
+    return { ...roleSettingsCache.value };
+  }
+
+  try {
+    const value = await kv.get("global_role_settings:1");
+    const settings = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    roleSettingsCache = {
+      value: { ...settings },
+      expiresAt: now + ROLE_SETTINGS_CACHE_TTL_MS,
+    };
+    return settings;
+  } catch (error) {
+    console.warn("[Permissions] Failed to load role settings from KV; using cached/default settings.", error);
+    return roleSettingsCache?.value ? { ...roleSettingsCache.value } : {};
+  }
 }
 
 function normalizeGlobalRolePayload(body: Record<string, unknown>) {
@@ -187,6 +244,10 @@ app.post("/global", async (c) => {
       body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {},
     );
     await kv.set(GLOBAL_ROLE_PERMISSIONS_KEY, sanitizedPayload);
+    rolePermissionsCache = {
+      value: cloneRolePermissionsMap(sanitizedPayload as Record<Role, PermissionKey[]>),
+      expiresAt: Date.now() + ROLE_PERMISSIONS_CACHE_TTL_MS,
+    };
 
     return c.json({ success: true, data: sanitizedPayload });
   } catch (err: any) {
@@ -204,7 +265,7 @@ app.get("/settings", async (c) => {
       return c.json({ error: "Forbidden" }, 403);
     }
 
-    const value = await kv.get("global_role_settings:1");
+    const value = await loadRoleSettings();
     return c.json({ data: value || {} });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -222,6 +283,10 @@ app.post("/settings", async (c) => {
 
     const body = await c.req.json();
     await kv.set("global_role_settings:1", body);
+    roleSettingsCache = {
+      value: body && typeof body === "object" && !Array.isArray(body) ? { ...body } : {},
+      expiresAt: Date.now() + ROLE_SETTINGS_CACHE_TTL_MS,
+    };
 
     return c.json({ success: true });
   } catch (err: any) {
@@ -242,9 +307,17 @@ app.get("/user/:id", async (c) => {
       return c.json({ error: "Forbidden" }, 403);
     }
 
-    const value =
-      (await kv.get(`user_perms:${userId}`)) ??
-      (await kv.get(`user_permission:${userId}`));
+    let value: unknown = null;
+    try {
+      value =
+        (await kv.get(`user_perms:${userId}`)) ??
+        (await kv.get(`user_permission:${userId}`));
+    } catch (error) {
+      console.warn("[Permissions] Failed to load custom user permissions; using role defaults.", {
+        userId,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
     const permissions = extractStoredUserPermissions(value);
 
     if (!permissions) {

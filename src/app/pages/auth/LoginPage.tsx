@@ -38,6 +38,9 @@ const isRetryableLoginError = (err: unknown) => {
       err.message.includes('Failed to fetch') ||
       err.message.includes('timeout') ||
       err.message.includes('Koneksi Supabase timeout') ||
+      err.message.includes('504') ||
+      err.message.toLowerCase().includes('gateway') ||
+      err.message.toLowerCase().includes('server error') ||
       err.message === '{}' ||
       err.message.trim() === ''
     );

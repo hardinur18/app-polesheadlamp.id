@@ -17,71 +17,204 @@ const client = () => createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
 );
 
+const KV_READ_TIMEOUT_MS = Math.max(500, Number(Deno.env.get("KV_READ_TIMEOUT_MS") || "2500"));
+const KV_WRITE_TIMEOUT_MS = Math.max(1000, Number(Deno.env.get("KV_WRITE_TIMEOUT_MS") || "8000"));
+const KV_CACHE_TTL_MS = Math.max(5000, Number(Deno.env.get("KV_CACHE_TTL_MS") || "120000"));
+
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const valueCache = new Map<string, CacheEntry<any>>();
+const prefixCache = new Map<string, CacheEntry<any[]>>();
+
+const isTimeoutLikeError = (error: unknown) => {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes("timeout") ||
+    message.includes("aborted") ||
+    message.includes("aborterror") ||
+    message.includes("504") ||
+    message.includes("gateway")
+  );
+};
+
+const readCache = <T>(cache: Map<string, CacheEntry<T>>, key: string): T | undefined => {
+  const cached = cache.get(key);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return cached.value;
+};
+
+const writeCache = <T>(cache: Map<string, CacheEntry<T>>, key: string, value: T) => {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + KV_CACHE_TTL_MS,
+  });
+};
+
+const clearPrefixCaches = () => {
+  prefixCache.clear();
+};
+
+const withTimeout = async <T>(operation: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 // Set stores a key-value pair in the database.
 export const set = async (key: string, value: any): Promise<void> => {
   const supabase = client()
-  const { error } = await supabase.from("kv_store_f781cd00").upsert({
-    key,
-    value
-  });
+  const { error } = await withTimeout(
+    supabase.from("kv_store_f781cd00").upsert({
+      key,
+      value
+    }),
+    KV_WRITE_TIMEOUT_MS,
+    "KV set",
+  );
   if (error) {
     throw new Error(error.message);
   }
+  writeCache(valueCache, key, value);
+  clearPrefixCaches();
 };
 
 // Get retrieves a key-value pair from the database.
 export const get = async (key: string): Promise<any> => {
   const supabase = client()
-  const { data, error } = await supabase.from("kv_store_f781cd00").select("value").eq("key", key).maybeSingle();
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const { data, error } = await withTimeout(
+      supabase.from("kv_store_f781cd00").select("value").eq("key", key).maybeSingle(),
+      KV_READ_TIMEOUT_MS,
+      "KV get",
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+    writeCache(valueCache, key, data?.value);
+    return data?.value;
+  } catch (error) {
+    const cached = readCache(valueCache, key);
+    if (cached !== undefined && isTimeoutLikeError(error)) {
+      console.warn(`[KV] get ${key} failed; using cached value.`, error instanceof Error ? error.message : error);
+      return cached;
+    }
+    throw error;
   }
-  return data?.value;
 };
 
 // Delete deletes a key-value pair from the database.
 export const del = async (key: string): Promise<void> => {
   const supabase = client()
-  const { error } = await supabase.from("kv_store_f781cd00").delete().eq("key", key);
+  const { error } = await withTimeout(
+    supabase.from("kv_store_f781cd00").delete().eq("key", key),
+    KV_WRITE_TIMEOUT_MS,
+    "KV del",
+  );
   if (error) {
     throw new Error(error.message);
   }
+  valueCache.delete(key);
+  clearPrefixCaches();
 };
 
 // Sets multiple key-value pairs in the database.
 export const mset = async (keys: string[], values: any[]): Promise<void> => {
   const supabase = client()
-  const { error } = await supabase.from("kv_store_f781cd00").upsert(keys.map((k, i) => ({ key: k, value: values[i] })));
+  const { error } = await withTimeout(
+    supabase.from("kv_store_f781cd00").upsert(keys.map((k, i) => ({ key: k, value: values[i] }))),
+    KV_WRITE_TIMEOUT_MS,
+    "KV mset",
+  );
   if (error) {
     throw new Error(error.message);
   }
+  keys.forEach((key, index) => writeCache(valueCache, key, values[index]));
+  clearPrefixCaches();
 };
 
 // Gets multiple key-value pairs from the database.
 export const mget = async (keys: string[]): Promise<any[]> => {
   const supabase = client()
-  const { data, error } = await supabase.from("kv_store_f781cd00").select("value").in("key", keys);
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const { data, error } = await withTimeout(
+      supabase.from("kv_store_f781cd00").select("key, value").in("key", keys),
+      KV_READ_TIMEOUT_MS,
+      "KV mget",
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+    const byKey = new Map((data || []).map((row: any) => [row.key, row.value]));
+    keys.forEach((key) => {
+      if (byKey.has(key)) writeCache(valueCache, key, byKey.get(key));
+    });
+    return keys.map((key) => byKey.get(key)).filter((value) => value !== undefined);
+  } catch (error) {
+    if (isTimeoutLikeError(error)) {
+      const cachedValues = keys
+        .map((key) => readCache(valueCache, key))
+        .filter((value) => value !== undefined);
+      if (cachedValues.length > 0) {
+        console.warn("[KV] mget failed; using cached values.", error instanceof Error ? error.message : error);
+        return cachedValues;
+      }
+    }
+    throw error;
   }
-  return data?.map((d) => d.value) ?? [];
 };
 
 // Deletes multiple key-value pairs from the database.
 export const mdel = async (keys: string[]): Promise<void> => {
   const supabase = client()
-  const { error } = await supabase.from("kv_store_f781cd00").delete().in("key", keys);
+  const { error } = await withTimeout(
+    supabase.from("kv_store_f781cd00").delete().in("key", keys),
+    KV_WRITE_TIMEOUT_MS,
+    "KV mdel",
+  );
   if (error) {
     throw new Error(error.message);
   }
+  keys.forEach((key) => valueCache.delete(key));
+  clearPrefixCaches();
 };
 
 // Search for key-value pairs by prefix.
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
   const supabase = client()
-  const { data, error } = await supabase.from("kv_store_f781cd00").select("key, value").like("key", prefix + "%");
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const { data, error } = await withTimeout(
+      supabase.from("kv_store_f781cd00").select("key, value").like("key", prefix + "%"),
+      KV_READ_TIMEOUT_MS,
+      "KV getByPrefix",
+    );
+    if (error) {
+      throw new Error(error.message);
+    }
+    const values = data?.map((d) => d.value) ?? [];
+    writeCache(prefixCache, prefix, values);
+    (data || []).forEach((row: any) => writeCache(valueCache, row.key, row.value));
+    return values;
+  } catch (error) {
+    const cached = readCache(prefixCache, prefix);
+    if (cached && isTimeoutLikeError(error)) {
+      console.warn(`[KV] getByPrefix ${prefix} failed; using cached values.`, error instanceof Error ? error.message : error);
+      return cached;
+    }
+    throw error;
   }
-  return data?.map((d) => d.value) ?? [];
 };
