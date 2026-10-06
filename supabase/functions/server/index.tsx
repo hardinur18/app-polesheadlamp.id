@@ -3278,18 +3278,80 @@ function applyAppDataFilters(query: any, c: any, config: AppDataAccessConfig) {
 }
 
 function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
-  const text = String(error?.message || "").toLowerCase();
-  return (
+  const text = [
+    error?.code,
+    error?.message,
+    error?.details,
+    error?.hint,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (
     (config.table === "ad_account_assignments" || config.table === "ad_account_owner_assignments") &&
     text.includes("notes") &&
     text.includes("schema cache")
+  ) {
+    return true;
+  }
+
+  if (config.table !== "leads") return false;
+
+  return (
+    text.includes("pgrst204") ||
+    text.includes("42703") ||
+    text.includes("schema cache") ||
+    [
+      "social_platform",
+      "social_username",
+      "social_profile_url",
+      "social_chat_url",
+      "embed_form_id",
+      "embed_form_submission_id",
+      "embed_form_slug",
+      "embed_form_name",
+      "service_id",
+      "affiliate_id",
+      "origin",
+      "landing_page_url",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+    ].some((column) => text.includes(column))
   );
 }
 
 function withoutAppDataDraftColumns(config: AppDataAccessConfig, payload: Record<string, unknown>) {
-  if (!isAppDataSchemaRetryable(config, { message: "notes schema cache" })) return payload;
-  const { notes: _notes, ...rest } = payload;
-  return rest;
+  if (config.table === "ad_account_assignments" || config.table === "ad_account_owner_assignments") {
+    const { notes: _notes, ...rest } = payload;
+    return rest;
+  }
+
+  if (config.table === "leads") {
+    const {
+      social_platform: _social_platform,
+      social_username: _social_username,
+      social_profile_url: _social_profile_url,
+      social_chat_url: _social_chat_url,
+      embed_form_id: _embed_form_id,
+      embed_form_submission_id: _embed_form_submission_id,
+      embed_form_slug: _embed_form_slug,
+      embed_form_name: _embed_form_name,
+      service_id: _service_id,
+      affiliate_id: _affiliate_id,
+      origin: _origin,
+      landing_page_url: _landing_page_url,
+      utm_source: _utm_source,
+      utm_medium: _utm_medium,
+      utm_campaign: _utm_campaign,
+      utm_term: _utm_term,
+      utm_content: _utm_content,
+      ...rest
+    } = payload;
+    return rest;
+  }
+
+  return payload;
 }
 
 async function requireAppDataAccess(c: any, config: AppDataAccessConfig, action: "read" | "create" | "edit" | "delete") {

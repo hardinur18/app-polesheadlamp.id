@@ -349,7 +349,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     const map = new Map<string, string>();
     [...adAccountOwnerAssignments]
       .filter(isActiveAdAssignment)
-      .sort((left, right) => right.startDate.localeCompare(left.startDate))
+      .sort((left, right) => (right.startDate || '').localeCompare(left.startDate || ''))
       .forEach((assignment) => {
         if (!map.has(assignment.adAccountId)) {
           map.set(assignment.adAccountId, assignment.advertiserId);
@@ -1489,7 +1489,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         setEditingItem(null);
       } catch (error: any) {
         console.error("Error updating lead:", error);
-        toast.error(error?.message || "Gagal memperbarui prospek");
+        toast.error("Gagal memperbarui prospek", {
+          description: error?.message || "Coba ulang beberapa detik lagi.",
+        });
       }
     } else {
       // Generate 7-char random ID (Uppercase + Numbers)
@@ -1509,7 +1511,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         ...formData
       };
       try {
-          await addLead(newItem);
+          await addLead(newItem, { silent: true });
           toast.success("Prospek berhasil ditambahkan");
           if (currentUser) {
             logActivity(
@@ -1523,9 +1525,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
           }
           setIsAddOpen(false);
           setEditingItem(null);
-      } catch (err) {
+      } catch (err: any) {
           console.error("Error submitting lead:", err);
-          toast.error("Gagal menambahkan prospek");
+          toast.error("Gagal menambahkan prospek", {
+            description: err?.message || "Coba ulang beberapa detik lagi.",
+          });
       }
     }
   };

@@ -179,7 +179,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
     const map = new Map<string, string>();
     [...adAccountOwnerAssignments]
       .filter(isActiveAssignmentPeriod)
-      .sort((left, right) => right.startDate.localeCompare(left.startDate))
+      .sort((left, right) => (right.startDate || '').localeCompare(left.startDate || ''))
       .forEach((assignment) => {
         if (!map.has(assignment.adAccountId)) {
           map.set(assignment.adAccountId, assignment.advertiserId);
