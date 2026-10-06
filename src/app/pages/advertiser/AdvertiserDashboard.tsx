@@ -338,6 +338,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [apiUnmappedSnapshots, setApiUnmappedSnapshots] = useState<ApiUnmappedSnapshot[]>([]);
   const [apiAdsStatus, setApiAdsStatus] = useState<ApiAdsStatus>('idle');
   const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
+  const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
@@ -392,6 +393,29 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+
+  React.useEffect(() => {
+    if (!rangeParams) return;
+
+    const refreshSnapshot = () => {
+      setApiSnapshotRefreshNonce((value) => value + 1);
+    };
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSnapshot();
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSnapshot, DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS);
+    window.addEventListener('focus', refreshSnapshot);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshSnapshot);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
+  }, [rangeParams]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -1007,7 +1031,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [adAccountAssignmentCacheKey, adAccountCsLookup, adAccountLookup, apiRefreshNonce, getAdAccountAdvertiserId, platforms, rangeParams, targetAdvertiserId]);
+  }, [adAccountAssignmentCacheKey, adAccountCsLookup, adAccountLookup, apiRefreshNonce, apiSnapshotRefreshNonce, getAdAccountAdvertiserId, platforms, rangeParams, targetAdvertiserId]);
 
   const csPerformanceRows = useMemo(() => {
     if (!rangeParams) return [];

@@ -3381,7 +3381,10 @@ app.post("/make-server-f781cd00/app-data/:type", async (c) => {
     if (error) throw error;
 
     const actor = auth.requester?.actorName || "System";
-    await logActivity(actor, `Create ${type}`, `Created ${type} ${(payload as any)?.id || ""}`, "System");
+    runBackgroundTask(
+      `audit create ${type}`,
+      logActivity(actor, `Create ${type}`, `Created ${type} ${(payload as any)?.id || ""}`, "System"),
+    );
 
     return c.json({ row: data }, 201);
   } catch (err: any) {
@@ -3449,7 +3452,10 @@ app.delete("/make-server-f781cd00/app-data/:type/:id", async (c) => {
     if (error) throw error;
 
     const actor = auth.requester?.actorName || "System";
-    await logActivity(actor, `Delete ${type}`, `Deleted ${type} ${id}`, "System");
+    runBackgroundTask(
+      `audit delete ${type}`,
+      logActivity(actor, `Delete ${type}`, `Deleted ${type} ${id}`, "System"),
+    );
 
     return c.json({ success: true });
   } catch (err: any) {

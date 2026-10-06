@@ -615,6 +615,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const [googleIntegrationConfigs, setGoogleIntegrationConfigs] = useState<GoogleAdsIntegrationConfig[]>([]);
   const [tiktokIntegrationConfigs, setTikTokIntegrationConfigs] = useState<TikTokAdsIntegrationConfig[]>([]);
   const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
+  const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
   const [isChartOpen, setIsChartOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(CS_VIEW_DEFAULT_ITEMS_PER_PAGE);
@@ -637,6 +638,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
   const lastSpamScopeKeyRef = React.useRef('');
+
   React.useEffect(() => {
     const checkMobile = () => setIsSpamFormMobile(window.innerWidth < 768);
     checkMobile();
@@ -670,6 +672,29 @@ export function CSDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+
+  React.useEffect(() => {
+    if (!rangeParams) return;
+
+    const refreshSnapshot = () => {
+      setApiSnapshotRefreshNonce((value) => value + 1);
+    };
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSnapshot();
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSnapshot, DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS);
+    window.addEventListener('focus', refreshSnapshot);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshSnapshot);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
+  }, [rangeParams]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -1237,7 +1262,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, isOperationalDataLoading, platforms, rangeParams]);
+  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, apiSnapshotRefreshNonce, isOperationalDataLoading, platforms, rangeParams]);
 
   // Filter Logic
   const filteredData = useMemo(() => {

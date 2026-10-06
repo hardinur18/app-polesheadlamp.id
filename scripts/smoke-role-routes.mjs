@@ -44,8 +44,8 @@ const scenarios = [
   {
     role: 'Finance',
     name: 'Route Smoke Finance',
-    targetPath: '/finance/payments',
-    expectedText: 'Pembayaran',
+    targetPath: '/finance/operational-expenses',
+    expectedText: 'Biaya Operasional',
   },
   {
     role: 'Advertiser',

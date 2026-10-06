@@ -3667,6 +3667,27 @@ export const MasterDataProvider: React.FC<{
 
       channel = channel.on(
         'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_ads' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newItem = mapDailyAdFromDB(payload.new);
+            setDailyAds((prev) => [newItem, ...prev.filter((item) => item.id !== newItem.id)]);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedItem = mapDailyAdFromDB(payload.new);
+            setDailyAds((prev) => {
+              const exists = prev.some((item) => item.id === updatedItem.id);
+              return exists
+                ? prev.map((item) => item.id === updatedItem.id ? updatedItem : item)
+                : [updatedItem, ...prev];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setDailyAds((prev) => prev.filter((item) => item.id !== payload.old.id));
+          }
+        }
+      );
+
+      channel = channel.on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'technician_schedules' },
         (payload) => {
           if (payload.eventType === 'INSERT') {
