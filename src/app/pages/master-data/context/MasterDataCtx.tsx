@@ -2960,6 +2960,35 @@ export const MasterDataProvider: React.FC<{
       });
   };
 
+  const queueOrderProspectLifecycleSync = (order: Order, source: string) => {
+    if (!order.leadId) return;
+
+    const maxAttempts = 2;
+    const run = async (attempt: number) => {
+      try {
+        await syncOrderProspectLifecycle(order);
+      } catch (error) {
+        const shouldRetry = attempt < maxAttempts;
+        console.warn('Order prospect lifecycle sync failed', {
+          orderId: order.id,
+          source,
+          attempt,
+          retrying: shouldRetry,
+          error,
+        });
+
+        if (shouldRetry) {
+          const delayMs = isRequestTimeoutError(error) ? 3_000 : 1_500;
+          globalThis.setTimeout(() => {
+            void run(attempt + 1);
+          }, delayMs);
+        }
+      }
+    };
+
+    void run(1);
+  };
+
   const orderPatchHasAnyField = (patch: Partial<Order>, fields: (keyof Order)[]) =>
     fields.some((field) => Object.prototype.hasOwnProperty.call(patch, field));
 
@@ -2981,13 +3010,9 @@ export const MasterDataProvider: React.FC<{
     validateOrderScheduleBeforeSave(item);
     await validateOrderScheduleFreshBeforeSave(item);
     const savedOrder = await addItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB);
-    syncOrderCrmContactSnapshot((savedOrder || item) as Order, 'pesanan_otomatis');
-    try {
-      await syncOrderProspectLifecycle((savedOrder || item) as Order);
-    } catch (error) {
-      console.error('Error syncing new order prospect lifecycle:', error);
-      toast.error('Pesanan tersimpan, tapi sinkronisasi prospek/booking gagal. Coba refresh lalu cek prospek terkait.');
-    }
+    const orderForSync = (savedOrder || item) as Order;
+    syncOrderCrmContactSnapshot(orderForSync, 'pesanan_otomatis');
+    queueOrderProspectLifecycleSync(orderForSync, 'order_create');
     return savedOrder;
   };
 
@@ -2996,13 +3021,9 @@ export const MasterDataProvider: React.FC<{
     validateOrderScheduleBeforeSave(item, previousOrder);
     await validateOrderScheduleFreshBeforeSave(item, previousOrder);
     const savedOrder = await updateItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB);
-    syncOrderCrmContactSnapshot((savedOrder || item) as Order, 'pesanan_update_otomatis');
-    try {
-      await syncOrderProspectLifecycle((savedOrder || item) as Order);
-    } catch (error) {
-      console.error('Error syncing order prospect lifecycle:', error);
-      toast.error('Status pesanan tersimpan, tapi sinkronisasi prospek/booking gagal. Coba refresh lalu ulangi jika masih belum sesuai.');
-    }
+    const orderForSync = (savedOrder || item) as Order;
+    syncOrderCrmContactSnapshot(orderForSync, 'pesanan_update_otomatis');
+    queueOrderProspectLifecycleSync(orderForSync, 'order_update');
     return savedOrder;
   };
 
@@ -3044,12 +3065,7 @@ export const MasterDataProvider: React.FC<{
       }
 
       if (shouldSyncOrderLifecycleForPatch(patch)) {
-        try {
-          await syncOrderProspectLifecycle(savedOrder);
-        } catch (error) {
-          console.error('Error syncing order prospect lifecycle:', error);
-          toast.error('Status pesanan tersimpan, tapi sinkronisasi prospek/booking gagal. Coba refresh lalu ulangi jika masih belum sesuai.');
-        }
+        queueOrderProspectLifecycleSync(savedOrder, 'order_patch');
       }
 
       return savedOrder;
