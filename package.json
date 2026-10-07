@@ -16,6 +16,7 @@
     "smoke:routes": "node scripts/smoke-route-navigation.mjs",
     "smoke:role-routes": "node scripts/smoke-role-routes.mjs",
     "smoke:prospect-crud": "node scripts/smoke-prospect-crud.mjs",
+    "audit:lead-duplicates": "node scripts/audit-lead-duplicates.mjs",
     "smoke:release": "npm run smoke:routes && npm run smoke:role-routes && npm run smoke:prospect-crud",
     "perf:mobile-baseline": "node scripts/perf-mobile-baseline.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",

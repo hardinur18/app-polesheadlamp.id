@@ -39,7 +39,7 @@ import {
   CollapsibleTrigger,
 } from "../../components/ui/collapsible";
 import { cn } from "../../components/ui/utils";
-import { Check, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import {
   MasterDataDialogBody,
   MasterDataFormActions,
@@ -57,6 +57,11 @@ import { useMasterData } from '../master-data/context';
 import { getTodayDateKey } from '../master-data/dateKeys';
 import { LEAD_SOCIAL_PLATFORM_OPTIONS, getLeadSocialPlatformLabel } from './socialContact';
 import { isAdminManagementRole, isAdvertiserRole, isCsRole } from '@/app/data/roleHelpers';
+import {
+  findLeadDuplicates,
+  formatLeadDuplicateWarning,
+  getLeadDuplicateCsId,
+} from '/utils/leadDuplicate';
 
 const leadSchema = z.object({
   name: z.string().min(1, "Nama wajib diisi"),
@@ -112,9 +117,11 @@ export const LeadForm: React.FC<LeadFormProps> = ({
   onSubmit, 
   onCancel 
 }) => {
-  const {
-    subChannels: contextSubChannels,
-    adAccounts,
+	  const {
+	    leads,
+	    users,
+	    subChannels: contextSubChannels,
+	    adAccounts,
     adAccountAssignments,
     adAccountOwnerAssignments,
   } = useMasterData();
@@ -144,9 +151,12 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 
   // Watchers
   const selectedPlatformId = form.watch('platformId');
-  const selectedSubChannelId = form.watch('subChannelId');
-  const selectedAdvertiserId = form.watch('advertiserId');
-  const selectedSocialPlatform = form.watch('socialPlatform');
+	  const selectedSubChannelId = form.watch('subChannelId');
+	  const selectedAdvertiserId = form.watch('advertiserId');
+	  const selectedSocialPlatform = form.watch('socialPlatform');
+	  const watchedName = form.watch('name');
+	  const watchedPhone = form.watch('phone');
+	  const watchedStatus = form.watch('status');
   
   const isCSLogin = isCsRole(currentUser?.role);
   const isAdvertiserLogin = isAdvertiserRole(currentUser?.role);
@@ -374,7 +384,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
   ]);
 
   // 5. Filtered CS
-  const filteredCS = useMemo(() => {
+	  const filteredCS = useMemo(() => {
       const includeOriginalCs = (items: User[]) => {
         if (!preserveOriginalCs || !originalCsId) return items;
         if (items.some((cs) => cs.id === originalCsId)) return items;
@@ -420,7 +430,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
       }
       
       return includeOriginalCs(csUsers);
-  }, [
+	  }, [
     activeAdAccounts,
     activeCsAssignmentsByAccountId,
     activeOwnerByAccountId,
@@ -433,9 +443,44 @@ export const LeadForm: React.FC<LeadFormProps> = ({
     selectedAdvertiserId,
     selectedPlatformId,
     selectedSubChannelId,
-  ]);
+	  ]);
 
-  // Keep dependent dropdowns aligned with the selected advertiser/ad-account scope.
+	  const userNameById = useMemo(
+	    () => new Map([...users, ...csUsers].map((user) => [user.id, user.name])),
+	    [csUsers, users],
+	  );
+
+	  const duplicateResult = useMemo(
+	    () => findLeadDuplicates(
+	      { id: item?.id, name: watchedName, phone: watchedPhone, status: watchedStatus },
+	      leads,
+	      { ignoreId: item?.id },
+	    ),
+	    [item?.id, watchedName, watchedPhone, watchedStatus, leads],
+	  );
+
+	  const duplicateWarning = useMemo(
+	    () => formatLeadDuplicateWarning(duplicateResult, (csId) => userNameById.get(csId)),
+	    [duplicateResult, userNameById],
+	  );
+
+	  const duplicateOwnerId = getLeadDuplicateCsId(
+	    duplicateResult.blockingMatch || duplicateResult.phoneMatches[0],
+	  );
+
+	  const handleValidatedSubmit = (values: LeadFormValues) => {
+	    if (duplicateResult.blockingMatch) {
+	      form.setError('phone', {
+	        type: 'manual',
+	        message: duplicateWarning || 'Nomor dan nama yang sama sudah ada.',
+	      });
+	      return;
+	    }
+
+	    onSubmit(values);
+	  };
+
+	  // Keep dependent dropdowns aligned with the selected advertiser/ad-account scope.
   useEffect(() => {
     const currentPlatform = form.getValues('platformId');
 
@@ -488,7 +533,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="masterDataForm leadManagedForm">
+	      <form onSubmit={form.handleSubmit(handleValidatedSubmit)} className="masterDataForm leadManagedForm">
         <MasterDataDialogBody compact className="leadManagedFormBody">
         {/* Row 1: Name & Phone */}
         <div className="leadFormGrid">
@@ -518,9 +563,35 @@ export const LeadForm: React.FC<LeadFormProps> = ({
               </FormItem>
             )}
           />
-        </div>
+	        </div>
 
-        <div className="leadSocialSection">
+	        {duplicateWarning && (
+	          <div
+	            className={cn(
+	              "leadDuplicateNotice rounded-xl border px-4 py-3 text-sm leading-relaxed",
+	              duplicateResult.blockingMatch
+	                ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-100"
+	                : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100",
+	            )}
+	          >
+	            <div className="flex items-start gap-2">
+	              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+	              <div>
+	                <p className="font-semibold">
+	                  {duplicateResult.blockingMatch ? 'Prospek double terdeteksi' : 'Nomor sudah pernah masuk'}
+	                </p>
+	                <p>{duplicateWarning}</p>
+	                {duplicateOwnerId && !duplicateResult.blockingMatch ? (
+	                  <p className="mt-1 text-xs opacity-80">
+	                    Pemilik data: {userNameById.get(duplicateOwnerId) || 'CS lain'}
+	                  </p>
+	                ) : null}
+	              </div>
+	            </div>
+	          </div>
+	        )}
+
+	        <div className="leadSocialSection">
           <Collapsible open={openSocialHelp} onOpenChange={setOpenSocialHelp} className="leadSocialCollapsible">
             <div className="leadSocialSectionHeader">
               <div>
@@ -951,10 +1022,11 @@ export const LeadForm: React.FC<LeadFormProps> = ({
         </div>
         </MasterDataDialogBody>
 
-        <MasterDataFormActions
-          onCancel={onCancel}
-          saveLabel={item ? 'Simpan Perubahan' : 'Tambah Prospek'}
-        />
+	        <MasterDataFormActions
+	          onCancel={onCancel}
+	          saveLabel={item ? 'Simpan Perubahan' : 'Tambah Prospek'}
+	          submitDisabled={Boolean(duplicateResult.blockingMatch)}
+	        />
       </form>
     </Form>
   );

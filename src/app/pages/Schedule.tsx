@@ -1001,7 +1001,7 @@ export default function Schedule() {
     }));
 
     const bookingItems: ScheduleItem[] = prospectBookings
-      .filter((booking) => !INACTIVE_SCHEDULE_STATUSES.has(booking.status))
+      .filter((booking) => !booking.orderId && !INACTIVE_SCHEDULE_STATUSES.has(booking.status))
       .map((booking) => ({
       id: `booking-${booking.id}`,
       source: 'booking',

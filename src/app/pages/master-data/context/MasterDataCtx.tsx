@@ -115,6 +115,10 @@ import {
 } from './internal/leadSocialAdapter';
 import { createMasterDataFetchCatalog } from './internal/masterDataFetchCatalog';
 import { saveOrderToCrmContact } from '@/app/services/crmContactsService';
+import {
+  findLeadDuplicates,
+  formatLeadDuplicateWarning,
+} from '/utils/leadDuplicate';
 
 export interface TechnicianSchedule {
   id: string;
@@ -130,6 +134,7 @@ import { toast } from 'sonner';
 type MutationOptions = {
   silent?: boolean;
   throwOnError?: boolean;
+  skipFreshScheduleValidation?: boolean;
 };
 
 const shouldUseLocalProfileFallback =
@@ -138,10 +143,10 @@ const shouldUseLocalProfileFallback =
 const CURRENT_USER_PROFILE_TIMEOUT_MS = 5_000;
 const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
-const APP_DATA_FETCH_TIMEOUT_MS = 10_000;
-const DIRECT_APP_DATA_FETCH_TIMEOUT_MS = 8_000;
-const MASTER_BOOTSTRAP_CONCURRENCY = 4;
-const OPERATIONAL_BOOTSTRAP_CONCURRENCY = 3;
+const APP_DATA_FETCH_TIMEOUT_MS = 8_000;
+const DIRECT_APP_DATA_FETCH_TIMEOUT_MS = 6_000;
+const MASTER_BOOTSTRAP_CONCURRENCY = 2;
+const OPERATIONAL_BOOTSTRAP_CONCURRENCY = 1;
 const MASTER_DATA_CACHE_PREFIX = 'rhi-v2-master-data-cache';
 const MASTER_DATA_CACHE_MAX_BYTES = 900_000;
 const CACHEABLE_MASTER_TABLES = new Set([
@@ -223,6 +228,17 @@ const safeWriteCachedRows = (table: string, rows: any[], suffix = 'full') => {
   }
 };
 
+const isLikelySupabaseOutage = (status?: number, error?: unknown) => {
+  if (typeof status === 'number') {
+    return status === 502 || status === 503 || status === 504 || status === 522 || status === 524;
+  }
+
+  if (!error) return false;
+
+  const message = error instanceof Error ? error.message : String(error);
+  return /timeout|terlalu lama|failed to fetch|network|load failed|gateway|connection|server data sedang lambat/i.test(message);
+};
+
 const buildRangeCacheSuffix = (options: {
   orderBy?: string;
   ascending?: boolean;
@@ -237,6 +253,29 @@ const buildRangeCacheSuffix = (options: {
     gte: options.gte || {},
     lte: options.lte || {},
   })}`;
+
+const readCachedAppDataPageRows = (
+  table: string,
+  from: number,
+  to: number,
+  options: {
+    orderBy?: string;
+    ascending?: boolean;
+    eq?: Record<string, string>;
+    gte?: Record<string, string>;
+    lte?: Record<string, string>;
+  } = {},
+) => {
+  const fullRows = CACHEABLE_MASTER_TABLES.has(table)
+    ? safeReadCachedRows(table)
+    : null;
+  const rangeRows = CACHEABLE_RANGE_TABLES.has(table)
+    ? safeReadCachedRows(table, buildRangeCacheSuffix(options))
+    : null;
+  const cachedRows = fullRows || rangeRows;
+
+  return cachedRows?.slice(from, to + 1) || null;
+};
 
 const getDeferredBootstrapTablesForPath = (path: string) => {
   const normalizedPath = path.toLowerCase();
@@ -453,8 +492,8 @@ interface MasterDataContextType {
   updateProspectBooking: (booking: ProspectBooking) => Promise<ProspectBooking | undefined>;
   deleteProspectBooking: (id: string) => void;
 
-  addOrder: (order: Order) => Promise<Order | undefined>;
-  updateOrder: (order: Order) => Promise<Order | undefined>;
+  addOrder: (order: Order, options?: MutationOptions) => Promise<Order | undefined>;
+  updateOrder: (order: Order, options?: MutationOptions) => Promise<Order | undefined>;
   updateOrderPatch: (id: string, patch: Partial<Order>, options?: MutationOptions) => Promise<Order | undefined>;
   deleteOrder: (id: string) => Promise<void>;
 
@@ -717,6 +756,47 @@ export const MasterDataProvider: React.FC<{
     return new Error(body.error || fallback);
   };
 
+  const isAppDataTransportFailure = (status?: number, error?: unknown) => {
+    if (typeof status === 'number') return status >= 500;
+    if (!error) return false;
+    if (isRequestTimeoutError(error)) return true;
+
+    const message = error instanceof Error ? error.message : String(error);
+    return /failed to fetch|network|load failed|gateway|server data sedang lambat/i.test(message);
+  };
+
+  const createDirectAppDataRow = async (table: string, payload: any) => {
+    const { data, error } = await supabase
+      .from(table)
+      .insert(payload)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  };
+
+  const updateDirectAppDataRow = async (table: string, id: string, payload: any) => {
+    const { data, error } = await supabase
+      .from(table)
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  };
+
+  const deleteDirectAppDataRow = async (table: string, id: string) => {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  };
+
   const fetchDirectAppDataPage = async (table: string, from: number, to: number, options: AppDataPageOptions = {}) => {
     const endTimer = startPerfTimer('master-data.direct-page', {
       table,
@@ -845,6 +925,25 @@ export const MasterDataProvider: React.FC<{
       }
 
       if (!response.ok) {
+        const cachedRows = readCachedAppDataPageRows(table, from, to, options);
+        if (isLikelySupabaseOutage(response.status) && cachedRows?.length) {
+          if (import.meta.env.DEV) {
+            console.warn('[MasterData] app-data outage, using cached page', {
+              table,
+              status: response.status,
+              rows: cachedRows.length,
+            });
+          }
+          endTimer('fallback', { reason: `cache_http_${response.status}`, rows: cachedRows.length });
+          return { rows: cachedRows, forbidden: false };
+        }
+
+        if (isLikelySupabaseOutage(response.status)) {
+          const error = await readAppDataError(response, `Gagal memuat ${table}`);
+          endTimer('error', { status: response.status, error: error.message });
+          throw error;
+        }
+
         try {
           const rows = await fetchDirectAppDataPage(table, from, to, options);
           if (import.meta.env.DEV) {
@@ -892,26 +991,48 @@ export const MasterDataProvider: React.FC<{
         forbidden: false,
       };
     } catch (error) {
-      if (!isRequestTimeoutError(error)) {
-        try {
-          const rows = await fetchDirectAppDataPage(table, from, to, options);
-          if (import.meta.env.DEV) {
-            console.info('[MasterData] app-data request failed, using direct Supabase fallback', {
-              table,
-              rows: rows.length,
-            });
-          }
-          endTimer('fallback', { reason: 'request_failed', rows: rows.length });
-          return { rows, forbidden: false };
-        } catch (fallbackError) {
-          if (import.meta.env.DEV) {
-            console.warn('[MasterData] direct Supabase request fallback failed', {
-              table,
-              error: fallbackError,
-            });
-          }
+      const fallbackReason = isRequestTimeoutError(error) ? 'request_timeout' : 'request_failed';
+      const cachedRows = readCachedAppDataPageRows(table, from, to, options);
+      if (isLikelySupabaseOutage(undefined, error) && cachedRows?.length) {
+        if (import.meta.env.DEV) {
+          console.warn('[MasterData] app-data request failed, using cached page', {
+            table,
+            reason: fallbackReason,
+            rows: cachedRows.length,
+          });
+        }
+        endTimer('fallback', { reason: `cache_${fallbackReason}`, rows: cachedRows.length });
+        return { rows: cachedRows, forbidden: false };
+      }
+
+      if (isLikelySupabaseOutage(undefined, error)) {
+        endTimer('error', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+
+      try {
+        const rows = await fetchDirectAppDataPage(table, from, to, options);
+        if (import.meta.env.DEV) {
+          console.info('[MasterData] app-data request failed, using direct Supabase fallback', {
+            table,
+            reason: fallbackReason,
+            rows: rows.length,
+          });
+        }
+        endTimer('fallback', { reason: fallbackReason, rows: rows.length });
+        return { rows, forbidden: false };
+      } catch (fallbackError) {
+        if (import.meta.env.DEV) {
+          console.warn('[MasterData] direct Supabase request fallback failed', {
+            table,
+            reason: fallbackReason,
+            error: fallbackError,
+          });
         }
       }
+
       endTimer('error', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -993,6 +1114,12 @@ export const MasterDataProvider: React.FC<{
       );
 
       if (!response.ok) {
+        if (isAppDataTransportFailure(response.status)) {
+          const data = await createDirectAppDataRow(table, payload);
+          endTimer('fallback', { reason: `http_${response.status}`, hasRow: Boolean(data) });
+          return data;
+        }
+
         const error = await readAppDataError(response, `Gagal menyimpan ${table}`);
         endTimer('error', { status: response.status, error: error.message });
         throw error;
@@ -1002,6 +1129,22 @@ export const MasterDataProvider: React.FC<{
       endTimer('ok', { hasRow: Boolean(body?.row) });
       return body?.row;
     } catch (error) {
+      if (isAppDataTransportFailure(undefined, error)) {
+        try {
+          const data = await createDirectAppDataRow(table, payload);
+          endTimer('fallback', {
+            reason: error instanceof Error ? error.message : String(error),
+            hasRow: Boolean(data),
+          });
+          return data;
+        } catch (fallbackError) {
+          endTimer('error', {
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          throw fallbackError;
+        }
+      }
+
       endTimer('error', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1024,6 +1167,12 @@ export const MasterDataProvider: React.FC<{
       );
 
       if (!response.ok) {
+        if (isAppDataTransportFailure(response.status)) {
+          const data = await updateDirectAppDataRow(table, id, payload);
+          endTimer('fallback', { reason: `http_${response.status}`, hasRow: Boolean(data) });
+          return data;
+        }
+
         const error = await readAppDataError(response, `Gagal memperbarui ${table}`);
         endTimer('error', { status: response.status, error: error.message });
         throw error;
@@ -1033,6 +1182,22 @@ export const MasterDataProvider: React.FC<{
       endTimer('ok', { hasRow: Boolean(body?.row) });
       return body?.row;
     } catch (error) {
+      if (isAppDataTransportFailure(undefined, error)) {
+        try {
+          const data = await updateDirectAppDataRow(table, id, payload);
+          endTimer('fallback', {
+            reason: error instanceof Error ? error.message : String(error),
+            hasRow: Boolean(data),
+          });
+          return data;
+        } catch (fallbackError) {
+          endTimer('error', {
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          throw fallbackError;
+        }
+      }
+
       endTimer('error', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1054,6 +1219,12 @@ export const MasterDataProvider: React.FC<{
       );
 
       if (!response.ok) {
+        if (isAppDataTransportFailure(response.status)) {
+          await deleteDirectAppDataRow(table, id);
+          endTimer('fallback', { reason: `http_${response.status}` });
+          return;
+        }
+
         const error = await readAppDataError(response, `Gagal menghapus ${table}`);
         endTimer('error', { status: response.status, error: error.message });
         throw error;
@@ -1061,6 +1232,21 @@ export const MasterDataProvider: React.FC<{
 
       endTimer('ok');
     } catch (error) {
+      if (isAppDataTransportFailure(undefined, error)) {
+        try {
+          await deleteDirectAppDataRow(table, id);
+          endTimer('fallback', {
+            reason: error instanceof Error ? error.message : String(error),
+          });
+          return;
+        } catch (fallbackError) {
+          endTimer('error', {
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+          throw fallbackError;
+        }
+      }
+
       endTimer('error', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1564,18 +1750,29 @@ export const MasterDataProvider: React.FC<{
     }
   };
 
-  const updateItem = async (table: string, item: any, setter: React.Dispatch<React.SetStateAction<any[]>>, dbMapper?: (item: any) => any, uiMapper?: (item: any) => any) => {
+  const updateItem = async (
+    table: string,
+    item: any,
+    setter: React.Dispatch<React.SetStateAction<any[]>>,
+    dbMapper?: (item: any) => any,
+    uiMapper?: (item: any) => any,
+    options?: MutationOptions,
+  ) => {
     try {
       const payload = dbMapper ? dbMapper(item) : item;
       let data = await updateAppDataRow(table, item.id, payload);
       if (data) {
          const uiItem = uiMapper ? uiMapper(data) : data;
          setter(prev => prev.map(i => i.id === item.id ? { ...i, ...uiItem } : i));
-         toast.success("Data berhasil diperbarui");
+         if (!options?.silent) {
+           toast.success("Data berhasil diperbarui");
+         }
          return uiItem;
       } else {
          setter(prev => prev.map(i => i.id === item.id ? { ...i, ...item } : i));
-         toast.success("Data berhasil diperbarui");
+         if (!options?.silent) {
+           toast.success("Data berhasil diperbarui");
+         }
          return item;
       }
     } catch (e: any) {
@@ -1583,18 +1780,24 @@ export const MasterDataProvider: React.FC<{
         const data = await updateAppDataRow(table, item.id, withoutAssignmentDraftColumns(dbMapper ? dbMapper(item) : item));
         const uiItem = uiMapper ? uiMapper(data) : data;
         setter(prev => prev.map(i => i.id === item.id ? { ...i, ...uiItem } : i));
-        toast.success("Data berhasil diperbarui");
+        if (!options?.silent) {
+          toast.success("Data berhasil diperbarui");
+        }
         return uiItem;
       }
       if (table === 'lead_spam_daily_inputs' && isLeadSpamTableMissingError(e)) {
         leadSpamDailyInputsUseFallbackRef.current = true;
         const fallbackItem = await upsertLeadSpamDailyInputFallback(item as LeadSpamDailyInput);
         setter(prev => prev.map(i => i.id === item.id ? { ...i, ...fallbackItem } : i));
-        toast.success("Data berhasil diperbarui");
+        if (!options?.silent) {
+          toast.success("Data berhasil diperbarui");
+        }
         return fallbackItem;
       }
       console.error(`Error updating ${table}:`, e);
-      toast.error(`Gagal memperbarui data: ${e.message}`);
+      if (!options?.silent) {
+        toast.error(`Gagal memperbarui data: ${e.message}`);
+      }
       throw e;
     }
   };
@@ -2004,6 +2207,11 @@ export const MasterDataProvider: React.FC<{
   const updateUser = (user: User) => setUsers(prev => prev.map(item => item.id === user.id ? user : item)); // Local update
   const refetchUsersFromProfiles = async () => {
     const pageSize = 1000;
+    const cachedProfiles = safeReadCachedRows('profiles');
+    if (cachedProfiles?.length) {
+      setUsers((previousUsers) => mergeUsersById(mapProfilesToUsers(cachedProfiles), previousUsers));
+    }
+
     const loadPages = async (loader: (from: number, to: number) => Promise<any[]>) => {
       const rows: any[] = [];
       let page = 0;
@@ -2019,14 +2227,26 @@ export const MasterDataProvider: React.FC<{
     };
 
     let directUsers: User[] = [];
+    let directFetchFailedWithOutage = false;
 
     try {
       const directRows = await loadPages((from, to) => fetchDirectAppDataPage('profiles', from, to));
       directUsers = mapProfilesToUsers(directRows);
+      if (directRows.length > 0) {
+        safeWriteCachedRows('profiles', directRows);
+      }
     } catch (error) {
+      directFetchFailedWithOutage = isLikelySupabaseOutage(undefined, error);
       if (import.meta.env.DEV) {
         console.warn('[MasterData] direct profiles fetch failed', error);
       }
+    }
+
+    if (directFetchFailedWithOutage && cachedProfiles?.length) {
+      if (import.meta.env.DEV) {
+        console.warn('[MasterData] skipping app-data profile verification during Supabase outage; using cached users');
+      }
+      return;
     }
 
     let bestSource = { source: 'direct', users: directUsers };
@@ -2590,8 +2810,21 @@ export const MasterDataProvider: React.FC<{
   };
 
   // -- LEADS (Direct Supabase Table)
+  const assertNoBlockingLeadDuplicate = (item: Lead, ignoreId?: string | null) => {
+    const duplicateResult = findLeadDuplicates(item, leads, { ignoreId: ignoreId || item.id });
+    if (!duplicateResult.blockingMatch) return;
+
+    throw new Error(
+      formatLeadDuplicateWarning(
+        duplicateResult,
+        (csId) => users.find((user) => user.id === csId)?.name,
+      ) || 'Nomor dan nama yang sama sudah ada. Simpan diblok agar data prospek tidak double.',
+    );
+  };
+
   const addLead = async (item: Lead, options?: MutationOptions) => {
     try {
+      assertNoBlockingLeadDuplicate(item);
       let savedLead: Lead | undefined;
 
       try {
@@ -2643,6 +2876,7 @@ export const MasterDataProvider: React.FC<{
 
   const updateLead = async (item: Lead) => {
     try {
+      assertNoBlockingLeadDuplicate(item, item.id);
       let savedLead: Lead;
 
       try {
@@ -2795,7 +3029,11 @@ export const MasterDataProvider: React.FC<{
   };
 
   const getScheduleBlockingProspectBookings = () =>
-    prospectBookings.filter((booking) => !isNonBlockingScheduleBookingLead(booking.leadId));
+    prospectBookings.filter((booking) =>
+      !booking.orderId &&
+      !isInactiveProspectBookingScheduleStatus(booking.status) &&
+      !isNonBlockingScheduleBookingLead(booking.leadId)
+    );
 
   const getIgnoredBookingLeadIds = () =>
     new Set(
@@ -3038,21 +3276,25 @@ export const MasterDataProvider: React.FC<{
       'areaId',
     ]);
 
-  const addOrder = async (item: Order) => {
+  const addOrder = async (item: Order, options?: MutationOptions) => {
     validateOrderScheduleBeforeSave(item);
-    await validateOrderScheduleFreshBeforeSave(item);
-    const savedOrder = await addItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB);
+    if (!options?.skipFreshScheduleValidation) {
+      await validateOrderScheduleFreshBeforeSave(item);
+    }
+    const savedOrder = await addItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB, options);
     const orderForSync = (savedOrder || item) as Order;
     syncOrderCrmContactSnapshot(orderForSync, 'pesanan_otomatis');
     queueOrderProspectLifecycleSync(orderForSync, 'order_create');
     return savedOrder;
   };
 
-  const updateOrder = async (item: Order) => {
+  const updateOrder = async (item: Order, options?: MutationOptions) => {
     const previousOrder = orders.find((order) => order.id === item.id);
     validateOrderScheduleBeforeSave(item, previousOrder);
-    await validateOrderScheduleFreshBeforeSave(item, previousOrder);
-    const savedOrder = await updateItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB);
+    if (!options?.skipFreshScheduleValidation) {
+      await validateOrderScheduleFreshBeforeSave(item, previousOrder);
+    }
+    const savedOrder = await updateItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB, options);
     const orderForSync = (savedOrder || item) as Order;
     syncOrderCrmContactSnapshot(orderForSync, 'pesanan_update_otomatis');
     queueOrderProspectLifecycleSync(orderForSync, 'order_update');
@@ -3079,7 +3321,9 @@ export const MasterDataProvider: React.FC<{
 
     try {
       validateOrderScheduleBeforeSave(nextOrder, previousOrder);
-      await validateOrderScheduleFreshBeforeSave(nextOrder, previousOrder);
+      if (!options?.skipFreshScheduleValidation) {
+        await validateOrderScheduleFreshBeforeSave(nextOrder, previousOrder);
+      }
 
       const data = await updateAppDataRow('orders', id, payload);
       const savedOrder = data ? mapOrderFromDB(data) : nextOrder;
@@ -3558,9 +3802,7 @@ export const MasterDataProvider: React.FC<{
   // --- REALTIME SUBSCRIPTIONS ---
   useEffect(() => {
     let isRealtimeDisposed = false;
-    let recoveryRefreshTimer: number | undefined;
     let recoveryResubscribeTimer: number | undefined;
-    let lastRecoveryRefreshAt = 0;
     let recoveryRetryDelayMs = 8_000;
     const reducedRealtimeForTechnician =
       isTechnicianRole(currentRole) &&
@@ -3570,21 +3812,6 @@ export const MasterDataProvider: React.FC<{
       if (isRealtimeDisposed) return;
 
       console.warn(`[MasterData] realtime channel ${status}; scheduling throttled recovery`);
-
-      if (recoveryRefreshTimer !== undefined) {
-        window.clearTimeout(recoveryRefreshTimer);
-      }
-
-      const now = Date.now();
-      const shouldRefreshAfterRealtimeDrop = now - lastRecoveryRefreshAt > 60_000;
-      if (shouldRefreshAfterRealtimeDrop) {
-        lastRecoveryRefreshAt = now;
-        recoveryRefreshTimer = window.setTimeout(() => {
-          if (!isRealtimeDisposed) {
-            setRefreshTrigger((prev) => prev + 1);
-          }
-        }, 10_000);
-      }
 
       if (recoveryResubscribeTimer !== undefined) return;
 
@@ -3799,9 +4026,6 @@ export const MasterDataProvider: React.FC<{
 
     return () => {
       isRealtimeDisposed = true;
-      if (recoveryRefreshTimer !== undefined) {
-        window.clearTimeout(recoveryRefreshTimer);
-      }
       if (recoveryResubscribeTimer !== undefined) {
         window.clearTimeout(recoveryResubscribeTimer);
       }

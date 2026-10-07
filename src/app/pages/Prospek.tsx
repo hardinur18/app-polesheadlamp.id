@@ -621,6 +621,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   };
 
   const openBookingForm = (lead: Lead) => {
+    if (!canManageLeadBooking(lead)) {
+      toast.error('Anda tidak memiliki akses untuk mengelola booking prospek ini');
+      return;
+    }
+
     if (lead.status === 'Closing') {
       toast.info('Prospek yang sudah Closing tidak bisa dibuat booking lagi');
       return;
@@ -816,9 +821,10 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   };
 
   // --- WA LOGIC ---
-  const handleWhatsappClick = (lead: Lead, template?: WATemplate) => {
+  const handleWhatsappClick = async (lead: Lead, template?: WATemplate) => {
     const phone = lead.phone.replace(/^0/, '62').replace(/\D/g, '');
     let message = "";
+    let pendingWindow: Window | null = null;
 
     if (template) {
         message = template.message;
@@ -839,20 +845,37 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
             templateHistory: [...(lead.templateHistory || []), newHistory],
             lastContact: 'Baru saja'
         };
-        
-        updateLead(updatedLead);
-        setDetailLead((current) => (current?.id === lead.id ? updatedLead : current));
-        setSelectedWaLead((current) => (current?.id === lead.id ? updatedLead : current));
+        pendingWindow = window.open('', '_blank');
+        if (pendingWindow) {
+          pendingWindow.opener = null;
+        }
 
-        // Increment usage count
-        updateWATemplate({ 
+        try {
+          await Promise.resolve(updateLead(updatedLead));
+
+          // Increment usage count only after lead history is saved.
+          await Promise.resolve(updateWATemplate({
             ...template, 
             usage_count: (template.usage_count || 0) + 1 
-        });
+          }));
+
+          setDetailLead((current) => (current?.id === lead.id ? updatedLead : current));
+          setSelectedWaLead((current) => (current?.id === lead.id ? updatedLead : current));
+        } catch (error: any) {
+          pendingWindow?.close();
+          toast.error('Gagal mencatat follow up WhatsApp', {
+            description: error?.message || 'Coba ulang beberapa detik lagi.',
+          });
+          return;
+        }
     }
 
     const url = `https://wa.me/${phone}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
-    window.open(url, '_blank');
+    if (pendingWindow) {
+      pendingWindow.location.href = url;
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const isTemplateUsed = (lead: Lead, templateId: string) => {
@@ -898,6 +921,14 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     if (!hasPermission('leads.delete')) return false;
     if (lead.status === 'Closing' && !isOwnerLikeUser) return false;
     return roleBasedLeads.some(item => item.id === lead.id);
+  };
+
+  const canManageLeadBooking = (lead: Lead) => canEditLead(lead);
+
+  const canForwardLeadToOrder = (lead: Lead) => {
+    if (!hasPermission('order.create')) return false;
+    if (lead.status === 'Closing') return false;
+    return canEditLead(lead);
   };
 
   const selectedEditableLeads = useMemo(
@@ -990,6 +1021,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   
   // --- ORDER GENERATION LOGIC ---
   const handleBookingSubmit = async (booking: ProspectBooking) => {
+    if (bookingLead && !canManageLeadBooking(bookingLead)) {
+      toast.error('Anda tidak memiliki akses untuk mengelola booking prospek ini');
+      return;
+    }
+
     if (bookingLead?.status === 'Closing') {
       toast.error('Booking tidak bisa disimpan karena prospek sudah Closing');
       setBookingLead(null);
@@ -1024,6 +1060,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   };
 
   const handleCancelLeadBooking = async (lead: Lead, booking?: ProspectBooking | null) => {
+    if (!canManageLeadBooking(lead)) {
+      toast.error('Anda tidak memiliki akses untuk membatalkan booking prospek ini');
+      return;
+    }
+
     const targetBooking = booking ?? getActiveLeadBooking(lead.id);
 
     if (!targetBooking) {
@@ -1638,17 +1679,19 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                             {canEditLead(item) && (
                               <DropdownMenuItem onClick={() => openEditLeadForm(item)}>Edit</DropdownMenuItem>
                             )}
-                            {item.status !== 'Closing' && (
+                            {canManageLeadBooking(item) && (
                               <DropdownMenuItem onClick={() => openBookingForm(item)}>
                                 Booking Jadwal
                               </DropdownMenuItem>
                             )}
-                            {item.status !== 'Closing' && activeBooking && (
+                            {canManageLeadBooking(item) && activeBooking && (
                               <DropdownMenuItem onClick={() => void handleCancelLeadBooking(item, activeBooking)}>
                                 <Ban className="w-4 h-4 mr-2" /> Batalkan Booking
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => { setForwardLead(item); }}>Proses Order</DropdownMenuItem>
+                            {canForwardLeadToOrder(item) && (
+                              <DropdownMenuItem onClick={() => { setForwardLead(item); }}>Proses Order</DropdownMenuItem>
+                            )}
                             {canEditLead(item) && (
                               <>
                                 <DropdownMenuSeparator />
@@ -2287,17 +2330,17 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                                     Edit
                                   </TableActionMenuItem>
                                 )}
-                                {item.status !== 'Closing' && (
+                                {canManageLeadBooking(item) && (
                                   <TableActionMenuItem icon={CalendarClock} onClick={() => openBookingForm(item)}>
                                     Booking Jadwal
                                   </TableActionMenuItem>
                                 )}
-                                {item.status !== 'Closing' && getActiveLeadBooking(item.id) && (
+                                {canManageLeadBooking(item) && getActiveLeadBooking(item.id) && (
                                   <TableActionMenuItem icon={Ban} onClick={() => void handleCancelLeadBooking(item, getActiveLeadBooking(item.id))}>
                                     Batalkan Booking
                                   </TableActionMenuItem>
                                 )}
-                                {item.status !== 'Closing' && (
+                                {canForwardLeadToOrder(item) && (
                                   <TableActionMenuItem icon={ArrowRightCircle} onClick={() => setForwardLead(item)}>
                                     Proses Order
                                   </TableActionMenuItem>
@@ -2412,17 +2455,17 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                                 Edit
                               </TableActionMenuItem>
                             )}
-                            {item.status !== 'Closing' && (
+                            {canManageLeadBooking(item) && (
                               <TableActionMenuItem icon={CalendarClock} onClick={() => openBookingForm(item)}>
                                 Booking Jadwal
                               </TableActionMenuItem>
                             )}
-                            {item.status !== 'Closing' && activeBooking && (
+                            {canManageLeadBooking(item) && activeBooking && (
                               <TableActionMenuItem icon={Ban} onClick={() => void handleCancelLeadBooking(item, activeBooking)}>
                                 Batalkan Booking
                               </TableActionMenuItem>
                             )}
-                            {item.status !== 'Closing' && (
+                            {canForwardLeadToOrder(item) && (
                               <TableActionMenuItem icon={ArrowRightCircle} onClick={() => setForwardLead(item)}>
                                 Proses Order
                               </TableActionMenuItem>
@@ -2833,7 +2876,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
               : getSubChannelName(detailLead.subChannelId);
             const detailVehicleName = getVehicleName(detailLead.vehicleId || detailBooking?.vehicleId);
             const detailServiceName = getServiceName(detailLead.serviceId || detailBooking?.serviceId);
-            const detailCanManageBooking = !isAdvertiserView && detailLead.status !== 'Closing';
+            const detailCanManageBooking = canManageLeadBooking(detailLead);
+            const detailCanForwardOrder = canForwardLeadToOrder(detailLead);
             const bookingSchedule = detailBooking
               ? [formatBookingDate(detailBooking), detailBooking.scheduleTime].filter((value) => value && value !== '-').join(' - ') || '-'
               : '-';
@@ -2958,13 +3002,15 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                             Batalkan
                           </Button>
                         )}
-                        <Button type="button" onClick={() => {
-                          setDetailLead(null);
-                          setForwardLead(detailLead);
-                        }}>
-                          <ArrowRightCircle className="h-4 w-4" />
-                          Proses Order
-                        </Button>
+                        {detailCanForwardOrder && (
+                          <Button type="button" onClick={() => {
+                            setDetailLead(null);
+                            setForwardLead(detailLead);
+                          }}>
+                            <ArrowRightCircle className="h-4 w-4" />
+                            Proses Order
+                          </Button>
+                        )}
                       </>
                     ) : undefined}
                   >
@@ -3111,7 +3157,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       </AlertDialog>
 
       {/* Forward to Order Modal */}
-      {forwardLead && (
+      {forwardLead && canForwardLeadToOrder(forwardLead) && (
          <OrderForm 
             isOpen={!!forwardLead}
             onClose={() => setForwardLead(null)}

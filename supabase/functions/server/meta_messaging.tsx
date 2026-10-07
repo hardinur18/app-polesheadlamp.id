@@ -7,6 +7,7 @@ import {
 } from "./requester_access.ts";
 import type { RequesterAccessContext } from "./requester_access.ts";
 import type { PermissionKey } from "../../../src/app/data/permissions.ts";
+import { findLeadDuplicates } from "../../../utils/leadDuplicate.ts";
 
 const app = new Hono();
 
@@ -2741,6 +2742,19 @@ async function autoCreateLeadFromWhatsAppInbound({
     const supabase = resolveSupabaseAdminClient();
     const csOwnerId = await resolveWhatsAppChannelOwnerId(channelId);
     const existingLeads = await listLeadRowsByComparablePhone(supabase, comparablePhone);
+    const duplicateResult = findLeadDuplicates(
+      {
+        name: contactName || "",
+        phone: formatPhoneForLead(comparablePhone),
+        status: "Pending",
+        cs_id: csOwnerId || null,
+      },
+      existingLeads,
+    );
+
+    if (duplicateResult.blockingMatch) {
+      return { created: false, reason: "existing_exact_duplicate" };
+    }
 
     const hasSameCsOpenLead = existingLeads.some((lead: any) => {
       const sameCs = (lead?.cs_id || null) === (csOwnerId || null);

@@ -31,6 +31,12 @@ import {
   listDateChunks,
   parseBooleanFlag,
 } from "./ads_snapshot_utils.tsx";
+import {
+  findLeadDuplicates,
+  formatLeadDuplicateWarning,
+  getLeadDuplicateCsId,
+  normalizeLeadComparablePhone,
+} from "../../../utils/leadDuplicate.ts";
 
 const app = new Hono();
 const CS_ASSIGNMENT_STATUSES = new Set(["available", "busy", "offline"]);
@@ -1408,6 +1414,10 @@ type MetaIntegrationConfigRecord = {
   liveMetaAccountName?: string;
 };
 
+type InternalAdAccountRecord = Awaited<ReturnType<typeof loadInternalAdAccounts>>[number];
+
+const META_CONFIG_LOAD_TIMEOUT_MS = 8_000;
+
 function isNonNull<T>(value: T | null): value is T {
   return value !== null;
 }
@@ -1648,6 +1658,79 @@ async function loadMetaIntegrationConfigs() {
   return (await kv.getByPrefix("meta_integration_config:")) as MetaIntegrationConfigRecord[];
 }
 
+async function loadMetaIntegrationConfigMapSafe() {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const timeout = new Promise<Map<string, MetaIntegrationConfigRecord>>((resolve) => {
+      timeoutId = setTimeout(() => resolve(new Map()), META_CONFIG_LOAD_TIMEOUT_MS);
+    });
+    const result = await Promise.race([loadMetaIntegrationConfigMap(), timeout]);
+    if (result.size === 0) {
+      console.warn("Meta integration config lookup empty/timeout; falling back to exact internal account name matching.");
+    }
+    return result;
+  } catch (error) {
+    console.warn(
+      "Meta integration config lookup failed; falling back to exact internal account name matching.",
+      error instanceof Error ? error.message : error,
+    );
+    return new Map<string, MetaIntegrationConfigRecord>();
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function normalizeMetaAccountName(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeMetaAccountNumericSuffix(value: string) {
+  return value.replace(/(^|\s)0+(\d+)(?=$|\s)/g, (_match, prefix, digits) => `${prefix}${Number(digits)}`);
+}
+
+function buildMetaAccountNameVariants(value?: string | null) {
+  const variants = new Set<string>();
+  const add = (next?: string | null) => {
+    const normalized = normalizeMetaAccountName(next);
+    const compact = normalized.replace(/\s+/g, "");
+    if (normalized) variants.add(normalized);
+    if (compact) variants.add(compact);
+
+    const normalizedNumeric = normalizeMetaAccountNumericSuffix(normalized);
+    const compactNumeric = compact.replace(/0+(\d+)$/g, (_match, digits) => String(Number(digits)));
+    if (normalizedNumeric) variants.add(normalizedNumeric);
+    if (compactNumeric) variants.add(compactNumeric);
+  };
+
+  add(value);
+
+  for (const variant of Array.from(variants)) {
+    if (variant.includes("rahmansha")) add(variant.replace(/rahmansha/g, "rahmansa"));
+    if (variant.includes("rahmansa")) add(variant.replace(/rahmansa/g, "rahmansha"));
+  }
+
+  return variants;
+}
+
+function findInternalAdAccountByMetaName(
+  internalAccounts: InternalAdAccountRecord[],
+  metaAccount: MetaAdAccountRecord,
+) {
+  const externalNames = buildMetaAccountNameVariants(metaAccount.name);
+  if (externalNames.size === 0) return null;
+
+  return internalAccounts.find((account) =>
+    account.status === "active" &&
+    Array.from(buildMetaAccountNameVariants(account.accountName)).some((name) => externalNames.has(name))
+  ) || null;
+}
+
 function buildMetaExternalAccountIdVariants(value?: string | null) {
   const trimmed = String(value || "").trim();
   if (!trimmed) return [];
@@ -1673,7 +1756,7 @@ async function syncMetaSnapshotRange(params: {
 
   const [internalAccounts, integrationConfigByAccountId] = await Promise.all([
     loadInternalAdAccounts(),
-    loadMetaIntegrationConfigMap(),
+    loadMetaIntegrationConfigMapSafe(),
   ]);
   const internalAccountById = new Map(
     internalAccounts.map((account) => [account.id, account]),
@@ -1759,7 +1842,7 @@ async function syncMetaSnapshotRange(params: {
             integrationConfigByAccountId.get(account.account_id || "");
           const internalAccount = integrationConfig?.adAccountId
             ? internalAccountById.get(integrationConfig.adAccountId)
-            : null;
+            : findInternalAdAccountByMetaName(internalAccounts, account);
           const spend = toNumber(metrics?.spend);
           const dashboardResultCost = extractMetaMessagingResultCost(metrics?.cost_per_action_type);
           const dashboardResultValue = extractMetaMessagingResultValue(metrics?.actions);
@@ -1776,7 +1859,7 @@ async function syncMetaSnapshotRange(params: {
           return {
             platformKey: "meta",
             snapshotDate,
-            internalAdAccountId: integrationConfig?.adAccountId || null,
+            internalAdAccountId: integrationConfig?.adAccountId || internalAccount?.id || null,
             advertiserId: internalAccount?.advertiserId || null,
             platformId: internalAccount?.platformId || null,
             externalAccountId: account.id,
@@ -2020,10 +2103,12 @@ app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
 
     if (includeLastKnown) {
       const existingAccountIds = new Set(rows.flatMap((row) => buildMetaExternalAccountIdVariants(row.externalAccountId)));
-      const configs = await loadMetaIntegrationConfigs();
-      const fallbackAccountIds = requestedAccountId
-        ? buildMetaExternalAccountIdVariants(requestedAccountId)
-        : configs
+      let fallbackAccountIds = requestedAccountId ? buildMetaExternalAccountIdVariants(requestedAccountId) : [];
+
+      if (!requestedAccountId) {
+        try {
+          const configs = await loadMetaIntegrationConfigs();
+          fallbackAccountIds = configs
             .filter(
               (config) =>
                 config.enabled &&
@@ -2032,6 +2117,13 @@ app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
             )
             .flatMap((config) => buildMetaExternalAccountIdVariants(config.liveMetaAccountId))
             .filter((accountId) => accountId && !existingAccountIds.has(accountId));
+        } catch (configError) {
+          console.warn(
+            "Meta snapshot config lookup failed; using latest stored snapshots without config filter.",
+            configError instanceof Error ? configError.message : configError,
+          );
+        }
+      }
 
       const fallbackRows =
         fallbackAccountIds.length > 0 || rows.length === 0
@@ -3424,6 +3516,10 @@ app.post("/make-server-f781cd00/app-data/:type", async (c) => {
 
   try {
     const payload = await c.req.json();
+    if (config.table === "leads") {
+      await assertNoBlockingLeadDuplicate(payload);
+    }
+
     let { data, error } = await supabase
       .from(config.table)
       .insert(payload)
@@ -3450,7 +3546,7 @@ app.post("/make-server-f781cd00/app-data/:type", async (c) => {
 
     return c.json({ row: data }, 201);
   } catch (err: any) {
-    return c.json({ error: err.message || "Gagal menyimpan app data." }, 500);
+    return c.json({ error: err.message || "Gagal menyimpan app data." }, getHttpErrorStatus(err));
   }
 });
 
@@ -3465,6 +3561,10 @@ app.put("/make-server-f781cd00/app-data/:type/:id", async (c) => {
 
   try {
     const payload = await c.req.json();
+    if (config.table === "leads") {
+      await assertNoBlockingLeadDuplicate(payload, id);
+    }
+
     let { data, error } = await supabase
       .from(config.table)
       .update(payload)
@@ -3493,7 +3593,7 @@ app.put("/make-server-f781cd00/app-data/:type/:id", async (c) => {
 
     return c.json({ row: data });
   } catch (err: any) {
-    return c.json({ error: err.message || "Gagal memperbarui app data." }, 500);
+    return c.json({ error: err.message || "Gagal memperbarui app data." }, getHttpErrorStatus(err));
   }
 });
 
@@ -3759,6 +3859,8 @@ function minimalEmbedLeadPayload(payload: Record<string, unknown>) {
 }
 
 async function insertEmbedLeadWithSchemaFallback(payload: Record<string, unknown>) {
+  await assertNoBlockingLeadDuplicate(payload);
+
   const fullResult = await supabase.from("leads").insert(payload).select().single();
   if (!fullResult.error) return fullResult.data;
   if (!isEmbedLeadSchemaError(fullResult.error)) throw fullResult.error;
@@ -3770,6 +3872,85 @@ async function insertEmbedLeadWithSchemaFallback(payload: Record<string, unknown
   const minimalResult = await supabase.from("leads").insert(minimalEmbedLeadPayload(payload)).select().single();
   if (minimalResult.error) throw minimalResult.error;
   return minimalResult.data;
+}
+
+async function listLeadRowsByComparablePhone(comparablePhone: string) {
+  const phoneTail = comparablePhone.slice(-9);
+  if (!phoneTail) return [] as any[];
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id,name,phone,cs_id,status,created_at")
+    .ilike("phone", `%${phoneTail}%`)
+    .limit(100);
+
+  if (error) throw error;
+
+  return (data || []).filter(
+    (row: any) => normalizeLeadComparablePhone(row?.phone) === comparablePhone,
+  );
+}
+
+async function resolveLeadDuplicateCsLabels(leads: any[]) {
+  const csIds = Array.from(
+    new Set(leads.map((lead) => getLeadDuplicateCsId(lead)).filter(Boolean)),
+  );
+  if (csIds.length === 0) return new Map<string, string>();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id,name,email,cs_display_name")
+    .in("id", csIds);
+
+  if (error) {
+    console.warn("Lead duplicate CS label lookup skipped.", error);
+    return new Map<string, string>();
+  }
+
+  return new Map(
+    (data || []).map((row: any) => [
+      String(row.id),
+      (typeof row.cs_display_name === "string" && row.cs_display_name.trim()) ||
+        (typeof row.name === "string" && row.name.trim()) ||
+        (typeof row.email === "string" && row.email.trim()) ||
+        "CS",
+    ]),
+  );
+}
+
+async function assertNoBlockingLeadDuplicate(payload: Record<string, unknown>, ignoreId?: string | null) {
+  const comparablePhone = normalizeLeadComparablePhone(payload.phone);
+  if (!comparablePhone) return;
+
+  const existingLeads = await listLeadRowsByComparablePhone(comparablePhone);
+  const duplicateResult = findLeadDuplicates(
+    {
+      id: typeof payload.id === "string" ? payload.id : null,
+      name: typeof payload.name === "string" ? payload.name : null,
+      phone: typeof payload.phone === "string" ? payload.phone : null,
+      status: typeof payload.status === "string" ? payload.status : null,
+      cs_id: typeof payload.cs_id === "string" ? payload.cs_id : null,
+    },
+    existingLeads,
+    { ignoreId },
+  );
+
+  if (!duplicateResult.blockingMatch) return;
+
+  const csLabels = await resolveLeadDuplicateCsLabels([
+    duplicateResult.blockingMatch,
+    ...duplicateResult.phoneMatches,
+  ]);
+  const message = formatLeadDuplicateWarning(duplicateResult, (csId) => csLabels.get(csId)) ||
+    "Nomor dan nama yang sama sudah ada. Simpan diblok agar data prospek tidak double.";
+  const error = new Error(message) as Error & { statusCode?: number };
+  error.statusCode = 409;
+  throw error;
+}
+
+function getHttpErrorStatus(error: any, fallback = 500) {
+  const status = Number(error?.statusCode || error?.status);
+  return Number.isInteger(status) && status >= 400 && status < 600 ? status : fallback;
 }
 
 async function createEmbedSubmissionRecord(payload: Record<string, unknown>) {
@@ -3904,7 +4085,7 @@ app.post("/make-server-f781cd00/public/affiliate-bookings", async (c) => {
       affiliateId: affiliate?.id || null,
     });
   } catch (err: any) {
-    return c.json({ error: err.message || "Gagal submit booking affiliate." }, 500);
+    return c.json({ error: err.message || "Gagal submit booking affiliate." }, getHttpErrorStatus(err));
   }
 });
 
@@ -4165,7 +4346,7 @@ app.post("/make-server-f781cd00/embed/public/forms/:identifier/submit", async (c
       throw error;
     }
   } catch (err: any) {
-    return c.json({ error: err.message || "Gagal submit embed form." }, 500);
+    return c.json({ error: err.message || "Gagal submit embed form." }, getHttpErrorStatus(err));
   }
 });
 
