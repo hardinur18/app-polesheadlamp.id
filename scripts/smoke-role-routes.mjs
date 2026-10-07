@@ -2,25 +2,37 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+const LOCAL_ENV = readLocalEnv();
+const envValue = (...keys) => {
+  for (const key of keys) {
+    const value = process.env[key] || LOCAL_ENV[key];
+    if (value) return value;
+  }
+  return '';
+};
+
 const SUPABASE_URL =
-  process.env.SMOKE_SUPABASE_URL ||
-  process.env.SUPABASE_URL ||
-  process.env.VITE_SUPABASE_URL;
+  envValue('SMOKE_SUPABASE_URL', 'SUPABASE_URL', 'VITE_SUPABASE_URL');
 const ANON_KEY =
-  process.env.SMOKE_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY;
-const USERS_ENDPOINT = `${SUPABASE_URL}/functions/v1/make-server-f781cd00/users`;
-const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:5174';
+  envValue('SMOKE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
+const FUNCTIONS_BASE =
+  envValue('SMOKE_FUNCTIONS_BASE_URL', 'VITE_FUNCTIONS_BASE_URL') ||
+  `${SUPABASE_URL}/functions/v1/make-server-f781cd00`;
+const USERS_ENDPOINT = `${FUNCTIONS_BASE}/users`;
+const BASE_URL = envValue('SMOKE_BASE_URL') || 'http://localhost:5174';
 const CHROME_PATH = resolveChromePath();
-const PUPPETEER_IMPORT_TIMEOUT_MS = Number(process.env.PUPPETEER_IMPORT_TIMEOUT_MS || 30_000);
+const PUPPETEER_IMPORT_TIMEOUT_MS = Number(envValue('PUPPETEER_IMPORT_TIMEOUT_MS') || 30_000);
 const PASSWORD = 'SmokeTest123!';
 const ARTIFACT_DIR = path.join(process.cwd(), 'File Review', 'artifacts');
 const OUTPUT_PATH = path.join(ARTIFACT_DIR, 'role-route-smoke.json');
 const CLEANUP_OUTPUT_PATH = path.join(ARTIFACT_DIR, 'role-route-smoke-cleanup.json');
-const PROVIDED_ACCOUNTS = process.env.SMOKE_ROLE_ACCOUNTS
-  ? JSON.parse(process.env.SMOKE_ROLE_ACCOUNTS)
+const PROVIDED_ACCOUNTS = envValue('SMOKE_ROLE_ACCOUNTS')
+  ? JSON.parse(envValue('SMOKE_ROLE_ACCOUNTS'))
   : null;
+const OWNER_EMAIL =
+  envValue('SMOKE_OWNER_EMAIL', 'PHASE1_OWNER_EMAIL') ||
+  'hardinurahman@gmail.com';
+const OWNER_PASSWORD = envValue('SMOKE_OWNER_PASSWORD', 'PHASE1_OWNER_PASSWORD');
 
 const scenarios = [
   {
@@ -68,6 +80,19 @@ function getProvidedAccount(role) {
     role,
     provided: true,
   };
+}
+
+function readLocalEnv() {
+  const envPath = path.join(process.cwd(), '.env.local');
+  if (!fs.existsSync(envPath)) return {};
+
+  return Object.fromEntries(
+    fs.readFileSync(envPath, 'utf8')
+      .split(/\n/)
+      .map((line) => line.match(/^([A-Z0-9_]+)=(.*)$/))
+      .filter(Boolean)
+      .map((match) => [match[1], match[2].replace(/^['"]|['"]$/g, '')]),
+  );
 }
 
 function ensureArtifactDir() {
@@ -130,17 +155,38 @@ async function loadPuppeteer() {
   }
 }
 
+async function signInOwner() {
+  if (!OWNER_PASSWORD) return null;
+
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      apikey: ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: OWNER_EMAIL,
+      password: OWNER_PASSWORD,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.access_token) {
+    throw new Error(`Failed to sign in smoke owner: ${payload?.error_description || payload?.error || response.status}`);
+  }
+  return payload.access_token;
+}
+
 function appUrl(pathname) {
   return new URL(pathname, BASE_URL).toString();
 }
 
-async function createUser(role, name) {
+async function createUser(role, name, bearerToken = ANON_KEY) {
   const email = `route.${role.toLowerCase()}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
   const response = await fetch(USERS_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${ANON_KEY}`,
+      Authorization: `Bearer ${bearerToken}`,
     },
     body: JSON.stringify({
       email,
@@ -158,11 +204,11 @@ async function createUser(role, name) {
   return { id: payload.user.id, email, role, name };
 }
 
-async function deleteUser(userId) {
+async function deleteUser(userId, bearerToken = ANON_KEY) {
   const response = await fetch(`${USERS_ENDPOINT}/${userId}`, {
     method: 'DELETE',
     headers: {
-      Authorization: `Bearer ${ANON_KEY}`,
+      Authorization: `Bearer ${bearerToken}`,
     },
   });
   if (!response.ok) {
@@ -239,11 +285,11 @@ async function runScenario(browser, scenario, account) {
   }
 }
 
-async function cleanupUsers(users) {
+async function cleanupUsers(users, bearerToken = ANON_KEY) {
   const cleanup = [];
   for (const user of users.toReversed()) {
     try {
-      await deleteUser(user.id);
+      await deleteUser(user.id, bearerToken);
       cleanup.push({ role: user.role, id: user.id, email: user.email, deleted: true });
     } catch (error) {
       cleanup.push({
@@ -276,12 +322,20 @@ async function main() {
   const results = [];
   const preparedScenarios = [];
   let browser = null;
+  let ownerToken = null;
+  let userManagementToken = ANON_KEY;
 
   let cleanup = null;
   try {
+    if (!PROVIDED_ACCOUNTS && OWNER_PASSWORD) {
+      console.error('role-smoke: signing in owner for temporary user creation');
+      ownerToken = await signInOwner();
+      userManagementToken = ownerToken;
+    }
+
     for (const scenario of scenarios) {
       const providedAccount = getProvidedAccount(scenario.role);
-      const account = providedAccount || (await createUser(scenario.role, scenario.name));
+      const account = providedAccount || (await createUser(scenario.role, scenario.name, userManagementToken));
       if (!providedAccount) {
         createdUsers.push(account);
       }
@@ -304,7 +358,7 @@ async function main() {
     if (browser) {
       await browser.close();
     }
-    cleanup = await cleanupUsers(createdUsers);
+    cleanup = await cleanupUsers(createdUsers, userManagementToken);
   }
 
   const payload = {
@@ -327,6 +381,7 @@ main().catch((error) => {
   ensureArtifactDir();
   const isCreateUnauthorized =
     error instanceof Error && error.message.includes('Failed to create') && error.message.includes('Unauthorized');
+  const missingOwnerCredentials = isCreateUnauthorized && !OWNER_PASSWORD;
   const payload = {
     generatedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
@@ -334,7 +389,9 @@ main().catch((error) => {
     skipped: isCreateUnauthorized,
     error: error instanceof Error ? error.message : String(error),
     nextAction: isCreateUnauthorized
-      ? 'Provide SMOKE_ROLE_ACCOUNTS with existing test credentials, or run with an authorized user-management token.'
+      ? missingOwnerCredentials
+        ? 'Provide SMOKE_ROLE_ACCOUNTS with existing test credentials, or set SMOKE_OWNER_PASSWORD/PHASE1_OWNER_PASSWORD so the script can create temporary role users.'
+        : 'Owner credentials were provided but user creation was still unauthorized. Check Owner role permissions or function auth.'
       : undefined,
   };
   fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(payload, null, 2)}\n`);

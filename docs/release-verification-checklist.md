@@ -1,6 +1,6 @@
 # Release Verification Checklist
 
-Last updated: 2026-09-16
+Last updated: 2026-10-07
 
 Use this checklist before marking the app release-ready. Local checks can pass without production access, but production validation must run against the real Supabase project used by the frontend app.
 
@@ -11,13 +11,26 @@ Use this checklist before marking the app release-ready. Local checks can pass w
 - [ ] `npm run build`
 - [ ] `npm run smoke:routes` against a local preview build.
 - [ ] `npm run smoke:role-routes` with `SMOKE_ROLE_ACCOUNTS` for real test accounts, or an authorized user-management token.
+- [ ] `npm run smoke:prospect-crud` with Owner cleanup access to verify Prospek create/update/delete.
+- [ ] `npm run smoke:release` when all smoke credentials are available.
 
 Expected smoke setup:
 
 - `SMOKE_BASE_URL` points to the preview or deployed app URL.
 - `SMOKE_SUPABASE_URL` / `SMOKE_SUPABASE_ANON_KEY` point to the same Supabase project as the app.
-- `SMOKE_ROLE_ACCOUNTS` contains Owner, CS, Finance, Teknisi, and Advertiser credentials when anonymous test-user creation is blocked.
+- `SMOKE_OWNER_PASSWORD` or `PHASE1_OWNER_PASSWORD` lets role smoke create temporary CS, Finance, Teknisi, and Advertiser users, then delete them after the run.
+- `SMOKE_ROLE_ACCOUNTS` contains Owner, CS, Finance, Teknisi, and Advertiser credentials when using permanent test users instead of temporary generated users.
+- `SMOKE_PROSPECT_ACCOUNT` can provide a dedicated CS account for `smoke:prospect-crud`; Owner credentials are still required for safe cleanup.
 - `smoke:routes` checks login redirects for protected routes and the public `/booking` route. Payment preview is treated as an internal authenticated workflow, not a public route.
+- Smoke artifacts are written to `File Review/artifacts/` and are intentionally ignored by git.
+
+Example smoke env:
+
+```bash
+SMOKE_BASE_URL=https://polesheadlamp-id.pages.dev \
+SMOKE_OWNER_PASSWORD='...' \
+npm run smoke:release
+```
 
 ## Role Checks
 
