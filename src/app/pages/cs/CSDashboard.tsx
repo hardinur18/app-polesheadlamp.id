@@ -612,6 +612,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     currentUser,
     orders,
     leads,
+    dailyAds,
     leadSpamDailyInputs,
     users,
     adAccounts,
@@ -1372,10 +1373,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
         if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || [], diagnostics, 'google');
         if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || [], diagnostics, 'tiktok');
 
-        if (failedSources.length === 3) {
-          throw new Error('Semua snapshot API iklan gagal dimuat.');
-        }
-
         if (failedSources.length > 0) {
           console.warn('[CS Dashboard] sebagian snapshot API iklan gagal dimuat', failedSources.map((item) => ({
             source: item.source,
@@ -1596,6 +1593,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       account: (typeof activeAdAccounts)[number];
       assignment: ReturnType<typeof adAccountCsLookup.resolveAssignment>;
       apiMetrics: CsAdsAccountMetric[];
+      operationalAds: typeof dailyAds;
       leads: typeof leads;
       orders: typeof orders;
     };
@@ -1641,6 +1639,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         account,
         assignment: effectiveAssignment,
         apiMetrics: [],
+        operationalAds: [],
         leads: [],
         orders: [],
       };
@@ -1656,6 +1655,19 @@ export function CSDashboard({ userId }: { userId?: string }) {
       const group = getGroup(metric.date, account);
       if (!group) continue;
       group.apiMetrics.push(metric);
+    }
+
+    for (const ad of dailyAds) {
+      if (!ad.date || ad.date < rangeParams.from || ad.date > rangeParams.to) continue;
+      if (targetPlatformId && ad.platformId !== targetPlatformId) continue;
+      const account = activeAdAccountById.get(ad.adAccountId);
+      if (!account) continue;
+      const group = getGroup(ad.date, account, {
+        csId: ad.csId,
+        subChannelId: ad.subChannelId,
+      });
+      if (!group) continue;
+      group.operationalAds.push(ad);
     }
 
     const candidatesByScope = new Map<string, AssignedAccountGroup[]>();
@@ -1793,6 +1805,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
     const getGroupActivityScore = (group: AssignedAccountGroup) =>
       group.apiMetrics.reduce((sum, metric) => sum + metric.spend + metric.leads, 0) +
+      group.operationalAds.reduce(
+        (sum, ad) => sum + (Number(ad.amountSpent) || 0) + (Number(ad.leadsDashboard) || 0),
+        0,
+      ) +
       group.leads.length +
       group.orders.length;
     const getGroupSource = (group: AssignedAccountGroup): DetailRow['source'] => {
@@ -1825,17 +1841,26 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
     const rows: DetailRow[] = [];
     for (const group of groups.values()) {
-      const spendDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.spend, 0);
-      const spendTotal = group.apiMetrics.reduce(
+      const apiSpendDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.spend, 0);
+      const apiSpendTotal = group.apiMetrics.reduce(
         (sum, metric) => sum + metric.spend * (1 + ((metric.ppn || 0) + (metric.fee || 0)) / 100),
         0,
       );
+      const apiLeads = group.apiMetrics.reduce((sum, metric) => sum + metric.leads, 0);
+      const hasApiMetrics = group.apiMetrics.some((metric) => metric.spend > 0 || metric.leads > 0);
+      const operationalSpendDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.amountSpent) || 0), 0);
+      const operationalSpendTotal = group.operationalAds.reduce(
+        (sum, ad) => sum + (Number(ad.amountSpent) || 0) + (Number(ad.ppnAmount) || 0) + (Number(ad.feeAmount) || 0),
+        0,
+      );
+      const operationalLeadsDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.leadsDashboard) || 0), 0);
+      const spendDashboard = hasApiMetrics ? apiSpendDashboard : operationalSpendDashboard;
+      const spendTotal = hasApiMetrics ? apiSpendTotal : operationalSpendTotal;
+      const leadsDashboard = hasApiMetrics ? apiLeads : operationalLeadsDashboard;
       const completedOrders = group.orders.filter((order) => order.status === 'done');
       const revenue = completedOrders.reduce((sum, order) => sum + (order.income || order.price || 0), 0);
       const orderCount = group.orders.length;
       const doneCount = completedOrders.length;
-      const apiLeads = group.apiMetrics.reduce((sum, metric) => sum + metric.leads, 0);
-      const leadsDashboard = apiLeads;
       const spamCount = spamByScope.get(getScopeKey(
         group.date,
         group.account.advertiserId,
@@ -1893,6 +1918,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     apiAdsByDateAccount,
     adAccountCsLookup,
     adAccounts,
+    dailyAds,
     isConnectedAdAccount,
     leads,
     orders,

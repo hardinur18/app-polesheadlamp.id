@@ -1201,10 +1201,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
           { source: 'tiktok', result: tiktok },
         ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
 
-        if (failedSources.length === 3) {
-          throw new Error('Semua snapshot API iklan gagal dimuat.');
-        }
-
         if (failedSources.length > 0) {
           console.warn('[Advertiser Dashboard] sebagian snapshot API iklan gagal dimuat', failedSources.map((item) => ({
             source: item.source,
