@@ -1482,10 +1482,12 @@ app.get("/snapshots", async (c) => {
 
     if (includeLastKnown) {
       const existingAccountIds = new Set(rows.map((row) => normalizeAdvertiserId(row.externalAccountId)).filter(Boolean));
-      const configs = await readTikTokIntegrationConfigs();
-      const fallbackAdvertiserIds = requestedAdvertiserId
-        ? [requestedAdvertiserId]
-        : configs
+      let fallbackAdvertiserIds = requestedAdvertiserId ? [requestedAdvertiserId] : [];
+
+      if (!requestedAdvertiserId) {
+        try {
+          const configs = await readTikTokIntegrationConfigs();
+          fallbackAdvertiserIds = configs
             .filter(
               (config) =>
                 config.enabled &&
@@ -1495,6 +1497,13 @@ app.get("/snapshots", async (c) => {
             )
             .map((config) => normalizeAdvertiserId(config.liveTikTokAdvertiserId || ""))
             .filter((advertiserId) => advertiserId && !existingAccountIds.has(advertiserId));
+        } catch (configError) {
+          console.warn(
+            "TikTok snapshot config lookup failed; using latest stored snapshots without config filter.",
+            configError instanceof Error ? configError.message : configError,
+          );
+        }
+      }
 
       const fallbackRows =
         fallbackAdvertiserIds.length > 0 || rows.length === 0

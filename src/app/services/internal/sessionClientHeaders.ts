@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { projectId, publicAnonKey, supabaseUrl } from '/utils/supabase/info';
 import { isRetryableAuthError } from './authErrorUtils';
 
 type EdgeHeadersOptions = {
@@ -12,6 +12,8 @@ const TOKEN_REFRESH_GRACE_MS = 15_000;
 const SESSION_READ_TIMEOUT_MS = 3_000;
 const SESSION_REFRESH_TIMEOUT_MS = 8_000;
 const CACHED_TOKEN_SKEW_MS = 30_000;
+const AUTH_SERVER_UNAVAILABLE_MESSAGE =
+  'Server auth Supabase belum merespons. Ini bukan indikasi password salah; coba lagi setelah koneksi server normal.';
 
 let lastKnownAccessToken: {
   token: string;
@@ -31,6 +33,7 @@ function withAuthTimeout<T>(promise: Promise<T>, timeoutMs: number, message: str
 
 function rememberAccessToken(session?: { access_token?: string | null; expires_at?: number | null } | null) {
   if (!session?.access_token) return;
+  if (!isSessionTokenForCurrentProject(session.access_token)) return;
 
   lastKnownAccessToken = {
     token: session.access_token,
@@ -40,8 +43,37 @@ function rememberAccessToken(session?: { access_token?: string | null; expires_a
 
 function getUsableCachedAccessToken() {
   if (!lastKnownAccessToken) return null;
+  if (!isSessionTokenForCurrentProject(lastKnownAccessToken.token)) {
+    lastKnownAccessToken = null;
+    return null;
+  }
   if (lastKnownAccessToken.expiresAtMs - Date.now() <= CACHED_TOKEN_SKEW_MS) return null;
   return lastKnownAccessToken.token;
+}
+
+function decodeJwtPayload(token?: string | null) {
+  if (!token) return null;
+
+  const payload = token.split('.')[1];
+  if (!payload) return null;
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      '=',
+    );
+    return JSON.parse(globalThis.atob(paddedPayload)) as { iss?: string; exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+function isSessionTokenForCurrentProject(token?: string | null) {
+  const expectedIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/+$/, '')}/auth/v1` : '';
+  if (!expectedIssuer) return true;
+
+  return decodeJwtPayload(token)?.iss === expectedIssuer;
 }
 
 function readStoredSupabaseSession() {
@@ -57,6 +89,7 @@ function readStoredSupabaseSession() {
       const parsed = JSON.parse(window.localStorage.getItem(key) || 'null');
       const session = parsed?.currentSession || parsed?.session || parsed;
       if (!session?.access_token) continue;
+      if (!isSessionTokenForCurrentProject(session.access_token)) continue;
 
       const expiresAtMs = session.expires_at ? Number(session.expires_at) * 1000 : 0;
       if (expiresAtMs && expiresAtMs - Date.now() <= CACHED_TOKEN_SKEW_MS) continue;
@@ -166,7 +199,7 @@ export async function getSessionAccessToken() {
 
     throw sessionError instanceof Error
       ? sessionError
-      : new Error('Koneksi ke server auth sedang lambat atau gagal.');
+      : new Error(AUTH_SERVER_UNAVAILABLE_MESSAGE);
   }
 
   if (error) {
@@ -192,6 +225,10 @@ export async function getSessionAccessToken() {
     throw new Error('Session login tidak ditemukan. Silakan login ulang.');
   }
 
+  if (!isSessionTokenForCurrentProject(session.access_token)) {
+    throw new Error('Session login tidak cocok dengan project aplikasi ini. Silakan login ulang.');
+  }
+
   const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
   const shouldRefresh = Boolean(expiresAtMs) && expiresAtMs - Date.now() < TOKEN_REFRESH_GRACE_MS;
 
@@ -207,7 +244,7 @@ export async function getSessionAccessToken() {
 
       throw refreshError instanceof Error
         ? refreshError
-        : new Error('Koneksi ke server auth sedang lambat atau gagal.');
+        : new Error(AUTH_SERVER_UNAVAILABLE_MESSAGE);
     }
   }
 

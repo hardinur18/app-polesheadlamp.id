@@ -1542,7 +1542,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       if (initialData) {
         const patch = buildOrderFormPatch(initialData, sanitizedData);
         savedOrder = Object.keys(patch).length > 0
-          ? await updateOrderPatch(initialData.id, patch, { silent: true })
+          ? await updateOrderPatch(initialData.id, patch, { silent: true, skipFreshScheduleValidation: true })
           : initialData;
         toast.success('Pesanan berhasil diperbarui');
         if (currentUser) {
@@ -1556,7 +1556,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
           );
         }
       } else {
-        savedOrder = await addOrder(sanitizedData as Order);
+        savedOrder = await addOrder(sanitizedData as Order, { skipFreshScheduleValidation: true });
         toast.success('Pesanan berhasil dibuat');
         if (currentUser) {
           logActivity(

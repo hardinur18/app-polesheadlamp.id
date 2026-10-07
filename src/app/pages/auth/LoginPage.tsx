@@ -1,18 +1,30 @@
 import React, { useState } from 'react';
 import appLogo from '@/assets/polesheadlamp-app-logo-round.png';
 import { supabase } from '../../../lib/supabaseClient';
-import { publicAnonKey, supabaseUrl } from '/utils/supabase/info';
+import { projectId, publicAnonKey, supabaseUrl } from '/utils/supabase/info';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Loader2, Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Session, User } from '@supabase/supabase-js';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
-const LOGIN_TIMEOUT_MS = 18_000;
-const LOGIN_MAX_ATTEMPTS = 2;
+const LOGIN_TIMEOUT_MS = 12_000;
+const LOGIN_MAX_ATTEMPTS = 1;
 const LOGIN_RETRY_BASE_DELAY_MS = 700;
+const SUPABASE_SET_SESSION_TIMEOUT_MS = 2_500;
+const AUTH_SERVER_UNAVAILABLE_MESSAGE =
+  'Server auth Supabase belum merespons. Ini bukan indikasi password salah; coba lagi setelah koneksi server normal.';
+
+const clearSupabaseAuthStorage = () => {
+  for (const key of Object.keys(window.localStorage)) {
+    if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+      window.localStorage.removeItem(key);
+    }
+  }
+};
 
 const withAbortableTimeout = async <T,>(
   buildPromise: (signal: AbortSignal) => PromiseLike<T>,
@@ -81,6 +93,105 @@ const parseAuthErrorPayload = (payload: unknown) => {
   );
 };
 
+const decodeJwtPayload = (token?: string | null) => {
+  if (!token) return null;
+  const payload = token.split('.')[1];
+  if (!payload) return null;
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      '=',
+    );
+    return JSON.parse(window.atob(paddedPayload)) as {
+      sub?: string;
+      email?: string;
+      exp?: number;
+      role?: string;
+      aud?: string;
+    };
+  } catch {
+    return null;
+  }
+};
+
+type DirectAuthPayload = Partial<Session> & {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  expires_at?: number;
+  token_type?: string;
+  user?: User;
+};
+
+const buildFallbackUser = (email: string, tokenPayload: ReturnType<typeof decodeJwtPayload>): User => {
+  const now = new Date().toISOString();
+
+  return {
+    id: tokenPayload?.sub || email,
+    aud: tokenPayload?.aud || 'authenticated',
+    role: tokenPayload?.role || 'authenticated',
+    email,
+    email_confirmed_at: now,
+    phone: '',
+    confirmed_at: now,
+    last_sign_in_at: now,
+    app_metadata: {},
+    user_metadata: {},
+    identities: [],
+    created_at: now,
+    updated_at: now,
+    is_anonymous: false,
+  };
+};
+
+const persistDirectAuthSession = (payload: DirectAuthPayload, email: string): Session => {
+  const tokenPayload = decodeJwtPayload(payload.access_token);
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = Number(payload.expires_at || tokenPayload?.exp || (now + Number(payload.expires_in || 3600)));
+  const session = {
+    ...payload,
+    access_token: payload.access_token!,
+    refresh_token: payload.refresh_token!,
+    expires_at: expiresAt,
+    expires_in: Number(payload.expires_in || Math.max(expiresAt - now, 0)),
+    token_type: payload.token_type || 'bearer',
+    user: payload.user || buildFallbackUser(email, tokenPayload),
+  } as Session;
+
+  if (projectId) {
+    window.localStorage.setItem(`sb-${projectId}-auth-token`, JSON.stringify(session));
+  }
+
+  return session;
+};
+
+const setSupabaseSessionBestEffort = async (session: Session): Promise<PasswordSignInResult> => {
+  const fallbackResult = {
+    data: {
+      session,
+      user: session.user,
+    },
+    error: null,
+  } as PasswordSignInResult;
+
+  try {
+    return await Promise.race([
+      supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      }),
+      new Promise<PasswordSignInResult>((resolve) => {
+        window.setTimeout(() => resolve(fallbackResult), SUPABASE_SET_SESSION_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.warn('[Login] Supabase setSession failed after direct auth; using persisted session.', error);
+    return fallbackResult;
+  }
+};
+
 const signInWithDirectAuth = async (
   email: string,
   password: string,
@@ -103,19 +214,16 @@ const signInWithDirectAuth = async (
     throw new Error(parseAuthErrorPayload(payload) || `Auth server error ${response.status}`);
   }
 
-  const sessionPayload = payload as {
-    access_token?: string;
-    refresh_token?: string;
-  } | null;
+  const sessionPayload = payload as DirectAuthPayload | null;
 
   if (!sessionPayload?.access_token || !sessionPayload?.refresh_token) {
     throw new Error('Auth server tidak mengembalikan session login.');
   }
 
-  return supabase.auth.setSession({
-    access_token: sessionPayload.access_token,
-    refresh_token: sessionPayload.refresh_token,
-  });
+  clearSupabaseAuthStorage();
+  const session = persistDirectAuthSession(sessionPayload, email);
+
+  return setSupabaseSessionBestEffort(session);
 };
 
 const signInWithRetry = async (email: string, password: string): Promise<PasswordSignInResult> => {
@@ -126,7 +234,7 @@ const signInWithRetry = async (email: string, password: string): Promise<Passwor
       const result = await withAbortableTimeout(
         (signal) => signInWithDirectAuth(email, password, signal),
         LOGIN_TIMEOUT_MS,
-        'Login timeout. Koneksi ke server auth terlalu lama. Coba ulang beberapa detik lagi.',
+        AUTH_SERVER_UNAVAILABLE_MESSAGE,
       );
 
       if (!result.error || !isRetryableLoginError(result.error) || attempt === LOGIN_MAX_ATTEMPTS) {
@@ -153,7 +261,7 @@ const getLoginErrorMessage = (err: unknown) => {
     }
 
     if (isRetryableLoginError(err)) {
-      return 'Koneksi ke server auth sedang lambat atau gagal. Coba lagi beberapa detik lagi.';
+      return AUTH_SERVER_UNAVAILABLE_MESSAGE;
     }
 
     return err.message;
@@ -198,6 +306,7 @@ export const LoginPage = () => {
       console.log(`[Login] Activity tracker reset: ${timestamp}`);
 
       toast.success('Login berhasil!');
+      window.location.replace('/dashboard/');
     } catch (err: any) {
       console.error('Auth error:', err);
       setError(getLoginErrorMessage(err));

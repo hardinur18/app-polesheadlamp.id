@@ -2,6 +2,10 @@ import { buildMakeServerUrl } from './internal/functionsBaseUrl';
 import { fetchWithTimeout } from './internal/fetchWithTimeout';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 import type { ServiceErrorPayload } from './internal/serviceTypes';
+import {
+  buildMetaAccountIdVariants,
+  fetchAdsSnapshotDatasetFromSupabase,
+} from './adsSnapshotDbFallback';
 
 const envMetaAccessToken = import.meta.env.VITE_META_ACCESS_TOKEN?.trim();
 const envMetaAppSecret = import.meta.env.VITE_META_APP_SECRET?.trim();
@@ -797,6 +801,22 @@ export async function fetchMetaSnapshotDataset({
   accountId?: string;
   includeLastKnown?: boolean;
 }) {
+  try {
+    return await fetchAdsSnapshotDatasetFromSupabase<MetaSnapshotRow>({
+      platformKey: 'meta',
+      from,
+      to,
+      externalAccountIds: accountId && accountId !== 'all' ? buildMetaAccountIdVariants(accountId) : undefined,
+      externalGroupId: businessId && businessId !== 'all' ? businessId : undefined,
+      includeLastKnown,
+    }) as MetaSnapshotDatasetResponse;
+  } catch (databaseError) {
+    console.warn(
+      '[Meta Ads] direct snapshot database read failed; falling back to Edge Function.',
+      databaseError instanceof Error ? databaseError.message : databaseError,
+    );
+  }
+
   const url = new URL(`${functionsBaseUrl}/meta/snapshots`);
 
   url.searchParams.set('from', from);

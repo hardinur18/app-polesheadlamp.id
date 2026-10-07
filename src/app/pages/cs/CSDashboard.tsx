@@ -68,6 +68,7 @@ import {
   type TikTokAdsIntegrationConfig,
 } from '@/app/services/tiktokAdsLiveService';
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
+import { readDashboardSnapshotCache, writeDashboardSnapshotCache } from '@/app/services/dashboardSnapshotCache';
 import {
   OperationalEmptyState,
   OperationalKpiCard,
@@ -139,6 +140,9 @@ type CsApiLoadDiagnostics = {
     source: string;
     externalAccountId?: string | null;
     externalAccountName?: string | null;
+    spend?: number;
+    conversions?: number;
+    snapshotDate?: string;
   }>;
   failedSources: string[];
 };
@@ -170,10 +174,8 @@ const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
 const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
 const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
-const DASHBOARD_API_AUTO_SYNC_COOLDOWN_MS = 5 * 60_000;
-const DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES = 10;
+const CS_DASHBOARD_API_CACHE_NAMESPACE = 'cs-dashboard-api';
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
-const csViewApiAutoSyncAttempts = new Map<string, number>();
 
 function withDashboardProviderTimeout<T>(
   promise: Promise<T>,
@@ -190,15 +192,6 @@ function withDashboardProviderTimeout<T>(
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timeoutId) globalThis.clearTimeout(timeoutId);
   });
-}
-
-function shouldAttemptDashboardAutoSync(cacheKey: string) {
-  const now = Date.now();
-  const lastAttemptAt = csViewApiAutoSyncAttempts.get(cacheKey) || 0;
-  if (now - lastAttemptAt < DASHBOARD_API_AUTO_SYNC_COOLDOWN_MS) return false;
-
-  csViewApiAutoSyncAttempts.set(cacheKey, now);
-  return true;
 }
 
 const formatShortCurrency = (value: number) =>
@@ -412,6 +405,9 @@ const readInitialDateRange = (): DateRange => {
 const buildApiCacheKey = (range: { from: string; to: string } | null, mappingKey: string) =>
   range ? `${range.from}:${range.to}:${mappingKey || 'unmapped'}` : null;
 
+const dashboardRangeIncludesToday = (range: { from: string; to: string }, today: string) =>
+  range.from <= today && range.to >= today;
+
 const createEmptyApiLoadDiagnostics = (): CsApiLoadDiagnostics => ({
   rawRows: 0,
   matchedRows: 0,
@@ -429,12 +425,41 @@ const normalizeExternalAccountId = (value?: string | null) =>
     .replace(/^act_/, '')
     .replace(/[^a-z0-9]/g, '');
 
-const normalizeAdAccountNameKey = (value?: string | null) =>
+const normalizeAdAccountTextKey = (value?: string | null) =>
   (value || '')
     .trim()
     .toLowerCase()
     .replace(/^act_/, '')
-    .replace(/\s+/g, ' ');
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const withNormalizedNumericSuffix = (value: string) =>
+  value.replace(/(^|\s)0+(\d+)(?=$|\s)/g, (_match, prefix, digits) => `${prefix}${Number(digits)}`);
+
+const getAdAccountNameLookupVariants = (value?: string | null) => {
+  const variants = new Set<string>();
+  const add = (next?: string | null) => {
+    const normalized = normalizeAdAccountTextKey(next);
+    const compact = normalizeLookupKey(next);
+    if (normalized) variants.add(normalized);
+    if (compact) variants.add(compact);
+
+    const normalizedNumeric = withNormalizedNumericSuffix(normalized);
+    const compactNumeric = compact.replace(/0+(\d+)$/g, (_match, digits) => String(Number(digits)));
+    if (normalizedNumeric) variants.add(normalizedNumeric);
+    if (compactNumeric) variants.add(compactNumeric);
+  };
+
+  add(value);
+
+  for (const variant of Array.from(variants)) {
+    if (variant.includes('rahmansha')) add(variant.replace(/rahmansha/g, 'rahmansa'));
+    if (variant.includes('rahmansa')) add(variant.replace(/rahmansa/g, 'rahmansha'));
+  }
+
+  return Array.from(variants);
+};
 
 const isActiveDataStatus = (status?: string | null) => {
   const normalized = String(status || '').trim().toLowerCase();
@@ -454,12 +479,7 @@ const buildExternalAccountLookupKeys = (platformKey: string, value?: string | nu
 };
 
 const buildExternalAccountNameKeys = (platformKey: string, value?: string | null) => {
-  const normalized = normalizeAdAccountNameKey(value);
-  const compact = normalizeLookupKey(value);
-  return Array.from(new Set([
-    normalized ? `${platformKey}:${normalized}` : '',
-    compact ? `${platformKey}:${compact}` : '',
-  ].filter(Boolean)));
+  return getAdAccountNameLookupVariants(value).map((variant) => `${platformKey}:${variant}`);
 };
 
 const resolvePlatformKey = (value?: string | null) => {
@@ -718,6 +738,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
     format(new Date(), 'yyyy-MM-dd'),
   ]);
   const lastApiRefreshNonceRef = React.useRef(0);
+  const lastApiSnapshotRefreshNonceRef = React.useRef(0);
+  const apiRequestInFlightRef = React.useRef(false);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
   const lastSpamScopeKeyRef = React.useRef('');
 
@@ -759,6 +781,9 @@ export function CSDashboard({ userId }: { userId?: string }) {
     if (!rangeParams) return;
 
     const refreshSnapshot = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (apiRequestInFlightRef.current) return;
+      if (!dashboardRangeIncludesToday(rangeParams, format(new Date(), 'yyyy-MM-dd'))) return;
       setApiSnapshotRefreshNonce((value) => value + 1);
     };
     const handleVisibilityRefresh = () => {
@@ -1094,8 +1119,9 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (!isActiveDataStatus(account.status)) continue;
       if (!shouldShowAdAccountInCsView(account)) continue;
       byId.set(account.id, account);
-      byName.set(normalizeLookupKey(account.accountName), account);
-      byName.set(normalizeAdAccountNameKey(account.accountName), account);
+      for (const key of getAdAccountNameLookupVariants(account.accountName)) {
+        byName.set(key, account);
+      }
       const platformName = platforms.find((platform) => platform.id === account.platformId)?.name;
       registerExternalPairing(account, resolvePlatformKey(platformName), account.id, account.accountName);
     }
@@ -1227,20 +1253,20 @@ export function CSDashboard({ userId }: { userId?: string }) {
     if (forceRefresh) {
       lastApiRefreshNonceRef.current = apiRefreshNonce;
     }
-    const cacheKey = buildApiCacheKey(rangeParams, adAccountMappingCacheKey);
-    const cachedSnapshot = !forceRefresh && cacheKey ? csViewApiCache.get(cacheKey) : null;
-    const isCachedSnapshotFresh = cachedSnapshot
-      ? Date.now() - cachedSnapshot.cachedAt < DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS
-      : false;
-    const effectiveForceRefresh = forceRefresh || Boolean(cachedSnapshot && !isCachedSnapshotFresh);
-    if (cachedSnapshot && !effectiveForceRefresh) {
-      setApiAdsMetrics(cachedSnapshot.metrics);
-      setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
-      setApiAdsStatus(cachedSnapshot.status);
-      setApiLoadDiagnostics(cachedSnapshot.diagnostics);
-      return;
+    const backgroundRefresh = apiSnapshotRefreshNonce !== lastApiSnapshotRefreshNonceRef.current;
+    if (backgroundRefresh) {
+      lastApiSnapshotRefreshNonceRef.current = apiSnapshotRefreshNonce;
     }
-
+    const cacheKey = buildApiCacheKey(rangeParams, adAccountMappingCacheKey);
+    const persistentCachedSnapshot =
+      cacheKey && !forceRefresh && !backgroundRefresh
+        ? readDashboardSnapshotCache<CsViewApiCacheEntry>(CS_DASHBOARD_API_CACHE_NAMESPACE, cacheKey)
+        : null;
+    if (cacheKey && persistentCachedSnapshot && !csViewApiCache.has(cacheKey)) {
+      csViewApiCache.set(cacheKey, persistentCachedSnapshot);
+    }
+    const cachedSnapshotForFallback = cacheKey ? (csViewApiCache.get(cacheKey) || persistentCachedSnapshot) : null;
+    const cachedSnapshot = !forceRefresh && !backgroundRefresh ? cachedSnapshotForFallback : null;
     if (cachedSnapshot && !forceRefresh) {
       setApiAdsMetrics(cachedSnapshot.metrics);
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
@@ -1265,11 +1291,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
         if (account) return account;
       }
 
-      return (
-        adAccountLookup.byName.get(normalizeLookupKey(row.externalAccountName)) ||
-        adAccountLookup.byName.get(normalizeAdAccountNameKey(row.externalAccountName)) ||
-        null
-      );
+      for (const key of getAdAccountNameLookupVariants(row.externalAccountName)) {
+        const account = adAccountLookup.byName.get(key);
+        if (account) return account;
+      }
+
+      return null;
     };
 
     const addSnapshotRows = (
@@ -1293,6 +1320,9 @@ export function CSDashboard({ userId }: { userId?: string }) {
               source,
               externalAccountId: row.externalAccountId,
               externalAccountName: row.externalAccountName,
+              spend: Number(row.spend) || 0,
+              conversions: Number(row.conversions) || 0,
+              snapshotDate: row.snapshotDate,
             });
           }
           continue;
@@ -1301,6 +1331,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
         diagnostics.matchedRows += 1;
 
         const assignment = adAccountCsLookup.resolveAssignment(adAccount.id, date);
+        const canonicalAdvertiserId = adAccount?.advertiserId || row.advertiserId || null;
+        const canonicalPlatformId = adAccount?.platformId || row.platformId || null;
 
         const spend = Number(row.spend) || 0;
         const conversions = Number(row.conversions) || 0;
@@ -1315,14 +1347,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
         resultByDate[date] = current;
 
         const accountKey = `${date}::${adAccount?.id || row.externalAccountId || row.externalAccountName || row.id || 'unmapped-api-account'}`;
-        const platformName = platforms.find((platform) => platform.id === (row.platformId || adAccount?.platformId))?.name;
+        const platformName = platforms.find((platform) => platform.id === canonicalPlatformId)?.name;
         const currentAccount = resultByDateAccount[accountKey] || {
           date,
           adAccountId: adAccount.id,
-          advertiserId: row.advertiserId || adAccount?.advertiserId || null,
+          advertiserId: canonicalAdvertiserId,
           csId: assignment?.csId || null,
           subChannelId: assignment?.subChannelId || null,
-          platformId: row.platformId || adAccount?.platformId || null,
+          platformId: canonicalPlatformId,
           platformKey: row.platformKey || resolvePlatformKey(platformName),
           accountName: adAccount?.accountName || row.externalAccountName || 'Akun API belum dipetakan',
           ppn: adAccount?.ppn || 0,
@@ -1350,12 +1382,32 @@ export function CSDashboard({ userId }: { userId?: string }) {
         { source: 'google', result: google },
         { source: 'tiktok', result: tiktok },
       ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
+      const failedSourceKeys = new Set(failedSources.map((item) => item.source));
 
       diagnostics.failedSources = failedSources.map((item) => item.source);
 
       if (meta.status === 'fulfilled') addSnapshotRows(next, nextByAccount, meta.value.rows || [], diagnostics, 'meta');
       if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || [], diagnostics, 'google');
       if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || [], diagnostics, 'tiktok');
+
+      if (failedSourceKeys.size > 0 && cachedSnapshotForFallback) {
+        for (const [accountKey, cachedMetric] of Object.entries(cachedSnapshotForFallback.byDateAccount)) {
+          if (!failedSourceKeys.has(cachedMetric.platformKey)) continue;
+          if (cachedMetric.date < rangeParams.from || cachedMetric.date > rangeParams.to) continue;
+          if (nextByAccount[accountKey]) continue;
+
+          nextByAccount[accountKey] = cachedMetric;
+          const current = next[cachedMetric.date] || {
+            date: cachedMetric.date,
+            spend: 0,
+            leads: 0,
+            source: 'api' as const,
+          };
+          current.spend += cachedMetric.spend;
+          current.leads += cachedMetric.leads;
+          next[cachedMetric.date] = current;
+        }
+      }
 
       if (failedSources.length > 0) {
         console.warn(`[CS Dashboard] sebagian snapshot API iklan gagal dimuat (${options.mode})`, failedSources.map((item) => ({
@@ -1369,7 +1421,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         (row) => row.spend > 0 || row.leads > 0,
       );
       const hasUsefulData = hasUsefulApiMetrics || hasUsefulApiAccountMetrics;
-      const hasAnyRows = diagnostics.rawRows > 0;
+      const hasAnyRows = diagnostics.rawRows > 0 || Object.keys(nextByAccount).length > 0;
       const hasAnyProviderResponse = results.some((result) => result.status === 'fulfilled');
       const status: ApiAdsStatus = hasUsefulData
         ? 'ready'
@@ -1394,13 +1446,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
       setApiLoadDiagnostics(diagnostics);
       setApiAdsStatus(status);
       if (options.cacheResult && cacheKey) {
-        csViewApiCache.set(cacheKey, {
+        const cachedEntry = {
           metrics: next,
           byDateAccount: nextByAccount,
           status,
           diagnostics,
           cachedAt: Date.now(),
-        });
+        };
+        csViewApiCache.set(cacheKey, cachedEntry);
+        writeDashboardSnapshotCache(CS_DASHBOARD_API_CACHE_NAMESPACE, cacheKey, cachedEntry);
       }
 
       return {
@@ -1442,13 +1496,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       ]);
     };
 
-    const syncSnapshots = async ({
-      force,
-      minFreshMinutes,
-    }: {
-      force: boolean;
-      minFreshMinutes: number;
-    }) => {
+    const syncSnapshots = async () => {
       const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
       const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
       const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
@@ -1457,21 +1505,21 @@ export function CSDashboard({ userId }: { userId?: string }) {
       return Promise.allSettled([
         shouldLoadMeta
           ? withDashboardProviderTimeout(
-              syncMetaSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
+              syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
               'Meta Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
           : Promise.resolve(emptySnapshotDataset),
         shouldLoadGoogle
           ? withDashboardProviderTimeout(
-              syncGoogleAdsSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
+              syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
               'Google Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
           : Promise.resolve(emptySnapshotDataset),
         shouldLoadTikTok
           ? withDashboardProviderTimeout(
-              syncTikTokAdsSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
+              syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
               'TikTok Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
@@ -1480,35 +1528,18 @@ export function CSDashboard({ userId }: { userId?: string }) {
     };
 
     const loadApiAdsMetrics = async () => {
-      if (!cachedSnapshot || forceRefresh) {
+      if (forceRefresh) {
         setApiAdsStatus('loading');
       }
+      apiRequestInFlightRef.current = true;
 
       try {
         const storedResults = await loadStoredSnapshots();
         if (cancelled) return;
         const storedApplyResult = applySettledSnapshotResults(storedResults, { cacheResult: true, mode: 'stored' });
 
-        const shouldAutoSync =
-          !forceRefresh &&
-          Boolean(cacheKey) &&
-          scopedApiPlatformKeys.size > 0 &&
-          (
-            storedApplyResult.status !== 'ready' ||
-            storedApplyResult.hasFailures ||
-            Boolean(cachedSnapshot && !isCachedSnapshotFresh)
-          ) &&
-          shouldAttemptDashboardAutoSync(cacheKey);
-
-        if (forceRefresh || shouldAutoSync) {
-          if (shouldAutoSync && !storedApplyResult.hasUsefulData) {
-            setApiAdsStatus('loading');
-          }
-
-          const syncedResults = await syncSnapshots({
-            force: forceRefresh,
-            minFreshMinutes: forceRefresh ? 0 : DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES,
-          });
+        if (forceRefresh) {
+          const syncedResults = await syncSnapshots();
           if (cancelled) return;
           applySettledSnapshotResults(syncedResults, {
             cacheResult: true,
@@ -1524,6 +1555,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
           setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
           setApiAdsStatus('error');
         }
+      } finally {
+        if (!cancelled) apiRequestInFlightRef.current = false;
       }
     };
 
@@ -1721,6 +1754,106 @@ export function CSDashboard({ userId }: { userId?: string }) {
       end: parseISO(`${rangeParams.to}T00:00:00`),
     }).map((date) => format(date, 'yyyy-MM-dd'));
     const dates = getDateRange();
+    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
+
+    const readNestedString = (value: unknown): string | null => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed || null;
+      }
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+      return null;
+    };
+
+    const collectPayloadValue = (source: unknown, keys: string[]) => {
+      if (!source || typeof source !== 'object') return null;
+      const record = source as Record<string, unknown>;
+      for (const key of keys) {
+        const value = readNestedString(record[key]);
+        if (value) return value;
+      }
+
+      const payload = record.payload;
+      if (!payload || typeof payload !== 'object') return null;
+      const payloadRecord = payload as Record<string, unknown>;
+      for (const key of keys) {
+        const value = readNestedString(payloadRecord[key]);
+        if (value) return value;
+      }
+
+      for (const nestedKey of ['adAccount', 'ad_account', 'source', 'apiAccount', 'api_account']) {
+        const nested = payloadRecord[nestedKey];
+        if (!nested || typeof nested !== 'object') continue;
+        const nestedRecord = nested as Record<string, unknown>;
+        for (const key of keys) {
+          const value = readNestedString(nestedRecord[key]);
+          if (value) return value;
+        }
+      }
+
+      return null;
+    };
+
+    const resolveExplicitAdAccount = (...sources: unknown[]) => {
+      const internalIdKeys = [
+        'adAccountId',
+        'ad_account_id',
+        'internalAdAccountId',
+        'internal_ad_account_id',
+      ];
+      const externalIdKeys = [
+        'externalAccountId',
+        'external_account_id',
+        'liveMetaAccountId',
+        'live_meta_account_id',
+        'metaAccountId',
+        'meta_account_id',
+        'liveGoogleCustomerId',
+        'live_google_customer_id',
+        'liveTikTokAdvertiserId',
+        'live_tiktok_advertiser_id',
+      ];
+      const nameKeys = [
+        'adAccountName',
+        'ad_account_name',
+        'internalAccountName',
+        'internal_account_name',
+        'externalAccountName',
+        'external_account_name',
+        'accountName',
+        'account_name',
+      ];
+
+      for (const source of sources) {
+        const internalId = collectPayloadValue(source, internalIdKeys);
+        if (internalId) {
+          const account = activeAdAccountById.get(internalId);
+          if (account) return account;
+        }
+      }
+
+      for (const source of sources) {
+        const externalId = collectPayloadValue(source, externalIdKeys);
+        if (!externalId) continue;
+        for (const platformKey of ['meta', 'google', 'tiktok'] as const) {
+          for (const key of buildExternalAccountLookupKeys(platformKey, externalId)) {
+            const account = adAccountLookup.byExternalId.get(key);
+            if (account && activeAdAccountById.has(account.id)) return account;
+          }
+        }
+      }
+
+      for (const source of sources) {
+        const accountName = collectPayloadValue(source, nameKeys);
+        if (!accountName) continue;
+        for (const key of getAdAccountNameLookupVariants(accountName)) {
+          const account = adAccountLookup.byName.get(key);
+          if (account && activeAdAccountById.has(account.id)) return account;
+        }
+      }
+
+      return null;
+    };
 
     const getSyntheticAssignment = (
       date: string,
@@ -1813,47 +1946,34 @@ export function CSDashboard({ userId }: { userId?: string }) {
     ) => {
       if (!candidates?.length) return null;
 
-      const isGoogleScope = candidates.some(
-        (group) => resolvePlatformKey(platformName.get(group.account.platformId || '')) === 'google',
-      );
-
-      if (isGoogleScope) {
-        const sortedByApiActivity = [...candidates].sort((left, right) => {
-          const leftScore = left.apiMetrics.reduce(
-            (sum, metric) => sum + (metric.spend || 0) + (metric.leads || 0),
-            0,
-          );
-          const rightScore = right.apiMetrics.reduce(
-            (sum, metric) => sum + (metric.spend || 0) + (metric.leads || 0),
-            0,
-          );
-
-          if (rightScore !== leftScore) return rightScore - leftScore;
-          return left.account.accountName.localeCompare(right.account.accountName, 'id-ID');
-        });
-        const candidatesWithApiActivity = sortedByApiActivity.filter((group) =>
-          group.apiMetrics.some((metric) => (metric.spend || 0) > 0 || (metric.leads || 0) > 0),
+      const getAttributionSignal = (group: AssignedAccountGroup) =>
+        group.apiMetrics.reduce(
+          (sum, metric) => sum + (Number(metric.spend) || 0) + ((Number(metric.leads) || 0) * 100000),
+          0,
+        ) +
+        group.operationalAds.reduce(
+          (sum, ad) => sum + (Number(ad.amountSpent) || 0) + ((Number(ad.leadsDashboard) || 0) * 100000),
+          0,
         );
-        const preferredCandidates = candidatesWithApiActivity.length > 0
-          ? candidatesWithApiActivity
-          : sortedByApiActivity;
+      const byBestSignal = (left: AssignedAccountGroup, right: AssignedAccountGroup) => {
+        const signalDelta = getAttributionSignal(right) - getAttributionSignal(left);
+        if (signalDelta !== 0) return signalDelta;
+        return left.account.accountName.localeCompare(right.account.accountName, 'id-ID', { numeric: true });
+      };
+      const chooseBest = (items: AssignedAccountGroup[]) => [...items].sort(byBestSignal)[0];
 
-        const exactSubChannel = subChannelId
-          ? preferredCandidates.find((group) => group.assignment?.subChannelId === subChannelId)
-          : null;
-        if (exactSubChannel) return exactSubChannel;
+      const exactSubChannelCandidates = subChannelId
+        ? candidates.filter((group) => group.assignment?.subChannelId === subChannelId)
+        : [];
+      if (exactSubChannelCandidates.length > 0) return chooseBest(exactSubChannelCandidates);
 
-        const defaultSubChannel = preferredCandidates.find((group) => !group.assignment?.subChannelId);
-        return defaultSubChannel || preferredCandidates[0];
-      }
+      const candidatesWithActivity = candidates.filter((group) => getAttributionSignal(group) > 0);
+      if (candidatesWithActivity.length > 0) return chooseBest(candidatesWithActivity);
 
-      const exactSubChannel = subChannelId
-        ? candidates.find((group) => group.assignment?.subChannelId === subChannelId)
-        : null;
-      if (exactSubChannel) return exactSubChannel;
+      const defaultSubChannelCandidates = candidates.filter((group) => !group.assignment?.subChannelId);
+      if (defaultSubChannelCandidates.length > 0) return chooseBest(defaultSubChannelCandidates);
 
-      const defaultSubChannel = candidates.find((group) => !group.assignment?.subChannelId);
-      return defaultSubChannel || candidates[0];
+      return chooseBest(candidates);
     };
 
     const findFallbackAccount = (
@@ -1881,18 +2001,27 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const getOrderLeadDate = (order: (typeof orders)[number]) => (order.leadDate || order.created_at || '').slice(0, 10);
 
     for (const order of orders) {
-      const date = getOrderLeadDate(order);
+      const relatedLead = order.leadId ? leadById.get(order.leadId) : undefined;
+      const date = getOrderLeadDate(order) || (relatedLead ? getLeadDate(relatedLead) : '');
       if (!date || date < rangeParams.from || date > rangeParams.to) continue;
-      if (targetId && order.csId !== targetId) continue;
-      if (targetPlatformId && order.platformId !== targetPlatformId) continue;
+      const orderCsId = order.csId || relatedLead?.csId || null;
+      const orderAdvertiserId = order.advertiserId || relatedLead?.advertiserId || null;
+      const orderPlatformId = order.platformId || relatedLead?.platformId || null;
+      const orderSubChannelId = order.subChannelId || relatedLead?.subChannelId || null;
+      if (targetId && orderCsId !== targetId) continue;
+      if (targetPlatformId && orderPlatformId !== targetPlatformId) continue;
 
-      const candidates = candidatesByScope.get(getScopeKey(date, order.advertiserId, order.platformId, order.csId));
-      const group = selectBestGroup(candidates, order.subChannelId)
+      const explicitAccount = resolveExplicitAdAccount(order, relatedLead);
+      const explicitGroup = explicitAccount
+        ? getGroup(date, explicitAccount, { csId: orderCsId, subChannelId: orderSubChannelId })
+        : null;
+      const candidates = candidatesByScope.get(getScopeKey(date, orderAdvertiserId, orderPlatformId, orderCsId));
+      const group = explicitGroup || selectBestGroup(candidates, orderSubChannelId)
         || (
-          order.csId
+          orderCsId
             ? (() => {
-              const account = findFallbackAccount(order.advertiserId, order.platformId, order.subChannelId);
-              return account ? getGroup(date, account, { csId: order.csId, subChannelId: order.subChannelId }) : null;
+              const account = findFallbackAccount(orderAdvertiserId, orderPlatformId, orderSubChannelId);
+              return account ? getGroup(date, account, { csId: orderCsId, subChannelId: orderSubChannelId }) : null;
             })()
             : null
         );
@@ -1906,8 +2035,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (targetId && lead.csId !== targetId) continue;
       if (targetPlatformId && lead.platformId !== targetPlatformId) continue;
 
+      const explicitAccount = resolveExplicitAdAccount(lead);
+      const explicitGroup = explicitAccount
+        ? getGroup(date, explicitAccount, { csId: lead.csId, subChannelId: lead.subChannelId })
+        : null;
       const candidates = candidatesByScope.get(getScopeKey(date, lead.advertiserId, lead.platformId, lead.csId));
-      const group = selectBestGroup(candidates, lead.subChannelId)
+      const group = explicitGroup || selectBestGroup(candidates, lead.subChannelId)
         || (
           lead.csId
             ? (() => {
@@ -2035,6 +2168,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     apiAdsByDateAccount,
     adAccountCsLookup,
     adAccounts,
+    adAccountLookup,
     dailyAds,
     isConnectedAdAccount,
     leads,
@@ -2148,23 +2282,59 @@ export function CSDashboard({ userId }: { userId?: string }) {
       actionLabel: string;
       tone: 'danger' | 'warning';
     }> = [];
-    const buildHref = (view: 'api' | 'unmatched' | 'assignment') => `/master-data?tab=ad-accounts&view=${view}`;
-    const uniqueUnmatchedAccounts = new Set(
-      apiLoadDiagnostics.unmatchedRows.map((row) =>
-        `${row.source}:${row.externalAccountId || normalizeLookupKey(row.externalAccountName) || 'unknown'}`,
-      ),
-    );
+    const buildHref = (
+      view: 'api' | 'unmatched' | 'assignment',
+      options?: {
+        action?: string;
+        platform?: string | null;
+        externalAccountId?: string | null;
+        q?: string | null;
+      },
+    ) => {
+      const params = new URLSearchParams({ tab: 'ad-accounts', view });
+      if (options?.action) params.set('action', options.action);
+      if (options?.platform) params.set('platform', options.platform);
+      if (options?.externalAccountId) params.set('externalAccountId', options.externalAccountId);
+      if (options?.q) params.set('q', options.q);
+      return `/master-data?${params.toString()}`;
+    };
+    const unmatchedAccountSummaries = Array.from(
+      apiLoadDiagnostics.unmatchedRows.reduce((map, row) => {
+        const key = `${row.source}:${row.externalAccountId || normalizeLookupKey(row.externalAccountName) || 'unknown'}`;
+        const current = map.get(key) || {
+          source: row.source,
+          externalAccountId: row.externalAccountId,
+          externalAccountName: row.externalAccountName,
+          spend: 0,
+          conversions: 0,
+        };
+        current.spend += Number(row.spend) || 0;
+        current.conversions += Number(row.conversions) || 0;
+        map.set(key, current);
+        return map;
+      }, new Map<string, {
+        source: string;
+        externalAccountId?: string | null;
+        externalAccountName?: string | null;
+        spend: number;
+        conversions: number;
+      }>()).values(),
+    ).sort((left, right) => right.spend - left.spend || right.conversions - left.conversions);
+    const primaryUnmatchedAccount = unmatchedAccountSummaries[0];
     const unassignedRows = detailRows.filter((row) => row.csName === 'CS belum diatur');
     const failedSources = apiLoadDiagnostics.failedSources.map((source) => source.toUpperCase()).join(', ');
 
     if (apiAdsStatus === 'error') {
+      const canStillUseOperationalData = hasOperationalVisibleRows || csKpis.prospects > 0 || csKpis.orders > 0;
       notices.push({
         key: 'api-error',
-        title: 'Snapshot API iklan gagal dimuat',
-        detail: 'Spending dan Lead Dashboard belum bisa dihitung. Cek integrasi API dan refresh snapshot iklan.',
+        title: canStillUseOperationalData ? 'API iklan belum sinkron' : 'Snapshot API iklan gagal dimuat',
+        detail: canStillUseOperationalData
+          ? 'Data operasional tetap tampil. Spending dan Lead Dashboard menunggu snapshot API iklan berhasil dimuat.'
+          : 'Spending dan Lead Dashboard belum bisa dihitung. Cek integrasi API dan refresh snapshot iklan.',
         href: buildHref('api'),
         actionLabel: 'Buka Integrasi API',
-        tone: 'danger',
+        tone: canStillUseOperationalData ? 'warning' : 'danger',
       });
     } else if (apiLoadDiagnostics.failedSources.length > 0) {
       notices.push({
@@ -2177,12 +2347,27 @@ export function CSDashboard({ userId }: { userId?: string }) {
       });
     }
 
-    if (uniqueUnmatchedAccounts.size > 0) {
+    if (unmatchedAccountSummaries.length > 0) {
+      const primaryLabel = primaryUnmatchedAccount.externalAccountName
+        || primaryUnmatchedAccount.externalAccountId
+        || 'Akun API tanpa nama';
+      const primaryMetrics = [
+        `Spend ${formatShortCurrency(primaryUnmatchedAccount.spend)}`,
+        `Lead ${formatCount(primaryUnmatchedAccount.conversions)}`,
+      ].join(', ');
+
       notices.push({
         key: 'api-unmatched',
         title: 'Ada snapshot API belum match ke akun internal',
-        detail: `${formatCount(uniqueUnmatchedAccounts.size)} akun API punya spend/lead, tapi belum cocok dengan master Akun Iklan.`,
-        href: buildHref('unmatched'),
+        detail: unmatchedAccountSummaries.length === 1
+          ? `${primaryLabel} (${primaryUnmatchedAccount.source.toUpperCase()} / ${primaryUnmatchedAccount.externalAccountId || 'ID belum ada'}) belum cocok ke akun internal aktif. ${primaryMetrics}.`
+          : `${formatCount(unmatchedAccountSummaries.length)} akun API punya spend/lead, termasuk ${primaryLabel}. Cek pairing ke master Akun Iklan aktif.`,
+        href: buildHref('api', {
+          action: 'pair-api',
+          platform: primaryUnmatchedAccount.source,
+          externalAccountId: primaryUnmatchedAccount.externalAccountId,
+          q: primaryLabel,
+        }),
         actionLabel: 'Cek Belum Match API',
         tone: 'warning',
       });
@@ -2219,8 +2404,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
     apiAdsStatus,
     apiLoadDiagnostics.failedSources,
     apiLoadDiagnostics.unmatchedRows,
+    csKpis.orders,
     csKpis.prospects,
     detailRows,
+    hasOperationalVisibleRows,
     hasPermission,
   ]);
   const dateGroups = useMemo(() => {

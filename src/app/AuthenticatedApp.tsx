@@ -6,6 +6,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { AppLoadingScreen } from './components/AppLoadingScreen';
 import { LoginPage } from './pages/auth/LoginPage';
 import { supabase } from '../lib/supabaseClient';
+import { projectId, supabaseUrl } from '/utils/supabase/info';
 import { Session } from '@supabase/supabase-js';
 import { getAppRouteByPath, getCanonicalAppPath } from '@/app/routing/appRouteRegistry';
 import {
@@ -19,28 +20,65 @@ const LOGIN_REDIRECT_STORAGE_KEY = 'app_post_login_redirect';
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
 
+const expectedSupabaseIssuer = supabaseUrl ? `${supabaseUrl.replace(/\/+$/, '')}/auth/v1` : '';
+
+const decodeJwtPayload = (token?: string | null) => {
+  if (!token) return null;
+  const payload = token.split('.')[1];
+  if (!payload) return null;
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      '=',
+    );
+    return JSON.parse(window.atob(paddedPayload)) as { iss?: string; exp?: number };
+  } catch {
+    return null;
+  }
+};
+
+const isSessionForCurrentProject = (session?: Session | null) => {
+  if (!session?.access_token || !expectedSupabaseIssuer) return Boolean(session?.access_token);
+  return decodeJwtPayload(session.access_token)?.iss === expectedSupabaseIssuer;
+};
+
+const parseStoredSession = (raw: string) => {
+  const parsed = JSON.parse(raw);
+  return (parsed?.currentSession || parsed?.session || (Array.isArray(parsed) ? parsed[0] : parsed)) as Session | null;
+};
+
 const hasCachedSupabaseSession = () => {
   if (typeof window === 'undefined') return false;
-  return Object.keys(window.localStorage).some((key) => (
-    key.startsWith('sb-') &&
-    key.endsWith('-auth-token') &&
-    Boolean(window.localStorage.getItem(key))
-  ));
+  return Object.keys(window.localStorage).some((key) => {
+    if (!key.startsWith('sb-') || !key.endsWith('-auth-token')) return false;
+    try {
+      return isSessionForCurrentProject(parseStoredSession(window.localStorage.getItem(key) || ''));
+    } catch {
+      return false;
+    }
+  });
 };
 
 const readCachedSupabaseSession = (): Session | null => {
   if (typeof window === 'undefined') return null;
 
-  for (const key of Object.keys(window.localStorage)) {
+  const candidateKeys = [
+    projectId ? `sb-${projectId}-auth-token` : '',
+    ...Object.keys(window.localStorage).filter((key) => key.startsWith('sb-') && key.endsWith('-auth-token')),
+  ].filter(Boolean);
+
+  for (const key of Array.from(new Set(candidateKeys))) {
     if (!key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
 
     try {
       const raw = window.localStorage.getItem(key);
       if (!raw) continue;
 
-      const parsed = JSON.parse(raw);
-      const session = (Array.isArray(parsed) ? parsed[0] : parsed) as Session | null;
+      const session = parseStoredSession(raw);
       if (!session?.access_token) continue;
+      if (!isSessionForCurrentProject(session)) continue;
 
       const expiresAtMs = session.expires_at ? session.expires_at * 1000 : 0;
       if (expiresAtMs && expiresAtMs <= Date.now()) continue;

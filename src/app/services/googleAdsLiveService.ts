@@ -2,6 +2,7 @@ import { buildMakeServerUrl } from './internal/functionsBaseUrl';
 import { fetchWithTimeout } from './internal/fetchWithTimeout';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 import type { ServiceErrorPayload } from './internal/serviceTypes';
+import { fetchAdsSnapshotDatasetFromSupabase } from './adsSnapshotDbFallback';
 
 export const googleAdsFunctionsBaseUrl = buildMakeServerUrl();
 
@@ -623,6 +624,22 @@ export async function fetchGoogleAdsSnapshotDataset({
   customerId?: string;
   includeLastKnown?: boolean;
 }) {
+  try {
+    return await fetchAdsSnapshotDatasetFromSupabase<GoogleAdsSnapshotRow>({
+      platformKey: 'google',
+      from,
+      to,
+      externalAccountIds: customerId && customerId !== 'all' ? [customerId] : undefined,
+      externalGroupId: managerId && managerId !== 'all' ? managerId : undefined,
+      includeLastKnown,
+    }) as GoogleAdsSnapshotDatasetResponse;
+  } catch (databaseError) {
+    console.warn(
+      '[Google Ads] direct snapshot database read failed; falling back to Edge Function.',
+      databaseError instanceof Error ? databaseError.message : databaseError,
+    );
+  }
+
   const url = new URL(`${googleAdsFunctionsBaseUrl}/google/snapshots`);
 
   url.searchParams.set('from', from);

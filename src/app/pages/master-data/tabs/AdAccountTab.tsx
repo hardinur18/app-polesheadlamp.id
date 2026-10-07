@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router';
 import {
   Plus, Edit, Trash2,
   AlertTriangle, CheckCircle2, History, Link2, Monitor, RefreshCw, Unlink, UserCheck, Users
@@ -137,6 +138,7 @@ type MappingAuditIssue =
     };
 
 export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _currentRole, setPageNotices }) => {
+  const location = useLocation();
   const {
     adAccounts,
     adAccountAssignments,
@@ -227,6 +229,7 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const [apiAccountInternalId, setApiAccountInternalId] = useState('none');
   const [apiAccountSaving, setApiAccountSaving] = useState(false);
   const [apiDeletingAccount, setApiDeletingAccount] = useState<AdApiAccount | null>(null);
+  const handledApiDeepLinkRef = React.useRef('');
 
   const isApiAccountFormDirty = useMemo(() => {
     if (!isApiAccountDialogOpen) return false;
@@ -348,12 +351,22 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const canDelete = hasPermission('master_data.delete');
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const queryView = new URLSearchParams(window.location.search).get('view') as AccountView | null;
+    const currentSearch = typeof window === 'undefined' ? location.search : window.location.search;
+    const params = new URLSearchParams(currentSearch);
+    const queryView = params.get('view') as AccountView | null;
     if (queryView && ACCOUNT_VIEW_IDS.has(queryView) && queryView !== accountView) {
       setAccountView(queryView);
     }
-  }, [accountView]);
+
+    const querySearch =
+      params.get('q') ||
+      params.get('search') ||
+      params.get('externalAccountId') ||
+      '';
+    if (querySearch) {
+      setSearch((current) => (current === querySearch ? current : querySearch));
+    }
+  }, [accountView, location.search]);
 
   const handleAccountViewChange = React.useCallback((nextView: AccountView) => {
     setAccountView(nextView);
@@ -366,6 +379,9 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     } else {
       url.searchParams.set('view', nextView);
     }
+    url.searchParams.delete('action');
+    url.searchParams.delete('platform');
+    url.searchParams.delete('externalAccountId');
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
@@ -435,6 +451,17 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const formatAssignmentPeriod = (startDate: string, endDate?: string | null) =>
     `${startDate} - ${endDate || 'Sekarang'}`;
   const normalizeLookupKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const normalizeExternalAccountId = (value?: string | null) =>
+    String(value || '').trim().toLowerCase().replace(/^act_/, '').replace(/[^a-z0-9]/g, '');
+  const buildExternalAccountIdVariants = (platformKey: AdsPlatformKey, value?: string | null) => {
+    const raw = String(value || '').trim();
+    const normalized = normalizeExternalAccountId(raw);
+    if (!normalized) return [];
+
+    const variants = new Set([raw, normalized]);
+    if (platformKey === 'meta') variants.add(`act_${normalized}`);
+    return Array.from(variants).filter(Boolean);
+  };
   const getTrailingNumberKey = (value: string) => value.match(/(\d+)\s*$/)?.[1] || '';
   const buildFlexibleLookupKeys = React.useCallback((value: string) => {
     const keys = new Set<string>();
@@ -1526,12 +1553,42 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
   const activeData = filteredData.filter(item => item.status === 'active');
   const inactiveData = filteredData.filter(item => item.status !== 'active');
 
-  const openApiMappingDialog = (apiAccount: AdApiAccount) => {
+  const openApiMappingDialog = React.useCallback((apiAccount: AdApiAccount) => {
     const existingMapping = getApiMappingForAccount(apiAccount);
     setApiMappingDialogAccount(apiAccount);
     setApiMappingInternalId(existingMapping?.internalAdAccountId || '');
     setApiMappingNotes(existingMapping?.notes || '');
-  };
+  }, [getApiMappingForAccount]);
+
+  useEffect(() => {
+    if (!canEdit) return;
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') !== 'pair-api') return;
+
+    const platform = params.get('platform') as AdsPlatformKey | null;
+    const externalAccountId = params.get('externalAccountId') || params.get('external_account_id');
+    if (!platform || !externalAccountId) return;
+
+    const externalAccountIdVariants = new Set(buildExternalAccountIdVariants(platform, externalAccountId));
+    const normalizedExternalAccountId = normalizeExternalAccountId(externalAccountId);
+    const deepLinkKey = `${platform}:${normalizedExternalAccountId || externalAccountId}`;
+    if (handledApiDeepLinkRef.current === deepLinkKey) return;
+
+    const apiAccount = allApiAccounts.find((account) =>
+      account.platformKey === platform &&
+      (
+        externalAccountIdVariants.has(account.externalAccountId) ||
+        normalizeExternalAccountId(account.externalAccountId) === normalizedExternalAccountId
+      )
+    );
+    if (!apiAccount) return;
+
+    handledApiDeepLinkRef.current = deepLinkKey;
+    setAccountView('api');
+    setSearch((current) => current || apiAccount.externalAccountName || externalAccountId);
+    openApiMappingDialog(apiAccount);
+  }, [allApiAccounts, canEdit, location.search, openApiMappingDialog]);
 
   const fillApiAccountForm = (account: AdApiAccount) => {
     setApiAccountPlatformKey(account.platformKey);

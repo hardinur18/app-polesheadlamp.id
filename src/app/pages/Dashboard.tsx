@@ -3,10 +3,11 @@ import { useMasterData } from './master-data/context';
 import { TechnicianDashboard } from './technician/TechnicianDashboard';
 import { CSDashboard } from './cs/CSDashboard';
 import { AdvertiserDashboard } from './advertiser/AdvertiserDashboard';
-import { Megaphone, MessageSquare, Wrench, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Megaphone, MessageSquare, Wrench, type LucideIcon } from 'lucide-react';
 import { DASHBOARD_VIEW_PERMISSION_MAP, type DashboardViewMode } from '../data/permissions';
 import { normalizeRole } from '../data/roleHelpers';
 import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '../components/ui/tabs';
+import { probeSystemHealth, type SystemHealthCheck } from '../services/systemHealthService';
 
 interface DashboardProps {
   viewMode?: DashboardViewMode;
@@ -30,6 +31,59 @@ function DashboardViewContent({ viewMode }: { viewMode: DashboardViewMode }) {
   return <AdvertiserDashboard />;
 }
 
+function SystemHealthStrip() {
+  const [checks, setChecks] = React.useState<SystemHealthCheck[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      setLoading(true);
+      const result = await probeSystemHealth();
+      if (cancelled) return;
+      setChecks(result.checks);
+      setLoading(false);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      void run();
+    }, 1_200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
+  if (loading || checks.length === 0 || checks.every((check) => check.ok)) {
+    return null;
+  }
+
+  return (
+    <div className="mx-auto mt-4 w-full max-w-[calc(100%-48px)] rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <AlertTriangle className="h-4 w-4" />
+          <span>Koneksi sistem sedang tidak stabil</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {checks.map((check) => (
+            <span
+              key={check.key}
+              className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white/70 px-2.5 py-1 text-xs font-medium dark:border-amber-900/60 dark:bg-slate-950/30"
+              title={check.detail || `${check.ms}ms`}
+            >
+              {check.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> : <Loader2 className="h-3.5 w-3.5 text-amber-700" />}
+              {check.label}: {check.ok ? `${check.ms}ms` : check.detail || 'Timeout'}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({
   viewMode,
   availableViewModes = [],
@@ -45,41 +99,49 @@ export default function Dashboard({
   const canSwitchView = visibleViewModes.length > 1 && Boolean(onViewModeChange);
 
   if (!canSwitchView) {
-    return <DashboardViewContent viewMode={activeViewMode} />;
+    return (
+      <>
+        <SystemHealthStrip />
+        <DashboardViewContent viewMode={activeViewMode} />
+      </>
+    );
   }
 
   return (
-    <Tabs
-      value={activeViewMode}
-      onValueChange={(value) => onViewModeChange?.(value as DashboardViewMode)}
-      className="dashboardViewTabsRoot"
-    >
-      <div className="dashboardViewSwitcherWrap">
-        <TabsViewport className="dashboardViewTabsViewport">
-          <TabsRail className="dashboardViewTabsRail min-w-max" aria-label="Dashboard view">
-            {safeViewModes.map((mode) => {
-              const Icon = DASHBOARD_VIEW_META[mode].icon;
+    <>
+      <SystemHealthStrip />
+      <Tabs
+        value={activeViewMode}
+        onValueChange={(value) => onViewModeChange?.(value as DashboardViewMode)}
+        className="dashboardViewTabsRoot"
+      >
+        <div className="dashboardViewSwitcherWrap">
+          <TabsViewport className="dashboardViewTabsViewport">
+            <TabsRail className="dashboardViewTabsRail min-w-max" aria-label="Dashboard view">
+              {safeViewModes.map((mode) => {
+                const Icon = DASHBOARD_VIEW_META[mode].icon;
 
-              return (
-                <TabsTrigger
-                  key={mode}
-                  value={mode}
-                  className="dashboardViewTab"
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{DASHBOARD_VIEW_META[mode].label}</span>
-                </TabsTrigger>
-              );
-            })}
-          </TabsRail>
-        </TabsViewport>
-      </div>
+                return (
+                  <TabsTrigger
+                    key={mode}
+                    value={mode}
+                    className="dashboardViewTab"
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{DASHBOARD_VIEW_META[mode].label}</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsRail>
+          </TabsViewport>
+        </div>
 
-      {safeViewModes.map((mode) => (
-        <TabsContent key={mode} value={mode} className="dashboardViewContent">
-          {mode === activeViewMode ? <DashboardViewContent viewMode={mode} /> : null}
-        </TabsContent>
-      ))}
-    </Tabs>
+        {safeViewModes.map((mode) => (
+          <TabsContent key={mode} value={mode} className="dashboardViewContent">
+            {mode === activeViewMode ? <DashboardViewContent viewMode={mode} /> : null}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </>
   );
 }

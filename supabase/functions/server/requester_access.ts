@@ -6,6 +6,8 @@ import type { Role } from "../../../src/app/pages/master-data/data.ts";
 
 const GLOBAL_ROLE_PERMISSIONS_KEY = "global_role_perms:11111111-1111-4111-a111-111111111111";
 const ROLE_KEYS = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+const AUTH_USER_CACHE_TTL_MS = 60_000;
+const AUTH_USER_TIMEOUT_MS = 3_000;
 const ROLE_PERMISSIONS_CACHE_TTL_MS = 60_000;
 const USER_CUSTOM_PERMISSIONS_CACHE_TTL_MS = 30_000;
 const REQUESTER_PROFILE_TIMEOUT_MS = 4_000;
@@ -30,6 +32,7 @@ const VALID_PERMISSION_KEYS = new Set<string>(PERMISSIONS.map((permission) => pe
 let rolePermissionsCache:
   | { value: Record<Role, PermissionKey[]>; expiresAt: number }
   | null = null;
+const authUserCache = new Map<string, { value: SupabaseAuthUser; expiresAt: number }>();
 const userCustomPermissionsCache = new Map<string, { value: PermissionKey[] | null; expiresAt: number }>();
 
 type RequesterProfile = {
@@ -70,6 +73,71 @@ function getRequesterToken(headers: Headers): string {
   }
 
   return "";
+}
+
+function decodeJwtPayload(token: string) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(
+      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+      "=",
+    );
+    return JSON.parse(atob(paddedPayload)) as { exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+function getTokenCacheExpiry(token: string, now = Date.now()) {
+  const expMs = Number(decodeJwtPayload(token)?.exp || 0) * 1000;
+  const ttlExpiry = now + AUTH_USER_CACHE_TTL_MS;
+  return expMs > 0 ? Math.min(expMs, ttlExpiry) : ttlExpiry;
+}
+
+async function loadAuthUser(adminClient: Awaited<ReturnType<typeof createAdminClient>>, token: string) {
+  if (!adminClient) return null;
+
+  const now = Date.now();
+  const cached = authUserCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  try {
+    const timeout = new Promise<{ timedOut: true }>((resolve) => {
+      setTimeout(() => resolve({ timedOut: true }), AUTH_USER_TIMEOUT_MS);
+    });
+    const result = await Promise.race([
+      adminClient.auth.getUser(token),
+      timeout,
+    ]);
+
+    if ("timedOut" in result) {
+      console.warn("[RequesterAccess] Auth user lookup timed out.");
+      return null;
+    }
+
+    const {
+      data: { user },
+      error,
+    } = result;
+
+    if (error || !user) {
+      return null;
+    }
+
+    authUserCache.set(token, {
+      value: user,
+      expiresAt: getTokenCacheExpiry(token, now),
+    });
+
+    return user;
+  } catch (error) {
+    console.warn("[RequesterAccess] Auth user lookup failed.", error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 function sanitizePermissionList(values: unknown): PermissionKey[] {
@@ -263,12 +331,8 @@ export async function getRequesterAccessContext(headers: Headers): Promise<Reque
     return null;
   }
 
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await adminClient.auth.getUser(token);
-
-  if (authError || !authUser) {
+  const authUser = await loadAuthUser(adminClient, token);
+  if (!authUser) {
     return null;
   }
 

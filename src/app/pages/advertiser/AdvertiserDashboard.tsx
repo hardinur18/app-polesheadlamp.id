@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '@/app/co
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
 import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { cn } from '@/app/components/ui/utils';
+import { readDashboardSnapshotCache, writeDashboardSnapshotCache } from '@/app/services/dashboardSnapshotCache';
 import {
   fetchAdsIntegrationConfigs,
   fetchMetaSnapshotDataset,
@@ -108,12 +109,10 @@ const advertiserCsPerfCache = new Map<string, {
   status: ApiAdsStatus;
   cachedAt: number;
 }>();
+const ADVERTISER_DASHBOARD_API_CACHE_NAMESPACE = 'advertiser-dashboard-api';
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
 const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
 const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
-const DASHBOARD_API_AUTO_SYNC_COOLDOWN_MS = 5 * 60_000;
-const DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES = 10;
-const advertiserApiAutoSyncAttempts = new Map<string, number>();
 
 function withDashboardProviderTimeout<T>(
   promise: Promise<T>,
@@ -132,14 +131,8 @@ function withDashboardProviderTimeout<T>(
   });
 }
 
-function shouldAttemptDashboardAutoSync(cacheKey: string) {
-  const now = Date.now();
-  const lastAttemptAt = advertiserApiAutoSyncAttempts.get(cacheKey) || 0;
-  if (now - lastAttemptAt < DASHBOARD_API_AUTO_SYNC_COOLDOWN_MS) return false;
-
-  advertiserApiAutoSyncAttempts.set(cacheKey, now);
-  return true;
-}
+const dashboardRangeIncludesToday = (range: { from: string; to: string }, today: string) =>
+  range.from <= today && range.to >= today;
 
 const formatCurrency = (value: number) =>
   Number.isFinite(value) && value > 0
@@ -170,12 +163,41 @@ const normalizeExternalAccountId = (value?: string | null) =>
     .replace(/^act_/, '')
     .replace(/[^a-z0-9]/g, '');
 
-const normalizeAdAccountNameKey = (value?: string | null) =>
+const normalizeAdAccountTextKey = (value?: string | null) =>
   (value || '')
     .trim()
     .toLowerCase()
     .replace(/^act_/, '')
-    .replace(/\s+/g, ' ');
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const withNormalizedNumericSuffix = (value: string) =>
+  value.replace(/(^|\s)0+(\d+)(?=$|\s)/g, (_match, prefix, digits) => `${prefix}${Number(digits)}`);
+
+const getAdAccountNameLookupVariants = (value?: string | null) => {
+  const variants = new Set<string>();
+  const add = (next?: string | null) => {
+    const normalized = normalizeAdAccountTextKey(next);
+    const compact = normalizeLookupKey(next);
+    if (normalized) variants.add(normalized);
+    if (compact) variants.add(compact);
+
+    const normalizedNumeric = withNormalizedNumericSuffix(normalized);
+    const compactNumeric = compact.replace(/0+(\d+)$/g, (_match, digits) => String(Number(digits)));
+    if (normalizedNumeric) variants.add(normalizedNumeric);
+    if (compactNumeric) variants.add(compactNumeric);
+  };
+
+  add(value);
+
+  for (const variant of Array.from(variants)) {
+    if (variant.includes('rahmansha')) add(variant.replace(/rahmansha/g, 'rahmansa'));
+    if (variant.includes('rahmansa')) add(variant.replace(/rahmansa/g, 'rahmansha'));
+  }
+
+  return Array.from(variants);
+};
 
 const buildExternalAccountLookupKeys = (platformKey: string, value?: string | null) => {
   const normalized = normalizeExternalAccountId(value);
@@ -190,12 +212,7 @@ const buildExternalAccountLookupKeys = (platformKey: string, value?: string | nu
 };
 
 const buildExternalAccountNameKeys = (platformKey: string, value?: string | null) => {
-  const normalized = normalizeAdAccountNameKey(value);
-  const compact = normalizeLookupKey(value);
-  return Array.from(new Set([
-    normalized ? `${platformKey}:${normalized}` : '',
-    compact ? `${platformKey}:${compact}` : '',
-  ].filter(Boolean)));
+  return getAdAccountNameLookupVariants(value).map((variant) => `${platformKey}:${variant}`);
 };
 
 const isActiveDataStatus = (status?: string | null) => {
@@ -433,6 +450,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
   const lastApiRefreshNonceRef = React.useRef(0);
+  const lastApiSnapshotRefreshNonceRef = React.useRef(0);
+  const apiRequestInFlightRef = React.useRef(false);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
 
   // Update selection if prop changes
@@ -518,6 +537,9 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     if (!rangeParams) return;
 
     const refreshSnapshot = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (apiRequestInFlightRef.current) return;
+      if (!dashboardRangeIncludesToday(rangeParams, format(new Date(), 'yyyy-MM-dd'))) return;
       setApiSnapshotRefreshNonce((value) => value + 1);
     };
     const handleVisibilityRefresh = () => {
@@ -1034,8 +1056,9 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       if (!isActiveDataStatus(account.status)) continue;
       if (!accountMatchesTargetAdvertiser(account)) continue;
       byId.set(account.id, account);
-      byName.set(normalizeLookupKey(account.accountName), account);
-      byName.set(normalizeAdAccountNameKey(account.accountName), account);
+      for (const key of getAdAccountNameLookupVariants(account.accountName)) {
+        byName.set(key, account);
+      }
       const platformName = platforms.find((platform) => platform.id === account.platformId)?.name;
       registerExternalPairing(account, resolvePlatformKey(platformName), account.id, account.accountName);
     }
@@ -1069,20 +1092,23 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     let cancelled = false;
     const forceRefresh = apiRefreshNonce !== lastApiRefreshNonceRef.current;
     if (forceRefresh) lastApiRefreshNonceRef.current = apiRefreshNonce;
+    const backgroundRefresh = apiSnapshotRefreshNonce !== lastApiSnapshotRefreshNonceRef.current;
+    if (backgroundRefresh) lastApiSnapshotRefreshNonceRef.current = apiSnapshotRefreshNonce;
     const cacheKey = `${rangeParams.from}:${rangeParams.to}:${targetAdvertiserId || 'all'}:${adAccountAssignmentCacheKey}`;
-    const cachedSnapshot = !forceRefresh ? advertiserCsPerfCache.get(cacheKey) : null;
-    const isCachedSnapshotFresh = cachedSnapshot
-      ? Date.now() - cachedSnapshot.cachedAt < DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS
-      : false;
-    const effectiveForceRefresh = forceRefresh || Boolean(cachedSnapshot && !isCachedSnapshotFresh);
-
-    if (cachedSnapshot && !effectiveForceRefresh) {
-      setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
-      setApiUnmappedSnapshots(cachedSnapshot.unmappedSnapshots);
-      setApiAdsStatus(cachedSnapshot.status);
-      return;
+    const persistentCachedSnapshot =
+      !forceRefresh && !backgroundRefresh
+        ? readDashboardSnapshotCache<{
+            byDateAccount: Record<string, AdvertiserCsAccountMetric>;
+            unmappedSnapshots: ApiUnmappedSnapshot[];
+            status: ApiAdsStatus;
+            cachedAt: number;
+          }>(ADVERTISER_DASHBOARD_API_CACHE_NAMESPACE, cacheKey)
+        : null;
+    if (persistentCachedSnapshot && !advertiserCsPerfCache.has(cacheKey)) {
+      advertiserCsPerfCache.set(cacheKey, persistentCachedSnapshot);
     }
-
+    const cachedSnapshotForFallback = advertiserCsPerfCache.get(cacheKey) || persistentCachedSnapshot || null;
+    const cachedSnapshot = !forceRefresh && !backgroundRefresh ? cachedSnapshotForFallback : null;
     if (cachedSnapshot && !forceRefresh) {
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
       setApiUnmappedSnapshots(cachedSnapshot.unmappedSnapshots);
@@ -1106,11 +1132,12 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         if (account) return account;
       }
 
-      return (
-        adAccountLookup.byName.get(normalizeLookupKey(row.externalAccountName)) ||
-        adAccountLookup.byName.get(normalizeAdAccountNameKey(row.externalAccountName)) ||
-        null
-      );
+      for (const key of getAdAccountNameLookupVariants(row.externalAccountName)) {
+        const account = adAccountLookup.byName.get(key);
+        if (account) return account;
+      }
+
+      return null;
     };
 
     const addSnapshotRows = (
@@ -1178,6 +1205,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         { source: 'google', result: google },
         { source: 'tiktok', result: tiktok },
       ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
+      const failedSourceKeys = new Set(failedSources.map((item) => item.source));
 
       if (failedSources.length > 0) {
         console.warn(`[Advertiser Dashboard] sebagian snapshot API iklan gagal dimuat (${options.mode})`, failedSources.map((item) => ({
@@ -1189,6 +1217,23 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       if (meta.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, meta.value.rows || []);
       if (google.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, google.value.rows || []);
       if (tiktok.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, tiktok.value.rows || []);
+
+      if (failedSourceKeys.size > 0 && cachedSnapshotForFallback) {
+        for (const [accountKey, cachedMetric] of Object.entries(cachedSnapshotForFallback.byDateAccount)) {
+          if (!failedSourceKeys.has(cachedMetric.platformKey)) continue;
+          if (cachedMetric.date < rangeParams.from || cachedMetric.date > rangeParams.to) continue;
+          if (nextByAccount[accountKey]) continue;
+          nextByAccount[accountKey] = cachedMetric;
+        }
+
+        for (const row of cachedSnapshotForFallback.unmappedSnapshots) {
+          if (!failedSourceKeys.has(row.platformKey)) continue;
+          if (row.date < rangeParams.from || row.date > rangeParams.to) continue;
+          const key = `${row.platformKey}::${row.externalAccountId || ''}::${normalizeLookupKey(row.externalAccountName)}::${row.date}`;
+          if (unmappedByKey.has(key)) continue;
+          unmappedByKey.set(key, row);
+        }
+      }
 
       const hasAnyRows = Object.keys(nextByAccount).length > 0 || Array.from(unmappedByKey.values()).length > 0;
       const hasAnyProviderResponse = results.some((result) => result.status === 'fulfilled');
@@ -1218,12 +1263,14 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       setApiAdsByDateAccount(nextByAccount);
       setApiUnmappedSnapshots(nextUnmapped);
       setApiAdsStatus(nextStatus);
-      advertiserCsPerfCache.set(cacheKey, {
+      const cachedEntry = {
         byDateAccount: nextByAccount,
         unmappedSnapshots: nextUnmapped,
         status: nextStatus,
         cachedAt: Date.now(),
-      });
+      };
+      advertiserCsPerfCache.set(cacheKey, cachedEntry);
+      writeDashboardSnapshotCache(ADVERTISER_DASHBOARD_API_CACHE_NAMESPACE, cacheKey, cachedEntry);
 
       return {
         applied: true,
@@ -1262,13 +1309,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       ]);
     };
 
-    const syncSnapshots = async ({
-      force,
-      minFreshMinutes,
-    }: {
-      force: boolean;
-      minFreshMinutes: number;
-    }) => {
+    const syncSnapshots = async () => {
       const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
       const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
       const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
@@ -1277,21 +1318,21 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       return Promise.allSettled([
         shouldLoadMeta
           ? withDashboardProviderTimeout(
-              syncMetaSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
+              syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
               'Meta Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
           : Promise.resolve(emptySnapshotDataset),
         shouldLoadGoogle
           ? withDashboardProviderTimeout(
-              syncGoogleAdsSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
+              syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
               'Google Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
           : Promise.resolve(emptySnapshotDataset),
         shouldLoadTikTok
           ? withDashboardProviderTimeout(
-              syncTikTokAdsSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
+              syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
               'TikTok Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
@@ -1300,35 +1341,18 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     };
 
     const loadApiAdsMetrics = async () => {
-      if (!cachedSnapshot || forceRefresh) {
+      if (forceRefresh) {
         setApiAdsStatus('loading');
       }
+      apiRequestInFlightRef.current = true;
 
       try {
         const storedResults = await loadStoredSnapshots();
         if (cancelled) return;
         const storedApplyResult = applySettledSnapshotResults(storedResults, { mode: 'stored' });
 
-        const shouldAutoSync =
-          !forceRefresh &&
-          cacheKey &&
-          scopedApiPlatformKeys.size > 0 &&
-          (
-            storedApplyResult.status !== 'ready' ||
-            storedApplyResult.hasFailures ||
-            Boolean(cachedSnapshot && !isCachedSnapshotFresh)
-          ) &&
-          shouldAttemptDashboardAutoSync(cacheKey);
-
-        if (forceRefresh || shouldAutoSync) {
-          if (shouldAutoSync && !storedApplyResult.hasUsefulData) {
-            setApiAdsStatus('loading');
-          }
-
-          const syncedResults = await syncSnapshots({
-            force: forceRefresh,
-            minFreshMinutes: forceRefresh ? 0 : DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES,
-          });
+        if (forceRefresh) {
+          const syncedResults = await syncSnapshots();
           if (cancelled) return;
           applySettledSnapshotResults(syncedResults, {
             keepExistingWhenEmpty: storedApplyResult.hasUsefulData,
@@ -1342,6 +1366,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
           setApiUnmappedSnapshots([]);
           setApiAdsStatus('error');
         }
+      } finally {
+        if (!cancelled) apiRequestInFlightRef.current = false;
       }
     };
 

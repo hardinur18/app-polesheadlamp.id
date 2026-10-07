@@ -1269,10 +1269,12 @@ app.get("/snapshots", async (c) => {
     let fallbackSnapshotDate: string | null = null;
 
     if (rows.length === 0 && includeLastKnown) {
-      const configs = await loadGoogleIntegrationConfigs();
-      const fallbackCustomerIds = requestedCustomerId
-        ? [requestedCustomerId]
-        : configs
+      let fallbackCustomerIds = requestedCustomerId ? [requestedCustomerId] : [];
+
+      if (!requestedCustomerId) {
+        try {
+          const configs = await loadGoogleIntegrationConfigs();
+          fallbackCustomerIds = configs
             .filter(
               (config) =>
                 config.enabled &&
@@ -1281,17 +1283,22 @@ app.get("/snapshots", async (c) => {
             )
             .map((config) => normalizeCustomerId(config.liveGoogleCustomerId || ""))
             .filter(Boolean);
-
-      if (fallbackCustomerIds.length > 0) {
-        rows = await fetchLatestAdsDailySnapshotsBeforeOrOn({
-          platformKey: "google",
-          onOrBefore: to!,
-          externalAccountIds: fallbackCustomerIds,
-          externalGroupId: requestedManagerId || null,
-        });
-        servedFrom = rows.length > 0 ? "database-latest-known" : servedFrom;
-        fallbackSnapshotDate = rows.length > 0 ? rows[0]?.snapshotDate || null : null;
+        } catch (configError) {
+          console.warn(
+            "Google Ads snapshot config lookup failed; using latest stored snapshots without config filter.",
+            configError instanceof Error ? configError.message : configError,
+          );
+        }
       }
+
+      rows = await fetchLatestAdsDailySnapshotsBeforeOrOn({
+        platformKey: "google",
+        onOrBefore: to!,
+        externalAccountIds: fallbackCustomerIds.length > 0 ? fallbackCustomerIds : undefined,
+        externalGroupId: requestedManagerId || null,
+      });
+      servedFrom = rows.length > 0 ? "database-latest-known" : servedFrom;
+      fallbackSnapshotDate = rows.length > 0 ? rows[0]?.snapshotDate || null : null;
     }
 
     return c.json({

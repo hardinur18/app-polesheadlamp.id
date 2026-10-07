@@ -2,6 +2,7 @@ import { buildMakeServerUrl } from './internal/functionsBaseUrl';
 import { fetchWithTimeout } from './internal/fetchWithTimeout';
 import { getSessionBackedEdgeHeaders } from './internal/sessionClientHeaders';
 import type { ServiceErrorPayload } from './internal/serviceTypes';
+import { fetchAdsSnapshotDatasetFromSupabase } from './adsSnapshotDbFallback';
 
 export const tiktokAdsFunctionsBaseUrl = buildMakeServerUrl();
 
@@ -134,6 +135,8 @@ export interface TikTokAdsSnapshotDatasetResponse {
     upsertedCount?: number;
     servedFrom?: string;
     skippedSync?: boolean;
+    fallbackReason?: string | null;
+    syncError?: string | null;
   };
 }
 
@@ -346,6 +349,22 @@ export async function fetchTikTokAdsSnapshotDataset({
   advertiserId?: string;
   includeLastKnown?: boolean;
 }) {
+  try {
+    return await fetchAdsSnapshotDatasetFromSupabase<TikTokAdsSnapshotRow>({
+      platformKey: 'tiktok',
+      from,
+      to,
+      externalAccountIds: advertiserId && advertiserId !== 'all' ? [advertiserId] : undefined,
+      externalGroupId: businessCenterId && businessCenterId !== 'all' ? businessCenterId : undefined,
+      includeLastKnown,
+    }) as TikTokAdsSnapshotDatasetResponse;
+  } catch (databaseError) {
+    console.warn(
+      '[TikTok Ads] direct snapshot database read failed; falling back to Edge Function.',
+      databaseError instanceof Error ? databaseError.message : databaseError,
+    );
+  }
+
   const url = new URL(`${tiktokAdsFunctionsBaseUrl}/tiktok/snapshots`);
 
   url.searchParams.set('from', from);
@@ -383,19 +402,54 @@ export async function syncTikTokAdsSnapshotDataset({
   force?: boolean;
   minFreshMinutes?: number;
 }) {
-  return await fetchTikTokJson<TikTokAdsSnapshotDatasetResponse>(
-    `${tiktokAdsFunctionsBaseUrl}/tiktok/sync-snapshots`,
-    {
-      method: 'POST',
-      headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-      body: JSON.stringify({
-        from,
-        to,
-        businessCenterId: businessCenterId && businessCenterId !== 'all' ? businessCenterId : undefined,
-        advertiserId: advertiserId && advertiserId !== 'all' ? advertiserId : undefined,
-        force,
-        minFreshMinutes,
-      }),
-    },
-  );
+  const fallbackToStoredSnapshots = async (syncError: string) => {
+    const fallbackPayload = await fetchTikTokAdsSnapshotDataset({
+      from,
+      to,
+      businessCenterId,
+      advertiserId,
+      includeLastKnown: true,
+    });
+
+    if ((fallbackPayload.rows || []).length === 0) {
+      throw new Error(syncError);
+    }
+
+    return {
+      ...fallbackPayload,
+      metadata: {
+        ...fallbackPayload.metadata,
+        servedFrom:
+          fallbackPayload.metadata?.servedFrom === 'database-latest-known'
+            ? 'database-latest-known'
+            : 'tiktok-sync-fallback',
+        fallbackReason: syncError,
+        syncError,
+      },
+    } as TikTokAdsSnapshotDatasetResponse;
+  };
+
+  try {
+    return await fetchTikTokJson<TikTokAdsSnapshotDatasetResponse>(
+      `${tiktokAdsFunctionsBaseUrl}/tiktok/sync-snapshots`,
+      {
+        method: 'POST',
+        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+        body: JSON.stringify({
+          from,
+          to,
+          businessCenterId: businessCenterId && businessCenterId !== 'all' ? businessCenterId : undefined,
+          advertiserId: advertiserId && advertiserId !== 'all' ? advertiserId : undefined,
+          force,
+          minFreshMinutes,
+        }),
+      },
+    );
+  } catch (error) {
+    const syncError =
+      error instanceof Error
+        ? error.message
+        : 'Sinkronisasi snapshot TikTok Ads gagal.';
+    return fallbackToStoredSnapshots(syncError);
+  }
 }

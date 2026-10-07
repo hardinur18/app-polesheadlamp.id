@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation } from 'react-router';
 import {
   Building2, Users, Database, Wallet, Map, Activity, LayoutGrid, Monitor, Lock, Share2, Store, ReceiptText, QrCode
 } from 'lucide-react';
@@ -36,8 +37,14 @@ const MASTER_DATA_TAB_IDS = new Set([
   'roles',
 ]);
 
+const getMasterDataTabFromSearch = (search: string) => {
+  const queryTab = new URLSearchParams(search).get('tab');
+  return queryTab && MASTER_DATA_TAB_IDS.has(queryTab) ? queryTab : 'branches';
+};
+
 export const MasterDataPage: React.FC<MasterDataPageProps> = ({ currentRole }) => {
-  const [activeTab, setActiveTab] = useState('branches');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(() => getMasterDataTabFromSearch(location.search));
   const { hasPermission } = usePermissions();
 
   if (!hasPermission('master_data.view')) {
@@ -66,6 +73,7 @@ const MasterDataContent: React.FC<{
   activeTab: string; 
   setActiveTab: (val: string) => void;
 }> = ({ currentRole, activeTab, setActiveTab }) => {
+  const location = useLocation();
   const { 
     platforms, addPlatform, updatePlatform, deletePlatform,
     subChannels, addSubChannel, updateSubChannel, deleteSubChannel,
@@ -79,11 +87,10 @@ const MasterDataContent: React.FC<{
   const [headerNotices, setHeaderNotices] = useState<NoticeItem[]>([]);
 
   React.useEffect(() => {
-    const queryTab = new URLSearchParams(window.location.search).get('tab');
-    if (queryTab && MASTER_DATA_TAB_IDS.has(queryTab) && queryTab !== activeTab) {
-      setActiveTab(queryTab);
-    }
-  }, [activeTab, setActiveTab]);
+    const currentSearch = typeof window === 'undefined' ? location.search : window.location.search;
+    const nextTab = getMasterDataTabFromSearch(currentSearch);
+    if (nextTab !== activeTab) setActiveTab(nextTab);
+  }, [activeTab, location.search, setActiveTab]);
 
   const handleTabChange = (nextTab: string) => {
     setActiveTab(nextTab);
