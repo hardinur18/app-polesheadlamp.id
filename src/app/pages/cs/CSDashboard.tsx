@@ -158,7 +158,8 @@ const CS_VIEW_FILTER_STORAGE_KEY = 'polesheadlamp_cs_view_filters_v1';
 const CS_VIEW_MAX_RANGE_DAYS = 62;
 const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
-const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 6_000;
+const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
+const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
 
 function withDashboardProviderTimeout<T>(
@@ -1205,8 +1206,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
       ? Date.now() - cachedSnapshot.cachedAt < DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS
       : false;
     const effectiveForceRefresh = forceRefresh || Boolean(cachedSnapshot && !isCachedSnapshotFresh);
-    const shouldForceApiSync = forceRefresh;
-
     if (cachedSnapshot && !effectiveForceRefresh) {
       setApiAdsMetrics(cachedSnapshot.metrics);
       setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
@@ -1311,102 +1310,149 @@ export function CSDashboard({ userId }: { userId?: string }) {
       }
     };
 
+    const applySettledSnapshotResults = (
+      results: Array<PromiseSettledResult<{ rows?: AdsSnapshotRowLike[] }>>,
+      options: { cacheResult?: boolean; keepExistingWhenEmpty?: boolean; mode: 'stored' | 'sync' },
+    ) => {
+      const [meta, google, tiktok] = results;
+      const next: Record<string, CsAdsDailyMetric> = {};
+      const nextByAccount: Record<string, CsAdsAccountMetric> = {};
+      const diagnostics = createEmptyApiLoadDiagnostics();
+      const failedSources = [
+        { source: 'meta', result: meta },
+        { source: 'google', result: google },
+        { source: 'tiktok', result: tiktok },
+      ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
+
+      diagnostics.failedSources = failedSources.map((item) => item.source);
+
+      if (meta.status === 'fulfilled') addSnapshotRows(next, nextByAccount, meta.value.rows || [], diagnostics, 'meta');
+      if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || [], diagnostics, 'google');
+      if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || [], diagnostics, 'tiktok');
+
+      if (failedSources.length > 0) {
+        console.warn(`[CS Dashboard] sebagian snapshot API iklan gagal dimuat (${options.mode})`, failedSources.map((item) => ({
+          source: item.source,
+          error: item.result.reason,
+        })));
+      }
+
+      const hasUsefulApiMetrics = Object.values(next).some((row) => row.spend > 0 || row.leads > 0);
+      const hasUsefulApiAccountMetrics = Object.values(nextByAccount).some(
+        (row) => row.spend > 0 || row.leads > 0,
+      );
+      const hasAnyRows = diagnostics.rawRows > 0;
+      const hasAnyProviderResponse = results.some((result) => result.status === 'fulfilled');
+
+      if (options.keepExistingWhenEmpty && hasAnyProviderResponse && !hasAnyRows) {
+        return false;
+      }
+
+      const nextStatus: ApiAdsStatus = hasUsefulApiMetrics || hasUsefulApiAccountMetrics ? 'ready' : 'empty';
+
+      setApiAdsMetrics(next);
+      setApiAdsByDateAccount(nextByAccount);
+      setApiLoadDiagnostics(diagnostics);
+      setApiAdsStatus(nextStatus);
+      if (options.cacheResult && cacheKey) {
+        csViewApiCache.set(cacheKey, {
+          metrics: next,
+          byDateAccount: nextByAccount,
+          status: nextStatus,
+          diagnostics,
+          cachedAt: Date.now(),
+        });
+      }
+
+      return true;
+    };
+
+    const loadStoredSnapshots = async () => {
+      const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
+      const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
+      const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
+      const emptySnapshotDataset = { rows: [] as AdsSnapshotRowLike[] };
+
+      return Promise.allSettled([
+        shouldLoadMeta
+          ? withDashboardProviderTimeout(
+              fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }).then((payload) => ({ rows: payload.rows || [] })),
+              'Meta Ads',
+            )
+          : Promise.resolve(emptySnapshotDataset),
+        shouldLoadGoogle
+          ? withDashboardProviderTimeout(
+              fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }).then((payload) => ({ rows: payload.rows || [] })),
+              'Google Ads',
+            )
+          : Promise.resolve(emptySnapshotDataset),
+        shouldLoadTikTok
+          ? withDashboardProviderTimeout(
+              fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }).then((payload) => ({ rows: payload.rows || [] })),
+              'TikTok Ads',
+            )
+          : Promise.resolve(emptySnapshotDataset),
+      ]);
+    };
+
+    const syncSnapshots = async () => {
+      const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
+      const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
+      const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
+      const emptySnapshotDataset = { rows: [] as AdsSnapshotRowLike[] };
+
+      return Promise.allSettled([
+        shouldLoadMeta
+          ? withDashboardProviderTimeout(
+              syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
+              'Meta Ads',
+              DASHBOARD_API_SYNC_TIMEOUT_MS,
+            )
+          : Promise.resolve(emptySnapshotDataset),
+        shouldLoadGoogle
+          ? withDashboardProviderTimeout(
+              syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
+              'Google Ads',
+              DASHBOARD_API_SYNC_TIMEOUT_MS,
+            )
+          : Promise.resolve(emptySnapshotDataset),
+        shouldLoadTikTok
+          ? withDashboardProviderTimeout(
+              syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
+              'TikTok Ads',
+              DASHBOARD_API_SYNC_TIMEOUT_MS,
+            )
+          : Promise.resolve(emptySnapshotDataset),
+      ]);
+    };
+
     const loadApiAdsMetrics = async () => {
       if (!cachedSnapshot || forceRefresh) {
         setApiAdsStatus('loading');
       }
 
       try {
-        const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
-        const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
-        const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
-        const emptySnapshotDataset = { rows: [] };
-        const metaLoader = shouldLoadMeta
-          ? withDashboardProviderTimeout(
-              shouldForceApiSync
-                ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-                    fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-                  )
-                : fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-              'Meta Ads',
-            )
-          : Promise.resolve(emptySnapshotDataset);
-        const googleLoader = shouldLoadGoogle
-          ? withDashboardProviderTimeout(
-              shouldForceApiSync
-                ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-                    fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-                  )
-                : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-              'Google Ads',
-            )
-          : Promise.resolve(emptySnapshotDataset);
-        const tiktokLoader = shouldLoadTikTok
-          ? withDashboardProviderTimeout(
-              shouldForceApiSync
-                ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-                    fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-                  )
-                : fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-              'TikTok Ads',
-            )
-          : Promise.resolve(emptySnapshotDataset);
-
-        const [meta, google, tiktok] = await Promise.allSettled([
-          metaLoader,
-          googleLoader,
-          tiktokLoader,
-        ]);
-
-        const next: Record<string, CsAdsDailyMetric> = {};
-        const nextByAccount: Record<string, CsAdsAccountMetric> = {};
-
-        const failedSources = [
-          { source: 'meta', result: meta },
-          { source: 'google', result: google },
-          { source: 'tiktok', result: tiktok },
-        ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
-        const diagnostics = createEmptyApiLoadDiagnostics();
-        diagnostics.failedSources = failedSources.map((item) => item.source);
-
-        if (meta.status === 'fulfilled') addSnapshotRows(next, nextByAccount, meta.value.rows || [], diagnostics, 'meta');
-        if (google.status === 'fulfilled') addSnapshotRows(next, nextByAccount, google.value.rows || [], diagnostics, 'google');
-        if (tiktok.status === 'fulfilled') addSnapshotRows(next, nextByAccount, tiktok.value.rows || [], diagnostics, 'tiktok');
-
-        if (failedSources.length > 0) {
-          console.warn('[CS Dashboard] sebagian snapshot API iklan gagal dimuat', failedSources.map((item) => ({
-            source: item.source,
-            error: item.result.reason,
-          })));
-        }
-
+        const storedResults = await loadStoredSnapshots();
         if (cancelled) return;
+        applySettledSnapshotResults(storedResults, { cacheResult: true, mode: 'stored' });
 
-        const hasUsefulApiMetrics = Object.values(next).some((row) => row.spend > 0 || row.leads > 0);
-        const hasUsefulApiAccountMetrics = Object.values(nextByAccount).some(
-          (row) => row.spend > 0 || row.leads > 0,
-        );
-
-        setApiAdsMetrics(next);
-        setApiAdsByDateAccount(nextByAccount);
-        setApiLoadDiagnostics(diagnostics);
-        const nextStatus: ApiAdsStatus = hasUsefulApiMetrics || hasUsefulApiAccountMetrics ? 'ready' : 'empty';
-        setApiAdsStatus(nextStatus);
-        if (cacheKey) {
-          csViewApiCache.set(cacheKey, {
-            metrics: next,
-            byDateAccount: nextByAccount,
-            status: nextStatus,
-            diagnostics,
-            cachedAt: Date.now(),
+        if (forceRefresh) {
+          const syncedResults = await syncSnapshots();
+          if (cancelled) return;
+          applySettledSnapshotResults(syncedResults, {
+            cacheResult: true,
+            keepExistingWhenEmpty: true,
+            mode: 'sync',
           });
         }
       } catch {
         if (cancelled) return;
-        setApiAdsMetrics({});
-        setApiAdsByDateAccount({});
-        setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
-        setApiAdsStatus('error');
+        if (!cachedSnapshot) {
+          setApiAdsMetrics({});
+          setApiAdsByDateAccount({});
+          setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
+          setApiAdsStatus('error');
+        }
       }
     };
 
