@@ -140,7 +140,9 @@ type MutationOptions = {
 const shouldUseLocalProfileFallback =
   import.meta.env.VITE_AUTH_MODE === 'local';
 
-const CURRENT_USER_PROFILE_TIMEOUT_MS = 5_000;
+const CURRENT_USER_PROFILE_TIMEOUT_MS = 4_000;
+const CURRENT_USER_PROFILE_FALLBACK_TIMEOUT_MS = 2_500;
+const CURRENT_USER_PROFILE_FALLBACK_MAX_PAGES = 1;
 const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
 const APP_DATA_FETCH_TIMEOUT_MS = 8_000;
@@ -287,14 +289,6 @@ const getDeferredBootstrapTablesForPath = (path: string) => {
   };
 
   if (
-    normalizedPath.startsWith('/dashboard') ||
-    normalizedPath.startsWith('/reports') ||
-    normalizedPath.startsWith('/ads')
-  ) {
-    add('daily_ads', 'lead_spam_daily_inputs');
-  }
-
-  if (
     normalizedPath.startsWith('/orders') ||
     normalizedPath.startsWith('/leads') ||
     normalizedPath.startsWith('/schedule') ||
@@ -326,6 +320,23 @@ const getDeferredBootstrapTablesForPath = (path: string) => {
   }
 
   return tables;
+};
+
+const shouldBootstrapAdPerformanceInputsForPath = (path: string) => {
+  const normalizedPath = path.toLowerCase();
+  return (
+    normalizedPath.startsWith('/dashboard') ||
+    normalizedPath.startsWith('/reports') ||
+    normalizedPath.startsWith('/ads')
+  );
+};
+
+const getCurrentMonthDateRange = () => {
+  const now = new Date();
+  return {
+    from: getTodayDateKey(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: getTodayDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  };
 };
 
 const readCachedCurrentUser = (userId: string): User | undefined => {
@@ -589,6 +600,7 @@ interface MasterDataContextType {
   ensureLeadsForDateRange: (range: { from: string; to: string }) => Promise<void>;
   ensureProspectBookingsForDateRange: (range: { from: string; to: string }) => Promise<void>;
   ensureTechnicianSchedulesForDateRange: (range: { from: string; to: string }) => Promise<void>;
+  ensureAdPerformanceInputsForDateRange: (range: { from: string; to: string }) => Promise<void>;
 
   // Setters (if needed for local state updates before refresh)
   setAreas: React.Dispatch<React.SetStateAction<Area[]>>;
@@ -660,10 +672,12 @@ export const MasterDataProvider: React.FC<{
   const fetchedLeadDateRangesRef = React.useRef(new Set<string>());
   const fetchedProspectBookingDateRangesRef = React.useRef(new Set<string>());
   const fetchedTechnicianScheduleDateRangesRef = React.useRef(new Set<string>());
+  const fetchedAdPerformanceDateRangesRef = React.useRef(new Set<string>());
   const fetchingOrderDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const fetchingLeadDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const fetchingProspectBookingDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const fetchingTechnicianScheduleDateRangesRef = React.useRef(new Map<string, Promise<void>>());
+  const fetchingAdPerformanceDateRangesRef = React.useRef(new Map<string, Promise<void>>());
   const leadSocialContactsRef = React.useRef<Record<string, LeadSocialFields>>({});
   const leadSpamDailyInputsUseFallbackRef = React.useRef(false);
 
@@ -1583,6 +1597,81 @@ export const MasterDataProvider: React.FC<{
     return request;
   }, []);
 
+  const ensureAdPerformanceInputsForDateRange = React.useCallback(async ({
+    from,
+    to,
+  }: {
+    from: string;
+    to: string;
+  }) => {
+    if (!from || !to) return;
+
+    const rangeKey = `${from}:${to}`;
+    if (fetchedAdPerformanceDateRangesRef.current.has(rangeKey)) return;
+    const inFlight = fetchingAdPerformanceDateRangesRef.current.get(rangeKey);
+    if (inFlight) return inFlight;
+
+    const request = (async () => {
+      const [dailyAdsResult, leadSpamResult] = await Promise.allSettled([
+        fetchRangeRows(
+          'daily_ads',
+          {
+            orderBy: 'date',
+            ascending: false,
+            gte: { date: from },
+            lte: { date: to },
+          },
+          (rows) => rows.map(mapDailyAdFromDB),
+          500,
+          false,
+        ),
+        fetchRangeRows(
+          'lead_spam_daily_inputs',
+          {
+            orderBy: 'input_date',
+            ascending: false,
+            gte: { input_date: from },
+            lte: { input_date: to },
+          },
+          (rows) => rows.map(mapLeadSpamDailyInputFromDB),
+          500,
+          false,
+        ),
+      ]);
+
+      let hasCompletedFetch = false;
+
+      if (dailyAdsResult.status === 'fulfilled') {
+        hasCompletedFetch = true;
+        if (dailyAdsResult.value.length > 0) {
+          setDailyAds((previousRows) => mergeRowsById(dailyAdsResult.value, previousRows));
+        }
+      } else if (import.meta.env.DEV) {
+        console.warn('[MasterData] daily ads range fetch failed', dailyAdsResult.reason);
+      }
+
+      if (leadSpamResult.status === 'fulfilled') {
+        hasCompletedFetch = true;
+        if (leadSpamResult.value.length > 0) {
+          setLeadSpamDailyInputs((previousRows) => mergeRowsById(leadSpamResult.value, previousRows));
+        }
+      } else if (import.meta.env.DEV) {
+        console.warn('[MasterData] lead spam range fetch failed', leadSpamResult.reason);
+      }
+
+      if (!hasCompletedFetch) {
+        throw new Error('Gagal memuat data iklan/spam periode ini.');
+      }
+
+      fetchedAdPerformanceDateRangesRef.current.add(rangeKey);
+    })().finally(() => {
+      fetchingAdPerformanceDateRangesRef.current.delete(rangeKey);
+    });
+
+    fetchingAdPerformanceDateRangesRef.current.set(rangeKey, request);
+    return request;
+  }, []);
+
   // Helper to fetch data from a table
 	  const fetchData = async (
 	    table: string,
@@ -1965,7 +2054,7 @@ export const MasterDataProvider: React.FC<{
         const appDataLookup = (async () => {
           let page = 0;
 
-          while (page < 20) {
+          while (page < CURRENT_USER_PROFILE_FALLBACK_MAX_PAGES) {
             const from = page * CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE;
             const to = from + CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE - 1;
             const { rows } = await fetchAppDataPage('profiles', from, to, {
@@ -1983,7 +2072,7 @@ export const MasterDataProvider: React.FC<{
         })();
 
         const timeout = new Promise<null>((resolve) => {
-          timeoutId = window.setTimeout(() => resolve(null), CURRENT_USER_PROFILE_TIMEOUT_MS);
+          timeoutId = window.setTimeout(() => resolve(null), CURRENT_USER_PROFILE_FALLBACK_TIMEOUT_MS);
         });
 
         try {
@@ -2753,10 +2842,12 @@ export const MasterDataProvider: React.FC<{
       fetchedLeadDateRangesRef.current.clear();
       fetchedProspectBookingDateRangesRef.current.clear();
       fetchedTechnicianScheduleDateRangesRef.current.clear();
+      fetchedAdPerformanceDateRangesRef.current.clear();
       fetchingOrderDateRangesRef.current.clear();
       fetchingLeadDateRangesRef.current.clear();
       fetchingProspectBookingDateRangesRef.current.clear();
       fetchingTechnicianScheduleDateRangesRef.current.clear();
+      fetchingAdPerformanceDateRangesRef.current.clear();
       setRefreshTrigger(prev => prev + 1);
       toast.info("Memperbarui data...");
   }, []);
@@ -3484,6 +3575,10 @@ export const MasterDataProvider: React.FC<{
     () => getDeferredBootstrapTablesForPath(activePath || '/dashboard'),
     [activePath],
   );
+  const shouldBootstrapAdPerformanceInputs = React.useMemo(
+    () => shouldBootstrapAdPerformanceInputsForPath(activePath || '/dashboard'),
+    [activePath],
+  );
 
   // Initial Fetch (Waterfall)
   useEffect(() => {
@@ -3496,10 +3591,12 @@ export const MasterDataProvider: React.FC<{
     fetchedLeadDateRangesRef.current.clear();
     fetchedProspectBookingDateRangesRef.current.clear();
     fetchedTechnicianScheduleDateRangesRef.current.clear();
+    fetchedAdPerformanceDateRangesRef.current.clear();
     fetchingOrderDateRangesRef.current.clear();
     fetchingLeadDateRangesRef.current.clear();
     fetchingProspectBookingDateRangesRef.current.clear();
     fetchingTechnicianScheduleDateRangesRef.current.clear();
+    fetchingAdPerformanceDateRangesRef.current.clear();
 
     const fetchCatalog = createMasterDataFetchCatalog({
       setAreas,
@@ -3757,6 +3854,9 @@ export const MasterDataProvider: React.FC<{
       const operationalFetchTasks = otherTransactionalFetches.map(({ table, setter, mapper }) => (
         () => fetchData(table, setter, mapper)
       ));
+      if (shouldBootstrapAdPerformanceInputs) {
+        operationalFetchTasks.push(() => ensureAdPerformanceInputsForDateRange(getCurrentMonthDateRange()));
+      }
       if (deferredBootstrapTables.has('lead_social_contacts')) {
         operationalFetchTasks.push(() => fetchLeadSocialContacts());
       }
@@ -3789,6 +3889,8 @@ export const MasterDataProvider: React.FC<{
     refreshTrigger,
     shouldFetchFullOperationalHistory,
     deferredBootstrapTables,
+    shouldBootstrapAdPerformanceInputs,
+    ensureAdPerformanceInputsForDateRange,
     isCurrentUserResolved,
     normalizedActivePath,
     shouldEnsureScheduleUserRoster,
@@ -4079,6 +4181,7 @@ export const MasterDataProvider: React.FC<{
     currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
     ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange,
+    ensureAdPerformanceInputsForDateRange,
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
@@ -4086,7 +4189,8 @@ export const MasterDataProvider: React.FC<{
     technicianSchedules,
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
-    ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange
+    ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange,
+    ensureAdPerformanceInputsForDateRange
   ]);
 
   return (

@@ -1005,14 +1005,9 @@ async function syncTikTokSnapshotRange(params: {
       platformKey: "tiktok",
       from,
       to,
+      externalAccountIds: params.requestedAdvertiserId ? [params.requestedAdvertiserId] : undefined,
+      externalGroupId: params.requestedBusinessCenterId || null,
     });
-
-    if (params.requestedAdvertiserId) {
-      rows = rows.filter((row) => row.externalAccountId === params.requestedAdvertiserId);
-    }
-    if (params.requestedBusinessCenterId) {
-      rows = rows.filter((row) => row.externalGroupId === params.requestedBusinessCenterId);
-    }
 
     return {
       rows,
@@ -1107,14 +1102,9 @@ async function syncTikTokSnapshotRange(params: {
     platformKey: "tiktok",
     from,
     to,
+    externalAccountIds: params.requestedAdvertiserId ? [params.requestedAdvertiserId] : undefined,
+    externalGroupId: params.requestedBusinessCenterId || null,
   });
-
-  if (params.requestedAdvertiserId) {
-    rows = rows.filter((row) => row.externalAccountId === params.requestedAdvertiserId);
-  }
-  if (params.requestedBusinessCenterId) {
-    rows = rows.filter((row) => row.externalGroupId === params.requestedBusinessCenterId);
-  }
 
   return {
     rows,
@@ -1468,14 +1458,9 @@ app.get("/snapshots", async (c) => {
       platformKey: "tiktok",
       from,
       to,
+      externalAccountIds: requestedAdvertiserId ? [requestedAdvertiserId] : undefined,
+      externalGroupId: requestedBusinessCenterId || null,
     });
-
-    if (requestedAdvertiserId) {
-      rows = rows.filter((row) => row.externalAccountId === requestedAdvertiserId);
-    }
-    if (requestedBusinessCenterId) {
-      rows = rows.filter((row) => row.externalGroupId === requestedBusinessCenterId);
-    }
 
     let servedFrom = "tiktok-ads-snapshot-db";
     let fallbackSnapshotDate: string | null = null;

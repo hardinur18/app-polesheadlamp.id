@@ -56,6 +56,7 @@ type AdsSnapshotDbRow = {
 };
 
 const SNAPSHOT_DB_READ_TIMEOUT_MS = 6_000;
+const SNAPSHOT_LATEST_KNOWN_READ_LIMIT = 1000;
 const SNAPSHOT_DATASET_CACHE_PREFIX = 'polesheadlamp_ads_snapshot_dataset_cache_v1';
 const SNAPSHOT_DATASET_CACHE_INDEX_KEY = 'polesheadlamp_ads_snapshot_dataset_cache_index_v1';
 const SNAPSHOT_DATASET_CACHE_LIMIT = 30;
@@ -291,7 +292,7 @@ export async function fetchAdsSnapshotDatasetFromSupabase<T extends AdsSnapshotF
       .lte('snapshot_date', to)
       .order('snapshot_date', { ascending: false })
       .order('updated_at', { ascending: false })
-      .limit(5000);
+      .limit(SNAPSHOT_LATEST_KNOWN_READ_LIMIT);
 
     if (accountIds.length === 1) {
       latestQuery = latestQuery.eq('external_account_id', accountIds[0]);

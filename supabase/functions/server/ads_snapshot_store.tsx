@@ -31,6 +31,7 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_URL") || "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "",
 );
+const ADS_SNAPSHOT_LATEST_KNOWN_READ_LIMIT = 1000;
 
 function toNullableNumber(value: unknown) {
   const parsed = Number(value);
@@ -46,8 +47,14 @@ export async function fetchAdsDailySnapshots(params: {
   platformKey: AdsSnapshotPlatformKey;
   from: string;
   to: string;
+  externalAccountIds?: string[];
+  externalGroupId?: string | null;
 }) {
-  const { data, error } = await supabase
+  const externalAccountIds = Array.from(
+    new Set((params.externalAccountIds || []).map((id) => String(id || "").trim()).filter(Boolean)),
+  );
+
+  let query = supabase
     .from("ads_live_daily_snapshots")
     .select("*")
     .eq("platform_key", params.platformKey)
@@ -55,6 +62,18 @@ export async function fetchAdsDailySnapshots(params: {
     .lte("snapshot_date", params.to)
     .order("snapshot_date", { ascending: true })
     .order("external_account_name", { ascending: true });
+
+  if (externalAccountIds.length === 1) {
+    query = query.eq("external_account_id", externalAccountIds[0]);
+  } else if (externalAccountIds.length > 1) {
+    query = query.in("external_account_id", externalAccountIds);
+  }
+
+  if (params.externalGroupId) {
+    query = query.eq("external_group_id", params.externalGroupId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
@@ -102,7 +121,7 @@ export async function fetchLatestAdsDailySnapshotsBeforeOrOn(params: {
     .lte("snapshot_date", params.onOrBefore)
     .order("snapshot_date", { ascending: false })
     .order("updated_at", { ascending: false })
-    .limit(5000);
+    .limit(ADS_SNAPSHOT_LATEST_KNOWN_READ_LIMIT);
 
   if (params.externalAccountIds && params.externalAccountIds.length > 0) {
     query = query.in("external_account_id", params.externalAccountIds);

@@ -110,7 +110,7 @@ const advertiserCsPerfCache = new Map<string, {
   cachedAt: number;
 }>();
 const ADVERTISER_DASHBOARD_API_CACHE_NAMESPACE = 'advertiser-dashboard-api';
-const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
+const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 5 * 60_000;
 const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
 const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
 
@@ -433,6 +433,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     refreshTrigger,
     ensureOrdersForDateRange,
     ensureLeadsForDateRange,
+    ensureAdPerformanceInputsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
 
@@ -567,6 +568,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'lead' }),
       ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'service' }),
       ensureLeadsForDateRange({ from: rangeParams.from, to: rangeParams.to }),
+      ensureAdPerformanceInputsForDateRange({ from: rangeParams.from, to: rangeParams.to }),
     ]).then((results) => {
       if (import.meta.env.DEV) {
         results.forEach((result, index) => {
@@ -579,6 +581,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   }, [
     ensureLeadsForDateRange,
     ensureOrdersForDateRange,
+    ensureAdPerformanceInputsForDateRange,
     rangeParams?.from,
     rangeParams?.to,
   ]);

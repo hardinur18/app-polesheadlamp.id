@@ -1585,7 +1585,10 @@ export const AdAccountTab: React.FC<AdAccountTabProps> = ({ currentRole: _curren
     if (!apiAccount) return;
 
     handledApiDeepLinkRef.current = deepLinkKey;
-    setAccountView('api');
+    const queryView = params.get('view') as AccountView | null;
+    if (!queryView || !ACCOUNT_VIEW_IDS.has(queryView)) {
+      setAccountView('api');
+    }
     setSearch((current) => current || apiAccount.externalAccountName || externalAccountId);
     openApiMappingDialog(apiAccount);
   }, [allApiAccounts, canEdit, location.search, openApiMappingDialog]);

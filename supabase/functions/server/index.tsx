@@ -835,6 +835,8 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     edit: ["leads.edit"],
     delete: ["leads.delete"],
     orderBy: "created_at",
+    ascending: false,
+    filterableColumns: ["created_at", "status", "cs_id", "advertiser_id", "platform_id", "ad_account_id"],
   },
   prospect_bookings: {
     table: "prospect_bookings",
@@ -842,6 +844,9 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     create: ["leads.create", "leads.edit"],
     edit: ["leads.edit", "order.edit"],
     delete: ["leads.delete"],
+    orderBy: "schedule_date",
+    ascending: false,
+    filterableColumns: ["schedule_date", "status", "cs_id", "technician_id", "advertiser_id", "platform_id", "branch_id"],
   },
   orders: {
     table: "orders",
@@ -865,6 +870,10 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     create: [ADS_MANAGE_PERMISSION],
     edit: [ADS_MANAGE_PERMISSION],
     delete: [ADS_MANAGE_PERMISSION],
+    orderBy: "date",
+    ascending: false,
+    maxLimit: 1000,
+    filterableColumns: ["date", "advertiser_id", "platform_id", "sub_channel_id", "ad_account_id", "cs_id"],
   },
   lead_spam_daily_inputs: {
     table: "lead_spam_daily_inputs",
@@ -872,6 +881,10 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     create: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
     edit: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
     delete: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
+    orderBy: "input_date",
+    ascending: false,
+    maxLimit: 1000,
+    filterableColumns: ["input_date", "cs_id", "platform_id", "advertiser_id"],
   },
   proof_assets: {
     table: "proof_assets",
@@ -890,11 +903,18 @@ const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     create: ["technician_schedule.manage"],
     edit: ["technician_schedule.manage"],
     delete: ["technician_schedule.manage"],
+    orderBy: "date",
+    ascending: false,
+    maxLimit: 1000,
+    filterableColumns: ["date", "user_id", "type"],
   },
   audit_logs: {
     table: "audit_logs",
     read: ["audit_logs.view"],
+    orderBy: "created_at",
+    ascending: false,
     maxLimit: 5000,
+    filterableColumns: ["created_at", "action", "entity", "user_name"],
   },
 };
 
@@ -1785,6 +1805,10 @@ async function syncMetaSnapshotRange(params: {
       platformKey: "meta",
       from: params.from,
       to: params.to,
+      externalAccountIds: params.requestedAccountId
+        ? buildMetaExternalAccountIdVariants(params.requestedAccountId)
+        : undefined,
+      externalGroupId: params.requestedBusinessId || null,
     }));
 
     return {
@@ -1894,6 +1918,10 @@ async function syncMetaSnapshotRange(params: {
     platformKey: "meta",
     from: params.from,
     to: params.to,
+    externalAccountIds: params.requestedAccountId
+      ? buildMetaExternalAccountIdVariants(params.requestedAccountId)
+      : undefined,
+    externalGroupId: params.requestedBusinessId || null,
   }));
 
   return {
@@ -2089,14 +2117,11 @@ app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
       platformKey: "meta",
       from: from!,
       to: to!,
+      externalAccountIds: requestedAccountId
+        ? buildMetaExternalAccountIdVariants(requestedAccountId)
+        : undefined,
+      externalGroupId: requestedBusinessId || null,
     });
-
-    if (requestedBusinessId) {
-      rows = rows.filter((row) => row.externalGroupId === requestedBusinessId);
-    }
-    if (requestedAccountId) {
-      rows = rows.filter((row) => row.externalAccountId === requestedAccountId);
-    }
 
     let servedFrom = "meta-snapshot-db";
     let fallbackSnapshotDate: string | null = null;
@@ -2221,7 +2246,12 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
       rows = rows.filter((row) => row.externalGroupId === requestedBusinessId);
     }
     if (requestedAccountId) {
-      rows = rows.filter((row) => row.externalAccountId === requestedAccountId);
+      const requestedAccountIdVariants = new Set(buildMetaExternalAccountIdVariants(requestedAccountId));
+      rows = rows.filter((row) =>
+        buildMetaExternalAccountIdVariants(row.externalAccountId).some((accountId) =>
+          requestedAccountIdVariants.has(accountId),
+        ),
+      );
     }
 
     return c.json({
@@ -3369,6 +3399,21 @@ function applyAppDataFilters(query: any, c: any, config: AppDataAccessConfig) {
   return nextQuery;
 }
 
+function getAppDataOrderBy(c: any, config: AppDataAccessConfig) {
+  const fallbackOrderBy = config.orderBy || "created_at";
+  const requestedOrderBy = c.req.query("orderBy");
+  if (!requestedOrderBy) return fallbackOrderBy;
+
+  const orderableColumns = new Set([
+    fallbackOrderBy,
+    "created_at",
+    "updated_at",
+    ...(config.filterableColumns || []),
+  ].filter(Boolean));
+
+  return orderableColumns.has(requestedOrderBy) ? requestedOrderBy : fallbackOrderBy;
+}
+
 function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
   const text = [
     error?.code,
@@ -3472,7 +3517,7 @@ app.get("/make-server-f781cd00/app-data/:type", async (c) => {
 
   try {
     const { from, to } = getAppDataRange(c, config);
-    const orderBy = c.req.query("orderBy") || config.orderBy || "created_at";
+    const orderBy = getAppDataOrderBy(c, config);
     const ascending = parseBooleanFlag(c.req.query("ascending"), Boolean(config.ascending));
 
     let query = supabase

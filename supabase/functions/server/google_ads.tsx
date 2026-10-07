@@ -805,6 +805,8 @@ async function syncGoogleAdsSnapshotRange(params: {
       platformKey: "google",
       from: params.from,
       to: params.to,
+      externalAccountIds: params.requestedCustomerId ? [params.requestedCustomerId] : undefined,
+      externalGroupId: params.requestedManagerId || null,
     });
 
     return {
@@ -897,6 +899,8 @@ async function syncGoogleAdsSnapshotRange(params: {
     platformKey: "google",
     from: params.from,
     to: params.to,
+    externalAccountIds: params.requestedCustomerId ? [params.requestedCustomerId] : undefined,
+    externalGroupId: params.requestedManagerId || null,
   });
 
   return {
@@ -1256,14 +1260,9 @@ app.get("/snapshots", async (c) => {
       platformKey: "google",
       from: from!,
       to: to!,
+      externalAccountIds: requestedCustomerId ? [requestedCustomerId] : undefined,
+      externalGroupId: requestedManagerId || null,
     });
-
-    if (requestedCustomerId) {
-      rows = rows.filter((row) => row.externalAccountId === requestedCustomerId);
-    }
-    if (requestedManagerId) {
-      rows = rows.filter((row) => row.externalGroupId === requestedManagerId);
-    }
 
     let servedFrom = "google-ads-snapshot-db";
     let fallbackSnapshotDate: string | null = null;

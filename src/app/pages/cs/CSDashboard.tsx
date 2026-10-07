@@ -171,7 +171,7 @@ type CsViewTab = 'performance' | 'spam-inputs';
 const CS_VIEW_FILTER_STORAGE_KEY = 'polesheadlamp_cs_view_filters_v1';
 const CS_VIEW_MAX_RANGE_DAYS = 62;
 const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
-const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
+const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 5 * 60_000;
 const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
 const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
 const CS_DASHBOARD_API_CACHE_NAMESPACE = 'cs-dashboard-api';
@@ -674,6 +674,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     refreshTrigger,
     ensureOrdersForDateRange,
     ensureLeadsForDateRange,
+    ensureAdPerformanceInputsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   
@@ -810,6 +811,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'lead' }),
       ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'service' }),
       ensureLeadsForDateRange({ from: rangeParams.from, to: rangeParams.to }),
+      ensureAdPerformanceInputsForDateRange({ from: rangeParams.from, to: rangeParams.to }),
     ]).then((results) => {
       if (import.meta.env.DEV) {
         results.forEach((result, index) => {
@@ -822,6 +824,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   }, [
     ensureLeadsForDateRange,
     ensureOrdersForDateRange,
+    ensureAdPerformanceInputsForDateRange,
     rangeParams?.from,
     rangeParams?.to,
   ]);
@@ -2362,7 +2365,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         detail: unmatchedAccountSummaries.length === 1
           ? `${primaryLabel} (${primaryUnmatchedAccount.source.toUpperCase()} / ${primaryUnmatchedAccount.externalAccountId || 'ID belum ada'}) belum cocok ke akun internal aktif. ${primaryMetrics}.`
           : `${formatCount(unmatchedAccountSummaries.length)} akun API punya spend/lead, termasuk ${primaryLabel}. Cek pairing ke master Akun Iklan aktif.`,
-        href: buildHref('api', {
+        href: buildHref('unmatched', {
           action: 'pair-api',
           platform: primaryUnmatchedAccount.source,
           externalAccountId: primaryUnmatchedAccount.externalAccountId,
