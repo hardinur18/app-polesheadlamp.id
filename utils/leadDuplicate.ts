@@ -50,7 +50,8 @@ export function isOpenLeadDuplicateStatus(status: unknown) {
   return typeof status === "string" && OPEN_LEAD_DUPLICATE_STATUSES.has(status);
 }
 
-export function getLeadDuplicateCsId(lead: LeadDuplicateCandidate) {
+export function getLeadDuplicateCsId(lead: LeadDuplicateCandidate | null | undefined) {
+  if (!lead) return "";
   return lead.csId || lead.cs_id || "";
 }
 
