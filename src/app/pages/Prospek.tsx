@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, Phone,
-  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw, SlidersHorizontal
+  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -1923,7 +1923,14 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         </OperationalKpiGrid>
 
 
-        <OperationalFilterPanel className={`leadFilterPanel ${isMobileFilterExpanded ? 'isExpanded' : ''}`}>
+        <OperationalFilterPanel
+          className="leadFilterPanel"
+          collapsible
+          isExpanded={isMobileFilterExpanded}
+          onExpandedChange={setIsMobileFilterExpanded}
+          summary={activeFilterCount > 0 ? `${activeFilterCount} filter aktif` : 'Semua data ditampilkan'}
+          contentClassName="leadFilterContent"
+        >
           <div className="leadFilterGrid">
             <div className="leadFilterDate leadFilterItem">
               <FoundationDateRangePicker
@@ -1931,18 +1938,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                 setDate={setDateRange}
               />
             </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className={`leadMobileFilterToggle ${hasActiveFilters ? 'isActive' : ''}`}
-              onClick={() => setIsMobileFilterExpanded((expanded) => !expanded)}
-              aria-expanded={isMobileFilterExpanded}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span>Filter</span>
-              {activeFilterCount > 0 && <strong>{activeFilterCount}</strong>}
-            </Button>
 
             <div className="leadAdvancedFilter leadFilterItem">
               <Select value={statusFilter} onValueChange={setStatusFilter}>

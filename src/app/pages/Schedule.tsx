@@ -3107,7 +3107,19 @@ export default function Schedule() {
         {/* TOP: Title (Scrolls away on mobile) */}
         <div className="scheduleHeader px-4 pt-4 md:px-0 md:pt-0 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
             <div>
-              <h1 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">Jadwal & Penugasan</h1>
+              <div className="topbarTitleLine">
+                <h1 className="text-lg md:text-2xl font-bold text-slate-800 dark:text-slate-100">Jadwal & Penugasan</h1>
+                <button
+                  type="button"
+                  onClick={handleRefreshSchedule}
+                  disabled={isRefreshingSchedule}
+                  className="foundationHeaderRefreshButton uiButton"
+                  aria-label="Refresh data jadwal"
+                  title={isRefreshingSchedule ? 'Data sedang dimuat' : 'Refresh data jadwal'}
+                >
+                  <RefreshCw className={cn("h-4 w-4", isRefreshingSchedule && "animate-spin")} />
+                </button>
+              </div>
               <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm">Monitoring kapasitas teknisi untuk pesanan dan booking prospek.</p>
             </div>
         </div>
@@ -3174,16 +3186,6 @@ export default function Schedule() {
                 )}
             </div>
             <div className="scheduleHeaderFilters hidden md:flex items-center justify-end gap-2">
-                 <button
-                    type="button"
-                    onClick={handleRefreshSchedule}
-                    disabled={isRefreshingSchedule}
-                    className="scheduleHeaderFilterButton flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                    aria-label="Refresh data jadwal"
-                    title="Refresh data jadwal"
-                 >
-                    <RefreshCw className={cn("h-4 w-4", isRefreshingSchedule && "animate-spin")} />
-                 </button>
                  {!isAdvertiserUser && (
                     <div className="scheduleLateSlotToggle flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
                         <span className="text-xs font-medium text-slate-600 dark:text-slate-300">19:00</span>
@@ -3369,16 +3371,6 @@ export default function Schedule() {
                                 <Filter className="w-4 h-4" />
                             </button>
                         )}
-                        <button
-                            onClick={handleRefreshSchedule}
-                            disabled={isRefreshingSchedule}
-                            className="scheduleMobileSquareButton flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            aria-label="Refresh data jadwal"
-                            title="Refresh"
-                        >
-                            <RefreshCw className={cn("w-4 h-4", isRefreshingSchedule && "animate-spin")} />
-                        </button>
-
                     </div>
 
                     <div className="scheduleMobileViewTabs">

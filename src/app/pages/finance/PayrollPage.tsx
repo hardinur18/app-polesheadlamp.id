@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   DollarSign, Users, Briefcase, Plus, Trash2, Edit,
-  Search, Calculator, CheckCircle2, AlertCircle, RefreshCw,
+  Search, Calculator, CheckCircle2, AlertCircle,
   Archive, Send, History, Eye
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -2061,16 +2061,14 @@ export const PayrollPage = () => {
         icon={DollarSign}
         title="Payroll & Gaji"
         subtitle={`Manajemen gaji pokok, KPI, bonus, dan estimasi payroll periode ${periodString}.`}
+        onRefresh={fetchData}
+        isRefreshing={loading}
         actions={
           <div className="payrollHeaderActions">
             <Badge variant="outline" className={cn('payrollAccessBadge', canManagePayroll ? 'isManage' : 'isView')}>
               <CheckCircle2 className="h-3.5 w-3.5" />
               {canManagePayroll ? 'Mode Kelola' : 'Mode Lihat'}
             </Badge>
-            <Button type="button" variant="outline" onClick={fetchData} disabled={loading}>
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              Refresh
-            </Button>
           </div>
         }
       />

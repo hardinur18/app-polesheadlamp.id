@@ -16,7 +16,6 @@ import {
   Loader2,
   Lock,
   Plus,
-  RefreshCw,
   ReceiptText,
   Search,
   Upload,
@@ -1701,15 +1700,13 @@ export function Kas() {
         icon={WalletCards}
         title="Biaya Operasional"
         subtitle={filters.startDate || filters.endDate ? `Periode ${formatDate(filters.startDate)} sampai ${formatDate(filters.endDate)}` : 'Semua periode biaya operasional'}
+        onRefresh={refreshData}
+        isRefreshing={loading}
         actions={
           <>
             <Button variant="outline" onClick={() => setBulkInputOpen(true)} disabled={!canCreate}>
               <Upload className="h-4 w-4" />
               Bulk Input
-            </Button>
-            <Button variant="outline" onClick={refreshData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
             </Button>
             <Button onClick={openCreate} disabled={!canCreate}>
               <Plus className="h-4 w-4" />

@@ -4,7 +4,7 @@ import {
 } from '@/app/components/ui/tabs';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-import { ArrowUpRight, ArrowDownLeft, Plus, RefreshCw, ChevronDown, ChevronUp, CheckCircle, Wallet, User as UserIcon, Building2, Edit, Trash2, Search, Filter, Lock } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Plus, ChevronDown, ChevronUp, CheckCircle, Wallet, User as UserIcon, Building2, Edit, Trash2, Search, Filter, Lock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -856,12 +856,10 @@ export const DebtsPage = () => {
                   {!canManageFinance && <span className="debtReadOnlyNote"> Mode lihat saja.</span>}
                 </>
               }
+              onRefresh={() => setIsRefresh(!isRefresh)}
+              isRefreshing={loading}
               actions={
                 <div className="debtHeaderActions">
-                  <Button variant="outline" onClick={() => setIsRefresh(!isRefresh)} className="debtRefreshButton">
-                    <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                    Refresh
-                  </Button>
                   <Button onClick={() => setCreateDialogOpen(true)} disabled={!canManageFinance} className="inventoryPrimaryButton">
                     <Plus className="h-4 w-4" />
                     Catat Manual

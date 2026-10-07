@@ -12,7 +12,6 @@ import {
   Pencil,
   Phone,
   Plus,
-  RefreshCw,
   Search,
   Send,
   Trash2,
@@ -586,12 +585,10 @@ export function ProofAssetLibraryPage() {
         icon={Images}
         title="Galeri Bukti"
         subtitle="Koleksi gambar hasil edit, before-after, dan testimoni yang rapi untuk dipakai lintas fitur."
+        onRefresh={() => void loadAssets()}
+        isRefreshing={loading}
         actions={
           <>
-            <Button variant="outline" onClick={() => void loadAssets()} disabled={loading}>
-              <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
-              Refresh
-            </Button>
             {canCreate && (
               <Button
                 className="h-9 bg-blue-600 text-white shadow-sm hover:bg-blue-700"

@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, type LucideIcon } from 'lucide-react';
+import { ChevronDown, RefreshCw, SlidersHorizontal, type LucideIcon } from 'lucide-react';
 import { cn } from './utils';
 import { Skeleton } from './skeleton';
 import { Button } from './button';
@@ -30,6 +30,10 @@ type OperationalPageHeaderProps = {
   children?: React.ReactNode;
   className?: string;
   showRefresh?: boolean;
+  onRefresh?: () => void | Promise<void>;
+  isRefreshing?: boolean;
+  refreshLabel?: string;
+  refreshPlacement?: 'actions' | 'title';
 };
 
 export function OperationalPageHeader({
@@ -41,6 +45,10 @@ export function OperationalPageHeader({
   children,
   className,
   showRefresh = true,
+  onRefresh,
+  isRefreshing,
+  refreshLabel = 'Refresh Data',
+  refreshPlacement = 'title',
 }: OperationalPageHeaderProps) {
   const {
     triggerRefresh,
@@ -49,7 +57,8 @@ export function OperationalPageHeader({
     isOrdersLoading,
     isLeadsLoading,
   } = useMasterData();
-  const isRefreshingData = Boolean(isMasterDataLoading || isOperationalDataLoading || isOrdersLoading || isLeadsLoading);
+  const isGlobalRefreshing = Boolean(isMasterDataLoading || isOperationalDataLoading || isOrdersLoading || isLeadsLoading);
+  const isRefreshingData = isRefreshing ?? isGlobalRefreshing;
 
   const handleRefreshData = React.useCallback(() => {
     if (isRefreshingData) {
@@ -57,22 +66,33 @@ export function OperationalPageHeader({
       return;
     }
 
+    if (onRefresh) {
+      void Promise.resolve(onRefresh()).catch((error) => {
+        console.error('Page refresh failed:', error);
+        toast.error('Refresh data gagal dijalankan');
+      });
+      return;
+    }
+
     triggerRefresh();
     toast.success('Refresh data dijalankan');
-  }, [isRefreshingData, triggerRefresh]);
+  }, [isRefreshingData, onRefresh, triggerRefresh]);
   const refreshAction = showRefresh ? (
     <Button
       type="button"
       variant="outline"
       onClick={handleRefreshData}
       disabled={isRefreshingData}
-      className="dailyAdsHeaderButton h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
+      className="foundationHeaderRefreshButton dailyAdsHeaderButton h-9 bg-white dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
       aria-label="Refresh data aplikasi"
+      title={isRefreshingData ? 'Data sedang dimuat' : refreshLabel}
     >
       <RefreshCw className={cn('w-4 h-4', isRefreshingData && 'animate-spin')} />
-      <span className="dailyAdsHeaderButtonText">Refresh Data</span>
+      <span className="dailyAdsHeaderButtonText">{refreshLabel}</span>
     </Button>
   ) : null;
+  const titleRefreshAction = refreshPlacement === 'title' ? refreshAction : null;
+  const headerRefreshAction = refreshPlacement === 'actions' ? refreshAction : null;
 
   return (
     <div className={className}>
@@ -84,12 +104,15 @@ export function OperationalPageHeader({
               {eyebrow}
             </div>
           )}
-          <h1>{title}</h1>
+          <div className="topbarTitleLine">
+            <h1>{title}</h1>
+            {titleRefreshAction}
+          </div>
           {subtitle && <p>{subtitle}</p>}
         </div>
-        {(refreshAction || actions) && (
+        {(headerRefreshAction || actions) && (
           <div className="topbarActions">
-            {refreshAction}
+            {headerRefreshAction}
             {actions}
           </div>
         )}
@@ -200,10 +223,55 @@ type OperationalSurfaceProps = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode;
 };
 
-export function OperationalFilterPanel({ children, className, ...props }: OperationalSurfaceProps) {
+type OperationalFilterPanelProps = OperationalSurfaceProps & {
+  collapsible?: boolean;
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  summary?: React.ReactNode;
+  contentClassName?: string;
+};
+
+export function OperationalFilterPanel({
+  children,
+  className,
+  collapsible = false,
+  isExpanded = false,
+  onExpandedChange,
+  summary,
+  contentClassName,
+  ...props
+}: OperationalFilterPanelProps) {
+  if (!collapsible) {
+    return (
+      <div className={cn('surfacePanel filterPanel', className)} {...props}>
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className={cn('surfacePanel filterPanel', className)} {...props}>
-      {children}
+    <div
+      className={cn('surfacePanel filterPanel foundationFilterPanelCollapsible', className)}
+      data-mobile-open={isExpanded ? 'true' : 'false'}
+      {...props}
+    >
+      <div className="foundationFilterSummary">
+        <strong>{summary || 'Semua data ditampilkan'}</strong>
+        <Button
+          type="button"
+          variant="outline"
+          className="foundationFilterToggle"
+          aria-expanded={isExpanded}
+          onClick={() => onExpandedChange?.(!isExpanded)}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          <span>{isExpanded ? 'Tutup' : 'Filter'}</span>
+          <ChevronDown className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-180')} />
+        </Button>
+      </div>
+      <div className={cn('foundationFilterContent', contentClassName)}>
+        {children}
+      </div>
     </div>
   );
 }

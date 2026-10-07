@@ -895,19 +895,6 @@ export function AppLayout() {
         )}
       </main>
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={handleGlobalRefresh}
-        className="appGlobalRefreshButton"
-        title={isRefreshingData ? "Data sedang dimuat" : "Refresh Data"}
-        disabled={isRefreshingData}
-        aria-label="Refresh data aplikasi"
-      >
-        <RefreshCcw className={cn("h-[1.15rem] w-[1.15rem]", isRefreshingData && "animate-spin")} />
-      </Button>
-
       <Toaster
         position="bottom-right"
         richColors

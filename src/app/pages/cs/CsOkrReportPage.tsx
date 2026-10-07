@@ -13,7 +13,6 @@ import {
   Loader2,
   MessageSquare,
   Plus,
-  RefreshCw,
   Save,
   Target,
   TrendingUp,
@@ -988,6 +987,11 @@ function CsOkrReportPage() {
         icon={Target}
         title="OKR CS"
         subtitle={`${selectedCsLabel} / ${selectedPlatformLabel} / ${format(new Date(fromDate), 'dd MMM yyyy', { locale: localeId })} - ${format(new Date(toDate), 'dd MMM yyyy', { locale: localeId })}`}
+        onRefresh={() => {
+          fetchTargets();
+          fetchPerformance(true);
+        }}
+        isRefreshing={targetsLoading || whatsAppLoading}
         actions={(
           <div className="csOkrHeaderActions flex flex-wrap items-center justify-end gap-2">
             {canManageTargets && (
@@ -996,24 +1000,6 @@ function CsOkrReportPage() {
                 <span className="csOkrHeaderLabel">Atur Target</span>
               </Button>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              className="csOkrHeaderButton"
-              title="Refresh"
-              onClick={() => {
-                fetchTargets();
-                fetchPerformance(true);
-              }}
-              disabled={targetsLoading || whatsAppLoading}
-            >
-              {targetsLoading || whatsAppLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              <span className="csOkrHeaderLabel">Refresh</span>
-            </Button>
             <Button type="button" className="csOkrHeaderButton csOkrHeaderButtonPrimary" onClick={handleExportPdf}>
               <Download className="mr-2 h-4 w-4" />
               <span>Export PDF</span>

@@ -64,6 +64,14 @@
   padding: 22px;
 }
 
+.leadFilterPanel.foundationFilterPanelCollapsible {
+  overflow: hidden;
+}
+
+.leadFilterContent {
+  min-width: 0;
+}
+
 .workspaceModalLayer,
 .workspaceSheetOverlay {
   left: 0;
@@ -364,10 +372,6 @@
   min-width: 0;
   padding-inline: 18px;
   width: 100%;
-}
-
-.leadMobileFilterToggle.uiButton {
-  display: none;
 }
 
 .leadTableCard {
@@ -1937,63 +1941,16 @@
 
   .leadFilterGrid {
     column-gap: 9px;
-    grid-template-columns: minmax(0, 1fr) minmax(92px, 108px);
+    grid-template-columns: minmax(0, 1fr);
     row-gap: 10px;
   }
 
   .leadFilterDate {
-    grid-column: 1 / 2;
-  }
-
-  .leadMobileFilterToggle.uiButton {
-    align-items: center;
-    background: #fff;
-    border-color: #dbe4ef;
-    border-radius: 14px;
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
-    color: #0f172a;
-    display: inline-flex;
-    gap: 7px;
-    grid-column: 2 / 3;
-    height: 48px !important;
-    justify-content: center;
-    min-height: 48px !important;
-    min-width: 0;
-    padding-inline: 10px;
-    width: 100%;
-  }
-
-  .leadMobileFilterToggle.uiButton.isActive {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #075bb5;
-  }
-
-  .leadMobileFilterToggle.uiButton span {
-    font-size: 0.82rem;
-    font-weight: 820;
-  }
-
-  .leadMobileFilterToggle.uiButton strong {
-    display: inline-grid;
-    height: 18px;
-    min-width: 18px;
-    place-items: center;
-    border-radius: 999px;
-    background: #0b63ce;
-    color: #fff;
-    font-size: 0.66rem;
-    font-weight: 900;
-    line-height: 1;
-  }
-
-  .leadAdvancedFilter {
-    display: none;
     grid-column: 1 / -1;
   }
 
-  .leadFilterPanel.isExpanded .leadAdvancedFilter {
-    display: block;
+  .leadAdvancedFilter {
+    grid-column: 1 / -1;
   }
 
   .leadSearchBox {
@@ -2033,12 +1990,7 @@
     white-space: normal;
   }
 
-  .leadFilterPanel:not(.isExpanded) .leadResetButton.uiButton {
-    display: none !important;
-  }
-
-  .leadFilterPanel.isExpanded .leadResetButton.uiButton {
-    display: inline-flex !important;
+  .leadResetButton.uiButton {
     grid-column: 1 / -1;
   }
 
@@ -2556,6 +2508,7 @@
 }
 
 .appGlobalRefreshButton {
+  display: none;
   position: fixed;
   right: 22px;
   bottom: calc(22px + env(safe-area-inset-bottom));
@@ -3389,6 +3342,46 @@
   min-width: 0;
 }
 
+.topbarTitleLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbarTitleLine h1 {
+  min-width: 0;
+}
+
+.topbarTitleLine > .foundationHeaderRefreshButton.uiButton {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #0f4ecf;
+  box-shadow: none;
+}
+
+.topbarTitleLine > .foundationHeaderRefreshButton.uiButton:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(37, 99, 235, 0.08);
+  color: #0b47bd;
+  box-shadow: none;
+}
+
+.topbarTitleLine > .foundationHeaderRefreshButton.uiButton svg {
+  width: 17px;
+  height: 17px;
+}
+
+.topbarTitleLine > .foundationHeaderRefreshButton.uiButton .dailyAdsHeaderButtonText {
+  display: none;
+}
+
 .topbarActions {
   display: flex;
   align-items: center;
@@ -3885,6 +3878,13 @@
 
 .filterPanel {
   min-width: 0;
+  overflow: hidden;
+  padding: 14px;
+  border-radius: 18px;
+  border-color: rgba(226, 232, 240, 0.86);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.055);
+  backdrop-filter: none;
 }
 
 .controlPanel {
@@ -3952,8 +3952,10 @@
   box-shadow: var(--ring);
 }
 
-.filterPanel :where(.uiInput, .uiSelectTrigger, .filterDateButton) {
+.filterPanel :where(.uiInput, .uiSelectTrigger, .filterDateButton, .uiPeriodPicker) {
   width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
 }
 
 .filterPanel :where(.uiButton, .primaryButton, .ghostButton, .dangerButton, .successButton, .secondaryButton):not(.buttonLg):not(.buttonSm):not(.iconButton) {
@@ -5025,6 +5027,56 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   word-break: normal;
+}
+
+.foundationMetricValue {
+  color: #0f172a !important;
+}
+
+.foundationMetricValue--info {
+  color: #1555d1 !important;
+}
+
+.foundationMetricValue--success {
+  color: #047857 !important;
+}
+
+.foundationMetricValue--warning {
+  color: #b45309 !important;
+}
+
+.foundationMetricValue--danger {
+  color: #dc2626 !important;
+}
+
+.foundationMetricValue--accent {
+  color: #6d28d9 !important;
+}
+
+.foundationMetricSubValue {
+  color: #64748b !important;
+  font-weight: 740 !important;
+}
+
+.foundationMetricSubValue--info {
+  color: #2563eb !important;
+}
+
+.foundationMetricSubValue--success {
+  color: #059669 !important;
+}
+
+.foundationMetricSubValue--warning {
+  color: #d97706 !important;
+}
+
+.foundationMetricSubValue--danger {
+  color: #e11d48 !important;
+}
+
+.foundationMetricDivider {
+  color: #cbd5e1 !important;
+  font-weight: 700 !important;
 }
 
 .metricCard em {
@@ -6938,6 +6990,15 @@
 
   .topbar h1 {
     font-size: calc(1rem + 3px);
+  }
+
+  .topbarTitleLine {
+    gap: 6px;
+  }
+
+  .filterPanel {
+    padding: 10px;
+    border-radius: 18px;
   }
 
   .appTopbarActions .appTopbarSecondaryAction {
@@ -20463,16 +20524,6 @@ body {
   width: 100%;
 }
 
-.operationalReportMobileFilterToggle {
-  display: none;
-}
-
-.operationalReportFilterCollapse {
-  display: block;
-  max-width: 100%;
-  min-width: 0;
-}
-
 .operationalReportTab {
   align-items: center;
   border: 1px solid transparent;
@@ -21011,72 +21062,6 @@ body {
 
   .operationalReportFilterCard {
     padding: 8px;
-  }
-
-  .operationalReportFilterCard.isMobileExpanded {
-    padding: 8px 8px 12px;
-  }
-
-  .operationalReportMobileFilterToggle {
-    display: grid;
-    width: 100%;
-    min-height: 48px;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 8px;
-    border: 0;
-    border-radius: 16px;
-    background: #ffffff;
-    color: #0f172a;
-    cursor: pointer;
-    padding: 0 12px;
-    text-align: left;
-  }
-
-  .operationalReportMobileFilterTitle {
-    display: inline-flex;
-    min-width: 0;
-    align-items: center;
-    gap: 7px;
-    color: #075bc7;
-    font-size: 0.78rem;
-    font-weight: 820;
-    white-space: nowrap;
-  }
-
-  .operationalReportMobileFilterSummary {
-    min-width: 0;
-    overflow: hidden;
-    color: #64748b;
-    font-size: 0.74rem;
-    font-weight: 650;
-    line-height: 1.2;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .operationalReportMobileFilterCount {
-    display: inline-flex;
-    min-width: 20px;
-    height: 20px;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: #eff6ff;
-    color: #075bc7;
-    font-size: 0.68rem;
-    font-weight: 820;
-  }
-
-  .operationalReportFilterCollapse {
-    display: none;
-  }
-
-  .operationalReportFilterCollapse.isOpen {
-    display: block;
-    margin-top: 8px;
-    border-top: 1px solid #e8eef6;
-    padding-top: 10px;
   }
 
   .operationalReportPage .metricGrid {
@@ -28965,5 +28950,749 @@ body {
 
   .advertiserDashboardSearchField {
     grid-column: auto;
+  }
+}
+
+/* Advertiser dashboard UX refinement: visual/layout only. */
+.advertiserDashboardPage.opsPageShell {
+  --advertiser-dashboard-shadow: 0 18px 44px -34px rgba(15, 23, 42, 0.36);
+  --advertiser-dashboard-shadow-soft: 0 10px 28px -24px rgba(15, 23, 42, 0.35);
+  --advertiser-dashboard-border: rgba(203, 213, 225, 0.78);
+}
+
+.advertiserDashboardPage .topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px 24px;
+  margin-bottom: 18px;
+}
+
+.advertiserDashboardPage .topbarTitle {
+  padding-top: 2px;
+}
+
+.advertiserDashboardPage .eyebrowLine {
+  margin-bottom: 9px;
+  color: #2454d8;
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.advertiserDashboardPage .eyebrowLine svg {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #2454d8;
+}
+
+.advertiserDashboardPage .topbar h1 {
+  font-size: clamp(1.2rem, 1.35vw, 1.48rem);
+  font-weight: 850;
+  line-height: 1.08;
+}
+
+.advertiserDashboardPage .topbar p {
+  max-width: 620px;
+  margin-top: 9px;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.48;
+}
+
+.advertiserDashboardPage .topbarActions {
+  display: flex;
+  min-width: min(100%, 420px);
+}
+
+.advertiserDashboardPage .topbarActions > .dailyAdsHeaderButton.uiButton {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  justify-self: end;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  margin-top: 23px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #0f4ecf;
+  box-shadow: none;
+}
+
+.advertiserDashboardPage .topbarActions > .dailyAdsHeaderButton.uiButton:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: none;
+  color: #0b47bd;
+}
+
+.advertiserDashboardPage .topbarActions > .dailyAdsHeaderButton.uiButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.advertiserDashboardPage .dailyAdsHeaderButtonText {
+  display: none;
+}
+
+.advertiserDashboardHeaderActions {
+  display: contents;
+}
+
+.advertiserDashboardFilterContent {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;
+  scrollbar-color: rgba(148, 163, 184, 0.32) transparent;
+  scrollbar-width: thin;
+}
+
+.advertiserDashboardFilterContent::-webkit-scrollbar {
+  height: 7px;
+}
+
+.advertiserDashboardFilterContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.advertiserDashboardFilterContent::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  background-clip: padding-box;
+}
+
+.advertiserDashboardFilterContent::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.36);
+  background-clip: padding-box;
+}
+
+.advertiserDashboardFilterContent {
+  display: grid;
+  grid-template-columns: minmax(198px, 218px) minmax(190px, 218px) minmax(260px, 1.25fr) repeat(4, minmax(138px, 0.86fr));
+  align-items: center;
+  gap: 10px;
+}
+
+.advertiserDashboardHeaderControl,
+.advertiserDashboardHeaderDate {
+  width: 100%;
+}
+
+.advertiserDashboardHeaderControl {
+  max-width: 236px;
+}
+
+.advertiserDashboardHeaderDate {
+  max-width: 218px;
+}
+
+.advertiserDashboardHeaderActions.dateOnly {
+  grid-template-columns: minmax(198px, 218px);
+}
+
+.advertiserDashboardControl.uiInput,
+.advertiserDashboardControl.uiSelectTrigger,
+.advertiserDashboardHeaderDate .uiPeriodPicker {
+  box-sizing: border-box;
+  height: 46px !important;
+  max-height: 46px;
+  min-height: 46px !important;
+  border-color: var(--advertiser-dashboard-border);
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.advertiserDashboardHeaderDate .uiPeriodPicker.uiPeriodPicker--foundation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100% !important;
+  padding: 0 14px !important;
+  line-height: 1;
+}
+
+.advertiserDashboardHeaderDate .uiPeriodPicker > span {
+  display: inline-flex;
+  min-height: 0;
+  align-items: center;
+  line-height: 1;
+}
+
+.advertiserDashboardHeaderDate .uiPeriodPicker svg {
+  width: 17px;
+  height: 17px;
+}
+
+.advertiserDashboardControl.uiInput:focus,
+.advertiserDashboardControl.uiSelectTrigger:focus-visible,
+.advertiserDashboardHeaderDate .uiPeriodPicker:focus-visible {
+  border-color: rgba(37, 99, 235, 0.42);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.advertiserDashboardFilterPanel.filterPanel {
+  margin-top: 2px;
+  padding: 13px;
+  border-color: rgba(203, 213, 225, 0.7);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--advertiser-dashboard-shadow);
+}
+
+.advertiserDashboardFilterGrid.adFilterGrid {
+  display: contents;
+  grid-template-columns: none;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.advertiserDashboardFilterField .filterFieldLabel {
+  display: none;
+}
+
+.advertiserDashboardSearchField .relative svg {
+  color: #64748b;
+}
+
+.advertiserDashboardTabs {
+  margin-top: 17px;
+}
+
+.advertiserDashboardTabsRail.uiTabsRail,
+.advertiserDashboardTabsRail.uiTabsList {
+  min-height: 44px;
+  padding: 4px;
+  border-radius: 15px;
+  box-shadow: none;
+}
+
+.advertiserDashboardTabsRail .uiTabsTrigger {
+  min-height: 34px;
+  border-radius: 11px;
+  font-weight: 820;
+}
+
+.advertiserDashboardKpiGrid.metricGrid {
+  gap: 14px;
+}
+
+.advertiserDashboardKpiGrid.metricGrid > .metricCard,
+.csDashboardKpiGrid.metricGrid > .metricCard {
+  min-height: 106px;
+  border-color: rgba(226, 232, 240, 0.86);
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--advertiser-dashboard-shadow-soft);
+}
+
+.advertiserDashboardKpiGrid.metricGrid > .metricCard:hover,
+.csDashboardKpiGrid.metricGrid > .metricCard:hover {
+  box-shadow: 0 18px 40px -28px rgba(15, 23, 42, 0.42);
+  transform: translateY(-2px);
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricIcon,
+.csDashboardKpiGrid.metricGrid .metricIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricCard small,
+.csDashboardKpiGrid.metricGrid .metricCard small {
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 720;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue .text-2xl,
+.csDashboardKpiGrid.metricGrid .metricValue .text-2xl {
+  font-size: clamp(1rem, 3.2cqi, 1.18rem) !important;
+  font-weight: 850 !important;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue .text-xs,
+.advertiserDashboardKpiGrid.metricGrid .metricValue span:not(.text-2xl),
+.csDashboardKpiGrid.metricGrid .metricValue .text-xs,
+.csDashboardKpiGrid.metricGrid .metricValue span:not(.text-2xl) {
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.advertiserDashboardKpiGrid.metricGrid .metricValue .text-xs.flex {
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  height: auto;
+}
+
+.advertiserDashboardChartGrid {
+  gap: 16px !important;
+}
+
+.advertiserDashboardChartCard {
+  border-color: rgba(226, 232, 240, 0.88) !important;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: var(--advertiser-dashboard-shadow);
+}
+
+.advertiserDashboardChartCard .uiCardHeader,
+.advertiserDashboardChartCard [data-slot="card-header"] {
+  padding: 18px 18px 8px !important;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.advertiserDashboardChartCard .uiCardTitle,
+.advertiserDashboardChartCard [data-slot="card-title"] {
+  align-items: center;
+  font-size: 1rem !important;
+  font-weight: 850;
+}
+
+.advertiserDashboardChartBody {
+  padding: 6px 14px 17px !important;
+}
+
+.dark .advertiserDashboardPage.opsPageShell {
+  --advertiser-dashboard-shadow: 0 18px 44px -32px rgba(0, 0, 0, 0.44);
+  --advertiser-dashboard-shadow-soft: 0 12px 30px -24px rgba(0, 0, 0, 0.58);
+  --advertiser-dashboard-border: rgba(51, 65, 85, 0.82);
+}
+
+.dark .advertiserDashboardFilterPanel.filterPanel,
+.dark .advertiserDashboardKpiGrid.metricGrid > .metricCard,
+.dark .csDashboardKpiGrid.metricGrid > .metricCard,
+.dark .advertiserDashboardChartCard {
+  border-color: rgba(51, 65, 85, 0.82) !important;
+  background: rgba(15, 23, 42, 0.94) !important;
+}
+
+.dark .advertiserDashboardControl.uiInput,
+.dark .advertiserDashboardControl.uiSelectTrigger,
+.dark .advertiserDashboardHeaderDate .uiPeriodPicker {
+  border-color: rgba(51, 65, 85, 0.82);
+  background: rgba(15, 23, 42, 0.96);
+}
+
+@media (max-width: 1023px) {
+  .appGlobalRefreshButton {
+    display: none;
+  }
+
+  .workspaceViewport.withMobileNav {
+    padding-bottom: calc(118px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .advertiserDashboardPage.opsPageShell,
+  .csDashboardPage.opsPageShell {
+    padding: 14px 12px calc(124px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .advertiserDashboardPage .topbar {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .advertiserDashboardPage .eyebrowLine {
+    margin-bottom: 7px;
+    font-size: 0.62rem;
+  }
+
+  .advertiserDashboardPage .topbar h1 {
+    font-size: 1.16rem;
+    line-height: 1.1;
+  }
+
+  .advertiserDashboardPage .topbar p {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    line-height: 1.38;
+  }
+
+  .advertiserDashboardPage .topbarActions {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .advertiserDashboardPage .topbarActions > .dailyAdsHeaderButton.uiButton {
+    justify-self: end;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    padding-inline: 0;
+    border-radius: 14px;
+  }
+
+  .advertiserDashboardHeaderActions {
+    display: contents;
+  }
+
+  .advertiserDashboardHeaderControl,
+  .advertiserDashboardHeaderDate {
+    max-width: none;
+  }
+
+  .advertiserDashboardControl.uiInput,
+  .advertiserDashboardControl.uiSelectTrigger,
+  .advertiserDashboardHeaderDate .uiPeriodPicker {
+    height: 42px !important;
+    max-height: 42px;
+    min-height: 42px !important;
+    border-radius: 14px !important;
+    font-size: 0.78rem !important;
+  }
+
+  .advertiserDashboardHeaderDate .uiPeriodPicker.uiPeriodPicker--foundation {
+    padding: 0 12px !important;
+  }
+
+  .advertiserDashboardFilterPanel.filterPanel {
+    padding: 10px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 14px 34px -30px rgba(15, 23, 42, 0.48);
+  }
+
+  .advertiserDashboardFilterGrid.adFilterGrid,
+  .advertiserDashboardFilterGrid.adFilterGrid.csMode,
+  .advertiserDashboardFilterGridCs {
+    grid-template-columns: none !important;
+    gap: 8px !important;
+    padding-top: 0;
+  }
+
+  .advertiserDashboardSearchField {
+    grid-column: auto;
+  }
+
+  .advertiserDashboardFilterField .filterFieldLabel {
+    display: none;
+  }
+
+  .advertiserDashboardTabs {
+    margin-top: 12px;
+  }
+
+  .advertiserDashboardTabsRail.uiTabsRail {
+    width: 100%;
+    padding: 3px;
+    border-radius: 14px;
+  }
+
+  .advertiserDashboardTabsRail .uiTabsTrigger {
+    height: 36px;
+    min-height: 36px;
+    font-size: 0.76rem;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid,
+  .advertiserDashboardCsKpiGrid.metricGrid,
+  .csDashboardKpiGrid.metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid > .metricCard,
+  .csDashboardKpiGrid.metricGrid > .metricCard {
+    min-height: 90px !important;
+    grid-template-columns: minmax(34px, 36px) minmax(0, 1fr);
+    gap: 9px;
+    padding: 11px !important;
+    border-radius: 15px !important;
+    box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.5) !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricIcon,
+  .csDashboardKpiGrid.metricGrid .metricIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricCard small,
+  .csDashboardKpiGrid.metricGrid .metricCard small {
+    font-size: 0.62rem !important;
+    line-height: 1.1;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricValue .text-2xl,
+  .csDashboardKpiGrid.metricGrid .metricValue .text-2xl {
+    font-size: clamp(0.88rem, 5.8cqi, 1.02rem) !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid .metricValue .text-xs,
+  .advertiserDashboardKpiGrid.metricGrid .metricValue span:not(.text-2xl),
+  .csDashboardKpiGrid.metricGrid .metricValue .text-xs,
+  .csDashboardKpiGrid.metricGrid .metricValue span:not(.text-2xl) {
+    font-size: 0.61rem !important;
+    line-height: 1.16;
+  }
+
+  .advertiserDashboardChartCard [data-slot="card-header"],
+  .advertiserDashboardChartCard .uiCardHeader {
+    padding: 12px 13px 5px !important;
+  }
+
+  .advertiserDashboardChartCard [data-slot="card-title"],
+  .advertiserDashboardChartCard .uiCardTitle {
+    font-size: 0.84rem !important;
+  }
+
+  .advertiserDashboardChartCanvas {
+    height: 230px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .advertiserDashboardKpiGrid.metricGrid,
+  .advertiserDashboardCsKpiGrid.metricGrid,
+  .csDashboardKpiGrid.metricGrid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .advertiserDashboardKpiGrid.metricGrid > .metricCard,
+  .csDashboardKpiGrid.metricGrid > .metricCard {
+    min-height: 82px !important;
+  }
+}
+
+.foundationFilterSummary,
+.advertiserDashboardFilterSummary {
+  display: none;
+}
+
+.foundationFilterToggle.uiButton,
+.advertiserDashboardFilterToggle.uiButton {
+  min-height: 38px;
+  padding-inline: 8px;
+  border-color: transparent;
+  border-radius: 13px;
+  background: transparent;
+  box-shadow: none;
+  color: #0f4ecf;
+  font-size: 0.78rem;
+  font-weight: 820;
+}
+
+.foundationFilterToggle.uiButton:hover:not(:disabled),
+.advertiserDashboardFilterToggle.uiButton:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: none;
+}
+
+@media (max-width: 767px) {
+  .advertiserDashboardPage .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start;
+  }
+
+  .advertiserDashboardPage .topbarTitle {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .advertiserDashboardPage .topbarActions {
+    display: contents;
+  }
+
+  .advertiserDashboardPage .topbarActions > .dailyAdsHeaderButton.uiButton {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    justify-self: end;
+    margin-top: 20px;
+    box-shadow: none;
+  }
+
+  .advertiserDashboardHeaderActions {
+    display: contents;
+  }
+
+  .advertiserDashboardHeaderActions > :only-child {
+    grid-column: 1 / -1;
+  }
+
+  .advertiserDashboardHeaderDate .uiPeriodPicker > span,
+  .advertiserDashboardHeaderControl .uiSelectTrigger > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .advertiserDashboardFilterPanel.filterPanel {
+    padding: 9px !important;
+  }
+
+  .foundationFilterSummary,
+  .advertiserDashboardFilterSummary {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .foundationFilterSummary strong,
+  .advertiserDashboardFilterSummary strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #0f172a;
+    font-size: 0.82rem;
+    font-weight: 850;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .foundationFilterToggle.uiButton,
+  .advertiserDashboardFilterToggle.uiButton {
+    flex: 0 0 auto;
+    height: 34px;
+    min-height: 34px !important;
+    border-color: transparent;
+    background: transparent;
+    color: #0f4ecf;
+    box-shadow: none;
+  }
+
+  .foundationFilterPanelCollapsible .foundationFilterContent:not(.advertiserDashboardFilterContent) {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(226, 232, 240, 0.86);
+  }
+
+  .foundationFilterPanelCollapsible[data-mobile-open="true"] .foundationFilterContent:not(.advertiserDashboardFilterContent) {
+    display: block;
+  }
+
+  .advertiserDashboardFilterContent {
+    display: none;
+    grid-template-columns: minmax(198px, 218px) minmax(180px, 210px) minmax(250px, 280px) repeat(4, minmax(174px, 190px));
+    gap: 8px;
+    padding-top: 10px;
+    padding-bottom: 12px;
+  }
+
+  .advertiserDashboardFilterPanel[data-mobile-open="true"] .advertiserDashboardFilterContent {
+    display: grid;
+  }
+
+  .advertiserDashboardFilterPanel[data-mobile-open="true"] {
+    padding-bottom: 10px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .advertiserDashboardHeaderActions {
+    display: contents;
+  }
+
+  .advertiserDashboardHeaderControl .uiSelectTrigger,
+  .advertiserDashboardHeaderDate .uiPeriodPicker {
+    padding-inline: 11px;
+  }
+
+  .advertiserDashboardHeaderDate .uiPeriodPicker svg,
+  .advertiserDashboardHeaderControl .uiSelectTrigger svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@media (max-width: 360px) {
+  .advertiserDashboardHeaderActions {
+    display: contents;
+  }
+}
+
+.dark .foundationFilterSummary strong,
+.dark .advertiserDashboardFilterSummary strong {
+  color: #f8fafc;
+}
+
+.dark .foundationFilterToggle.uiButton,
+.dark .advertiserDashboardFilterToggle.uiButton {
+  border-color: transparent;
+  background: transparent;
+  color: #93c5fd;
+}
+
+.dark .foundationFilterToggle.uiButton:hover:not(:disabled),
+.dark .advertiserDashboardFilterToggle.uiButton:hover:not(:disabled),
+.dark .advertiserDashboardPage .topbarActions > .dailyAdsHeaderButton.uiButton:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.dark .foundationMetricValue {
+  color: #f8fafc !important;
+}
+
+.dark .foundationMetricValue--info {
+  color: #60a5fa !important;
+}
+
+.dark .foundationMetricValue--success {
+  color: #34d399 !important;
+}
+
+.dark .foundationMetricValue--warning {
+  color: #fbbf24 !important;
+}
+
+.dark .foundationMetricValue--danger {
+  color: #fb7185 !important;
+}
+
+.dark .foundationMetricValue--accent {
+  color: #c4b5fd !important;
+}
+
+.dark .foundationMetricSubValue {
+  color: #94a3b8 !important;
+}
+
+.dark .foundationMetricSubValue--info {
+  color: #93c5fd !important;
+}
+
+.dark .foundationMetricSubValue--success {
+  color: #6ee7b7 !important;
+}
+
+.dark .foundationMetricSubValue--warning {
+  color: #fcd34d !important;
+}
+
+.dark .foundationMetricSubValue--danger {
+  color: #fda4af !important;
+}
+
+.dark .foundationMetricDivider {
+  color: #475569 !important;
+}
+
+@media (max-width: 767px) {
+  .dark .foundationFilterPanelCollapsible .foundationFilterContent:not(.advertiserDashboardFilterContent) {
+    border-top-color: rgba(51, 65, 85, 0.82);
   }
 }

@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Calendar as CalendarIcon, 
-  ChevronDown,
-  Search, 
-  SlidersHorizontal,
+import {
+  Calendar as CalendarIcon,
+  Search,
   DollarSign, 
   TrendingUp, 
   CheckCircle2,
@@ -83,6 +81,7 @@ import {
 import { FoundationDateRangePicker } from "@/app/components/ui/date-range-picker";
 import {
   OperationalEmptyState,
+  OperationalFilterPanel,
   OperationalKpiCard,
   OperationalKpiGrid,
   OperationalPageHeader,
@@ -2501,27 +2500,16 @@ export function Laporan({ mode: _mode = 'daily' }: LaporanProps) {
 
       <div className="operationalReportControlStack">
         {renderMainReportTabs()}
-        <div className={cn('operationalReportFilterCard', isMobileFiltersOpen && 'isMobileExpanded')}>
-          <button
-            type="button"
-            className="operationalReportMobileFilterToggle"
-            aria-expanded={isMobileFiltersOpen}
-            onClick={() => setIsMobileFiltersOpen((open) => !open)}
-          >
-            <span className="operationalReportMobileFilterTitle">
-              <SlidersHorizontal className="h-4 w-4" />
-              Filter Laporan
-            </span>
-            <span className="operationalReportMobileFilterSummary">{reportFilterSummary}</span>
-            {activeReportFilterCount > 0 && (
-              <span className="operationalReportMobileFilterCount">{activeReportFilterCount}</span>
-            )}
-            <ChevronDown className={cn('h-4 w-4 transition-transform', isMobileFiltersOpen && 'rotate-180')} />
-          </button>
-          <div className={cn('operationalReportFilterCollapse', isMobileFiltersOpen && 'isOpen')}>
-            {renderTopFilters()}
-          </div>
-        </div>
+        <OperationalFilterPanel
+          className="operationalReportFilterCard"
+          collapsible
+          isExpanded={isMobileFiltersOpen}
+          onExpandedChange={setIsMobileFiltersOpen}
+          summary={activeReportFilterCount > 0 ? `${activeReportFilterCount} filter aktif` : reportFilterSummary}
+          contentClassName="operationalReportFilterContent"
+        >
+          {renderTopFilters()}
+        </OperationalFilterPanel>
       </div>
 
       {/* KPI Cards */}

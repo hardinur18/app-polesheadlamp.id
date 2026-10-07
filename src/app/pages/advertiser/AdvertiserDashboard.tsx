@@ -499,6 +499,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   });
   
   // Filters State
+  const [isMobileFilterExpanded, setIsMobileFilterExpanded] = useState(false);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [subChannelFilter, setSubChannelFilter] = useState<string>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
@@ -2025,6 +2026,14 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       );
   };
 
+  const activeFilterCount = [
+    activeTab === 'ads-summary' && search.trim().length > 0,
+    platformFilter !== 'all',
+    activeTab === 'ads-summary' && subChannelFilter !== 'all',
+    accountFilter !== 'all',
+    csFilter !== 'all',
+  ].filter(Boolean).length;
+
   return (
     <TooltipProvider>
     <OperationalPageShell className="advertiserDashboardPage">
@@ -2033,8 +2042,31 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
           subtitle={`Halo, ${currentUser?.name || 'Advertiser'}. Pantau performa iklan harian Anda di sini.`}
           eyebrow="Dashboard"
           icon={BarChart3}
-          actions={
-            <div className="dashboardHeaderActions advertiserDashboardHeaderActions">
+       />
+
+       {/* Filters Section */}
+       <OperationalFilterPanel
+          className="adFilterPanel advertiserDashboardFilterPanel"
+          collapsible
+          isExpanded={isMobileFilterExpanded}
+          onExpandedChange={setIsMobileFilterExpanded}
+          summary={
+            activeFilterCount > 0
+              ? `${activeFilterCount} filter aktif`
+              : 'Semua data ditampilkan'
+          }
+          contentClassName="advertiserDashboardFilterContent"
+       >
+            <div className={cn('dashboardHeaderActions advertiserDashboardHeaderActions', !isOwner && 'dateOnly')}>
+               <div className="dashboardHeaderDate advertiserDashboardHeaderDate">
+                  <FoundationDateRangePicker
+                    date={dateRange}
+                    setDate={setDateRange}
+                    className="advertiserDashboardDatePicker"
+                    contentClassName="advertiserDashboardDatePopover"
+                    numberOfMonths={1}
+                  />
+               </div>
                {isOwner && (
                    <div className="dashboardHeaderControl advertiserDashboardHeaderControl">
                        <Select value={selectedAdvertiserId} onValueChange={setSelectedAdvertiserId}>
@@ -2053,21 +2085,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                        </Select>
                    </div>
                )}
-               <div className="dashboardHeaderDate advertiserDashboardHeaderDate">
-                  <FoundationDateRangePicker
-                    date={dateRange}
-                    setDate={setDateRange}
-                    className="advertiserDashboardDatePicker"
-                    contentClassName="advertiserDashboardDatePopover"
-                    numberOfMonths={1}
-                  />
-               </div>
             </div>
-          }
-       />
-
-       {/* Filters Section */}
-       <OperationalFilterPanel className="adFilterPanel advertiserDashboardFilterPanel">
             <div className={cn('adFilterGrid advertiserDashboardFilterGrid', activeTab === 'cs-performance' && 'csMode advertiserDashboardFilterGridCs')}>
                  {activeTab === 'ads-summary' && (
                  <div className="filterField adFilterSearch advertiserDashboardFilterField advertiserDashboardSearchField">
@@ -2175,62 +2193,64 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         <div className="space-y-5">
             {/* Top Cards */}
             <OperationalKpiGrid className="advertiserDashboardKpiGrid">
-              <OperationalKpiCard
-                label="Total Spending"
-                icon={DollarSign}
-                tone="blue"
-                value={
-                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                    <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
-                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totals.spend)}
-                    </span>
-                    <span>Burn: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totals.burn)}</span>
-                  </div>
-                }
-              />
+	              <OperationalKpiCard
+	                label="Total Spending"
+	                icon={DollarSign}
+	                tone="blue"
+	                value={
+	                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                    <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--info">
+	                      {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totals.spend)}
+	                    </span>
+	                    <span className={cn('foundationMetricSubValue', totals.burn > totals.spend ? 'foundationMetricSubValue--danger' : 'foundationMetricSubValue--warning')}>
+	                      Burn: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(totals.burn)}
+	                    </span>
+	                  </div>
+	                }
+	              />
 
               <OperationalKpiCard
                 label="Total Prospek"
                 icon={Users}
-                tone="blue"
-                value={
-                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                    <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{totals.leadsDash}</span>
-                    <span>Real: {totals.leadsReal}</span>
-                  </div>
-                }
-              />
+	                tone="blue"
+	                value={
+	                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                    <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--info">{totals.leadsDash}</span>
+	                    <span className="foundationMetricSubValue foundationMetricSubValue--info">Real: {totals.leadsReal}</span>
+	                  </div>
+	                }
+	              />
 
               <OperationalKpiCard
                 label="Total Orders"
                 icon={ShoppingCart}
-                tone="emerald"
-                value={
-                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                    <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{totals.orders}</span>
-                    <span>Selesai: {totals.ordersDone}</span>
-                  </div>
-                }
-              />
+	                tone="emerald"
+	                value={
+	                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                    <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{totals.orders}</span>
+	                    <span className="foundationMetricSubValue foundationMetricSubValue--success">Selesai: {totals.ordersDone}</span>
+	                  </div>
+	                }
+	              />
 
               <OperationalKpiCard
                 label="CPR Done"
                 icon={TrendingUp}
-                tone="violet"
-                value={
-                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                        <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
-                            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(avgCprDone)}
-                        </span>
-                        <div className="text-xs h-5 flex items-center gap-2">
-                            <span className="text-cyan-600 dark:text-cyan-400 font-medium whitespace-nowrap" title="Cost per Lead (Dashboard)">
-                                CPL(D): {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCplAds)}
-                            </span>
-                            <span className="text-slate-300 dark:text-slate-600">|</span>
-                            <span className="text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap" title="Cost per Result (Deal)">
-                                CPR(Deal): {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCpr)}
-                            </span>
-                        </div>
+	                tone="violet"
+	                value={
+	                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                        <span className={`text-2xl font-semibold ${getCostIndicatorTextClass(avgCprDone)}`}>
+	                            {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(avgCprDone)}
+	                        </span>
+	                        <div className="text-xs h-5 flex items-center gap-2">
+	                            <span className={`font-medium whitespace-nowrap ${getCostPerLeadTextClass(avgCplAds)}`} title="Cost per Lead (Dashboard)">
+	                                CPL(D): {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCplAds)}
+	                            </span>
+	                            <span className="foundationMetricDivider">|</span>
+	                            <span className={`font-medium whitespace-nowrap ${getCostIndicatorTextClass(avgCpr)}`} title="Cost per Result (Deal)">
+	                                CPR(Deal): {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(avgCpr)}
+	                            </span>
+	                        </div>
                   </div>
                 }
               />
@@ -2586,46 +2606,48 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                 <OperationalKpiCard
                   label="Spending"
                   icon={TrendingUp}
-                  tone="blue"
-                  value={
-                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatCurrency(csPerformanceTotals.spendDashboard)}</span>
-                      <span>{formatCurrency(csPerformanceTotals.spendTotal)}</span>
-                    </div>
-                  }
-                />
+	                  tone="blue"
+	                  value={
+	                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--info">{formatCurrency(csPerformanceTotals.spendDashboard)}</span>
+	                      <span className={cn('foundationMetricSubValue', csPerformanceTotals.spendTotal > csPerformanceTotals.spendDashboard ? 'foundationMetricSubValue--danger' : 'foundationMetricSubValue--warning')}>
+	                        {formatCurrency(csPerformanceTotals.spendTotal)}
+	                      </span>
+	                    </div>
+	                  }
+	                />
                 <OperationalKpiCard
                   label="Lead Dashboard"
                   icon={Users}
-                  tone="blue"
-                  value={
-                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatNumber(csPerformanceTotals.leadsDash)}</span>
-                      <span>Prospek {formatNumber(csPerformanceTotals.leadsReal)}</span>
-                    </div>
-                  }
-                />
+	                  tone="blue"
+	                  value={
+	                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--info">{formatNumber(csPerformanceTotals.leadsDash)}</span>
+	                      <span className="foundationMetricSubValue foundationMetricSubValue--info">Prospek {formatNumber(csPerformanceTotals.leadsReal)}</span>
+	                    </div>
+	                  }
+	                />
                 <OperationalKpiCard
                   label="Spam"
                   icon={TriangleAlert}
-                  tone="rose"
-                  value={
-                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-rose-600 dark:text-rose-300">{formatNumber(csPerformanceTotals.spam)}</span>
-                      <span className="invisible">-</span>
-                    </div>
-                  }
+	                  tone="rose"
+	                  value={
+	                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--danger">{formatNumber(csPerformanceTotals.spam)}</span>
+	                      <span className="invisible">-</span>
+	                    </div>
+	                  }
                 />
                 <OperationalKpiCard
                   label="Spam Rate"
                   icon={TrendingUp}
                   tone="amber"
-                  value={
-                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-amber-500 dark:text-amber-300">
-                        {formatPercentAllowZero(csPerformanceSummary.spamRate)}
-                      </span>
-                      <span className="invisible">-</span>
+	                  value={
+	                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--warning">
+	                        {formatPercentAllowZero(csPerformanceSummary.spamRate)}
+	                      </span>
+	                      <span className="invisible">-</span>
                     </div>
                   }
                 />
@@ -2645,14 +2667,14 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                 <OperationalKpiCard
                   label="Closing"
                   icon={ShoppingCart}
-                  tone="violet"
-                  value={
-                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-                      <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatNumber(csPerformanceTotals.orders)}</span>
-                      <span>Selesai: {formatNumber(csPerformanceTotals.done)}</span>
-                    </div>
-                  }
-                />
+	                  tone="violet"
+	                  value={
+	                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+	                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{formatNumber(csPerformanceTotals.orders)}</span>
+	                      <span className="foundationMetricSubValue foundationMetricSubValue--success">Selesai: {formatNumber(csPerformanceTotals.done)}</span>
+	                    </div>
+	                  }
+	                />
                 <OperationalKpiCard
                   label="Cost/Closing"
                   icon={ShoppingCart}

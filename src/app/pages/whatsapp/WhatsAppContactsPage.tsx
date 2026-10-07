@@ -1648,6 +1648,8 @@ export function WhatsAppContactsPage() {
           icon={Users}
           title="Database Kontak"
           subtitle="Kontak CRM dari pesanan dan input manual, dengan riwayat pemakaian jasa yang digabung per nomor."
+          onRefresh={() => void refreshAll()}
+          isRefreshing={loading || isRefreshing}
           actions={
             <div className="contactsHeaderActions flex flex-wrap items-center gap-2">
               <Button
@@ -1658,19 +1660,6 @@ export function WhatsAppContactsPage() {
               >
                 <Plus className="mr-2 h-4 w-4" />
                 <span>Tambah Kontak</span>
-              </Button>
-              <Button
-                type="button"
-                className="contactsHeaderButton h-10 rounded-xl bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"
-                onClick={() => void refreshAll()}
-                disabled={loading || isRefreshing}
-              >
-                {isRefreshing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                )}
-                <span>Refresh</span>
               </Button>
             </div>
           }
