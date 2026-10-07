@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
-const LOGIN_TIMEOUT_MS = 8_000;
+const LOGIN_TIMEOUT_MS = 45_000;
 const LOGIN_MAX_ATTEMPTS = 1;
 const LOGIN_RETRY_BASE_DELAY_MS = 500;
 
