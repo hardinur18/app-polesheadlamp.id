@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import appLogo from '@/assets/polesheadlamp-app-logo-round.png';
 import { supabase } from '../../../lib/supabaseClient';
+import { publicAnonKey, supabaseUrl } from '/utils/supabase/info';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -9,20 +10,35 @@ import { toast } from 'sonner';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
-const LOGIN_TIMEOUT_MS = 45_000;
-const LOGIN_MAX_ATTEMPTS = 1;
-const LOGIN_RETRY_BASE_DELAY_MS = 500;
+const LOGIN_TIMEOUT_MS = 18_000;
+const LOGIN_MAX_ATTEMPTS = 2;
+const LOGIN_RETRY_BASE_DELAY_MS = 700;
 
-const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> => {
+const withAbortableTimeout = async <T,>(
+  buildPromise: (signal: AbortSignal) => PromiseLike<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> => {
+  const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let didTimeout = false;
 
   try {
     return await Promise.race([
-      promise,
+      buildPromise(controller.signal),
       new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+        timeoutId = setTimeout(() => {
+          didTimeout = true;
+          controller.abort(message);
+          reject(new Error(message));
+        }, timeoutMs);
       }),
     ]);
+  } catch (error) {
+    if (didTimeout) {
+      throw new Error(message);
+    }
+    throw error;
   } finally {
     if (timeoutId) {
       clearTimeout(timeoutId);
@@ -53,13 +69,62 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type PasswordSignInResult = Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
 
+const parseAuthErrorPayload = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return '';
+  const record = payload as Record<string, unknown>;
+  return String(
+    record.error_description ||
+    record.msg ||
+    record.message ||
+    record.error ||
+    '',
+  );
+};
+
+const signInWithDirectAuth = async (
+  email: string,
+  password: string,
+  signal: AbortSignal,
+): Promise<PasswordSignInResult> => {
+  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      apikey: publicAnonKey,
+      Authorization: `Bearer ${publicAnonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+    signal,
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(parseAuthErrorPayload(payload) || `Auth server error ${response.status}`);
+  }
+
+  const sessionPayload = payload as {
+    access_token?: string;
+    refresh_token?: string;
+  } | null;
+
+  if (!sessionPayload?.access_token || !sessionPayload?.refresh_token) {
+    throw new Error('Auth server tidak mengembalikan session login.');
+  }
+
+  return supabase.auth.setSession({
+    access_token: sessionPayload.access_token,
+    refresh_token: sessionPayload.refresh_token,
+  });
+};
+
 const signInWithRetry = async (email: string, password: string): Promise<PasswordSignInResult> => {
   let lastRetryableResult: PasswordSignInResult | null = null;
 
   for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt += 1) {
     try {
-      const result = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password }),
+      const result = await withAbortableTimeout(
+        (signal) => signInWithDirectAuth(email, password, signal),
         LOGIN_TIMEOUT_MS,
         'Login timeout. Koneksi ke server auth terlalu lama. Coba ulang beberapa detik lagi.',
       );
