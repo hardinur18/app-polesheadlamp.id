@@ -26,9 +26,24 @@ import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '@/app/co
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
 import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { cn } from '@/app/components/ui/utils';
-import { fetchMetaSnapshotDataset, syncMetaSnapshotDataset } from '@/app/services/liveAdsService';
-import { fetchGoogleAdsSnapshotDataset, syncGoogleAdsSnapshotDataset } from '@/app/services/googleAdsLiveService';
-import { fetchTikTokAdsSnapshotDataset, syncTikTokAdsSnapshotDataset } from '@/app/services/tiktokAdsLiveService';
+import {
+  fetchAdsIntegrationConfigs,
+  fetchMetaSnapshotDataset,
+  syncMetaSnapshotDataset,
+  type AdsIntegrationConfig,
+} from '@/app/services/liveAdsService';
+import {
+  fetchGoogleAdsIntegrationConfigs,
+  fetchGoogleAdsSnapshotDataset,
+  syncGoogleAdsSnapshotDataset,
+  type GoogleAdsIntegrationConfig,
+} from '@/app/services/googleAdsLiveService';
+import {
+  fetchTikTokAdsIntegrationConfigs,
+  fetchTikTokAdsSnapshotDataset,
+  syncTikTokAdsSnapshotDataset,
+  type TikTokAdsIntegrationConfig,
+} from '@/app/services/tiktokAdsLiveService';
 import {
   OperationalEmptyState,
   OperationalFilterPanel,
@@ -126,6 +141,41 @@ const getOrderDateKey = (order: { leadDate?: string; serviceDate?: string; creat
 
 const normalizeLookupKey = (value?: string | null) =>
   (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+
+const normalizeExternalAccountId = (value?: string | null) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^act_/, '')
+    .replace(/[^a-z0-9]/g, '');
+
+const normalizeAdAccountNameKey = (value?: string | null) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^act_/, '')
+    .replace(/\s+/g, ' ');
+
+const buildExternalAccountLookupKeys = (platformKey: string, value?: string | null) => {
+  const normalized = normalizeExternalAccountId(value);
+  if (!normalized) return [];
+
+  const keys = new Set<string>([`${platformKey}:${normalized}`]);
+  if (platformKey === 'meta') {
+    keys.add(`meta:act${normalized}`);
+  }
+
+  return Array.from(keys);
+};
+
+const buildExternalAccountNameKeys = (platformKey: string, value?: string | null) => {
+  const normalized = normalizeAdAccountNameKey(value);
+  const compact = normalizeLookupKey(value);
+  return Array.from(new Set([
+    normalized ? `${platformKey}:${normalized}` : '',
+    compact ? `${platformKey}:${compact}` : '',
+  ].filter(Boolean)));
+};
 
 const isActiveDataStatus = (status?: string | null) => {
   const normalized = String(status || '').trim().toLowerCase();
@@ -355,6 +405,9 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [apiAdsByDateAccount, setApiAdsByDateAccount] = useState<Record<string, AdvertiserCsAccountMetric>>({});
   const [apiUnmappedSnapshots, setApiUnmappedSnapshots] = useState<ApiUnmappedSnapshot[]>([]);
   const [apiAdsStatus, setApiAdsStatus] = useState<ApiAdsStatus>('idle');
+  const [metaIntegrationConfigs, setMetaIntegrationConfigs] = useState<AdsIntegrationConfig[]>([]);
+  const [googleIntegrationConfigs, setGoogleIntegrationConfigs] = useState<GoogleAdsIntegrationConfig[]>([]);
+  const [tiktokIntegrationConfigs, setTikTokIntegrationConfigs] = useState<TikTokAdsIntegrationConfig[]>([]);
   const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
   const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
@@ -369,6 +422,34 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   React.useEffect(() => {
     if (refreshTrigger === lastMasterRefreshTriggerRef.current) return;
     lastMasterRefreshTriggerRef.current = refreshTrigger;
+  }, [refreshTrigger]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    Promise.allSettled([
+      fetchAdsIntegrationConfigs(),
+      fetchGoogleAdsIntegrationConfigs(),
+      fetchTikTokAdsIntegrationConfigs(),
+    ])
+      .then(([meta, google, tiktok]) => {
+        if (cancelled) return;
+
+        setMetaIntegrationConfigs(meta.status === 'fulfilled' ? meta.value : []);
+        setGoogleIntegrationConfigs(google.status === 'fulfilled' ? google.value : []);
+        setTikTokIntegrationConfigs(tiktok.status === 'fulfilled' ? tiktok.value : []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMetaIntegrationConfigs([]);
+          setGoogleIntegrationConfigs([]);
+          setTikTokIntegrationConfigs([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshTrigger]);
 
   // Date State
@@ -568,8 +649,20 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       `cs:${assignment.adAccountId}:${assignment.csId}:${assignment.subChannelId || ''}:${assignment.status}:${assignment.startDate}:${assignment.endDate || ''}`,
     );
 
-    return [...ownerKeys, ...csKeys].sort().join('|');
-  }, [adAccountAssignments, adAccountOwnerAssignments]);
+    const integrationKeys = [
+      ...metaIntegrationConfigs.map((config) =>
+        `meta:${config.adAccountId}:${config.enabled}:${config.liveMetaAccountId || ''}:${config.liveMetaAccountName || ''}`,
+      ),
+      ...googleIntegrationConfigs.map((config) =>
+        `google:${config.adAccountId}:${config.enabled}:${config.liveGoogleCustomerId || ''}:${config.liveGoogleCustomerName || ''}`,
+      ),
+      ...tiktokIntegrationConfigs.map((config) =>
+        `tiktok:${config.adAccountId}:${config.enabled}:${config.liveTikTokAdvertiserId || ''}:${config.liveTikTokAdvertiserName || ''}`,
+      ),
+    ];
+
+    return [...ownerKeys, ...csKeys, ...integrationKeys].sort().join('|');
+  }, [adAccountAssignments, adAccountOwnerAssignments, googleIntegrationConfigs, metaIntegrationConfigs, tiktokIntegrationConfigs]);
 
   const activeAdvertiserAccounts = useMemo(() => {
     return adAccounts.filter((account) =>
@@ -898,16 +991,51 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const adAccountLookup = useMemo(() => {
     const byId = new Map<string, (typeof adAccounts)[number]>();
     const byName = new Map<string, (typeof adAccounts)[number]>();
+    const byExternalId = new Map<string, (typeof adAccounts)[number]>();
+    const byExternalName = new Map<string, (typeof adAccounts)[number]>();
+
+    const registerExternalPairing = (
+      account: (typeof adAccounts)[number] | undefined,
+      platformKey: string,
+      externalId?: string | null,
+      externalName?: string | null,
+    ) => {
+      if (!account) return;
+      for (const key of buildExternalAccountLookupKeys(platformKey, externalId)) {
+        byExternalId.set(key, account);
+      }
+      for (const key of buildExternalAccountNameKeys(platformKey, externalName)) {
+        byExternalName.set(key, account);
+      }
+    };
 
     for (const account of adAccounts) {
       if (!isActiveDataStatus(account.status)) continue;
       if (!accountMatchesTargetAdvertiser(account)) continue;
       byId.set(account.id, account);
       byName.set(normalizeLookupKey(account.accountName), account);
+      byName.set(normalizeAdAccountNameKey(account.accountName), account);
+      const platformName = platforms.find((platform) => platform.id === account.platformId)?.name;
+      registerExternalPairing(account, resolvePlatformKey(platformName), account.id, account.accountName);
     }
 
-    return { byId, byName };
-  }, [accountMatchesTargetAdvertiser, adAccounts]);
+    for (const config of metaIntegrationConfigs) {
+      if (!config.enabled) continue;
+      registerExternalPairing(byId.get(config.adAccountId), 'meta', config.liveMetaAccountId, config.liveMetaAccountName);
+    }
+
+    for (const config of googleIntegrationConfigs) {
+      if (!config.enabled) continue;
+      registerExternalPairing(byId.get(config.adAccountId), 'google', config.liveGoogleCustomerId, config.liveGoogleCustomerName);
+    }
+
+    for (const config of tiktokIntegrationConfigs) {
+      if (!config.enabled) continue;
+      registerExternalPairing(byId.get(config.adAccountId), 'tiktok', config.liveTikTokAdvertiserId, config.liveTikTokAdvertiserName);
+    }
+
+    return { byId, byName, byExternalId, byExternalName };
+  }, [accountMatchesTargetAdvertiser, adAccounts, googleIntegrationConfigs, metaIntegrationConfigs, platforms, tiktokIntegrationConfigs]);
 
   React.useEffect(() => {
     if (!rangeParams) {
@@ -942,13 +1070,27 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     }
 
     const resolveAdAccount = (row: AdsSnapshotRowLike) => {
+      const platformName = platforms.find((platform) => platform.id === row.platformId)?.name;
+      const platformKey = row.platformKey || resolvePlatformKey(platformName || row.externalAccountName);
       const internalId = row.internalAdAccountId || '';
       if (internalId && adAccountLookup.byId.has(internalId)) return adAccountLookup.byId.get(internalId) || null;
 
       const externalId = row.externalAccountId || '';
-      if (externalId && adAccountLookup.byId.has(externalId)) return adAccountLookup.byId.get(externalId) || null;
+      for (const key of buildExternalAccountLookupKeys(platformKey, externalId)) {
+        const account = adAccountLookup.byExternalId.get(key);
+        if (account) return account;
+      }
 
-      return adAccountLookup.byName.get(normalizeLookupKey(row.externalAccountName)) || null;
+      for (const key of buildExternalAccountNameKeys(platformKey, row.externalAccountName)) {
+        const account = adAccountLookup.byExternalName.get(key);
+        if (account) return account;
+      }
+
+      return (
+        adAccountLookup.byName.get(normalizeLookupKey(row.externalAccountName)) ||
+        adAccountLookup.byName.get(normalizeAdAccountNameKey(row.externalAccountName)) ||
+        null
+      );
     };
 
     const addSnapshotRows = (

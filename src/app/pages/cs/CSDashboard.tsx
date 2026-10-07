@@ -399,6 +399,41 @@ const createEmptyApiLoadDiagnostics = (): CsApiLoadDiagnostics => ({
 const normalizeLookupKey = (value?: string | null) =>
   (value || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
 
+const normalizeExternalAccountId = (value?: string | null) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^act_/, '')
+    .replace(/[^a-z0-9]/g, '');
+
+const normalizeAdAccountNameKey = (value?: string | null) =>
+  (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^act_/, '')
+    .replace(/\s+/g, ' ');
+
+const buildExternalAccountLookupKeys = (platformKey: string, value?: string | null) => {
+  const normalized = normalizeExternalAccountId(value);
+  if (!normalized) return [];
+
+  const keys = new Set<string>([`${platformKey}:${normalized}`]);
+  if (platformKey === 'meta') {
+    keys.add(`meta:act${normalized}`);
+  }
+
+  return Array.from(keys);
+};
+
+const buildExternalAccountNameKeys = (platformKey: string, value?: string | null) => {
+  const normalized = normalizeAdAccountNameKey(value);
+  const compact = normalizeLookupKey(value);
+  return Array.from(new Set([
+    normalized ? `${platformKey}:${normalized}` : '',
+    compact ? `${platformKey}:${compact}` : '',
+  ].filter(Boolean)));
+};
+
 const resolvePlatformKey = (value?: string | null) => {
   const normalized = normalizeLookupKey(value);
   if (normalized.includes('google')) return 'google';
@@ -1008,16 +1043,51 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const adAccountLookup = useMemo(() => {
     const byId = new Map<string, (typeof adAccounts)[number]>();
     const byName = new Map<string, (typeof adAccounts)[number]>();
+    const byExternalId = new Map<string, (typeof adAccounts)[number]>();
+    const byExternalName = new Map<string, (typeof adAccounts)[number]>();
+
+    const registerExternalPairing = (
+      account: (typeof adAccounts)[number] | undefined,
+      platformKey: string,
+      externalId?: string | null,
+      externalName?: string | null,
+    ) => {
+      if (!account) return;
+      for (const key of buildExternalAccountLookupKeys(platformKey, externalId)) {
+        byExternalId.set(key, account);
+      }
+      for (const key of buildExternalAccountNameKeys(platformKey, externalName)) {
+        byExternalName.set(key, account);
+      }
+    };
 
     for (const account of adAccounts) {
       if (account.status !== 'active') continue;
       if (!shouldShowAdAccountInCsView(account)) continue;
       byId.set(account.id, account);
       byName.set(normalizeLookupKey(account.accountName), account);
+      byName.set(normalizeAdAccountNameKey(account.accountName), account);
+      const platformName = platforms.find((platform) => platform.id === account.platformId)?.name;
+      registerExternalPairing(account, resolvePlatformKey(platformName), account.id, account.accountName);
     }
 
-    return { byId, byName };
-  }, [adAccounts, shouldShowAdAccountInCsView]);
+    for (const config of metaIntegrationConfigs) {
+      if (!config.enabled) continue;
+      registerExternalPairing(byId.get(config.adAccountId), 'meta', config.liveMetaAccountId, config.liveMetaAccountName);
+    }
+
+    for (const config of googleIntegrationConfigs) {
+      if (!config.enabled) continue;
+      registerExternalPairing(byId.get(config.adAccountId), 'google', config.liveGoogleCustomerId, config.liveGoogleCustomerName);
+    }
+
+    for (const config of tiktokIntegrationConfigs) {
+      if (!config.enabled) continue;
+      registerExternalPairing(byId.get(config.adAccountId), 'tiktok', config.liveTikTokAdvertiserId, config.liveTikTokAdvertiserName);
+    }
+
+    return { byId, byName, byExternalId, byExternalName };
+  }, [adAccounts, googleIntegrationConfigs, metaIntegrationConfigs, platforms, shouldShowAdAccountInCsView, tiktokIntegrationConfigs]);
 
   const scopedApiPlatformKeys = useMemo(() => {
     const platformNameById = new Map(platforms.map((platform) => [platform.id, platform.name]));
@@ -1060,8 +1130,20 @@ export function CSDashboard({ userId }: { userId?: string }) {
       .sort()
       .join('|');
 
-    return `${accountPart}::${assignmentPart}`;
-  }, [adAccountAssignments, adAccounts, shouldShowAdAccountInCsView]);
+    const integrationPart = [
+      ...metaIntegrationConfigs.map((config) =>
+        `meta:${config.adAccountId}:${config.enabled}:${config.liveMetaAccountId || ''}:${config.liveMetaAccountName || ''}`,
+      ),
+      ...googleIntegrationConfigs.map((config) =>
+        `google:${config.adAccountId}:${config.enabled}:${config.liveGoogleCustomerId || ''}:${config.liveGoogleCustomerName || ''}`,
+      ),
+      ...tiktokIntegrationConfigs.map((config) =>
+        `tiktok:${config.adAccountId}:${config.enabled}:${config.liveTikTokAdvertiserId || ''}:${config.liveTikTokAdvertiserName || ''}`,
+      ),
+    ].sort().join('|');
+
+    return `${accountPart}::${assignmentPart}::${integrationPart}`;
+  }, [adAccountAssignments, adAccounts, googleIntegrationConfigs, metaIntegrationConfigs, shouldShowAdAccountInCsView, tiktokIntegrationConfigs]);
 
   const adAccountCsLookup = useMemo(() => {
     const resolveAssignment = (adAccountId?: string, date?: string) => {
@@ -1140,13 +1222,27 @@ export function CSDashboard({ userId }: { userId?: string }) {
     }
 
     const resolveAdAccount = (row: AdsSnapshotRowLike) => {
+      const platformName = platforms.find((platform) => platform.id === row.platformId)?.name;
+      const platformKey = row.platformKey || resolvePlatformKey(platformName || row.externalAccountName);
       const internalId = row.internalAdAccountId || '';
       if (internalId && adAccountLookup.byId.has(internalId)) return adAccountLookup.byId.get(internalId) || null;
 
       const externalId = row.externalAccountId || '';
-      if (externalId && adAccountLookup.byId.has(externalId)) return adAccountLookup.byId.get(externalId) || null;
+      for (const key of buildExternalAccountLookupKeys(platformKey, externalId)) {
+        const account = adAccountLookup.byExternalId.get(key);
+        if (account) return account;
+      }
 
-      return adAccountLookup.byName.get(normalizeLookupKey(row.externalAccountName)) || null;
+      for (const key of buildExternalAccountNameKeys(platformKey, row.externalAccountName)) {
+        const account = adAccountLookup.byExternalName.get(key);
+        if (account) return account;
+      }
+
+      return (
+        adAccountLookup.byName.get(normalizeLookupKey(row.externalAccountName)) ||
+        adAccountLookup.byName.get(normalizeAdAccountNameKey(row.externalAccountName)) ||
+        null
+      );
     };
 
     const addSnapshotRows = (
