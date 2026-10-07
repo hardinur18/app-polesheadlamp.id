@@ -2118,22 +2118,26 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const isApiScopeMismatch = apiAdsStatus === 'ready' && detailRows.length > 0 && !hasVisibleApiData;
   const resolvedApiStatusClassName = isApiScopeMismatch
     ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
-    : hasConnectedVisibleRows
-      ? apiStatusClassName('ready')
+    : apiAdsStatus === 'error'
+      ? apiStatusClassName('error')
       : apiAdsStatus !== 'idle'
         ? apiStatusClassName(apiAdsStatus)
-        : hasOperationalVisibleRows
-          ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-          : apiStatusClassName(apiAdsStatus);
+        : hasConnectedVisibleRows
+          ? apiStatusClassName('ready')
+          : hasOperationalVisibleRows
+            ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+            : apiStatusClassName(apiAdsStatus);
   const resolvedApiStatusLabel = isApiScopeMismatch
     ? 'Perlu mapping'
-    : hasConnectedVisibleRows
-      ? 'Connected'
+    : apiAdsStatus === 'error'
+      ? getApiStatusLabel('error')
       : apiAdsStatus !== 'idle'
         ? getApiStatusLabel(apiAdsStatus)
-        : hasOperationalVisibleRows
-        ? 'Operasional'
-        : getApiStatusLabel(apiAdsStatus);
+        : hasConnectedVisibleRows
+          ? 'Connected'
+          : hasOperationalVisibleRows
+            ? 'Operasional'
+            : getApiStatusLabel(apiAdsStatus);
   const csDashboardMappingNotices = useMemo(() => {
     const canOpenMasterData = hasPermission('master_data.view');
     const notices: Array<{

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
-import { publicAnonKey } from '/utils/supabase/info';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 import { isRetryableAuthError } from './authErrorUtils';
 
 type EdgeHeadersOptions = {
@@ -42,6 +42,33 @@ function getUsableCachedAccessToken() {
   if (!lastKnownAccessToken) return null;
   if (lastKnownAccessToken.expiresAtMs - Date.now() <= CACHED_TOKEN_SKEW_MS) return null;
   return lastKnownAccessToken.token;
+}
+
+function readStoredSupabaseSession() {
+  if (typeof window === 'undefined') return null;
+
+  const candidateKeys = [
+    projectId ? `sb-${projectId}-auth-token` : '',
+    ...Object.keys(window.localStorage || {}).filter((key) => key.startsWith('sb-') && key.endsWith('-auth-token')),
+  ].filter(Boolean);
+
+  for (const key of Array.from(new Set(candidateKeys))) {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(key) || 'null');
+      const session = parsed?.currentSession || parsed?.session || parsed;
+      if (!session?.access_token) continue;
+
+      const expiresAtMs = session.expires_at ? Number(session.expires_at) * 1000 : 0;
+      if (expiresAtMs && expiresAtMs - Date.now() <= CACHED_TOKEN_SKEW_MS) continue;
+
+      rememberAccessToken(session);
+      return session as { access_token: string; expires_at?: number | null };
+    } catch {
+      // Ignore malformed or unrelated storage records.
+    }
+  }
+
+  return null;
 }
 
 async function refreshSessionAccessToken() {
@@ -114,6 +141,11 @@ function mergeHeaders(...parts: Array<HeadersInit | undefined>) {
 }
 
 export async function getSessionAccessToken() {
+  const storedSession = readStoredSupabaseSession();
+  if (storedSession?.access_token) {
+    return storedSession.access_token;
+  }
+
   let data: Awaited<ReturnType<typeof supabase.auth.getSession>>['data'];
   let error: Awaited<ReturnType<typeof supabase.auth.getSession>>['error'];
 
