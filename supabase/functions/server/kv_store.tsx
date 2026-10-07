@@ -61,13 +61,28 @@ const clearPrefixCaches = () => {
   prefixCache.clear();
 };
 
-const withTimeout = async <T>(operation: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> => {
+const withAbortSignal = <T extends { abortSignal?: (signal: AbortSignal) => PromiseLike<any> }>(
+  query: T,
+  signal: AbortSignal,
+) => (
+  typeof query.abortSignal === "function" ? query.abortSignal(signal) : query
+);
+
+const withAbortableTimeout = async <T>(
+  buildOperation: (signal: AbortSignal) => PromiseLike<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> => {
+  const abortController = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      operation,
+      buildOperation(abortController.signal),
       new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs);
+        timeoutId = setTimeout(() => {
+          abortController.abort(`${label} timeout`);
+          reject(new Error(`${label} timeout`));
+        }, timeoutMs);
       }),
     ]);
   } finally {
@@ -78,11 +93,14 @@ const withTimeout = async <T>(operation: PromiseLike<T>, timeoutMs: number, labe
 // Set stores a key-value pair in the database.
 export const set = async (key: string, value: any): Promise<void> => {
   const supabase = client()
-  const { error } = await withTimeout(
-    supabase.from("kv_store_f781cd00").upsert({
-      key,
-      value
-    }),
+  const { error } = await withAbortableTimeout(
+    (signal) => withAbortSignal(
+      supabase.from("kv_store_f781cd00").upsert({
+        key,
+        value
+      }),
+      signal,
+    ),
     KV_WRITE_TIMEOUT_MS,
     "KV set",
   );
@@ -97,8 +115,11 @@ export const set = async (key: string, value: any): Promise<void> => {
 export const get = async (key: string): Promise<any> => {
   const supabase = client()
   try {
-    const { data, error } = await withTimeout(
-      supabase.from("kv_store_f781cd00").select("value").eq("key", key).maybeSingle(),
+    const { data, error } = await withAbortableTimeout(
+      (signal) => withAbortSignal(
+        supabase.from("kv_store_f781cd00").select("value").eq("key", key).maybeSingle(),
+        signal,
+      ),
       KV_READ_TIMEOUT_MS,
       "KV get",
     );
@@ -120,8 +141,11 @@ export const get = async (key: string): Promise<any> => {
 // Delete deletes a key-value pair from the database.
 export const del = async (key: string): Promise<void> => {
   const supabase = client()
-  const { error } = await withTimeout(
-    supabase.from("kv_store_f781cd00").delete().eq("key", key),
+  const { error } = await withAbortableTimeout(
+    (signal) => withAbortSignal(
+      supabase.from("kv_store_f781cd00").delete().eq("key", key),
+      signal,
+    ),
     KV_WRITE_TIMEOUT_MS,
     "KV del",
   );
@@ -135,8 +159,11 @@ export const del = async (key: string): Promise<void> => {
 // Sets multiple key-value pairs in the database.
 export const mset = async (keys: string[], values: any[]): Promise<void> => {
   const supabase = client()
-  const { error } = await withTimeout(
-    supabase.from("kv_store_f781cd00").upsert(keys.map((k, i) => ({ key: k, value: values[i] }))),
+  const { error } = await withAbortableTimeout(
+    (signal) => withAbortSignal(
+      supabase.from("kv_store_f781cd00").upsert(keys.map((k, i) => ({ key: k, value: values[i] }))),
+      signal,
+    ),
     KV_WRITE_TIMEOUT_MS,
     "KV mset",
   );
@@ -151,8 +178,11 @@ export const mset = async (keys: string[], values: any[]): Promise<void> => {
 export const mget = async (keys: string[]): Promise<any[]> => {
   const supabase = client()
   try {
-    const { data, error } = await withTimeout(
-      supabase.from("kv_store_f781cd00").select("key, value").in("key", keys),
+    const { data, error } = await withAbortableTimeout(
+      (signal) => withAbortSignal(
+        supabase.from("kv_store_f781cd00").select("key, value").in("key", keys),
+        signal,
+      ),
       KV_READ_TIMEOUT_MS,
       "KV mget",
     );
@@ -181,8 +211,11 @@ export const mget = async (keys: string[]): Promise<any[]> => {
 // Deletes multiple key-value pairs from the database.
 export const mdel = async (keys: string[]): Promise<void> => {
   const supabase = client()
-  const { error } = await withTimeout(
-    supabase.from("kv_store_f781cd00").delete().in("key", keys),
+  const { error } = await withAbortableTimeout(
+    (signal) => withAbortSignal(
+      supabase.from("kv_store_f781cd00").delete().in("key", keys),
+      signal,
+    ),
     KV_WRITE_TIMEOUT_MS,
     "KV mdel",
   );
@@ -197,8 +230,11 @@ export const mdel = async (keys: string[]): Promise<void> => {
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
   const supabase = client()
   try {
-    const { data, error } = await withTimeout(
-      supabase.from("kv_store_f781cd00").select("key, value").like("key", prefix + "%"),
+    const { data, error } = await withAbortableTimeout(
+      (signal) => withAbortSignal(
+        supabase.from("kv_store_f781cd00").select("key, value").like("key", prefix + "%"),
+        signal,
+      ),
       KV_READ_TIMEOUT_MS,
       "KV getByPrefix",
     );

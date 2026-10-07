@@ -140,6 +140,8 @@ const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
 const APP_DATA_FETCH_TIMEOUT_MS = 10_000;
 const DIRECT_APP_DATA_FETCH_TIMEOUT_MS = 8_000;
+const MASTER_BOOTSTRAP_CONCURRENCY = 4;
+const OPERATIONAL_BOOTSTRAP_CONCURRENCY = 3;
 const MASTER_DATA_CACHE_PREFIX = 'rhi-v2-master-data-cache';
 const MASTER_DATA_CACHE_MAX_BYTES = 900_000;
 const CACHEABLE_MASTER_TABLES = new Set([
@@ -169,6 +171,29 @@ const CACHEABLE_RANGE_TABLES = new Set([
 
 const buildCacheKey = (table: string, suffix = 'full') =>
   `${MASTER_DATA_CACHE_PREFIX}:${table}:${suffix}`;
+
+const runSettledWithConcurrency = async (
+  tasks: Array<() => Promise<unknown>>,
+  concurrency: number,
+) => {
+  const limit = Math.max(1, Math.min(concurrency, tasks.length || 1));
+  let cursor = 0;
+
+  const workers = Array.from({ length: limit }, async () => {
+    while (cursor < tasks.length) {
+      const index = cursor;
+      cursor += 1;
+
+      try {
+        await tasks[index]();
+      } catch {
+        // Keep batch behavior equivalent to Promise.allSettled.
+      }
+    }
+  });
+
+  await Promise.all(workers);
+};
 
 const safeReadCachedRows = (table: string, suffix = 'full') => {
   if (typeof window === 'undefined') return null;
@@ -1664,6 +1689,22 @@ export const MasterDataProvider: React.FC<{
     setCurrentUserIssue(undefined);
     setIsCurrentUserResolved(false);
 
+    const cachedUserAtBoot = readCachedCurrentUser(session.user.id);
+    if (cachedUserAtBoot) {
+      console.warn('[MasterData] Opening app with cached current user while profile is verified in background:', {
+        userId: cachedUserAtBoot.id,
+        role: cachedUserAtBoot.role,
+      });
+      setCurrentUserId(cachedUserAtBoot.id);
+      setRealUser(cachedUserAtBoot);
+      setUsers(prev => {
+        const exists = prev.some(user => user.id === cachedUserAtBoot.id);
+        if (exists) return prev.map(user => user.id === cachedUserAtBoot.id ? cachedUserAtBoot : user);
+        return [cachedUserAtBoot, ...prev];
+      });
+      setIsCurrentUserResolved(true);
+    }
+
     const syncUser = async () => {
       let profileSyncTimeoutId: number | undefined;
 
@@ -1989,21 +2030,33 @@ export const MasterDataProvider: React.FC<{
     }
 
     let bestSource = { source: 'direct', users: directUsers };
+    const directTechnicianCount = directUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+    const shouldValidateProfilesViaAppData =
+      directUsers.length <= 1 ||
+      (shouldEnsureScheduleUserRoster && directTechnicianCount === 0);
 
     try {
-      const appDataRows = await loadPages(async (from, to) => {
-        const { rows } = await fetchAppDataPage('profiles', from, to);
-        return rows;
-      });
-      const appDataUsers = mapProfilesToUsers(appDataRows);
-      const directTechnicianCount = directUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
-      const appDataTechnicianCount = appDataUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
-      const shouldPreferAppData =
-        appDataUsers.length > directUsers.length ||
-        (appDataTechnicianCount > 0 && directTechnicianCount === 0);
+      if (!shouldValidateProfilesViaAppData) {
+        if (import.meta.env.DEV) {
+          console.info('[MasterData] direct profiles are complete enough; skipping app-data profile verification', {
+            users: directUsers.length,
+            activeTechnicians: directTechnicianCount,
+          });
+        }
+      } else {
+        const appDataRows = await loadPages(async (from, to) => {
+          const { rows } = await fetchAppDataPage('profiles', from, to);
+          return rows;
+        });
+        const appDataUsers = mapProfilesToUsers(appDataRows);
+        const appDataTechnicianCount = appDataUsers.filter((user) => isTechnicianRole(user.role) && user.status === 'active').length;
+        const shouldPreferAppData =
+          appDataUsers.length > directUsers.length ||
+          (appDataTechnicianCount > 0 && directTechnicianCount === 0);
 
-      if (shouldPreferAppData) {
-        bestSource = { source: 'app-data', users: appDataUsers };
+        if (shouldPreferAppData) {
+          bestSource = { source: 'app-data', users: appDataUsers };
+        }
       }
     } catch (error) {
       if (import.meta.env.DEV) {
@@ -3161,10 +3214,8 @@ export const MasterDataProvider: React.FC<{
   const shouldFetchFullOperationalHistory =
     canFetchFullOperationalHistory &&
     (
-      normalizedActivePath.startsWith('/dashboard') ||
       normalizedActivePath.startsWith('/reports') ||
-      normalizedActivePath.startsWith('/finance') ||
-      normalizedActivePath.startsWith('/ads')
+      normalizedActivePath.startsWith('/finance')
     );
   const isTechnicianMobileOperationalPath = normalizedActivePath.startsWith('/technician/mobile');
   const isTechnicianDashboardOperationalPath = normalizedActivePath.startsWith('/dashboard');
@@ -3233,16 +3284,16 @@ export const MasterDataProvider: React.FC<{
       mapLeadRow: (lead) => mapLeadFromDB(lead, leadSocialContactsRef.current[lead.id]),
     });
 
-    // 1. Fetch Masters
-    const masterFetches = fetchCatalog.masters.map(({ table, setter, mapper }) =>
-      fetchData(table, setter, mapper)
-    );
+    // 1. Fetch masters in small batches so boot does not stampede Supabase.
+    const masterFetchTasks = [
+      ...fetchCatalog.masters.map(({ table, setter, mapper }) => (
+        () => fetchData(table, setter, mapper)
+      )),
+      () => refetchUsersFromProfiles(),
+      ...(shouldEnsureScheduleUserRoster ? [() => refetchScheduleUsersFromProfiles()] : []),
+    ];
 
-    Promise.allSettled([
-      ...masterFetches,
-      refetchUsersFromProfiles(),
-      ...(shouldEnsureScheduleUserRoster ? [refetchScheduleUsersFromProfiles()] : []),
-    ]).finally(() => {
+    runSettledWithConcurrency(masterFetchTasks, MASTER_BOOTSTRAP_CONCURRENCY).finally(() => {
       if (!isCancelled) {
         setIsMasterDataLoading(false);
       }
@@ -3459,30 +3510,29 @@ export const MasterDataProvider: React.FC<{
         table !== 'leads' &&
         deferredBootstrapTables.has(table)
       );
-      const operationalFetches = otherTransactionalFetches.map(({ table, setter, mapper }) =>
-        fetchData(table, setter, mapper)
-      );
+      const operationalFetchTasks = otherTransactionalFetches.map(({ table, setter, mapper }) => (
+        () => fetchData(table, setter, mapper)
+      ));
       if (deferredBootstrapTables.has('lead_social_contacts')) {
-        operationalFetches.push(fetchLeadSocialContacts());
+        operationalFetchTasks.push(() => fetchLeadSocialContacts());
       }
 
-      if (operationalFetches.length === 0 && !deferredBootstrapTables.has('audit_logs') && !deferredBootstrapTables.has('technician_schedules')) {
+      if (operationalFetchTasks.length === 0 && !deferredBootstrapTables.has('audit_logs') && !deferredBootstrapTables.has('technician_schedules')) {
         setIsOperationalDataLoading(false);
         return;
       }
 
-      Promise.allSettled(operationalFetches).finally(() => {
+      runSettledWithConcurrency(operationalFetchTasks, OPERATIONAL_BOOTSTRAP_CONCURRENCY).finally(() => {
         if (!isCancelled) {
           setIsOperationalDataLoading(false);
         }
       });
 
       scheduleDeferredTask('master-data.support-bootstrap', 1_500, () => {
-        fetchCatalog.support.forEach(({ table, setter, mapper }) => {
-          if (deferredBootstrapTables.has(table)) {
-            fetchData(table, setter, mapper);
-          }
-        });
+        const supportFetchTasks = fetchCatalog.support
+          .filter(({ table }) => deferredBootstrapTables.has(table))
+          .map(({ table, setter, mapper }) => () => fetchData(table, setter, mapper));
+        void runSettledWithConcurrency(supportFetchTasks, OPERATIONAL_BOOTSTRAP_CONCURRENCY);
       }, 2_500);
     };
 
@@ -3510,6 +3560,8 @@ export const MasterDataProvider: React.FC<{
     let isRealtimeDisposed = false;
     let recoveryRefreshTimer: number | undefined;
     let recoveryResubscribeTimer: number | undefined;
+    let lastRecoveryRefreshAt = 0;
+    let recoveryRetryDelayMs = 8_000;
     const reducedRealtimeForTechnician =
       isTechnicianRole(currentRole) &&
       (isTechnicianMobileOperationalPath || isTechnicianOrdersOperationalPath || isTechnicianDashboardOperationalPath);
@@ -3517,25 +3569,32 @@ export const MasterDataProvider: React.FC<{
     const scheduleRealtimeRecovery = (status: string) => {
       if (isRealtimeDisposed) return;
 
-      console.warn(`[MasterData] realtime channel ${status}; refreshing data and resubscribing`);
+      console.warn(`[MasterData] realtime channel ${status}; scheduling throttled recovery`);
 
       if (recoveryRefreshTimer !== undefined) {
         window.clearTimeout(recoveryRefreshTimer);
       }
 
-      recoveryRefreshTimer = window.setTimeout(() => {
-        if (!isRealtimeDisposed) {
-          setRefreshTrigger((prev) => prev + 1);
-        }
-      }, 1200);
+      const now = Date.now();
+      const shouldRefreshAfterRealtimeDrop = now - lastRecoveryRefreshAt > 60_000;
+      if (shouldRefreshAfterRealtimeDrop) {
+        lastRecoveryRefreshAt = now;
+        recoveryRefreshTimer = window.setTimeout(() => {
+          if (!isRealtimeDisposed) {
+            setRefreshTrigger((prev) => prev + 1);
+          }
+        }, 10_000);
+      }
 
       if (recoveryResubscribeTimer !== undefined) return;
 
+      const retryDelay = recoveryRetryDelayMs;
+      recoveryRetryDelayMs = Math.min(recoveryRetryDelayMs * 2, 60_000);
       recoveryResubscribeTimer = window.setTimeout(() => {
         if (!isRealtimeDisposed) {
           setRealtimeRetryKey((prev) => prev + 1);
         }
-      }, 5000);
+      }, retryDelay);
     };
 
     // Channel for high-frequency updates (Orders, Leads, Profiles)
