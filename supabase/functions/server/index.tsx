@@ -1989,7 +1989,7 @@ app.get("/make-server-f781cd00/meta/live-breakdown", async (c) => {
 
 app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
   try {
-    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    const auth = await requireAuthorizedRequester(c, ADS_REFERENCE_READ_PERMISSIONS);
     if (auth.response) return auth.response;
 
     const from = c.req.query("from");
@@ -2075,7 +2075,7 @@ app.get("/make-server-f781cd00/meta/snapshots", async (c) => {
 
 app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
   try {
-    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    const auth = await requireAuthorizedRequester(c, ADS_REFERENCE_READ_PERMISSIONS);
     if (auth.response) return auth.response;
 
     if (!META_ACCESS_TOKEN && !META_DM_USER_TOKEN) {
@@ -2184,7 +2184,7 @@ app.get("/make-server-f781cd00/meta/token-health", async (c) => {
 
 app.get("/make-server-f781cd00/meta/integration-configs", async (c) => {
   try {
-    const auth = await requireAuthorizedRequester(c, [MARKETING_MONITORING_VIEW_PERMISSION]);
+    const auth = await requireAuthorizedRequester(c, ADS_REFERENCE_READ_PERMISSIONS);
     if (auth.response) return auth.response;
 
     const configs = await kv.getByPrefix("meta_integration_config:");

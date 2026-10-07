@@ -237,7 +237,14 @@ type AdsPermissionAccess =
   | { ok: true; requester: RequesterAccessContext }
   | { ok: false; error: Response };
 
-const ADS_VIEW_PERMISSIONS: PermissionKey[] = ["monitoring.marketing.view"];
+const ADS_VIEW_PERMISSIONS: PermissionKey[] = [
+  "monitoring.marketing.view",
+  "ads.view_daily",
+  "ads.view_analytics",
+  "dashboard.view_advertiser",
+  "dashboard.view_cs",
+  "dashboard.view_owner",
+];
 const ADS_MANAGE_PERMISSIONS: PermissionKey[] = ["ads.manage"];
 
 function isTrustedServiceRoleRequest(c: any) {
