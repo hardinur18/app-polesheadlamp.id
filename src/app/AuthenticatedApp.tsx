@@ -54,6 +54,34 @@ const readCachedSupabaseSession = (): Session | null => {
   return null;
 };
 
+const withAuthTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> => (
+  new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  })
+);
+
+const isAuthTimeoutError = (error: unknown) =>
+  error instanceof Error && error.message.toLowerCase().includes('timed out');
+
+const isRecoverableAuthBootError = (error: unknown) =>
+  isRetryableAuthError(error) || isAuthTimeoutError(error);
+
 const createLocalSession = (): Session => {
   const email = localStorage.getItem('rhi-v2-local-email') || 'owner@polesheadlamp.id';
   const now = Math.floor(Date.now() / 1000);
@@ -100,6 +128,7 @@ export const AuthenticatedApp = () => {
 
     let isActive = true;
     const AUTH_BOOT_TIMEOUT_MS = 20000;
+    const AUTH_REQUEST_TIMEOUT_MS = 8000;
     const AUTH_RETRY_DELAY_MS = 1500;
     const MAX_AUTH_RETRIES = 3;
 
@@ -118,13 +147,13 @@ export const AuthenticatedApp = () => {
 
       const message = getAuthErrorMessage(error);
 
-      if (isRetryableAuthError(error) && retry && attempt < MAX_AUTH_RETRIES) {
+      if (isRecoverableAuthBootError(error) && retry && attempt < MAX_AUTH_RETRIES) {
         console.warn(`Network connection issue during auth check. Retrying (${attempt + 1}/${MAX_AUTH_RETRIES}).`, message);
         window.setTimeout(retry, AUTH_RETRY_DELAY_MS);
         return;
       }
 
-      if (!isRetryableAuthError(error)) {
+      if (!isRecoverableAuthBootError(error)) {
         console.error('Unexpected auth error:', error);
         settleAuthState(null);
         return;
@@ -151,14 +180,18 @@ export const AuthenticatedApp = () => {
       const {
         data: { session: refreshedSession },
         error: refreshError,
-      } = await supabase.auth.refreshSession();
+      } = await withAuthTimeout(
+        supabase.auth.refreshSession(),
+        AUTH_REQUEST_TIMEOUT_MS,
+        'Auth session refresh timed out',
+      );
 
       if (!refreshError && refreshedSession?.access_token) {
         settleAuthState(refreshedSession);
         return;
       }
 
-      if (refreshError && isRetryableAuthError(refreshError)) {
+      if (refreshError && isRecoverableAuthBootError(refreshError)) {
         console.warn('Session refresh temporarily failed. Keeping cached session active.', refreshError.message);
         settleAuthState(nextSession);
         return;
@@ -183,18 +216,21 @@ export const AuthenticatedApp = () => {
 
     // 2. Check active session
     const checkActiveSession = (attempt = 0) => {
-      supabase.auth
-        .getSession()
+      withAuthTimeout(
+        supabase.auth.getSession(),
+        AUTH_REQUEST_TIMEOUT_MS,
+        'Auth session check timed out',
+      )
       .then(({ data: { session }, error }) => {
         window.clearTimeout(bootTimeout);
 
         if (error) {
-          if (isRetryableAuthError(error) && attempt < MAX_AUTH_RETRIES) {
+          if (isRecoverableAuthBootError(error) && attempt < MAX_AUTH_RETRIES) {
             console.warn('Network error during session check:', error.message);
             window.setTimeout(() => checkActiveSession(attempt + 1), AUTH_RETRY_DELAY_MS);
             return;
           }
-          if (isRetryableAuthError(error)) {
+          if (isRecoverableAuthBootError(error)) {
             console.warn('Network error during session check. Not clearing auth session:', error.message);
             if (hasCachedSupabaseSession()) {
               settleCachedAuthState();
