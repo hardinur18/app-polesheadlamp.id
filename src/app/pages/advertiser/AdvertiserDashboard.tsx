@@ -86,6 +86,24 @@ const advertiserCsPerfCache = new Map<string, {
   cachedAt: number;
 }>();
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
+const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 15_000;
+
+function withDashboardProviderTimeout<T>(
+  promise: Promise<T>,
+  source: string,
+  timeoutMs = DASHBOARD_API_PROVIDER_TIMEOUT_MS,
+) {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(`${source} terlalu lama merespons.`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
+  });
+}
 
 const formatCurrency = (value: number) =>
   Number.isFinite(value) && value > 0
@@ -975,21 +993,30 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       setApiAdsStatus('loading');
 
       try {
-        const metaLoader = shouldForceApiSync
-          ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-              fetchMetaSnapshotDataset(rangeParams),
-            )
-          : fetchMetaSnapshotDataset(rangeParams);
-        const googleLoader = shouldForceApiSync
-          ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-              fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-            )
-          : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true });
-        const tiktokLoader = shouldForceApiSync
-          ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-              fetchTikTokAdsSnapshotDataset(rangeParams),
-            )
-          : fetchTikTokAdsSnapshotDataset(rangeParams);
+        const metaLoader = withDashboardProviderTimeout(
+          shouldForceApiSync
+            ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              )
+            : fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+          'Meta Ads',
+        );
+        const googleLoader = withDashboardProviderTimeout(
+          shouldForceApiSync
+            ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              )
+            : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+          'Google Ads',
+        );
+        const tiktokLoader = withDashboardProviderTimeout(
+          shouldForceApiSync
+            ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              )
+            : fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+          'TikTok Ads',
+        );
 
         const [meta, google, tiktok] = await Promise.allSettled([
           metaLoader,
@@ -999,6 +1026,23 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
         const nextByAccount: Record<string, AdvertiserCsAccountMetric> = {};
         const unmappedByKey = new Map<string, ApiUnmappedSnapshot>();
+        const failedSources = [
+          { source: 'meta', result: meta },
+          { source: 'google', result: google },
+          { source: 'tiktok', result: tiktok },
+        ].filter((item): item is { source: string; result: PromiseRejectedResult } => item.result.status === 'rejected');
+
+        if (failedSources.length === 3) {
+          throw new Error('Semua snapshot API iklan gagal dimuat.');
+        }
+
+        if (failedSources.length > 0) {
+          console.warn('[Advertiser Dashboard] sebagian snapshot API iklan gagal dimuat', failedSources.map((item) => ({
+            source: item.source,
+            error: item.result.reason,
+          })));
+        }
+
         if (meta.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, meta.value.rows || []);
         if (google.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, google.value.rows || []);
         if (tiktok.status === 'fulfilled') addSnapshotRows(nextByAccount, unmappedByKey, tiktok.value.rows || []);

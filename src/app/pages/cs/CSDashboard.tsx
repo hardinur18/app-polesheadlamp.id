@@ -158,7 +158,25 @@ const CS_VIEW_FILTER_STORAGE_KEY = 'polesheadlamp_cs_view_filters_v1';
 const CS_VIEW_MAX_RANGE_DAYS = 62;
 const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
+const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 15_000;
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
+
+function withDashboardProviderTimeout<T>(
+  promise: Promise<T>,
+  source: string,
+  timeoutMs = DASHBOARD_API_PROVIDER_TIMEOUT_MS,
+) {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(`${source} terlalu lama merespons.`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
+  });
+}
 
 const formatShortCurrency = (value: number) =>
   Number.isFinite(value) && value > 0
@@ -1179,21 +1197,30 @@ export function CSDashboard({ userId }: { userId?: string }) {
       setApiAdsStatus('loading');
 
       try {
-        const metaLoader = shouldForceApiSync
-          ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-              fetchMetaSnapshotDataset(rangeParams),
-            )
-          : fetchMetaSnapshotDataset(rangeParams);
-        const googleLoader = shouldForceApiSync
-          ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-              fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-            )
-          : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true });
-        const tiktokLoader = shouldForceApiSync
-          ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-              fetchTikTokAdsSnapshotDataset(rangeParams),
-            )
-          : fetchTikTokAdsSnapshotDataset(rangeParams);
+        const metaLoader = withDashboardProviderTimeout(
+          shouldForceApiSync
+            ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              )
+            : fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+          'Meta Ads',
+        );
+        const googleLoader = withDashboardProviderTimeout(
+          shouldForceApiSync
+            ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              )
+            : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+          'Google Ads',
+        );
+        const tiktokLoader = withDashboardProviderTimeout(
+          shouldForceApiSync
+            ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              )
+            : fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+          'TikTok Ads',
+        );
 
         const [meta, google, tiktok] = await Promise.allSettled([
           metaLoader,
