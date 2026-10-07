@@ -143,6 +143,16 @@ type CsApiLoadDiagnostics = {
   failedSources: string[];
 };
 
+type ApiSnapshotApplyResult = {
+  applied: boolean;
+  hasRows: boolean;
+  hasUsefulData: boolean;
+  hasFailures: boolean;
+  rawRows: number;
+  matchedRows: number;
+  status: ApiAdsStatus;
+};
+
 type CsViewFilterState = {
   selectedCsId?: string;
   selectedPlatformId?: string;
@@ -160,7 +170,10 @@ const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
 const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
 const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
+const DASHBOARD_API_AUTO_SYNC_COOLDOWN_MS = 5 * 60_000;
+const DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES = 10;
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
+const csViewApiAutoSyncAttempts = new Map<string, number>();
 
 function withDashboardProviderTimeout<T>(
   promise: Promise<T>,
@@ -177,6 +190,15 @@ function withDashboardProviderTimeout<T>(
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timeoutId) globalThis.clearTimeout(timeoutId);
   });
+}
+
+function shouldAttemptDashboardAutoSync(cacheKey: string) {
+  const now = Date.now();
+  const lastAttemptAt = csViewApiAutoSyncAttempts.get(cacheKey) || 0;
+  if (now - lastAttemptAt < DASHBOARD_API_AUTO_SYNC_COOLDOWN_MS) return false;
+
+  csViewApiAutoSyncAttempts.set(cacheKey, now);
+  return true;
 }
 
 const formatShortCurrency = (value: number) =>
@@ -413,6 +435,11 @@ const normalizeAdAccountNameKey = (value?: string | null) =>
     .toLowerCase()
     .replace(/^act_/, '')
     .replace(/\s+/g, ' ');
+
+const isActiveDataStatus = (status?: string | null) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  return !normalized || normalized === 'active' || normalized === 'aktif' || normalized === 'enabled' || normalized === 'on';
+};
 
 const buildExternalAccountLookupKeys = (platformKey: string, value?: string | null) => {
   const normalized = normalizeExternalAccountId(value);
@@ -1064,7 +1091,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     };
 
     for (const account of adAccounts) {
-      if (account.status !== 'active') continue;
+      if (!isActiveDataStatus(account.status)) continue;
       if (!shouldShowAdAccountInCsView(account)) continue;
       byId.set(account.id, account);
       byName.set(normalizeLookupKey(account.accountName), account);
@@ -1096,7 +1123,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const keys = new Set<string>();
 
     for (const account of adAccounts) {
-      if (account.status !== 'active') continue;
+      if (!isActiveDataStatus(account.status)) continue;
       if (!shouldShowAdAccountInCsView(account)) continue;
       if (targetPlatformId && account.platformId !== targetPlatformId) continue;
       keys.add(resolvePlatformKey(platformNameById.get(account.platformId || '')));
@@ -1107,7 +1134,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
   const adAccountMappingCacheKey = useMemo(() => {
     const accountPart = adAccounts
-      .filter((account) => account.status === 'active' && shouldShowAdAccountInCsView(account))
+      .filter((account) => isActiveDataStatus(account.status) && shouldShowAdAccountInCsView(account))
       .map((account) => [
         account.id,
         normalizeLookupKey(account.accountName),
@@ -1313,7 +1340,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const applySettledSnapshotResults = (
       results: Array<PromiseSettledResult<{ rows?: AdsSnapshotRowLike[] }>>,
       options: { cacheResult?: boolean; keepExistingWhenEmpty?: boolean; mode: 'stored' | 'sync' },
-    ) => {
+    ): ApiSnapshotApplyResult => {
       const [meta, google, tiktok] = results;
       const next: Record<string, CsAdsDailyMetric> = {};
       const nextByAccount: Record<string, CsAdsAccountMetric> = {};
@@ -1341,30 +1368,50 @@ export function CSDashboard({ userId }: { userId?: string }) {
       const hasUsefulApiAccountMetrics = Object.values(nextByAccount).some(
         (row) => row.spend > 0 || row.leads > 0,
       );
+      const hasUsefulData = hasUsefulApiMetrics || hasUsefulApiAccountMetrics;
       const hasAnyRows = diagnostics.rawRows > 0;
       const hasAnyProviderResponse = results.some((result) => result.status === 'fulfilled');
+      const status: ApiAdsStatus = hasUsefulData
+        ? 'ready'
+        : failedSources.length > 0
+          ? 'error'
+          : 'empty';
 
-      if (options.keepExistingWhenEmpty && hasAnyProviderResponse && !hasAnyRows) {
-        return false;
+      if (options.keepExistingWhenEmpty && (!hasAnyProviderResponse || !hasUsefulData)) {
+        return {
+          applied: false,
+          hasRows: hasAnyRows,
+          hasUsefulData,
+          hasFailures: failedSources.length > 0,
+          rawRows: diagnostics.rawRows,
+          matchedRows: diagnostics.matchedRows,
+          status,
+        };
       }
-
-      const nextStatus: ApiAdsStatus = hasUsefulApiMetrics || hasUsefulApiAccountMetrics ? 'ready' : 'empty';
 
       setApiAdsMetrics(next);
       setApiAdsByDateAccount(nextByAccount);
       setApiLoadDiagnostics(diagnostics);
-      setApiAdsStatus(nextStatus);
+      setApiAdsStatus(status);
       if (options.cacheResult && cacheKey) {
         csViewApiCache.set(cacheKey, {
           metrics: next,
           byDateAccount: nextByAccount,
-          status: nextStatus,
+          status,
           diagnostics,
           cachedAt: Date.now(),
         });
       }
 
-      return true;
+      return {
+        applied: true,
+        hasRows: hasAnyRows,
+        hasUsefulData,
+        hasFailures: failedSources.length > 0,
+        rawRows: diagnostics.rawRows,
+        matchedRows: diagnostics.matchedRows,
+        status,
+      };
     };
 
     const loadStoredSnapshots = async () => {
@@ -1395,7 +1442,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
       ]);
     };
 
-    const syncSnapshots = async () => {
+    const syncSnapshots = async ({
+      force,
+      minFreshMinutes,
+    }: {
+      force: boolean;
+      minFreshMinutes: number;
+    }) => {
       const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
       const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
       const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
@@ -1404,21 +1457,21 @@ export function CSDashboard({ userId }: { userId?: string }) {
       return Promise.allSettled([
         shouldLoadMeta
           ? withDashboardProviderTimeout(
-              syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
+              syncMetaSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
               'Meta Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
           : Promise.resolve(emptySnapshotDataset),
         shouldLoadGoogle
           ? withDashboardProviderTimeout(
-              syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
+              syncGoogleAdsSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
               'Google Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
           : Promise.resolve(emptySnapshotDataset),
         shouldLoadTikTok
           ? withDashboardProviderTimeout(
-              syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).then((payload) => ({ rows: payload.rows || [] })),
+              syncTikTokAdsSnapshotDataset({ ...rangeParams, force, minFreshMinutes }).then((payload) => ({ rows: payload.rows || [] })),
               'TikTok Ads',
               DASHBOARD_API_SYNC_TIMEOUT_MS,
             )
@@ -1434,14 +1487,32 @@ export function CSDashboard({ userId }: { userId?: string }) {
       try {
         const storedResults = await loadStoredSnapshots();
         if (cancelled) return;
-        applySettledSnapshotResults(storedResults, { cacheResult: true, mode: 'stored' });
+        const storedApplyResult = applySettledSnapshotResults(storedResults, { cacheResult: true, mode: 'stored' });
 
-        if (forceRefresh) {
-          const syncedResults = await syncSnapshots();
+        const shouldAutoSync =
+          !forceRefresh &&
+          Boolean(cacheKey) &&
+          scopedApiPlatformKeys.size > 0 &&
+          (
+            storedApplyResult.status !== 'ready' ||
+            storedApplyResult.hasFailures ||
+            Boolean(cachedSnapshot && !isCachedSnapshotFresh)
+          ) &&
+          shouldAttemptDashboardAutoSync(cacheKey);
+
+        if (forceRefresh || shouldAutoSync) {
+          if (shouldAutoSync && !storedApplyResult.hasUsefulData) {
+            setApiAdsStatus('loading');
+          }
+
+          const syncedResults = await syncSnapshots({
+            force: forceRefresh,
+            minFreshMinutes: forceRefresh ? 0 : DASHBOARD_API_AUTO_SYNC_MIN_FRESH_MINUTES,
+          });
           if (cancelled) return;
           applySettledSnapshotResults(syncedResults, {
             cacheResult: true,
-            keepExistingWhenEmpty: true,
+            keepExistingWhenEmpty: storedApplyResult.hasUsefulData,
             mode: 'sync',
           });
         }

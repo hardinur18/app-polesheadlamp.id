@@ -9,6 +9,40 @@ type EdgeHeadersOptions = {
 
 let inFlightAccessTokenRefresh: Promise<string> | null = null;
 const TOKEN_REFRESH_GRACE_MS = 15_000;
+const SESSION_READ_TIMEOUT_MS = 3_000;
+const SESSION_REFRESH_TIMEOUT_MS = 8_000;
+const CACHED_TOKEN_SKEW_MS = 30_000;
+
+let lastKnownAccessToken: {
+  token: string;
+  expiresAtMs: number;
+} | null = null;
+
+function withAuthTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
+  });
+}
+
+function rememberAccessToken(session?: { access_token?: string | null; expires_at?: number | null } | null) {
+  if (!session?.access_token) return;
+
+  lastKnownAccessToken = {
+    token: session.access_token,
+    expiresAtMs: session.expires_at ? session.expires_at * 1000 : Date.now() + 5 * 60_000,
+  };
+}
+
+function getUsableCachedAccessToken() {
+  if (!lastKnownAccessToken) return null;
+  if (lastKnownAccessToken.expiresAtMs - Date.now() <= CACHED_TOKEN_SKEW_MS) return null;
+  return lastKnownAccessToken.token;
+}
 
 async function refreshSessionAccessToken() {
   if (inFlightAccessTokenRefresh) {
@@ -25,12 +59,21 @@ async function refreshSessionAccessToken() {
 async function refreshSessionAccessTokenNow() {
   const {
     data: { session: cachedSession },
-  } = await supabase.auth.getSession();
+  } = await withAuthTimeout(
+    supabase.auth.getSession(),
+    SESSION_READ_TIMEOUT_MS,
+    'Koneksi auth terlalu lama saat membaca session.',
+  );
+  rememberAccessToken(cachedSession);
 
   const {
     data: { session: refreshedSession },
     error: refreshError,
-  } = await supabase.auth.refreshSession();
+  } = await withAuthTimeout(
+    supabase.auth.refreshSession(),
+    SESSION_REFRESH_TIMEOUT_MS,
+    'Koneksi auth terlalu lama saat memperbarui session.',
+  );
 
   if (refreshError) {
     if (isRetryableAuthError(refreshError) && cachedSession?.access_token) {
@@ -40,6 +83,8 @@ async function refreshSessionAccessTokenNow() {
 
     throw new Error('Sesi login sudah kedaluwarsa. Silakan login ulang.');
   }
+
+  rememberAccessToken(refreshedSession);
 
   if (!refreshedSession?.access_token) {
     if (cachedSession?.access_token) {
@@ -69,15 +114,49 @@ function mergeHeaders(...parts: Array<HeadersInit | undefined>) {
 }
 
 export async function getSessionAccessToken() {
-  const { data, error } = await supabase.auth.getSession();
+  let data: Awaited<ReturnType<typeof supabase.auth.getSession>>['data'];
+  let error: Awaited<ReturnType<typeof supabase.auth.getSession>>['error'];
+
+  try {
+    const response = await withAuthTimeout(
+      supabase.auth.getSession(),
+      SESSION_READ_TIMEOUT_MS,
+      'Koneksi auth terlalu lama saat membaca session.',
+    );
+    data = response.data;
+    error = response.error;
+  } catch (sessionError) {
+    const cachedToken = getUsableCachedAccessToken();
+    if (cachedToken) {
+      console.warn('[Auth] Session read temporarily failed; reusing cached token for this request.');
+      return cachedToken;
+    }
+
+    throw sessionError instanceof Error
+      ? sessionError
+      : new Error('Koneksi ke server auth sedang lambat atau gagal.');
+  }
 
   if (error) {
+    const cachedToken = getUsableCachedAccessToken();
+    if (isRetryableAuthError(error) && cachedToken) {
+      console.warn('[Auth] Session read returned a retryable error; reusing cached token for this request.');
+      return cachedToken;
+    }
+
     throw new Error(error.message);
   }
 
   const session = data.session;
+  rememberAccessToken(session);
 
   if (!session?.access_token) {
+    const cachedToken = getUsableCachedAccessToken();
+    if (cachedToken) {
+      console.warn('[Auth] Session read returned no token; reusing cached token for this request.');
+      return cachedToken;
+    }
+
     throw new Error('Session login tidak ditemukan. Silakan login ulang.');
   }
 
@@ -85,7 +164,19 @@ export async function getSessionAccessToken() {
   const shouldRefresh = Boolean(expiresAtMs) && expiresAtMs - Date.now() < TOKEN_REFRESH_GRACE_MS;
 
   if (shouldRefresh) {
-    return refreshSessionAccessToken();
+    try {
+      return await refreshSessionAccessToken();
+    } catch (refreshError) {
+      const cachedToken = getUsableCachedAccessToken();
+      if (cachedToken) {
+        console.warn('[Auth] Session refresh failed temporarily; reusing cached token for this request.');
+        return cachedToken;
+      }
+
+      throw refreshError instanceof Error
+        ? refreshError
+        : new Error('Koneksi ke server auth sedang lambat atau gagal.');
+    }
   }
 
   return session.access_token;
