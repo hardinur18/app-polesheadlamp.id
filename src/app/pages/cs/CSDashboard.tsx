@@ -70,6 +70,14 @@ import {
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
 import { readDashboardSnapshotCache, writeDashboardSnapshotCache } from '@/app/services/dashboardSnapshotCache';
 import {
+  buildAdsDailySyncPreview,
+  commitAdsDailySyncPreview,
+} from '@/app/services/adsDailySyncService';
+import {
+  fetchAdAccountApiMappings,
+  type AdAccountApiMapping,
+} from '@/app/services/adApiIntegrationService';
+import {
   OperationalEmptyState,
   OperationalKpiCard,
   OperationalKpiGrid,
@@ -665,6 +673,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     users,
     adAccounts,
     adAccountAssignments,
+    adAccountOwnerAssignments,
     platforms,
     subChannels,
     addLeadSpamDailyInput,
@@ -675,6 +684,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     ensureOrdersForDateRange,
     ensureLeadsForDateRange,
     ensureAdPerformanceInputsForDateRange,
+    refreshAdPerformanceInputsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   
@@ -717,8 +727,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const [metaIntegrationConfigs, setMetaIntegrationConfigs] = useState<AdsIntegrationConfig[]>([]);
   const [googleIntegrationConfigs, setGoogleIntegrationConfigs] = useState<GoogleAdsIntegrationConfig[]>([]);
   const [tiktokIntegrationConfigs, setTikTokIntegrationConfigs] = useState<TikTokAdsIntegrationConfig[]>([]);
+  const [apiAccountMappings, setApiAccountMappings] = useState<AdAccountApiMapping[]>([]);
   const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
   const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
+  const [isApiDailySyncing, setIsApiDailySyncing] = useState(false);
   const [isChartOpen, setIsChartOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(CS_VIEW_DEFAULT_ITEMS_PER_PAGE);
@@ -777,6 +789,66 @@ export function CSDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+
+  const handleSyncAdsApiToDailyAds = React.useCallback(async () => {
+    if (!rangeParams) return;
+
+    setIsApiDailySyncing(true);
+    try {
+      const preview = await buildAdsDailySyncPreview({
+        range: rangeParams,
+        context: {
+          dailyAds,
+          platforms,
+          adAccounts,
+          adAccountAssignments,
+          adAccountOwnerAssignments,
+          users,
+        },
+        filters: {
+          platformId: targetPlatformId || 'all',
+          csId: targetId || 'all',
+          mode: 'update-existing',
+          preserveEdited: true,
+          mappedOnly: true,
+        },
+      });
+      const actionableRows = preview.rows.filter((row) => row.status === 'new' || row.status === 'update');
+
+      if (preview.providerStatuses.length === 0) {
+        toast.info('Platform ini belum punya konektor API laporan iklan.');
+        return;
+      }
+
+      if (actionableRows.length === 0) {
+        const errorHint = preview.errors.length > 0 ? ` ${preview.errors[0]}` : '';
+        toast.info(`Tidak ada data API yang perlu disimpan ke Iklan Harian.${errorHint}`);
+        setApiRefreshNonce((value) => value + 1);
+        return;
+      }
+
+      const result = await commitAdsDailySyncPreview(actionableRows);
+      await refreshAdPerformanceInputsForDateRange(rangeParams);
+      setApiSnapshotRefreshNonce((value) => value + 1);
+      setApiRefreshNonce((value) => value + 1);
+      toast.success(`Sinkron API selesai: ${result.inserted} ditambahkan, ${result.updated} diperbarui di Iklan Harian.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal sinkron API ke Iklan Harian.');
+    } finally {
+      setIsApiDailySyncing(false);
+    }
+  }, [
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    adAccounts,
+    dailyAds,
+    platforms,
+    rangeParams,
+    refreshAdPerformanceInputsForDateRange,
+    targetId,
+    targetPlatformId,
+    users,
+  ]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -950,19 +1022,22 @@ export function CSDashboard({ userId }: { userId?: string }) {
       fetchAdsIntegrationConfigs(),
       fetchGoogleAdsIntegrationConfigs(),
       fetchTikTokAdsIntegrationConfigs(),
+      fetchAdAccountApiMappings(),
     ])
-      .then(([meta, google, tiktok]) => {
+      .then(([meta, google, tiktok, mappings]) => {
         if (cancelled) return;
 
         setMetaIntegrationConfigs(meta.status === 'fulfilled' ? meta.value : []);
         setGoogleIntegrationConfigs(google.status === 'fulfilled' ? google.value : []);
         setTikTokIntegrationConfigs(tiktok.status === 'fulfilled' ? tiktok.value : []);
+        setApiAccountMappings(mappings.status === 'fulfilled' ? mappings.value : []);
       })
       .catch(() => {
         if (!cancelled) {
           setMetaIntegrationConfigs([]);
           setGoogleIntegrationConfigs([]);
           setTikTokIntegrationConfigs([]);
+          setApiAccountMappings([]);
         }
       });
 
@@ -1144,8 +1219,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
       registerExternalPairing(byId.get(config.adAccountId), 'tiktok', config.liveTikTokAdvertiserId, config.liveTikTokAdvertiserName);
     }
 
+    for (const mapping of apiAccountMappings) {
+      if (mapping.status !== 'active') continue;
+      registerExternalPairing(byId.get(mapping.internalAdAccountId), mapping.platformKey, mapping.externalAccountId);
+    }
+
     return { byId, byName, byExternalId, byExternalName };
-  }, [adAccounts, googleIntegrationConfigs, metaIntegrationConfigs, platforms, shouldShowAdAccountInCsView, tiktokIntegrationConfigs]);
+  }, [adAccounts, apiAccountMappings, googleIntegrationConfigs, metaIntegrationConfigs, platforms, shouldShowAdAccountInCsView, tiktokIntegrationConfigs]);
 
   const scopedApiPlatformKeys = useMemo(() => {
     const platformNameById = new Map(platforms.map((platform) => [platform.id, platform.name]));
@@ -1198,10 +1278,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
       ...tiktokIntegrationConfigs.map((config) =>
         `tiktok:${config.adAccountId}:${config.enabled}:${config.liveTikTokAdvertiserId || ''}:${config.liveTikTokAdvertiserName || ''}`,
       ),
+      ...apiAccountMappings.map((mapping) =>
+        `api-map:${mapping.internalAdAccountId}:${mapping.platformKey}:${mapping.externalAccountId}:${mapping.status}`,
+      ),
     ].sort().join('|');
 
     return `${accountPart}::${assignmentPart}::${integrationPart}`;
-  }, [adAccountAssignments, adAccounts, googleIntegrationConfigs, metaIntegrationConfigs, shouldShowAdAccountInCsView, tiktokIntegrationConfigs]);
+  }, [adAccountAssignments, adAccounts, apiAccountMappings, googleIntegrationConfigs, metaIntegrationConfigs, shouldShowAdAccountInCsView, tiktokIntegrationConfigs]);
 
   const adAccountCsLookup = useMemo(() => {
     const resolveAssignment = (adAccountId?: string, date?: string) => {
@@ -2064,15 +2147,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
       ) +
       group.leads.length +
       group.orders.length;
-    const getGroupSource = (group: AssignedAccountGroup): DetailRow['source'] => {
-      const hasApiActivity = group.apiMetrics.some(
-        (metric) => (metric.spend || 0) > 0 || (metric.leads || 0) > 0,
-      );
-      if (hasApiActivity) return 'api';
-      if (group.apiMetrics.length > 0 || isConnectedAdAccount(group.account)) return 'connected';
-
-      return 'operational';
-    };
     const shouldAttachScopeSpam = (group: AssignedAccountGroup) => {
       const scopeKey = getScopeKey(
         group.date,
@@ -2094,22 +2168,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
     const rows: DetailRow[] = [];
     for (const group of groups.values()) {
-      const apiSpendDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.spend, 0);
-      const apiSpendTotal = group.apiMetrics.reduce(
-        (sum, metric) => sum + metric.spend * (1 + ((metric.ppn || 0) + (metric.fee || 0)) / 100),
-        0,
-      );
-      const apiLeads = group.apiMetrics.reduce((sum, metric) => sum + metric.leads, 0);
-      const hasApiMetrics = group.apiMetrics.some((metric) => metric.spend > 0 || metric.leads > 0);
       const operationalSpendDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.amountSpent) || 0), 0);
       const operationalSpendTotal = group.operationalAds.reduce(
         (sum, ad) => sum + (Number(ad.amountSpent) || 0) + (Number(ad.ppnAmount) || 0) + (Number(ad.feeAmount) || 0),
         0,
       );
       const operationalLeadsDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.leadsDashboard) || 0), 0);
-      const spendDashboard = hasApiMetrics ? apiSpendDashboard : operationalSpendDashboard;
-      const spendTotal = hasApiMetrics ? apiSpendTotal : operationalSpendTotal;
-      const leadsDashboard = hasApiMetrics ? apiLeads : operationalLeadsDashboard;
+      const spendDashboard = operationalSpendDashboard;
+      const spendTotal = operationalSpendTotal;
+      const leadsDashboard = operationalLeadsDashboard;
       const completedOrders = group.orders.filter((order) => order.status === 'done');
       const revenue = completedOrders.reduce((sum, order) => sum + (order.income || order.price || 0), 0);
       const orderCount = group.orders.length;
@@ -2155,7 +2222,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         roasTotal: spendTotal > 0 ? revenue / spendTotal : 0,
         cpl: leadsDashboard > 0 ? spendDashboard / leadsDashboard : 0,
         cplTotal: leadsDashboard > 0 ? spendTotal / leadsDashboard : 0,
-        source: getGroupSource(group),
+        source: group.operationalAds.length > 0 ? 'operational' : (isConnectedAdAccount(group.account) ? 'connected' : 'operational'),
       });
     }
 
@@ -2674,11 +2741,11 @@ export function CSDashboard({ userId }: { userId?: string }) {
             <Button
               type="button"
               className="h-10 gap-2 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-              disabled={!rangeParams || apiAdsStatus === 'loading'}
-              onClick={() => setApiRefreshNonce((value) => value + 1)}
+              disabled={!rangeParams || apiAdsStatus === 'loading' || isApiDailySyncing}
+              onClick={handleSyncAdsApiToDailyAds}
             >
-              <RefreshCw className={`h-4 w-4 ${apiAdsStatus === 'loading' ? 'animate-spin' : ''}`} />
-              Muat Ulang API
+              <RefreshCw className={`h-4 w-4 ${apiAdsStatus === 'loading' || isApiDailySyncing ? 'animate-spin' : ''}`} />
+              Sinkron API
             </Button>
           </div>
         </div>
@@ -2968,12 +3035,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
                   variant="outline"
                   size="sm"
                   className="h-8 gap-2 rounded-full border-slate-200 bg-white px-3 text-xs font-semibold shadow-sm dark:border-slate-700 dark:bg-slate-900"
-                  disabled={!rangeParams || apiAdsStatus === 'loading'}
-                  onClick={() => setApiRefreshNonce((value) => value + 1)}
+                  disabled={!rangeParams || apiAdsStatus === 'loading' || isApiDailySyncing}
+                  onClick={handleSyncAdsApiToDailyAds}
                   title="Refresh data snapshot API iklan"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${apiAdsStatus === 'loading' ? 'animate-spin' : ''}`} />
-                  Refresh API
+                  <RefreshCw className={`h-3.5 w-3.5 ${apiAdsStatus === 'loading' || isApiDailySyncing ? 'animate-spin' : ''}`} />
+                  Sinkron API
                 </Button>
               </div>
             </div>

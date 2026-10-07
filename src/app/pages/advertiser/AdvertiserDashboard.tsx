@@ -28,6 +28,14 @@ import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-sc
 import { cn } from '@/app/components/ui/utils';
 import { readDashboardSnapshotCache, writeDashboardSnapshotCache } from '@/app/services/dashboardSnapshotCache';
 import {
+  buildAdsDailySyncPreview,
+  commitAdsDailySyncPreview,
+} from '@/app/services/adsDailySyncService';
+import {
+  fetchAdAccountApiMappings,
+  type AdAccountApiMapping,
+} from '@/app/services/adApiIntegrationService';
+import {
   fetchAdsIntegrationConfigs,
   fetchMetaSnapshotDataset,
   syncMetaSnapshotDataset,
@@ -54,6 +62,7 @@ import {
   OperationalPageShell,
   OperationalTableCard,
 } from '../../components/ui/operational-page';
+import { toast } from 'sonner';
 
 type AdvertiserViewTab = 'ads-summary' | 'cs-performance';
 type ApiAdsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -434,6 +443,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     ensureOrdersForDateRange,
     ensureLeadsForDateRange,
     ensureAdPerformanceInputsForDateRange,
+    refreshAdPerformanceInputsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
 
@@ -447,8 +457,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [metaIntegrationConfigs, setMetaIntegrationConfigs] = useState<AdsIntegrationConfig[]>([]);
   const [googleIntegrationConfigs, setGoogleIntegrationConfigs] = useState<GoogleAdsIntegrationConfig[]>([]);
   const [tiktokIntegrationConfigs, setTikTokIntegrationConfigs] = useState<TikTokAdsIntegrationConfig[]>([]);
+  const [apiAccountMappings, setApiAccountMappings] = useState<AdAccountApiMapping[]>([]);
   const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
   const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
+  const [isApiDailySyncing, setIsApiDailySyncing] = useState(false);
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastApiSnapshotRefreshNonceRef = React.useRef(0);
@@ -472,19 +484,22 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       fetchAdsIntegrationConfigs(),
       fetchGoogleAdsIntegrationConfigs(),
       fetchTikTokAdsIntegrationConfigs(),
+      fetchAdAccountApiMappings(),
     ])
-      .then(([meta, google, tiktok]) => {
+      .then(([meta, google, tiktok, mappings]) => {
         if (cancelled) return;
 
         setMetaIntegrationConfigs(meta.status === 'fulfilled' ? meta.value : []);
         setGoogleIntegrationConfigs(google.status === 'fulfilled' ? google.value : []);
         setTikTokIntegrationConfigs(tiktok.status === 'fulfilled' ? tiktok.value : []);
+        setApiAccountMappings(mappings.status === 'fulfilled' ? mappings.value : []);
       })
       .catch(() => {
         if (!cancelled) {
           setMetaIntegrationConfigs([]);
           setGoogleIntegrationConfigs([]);
           setTikTokIntegrationConfigs([]);
+          setApiAccountMappings([]);
         }
       });
 
@@ -534,6 +549,70 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+
+  const handleSyncAdsApiToDailyAds = React.useCallback(async () => {
+    if (!rangeParams) return;
+
+    setIsApiDailySyncing(true);
+    try {
+      const preview = await buildAdsDailySyncPreview({
+        range: rangeParams,
+        context: {
+          dailyAds,
+          platforms,
+          adAccounts,
+          adAccountAssignments,
+          adAccountOwnerAssignments,
+          users,
+        },
+        filters: {
+          platformId: platformFilter,
+          advertiserId: targetAdvertiserId || 'all',
+          csId: csFilter,
+          adAccountId: accountFilter,
+          mode: 'update-existing',
+          preserveEdited: true,
+          mappedOnly: true,
+        },
+      });
+      const actionableRows = preview.rows.filter((row) => row.status === 'new' || row.status === 'update');
+
+      if (preview.providerStatuses.length === 0) {
+        toast.info('Platform ini belum punya konektor API laporan iklan.');
+        return;
+      }
+
+      if (actionableRows.length === 0) {
+        const errorHint = preview.errors.length > 0 ? ` ${preview.errors[0]}` : '';
+        toast.info(`Tidak ada data API yang perlu disimpan ke Iklan Harian.${errorHint}`);
+        setApiRefreshNonce((value) => value + 1);
+        return;
+      }
+
+      const result = await commitAdsDailySyncPreview(actionableRows);
+      await refreshAdPerformanceInputsForDateRange(rangeParams);
+      setApiSnapshotRefreshNonce((value) => value + 1);
+      setApiRefreshNonce((value) => value + 1);
+      toast.success(`Sinkron API selesai: ${result.inserted} ditambahkan, ${result.updated} diperbarui di Iklan Harian.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Gagal sinkron API ke Iklan Harian.');
+    } finally {
+      setIsApiDailySyncing(false);
+    }
+  }, [
+    accountFilter,
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    adAccounts,
+    csFilter,
+    dailyAds,
+    platforms,
+    platformFilter,
+    rangeParams,
+    refreshAdPerformanceInputsForDateRange,
+    targetAdvertiserId,
+    users,
+  ]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -706,10 +785,13 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       ...tiktokIntegrationConfigs.map((config) =>
         `tiktok:${config.adAccountId}:${config.enabled}:${config.liveTikTokAdvertiserId || ''}:${config.liveTikTokAdvertiserName || ''}`,
       ),
+      ...apiAccountMappings.map((mapping) =>
+        `api-map:${mapping.internalAdAccountId}:${mapping.platformKey}:${mapping.externalAccountId}:${mapping.status}`,
+      ),
     ];
 
     return [...ownerKeys, ...csKeys, ...integrationKeys].sort().join('|');
-  }, [adAccountAssignments, adAccountOwnerAssignments, googleIntegrationConfigs, metaIntegrationConfigs, tiktokIntegrationConfigs]);
+  }, [adAccountAssignments, adAccountOwnerAssignments, apiAccountMappings, googleIntegrationConfigs, metaIntegrationConfigs, tiktokIntegrationConfigs]);
 
   const activeAdvertiserAccounts = useMemo(() => {
     return adAccounts.filter((account) =>
@@ -1082,8 +1164,13 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       registerExternalPairing(byId.get(config.adAccountId), 'tiktok', config.liveTikTokAdvertiserId, config.liveTikTokAdvertiserName);
     }
 
+    for (const mapping of apiAccountMappings) {
+      if (mapping.status !== 'active') continue;
+      registerExternalPairing(byId.get(mapping.internalAdAccountId), mapping.platformKey, mapping.externalAccountId);
+    }
+
     return { byId, byName, byExternalId, byExternalName };
-  }, [accountMatchesTargetAdvertiser, adAccounts, googleIntegrationConfigs, metaIntegrationConfigs, platforms, tiktokIntegrationConfigs]);
+  }, [accountMatchesTargetAdvertiser, adAccounts, apiAccountMappings, googleIntegrationConfigs, metaIntegrationConfigs, platforms, tiktokIntegrationConfigs]);
 
   React.useEffect(() => {
     if (!rangeParams) {
@@ -1567,22 +1654,15 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
     const rows: CsPerformanceRow[] = [];
     for (const group of groups.values()) {
-      const apiSpendDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.spend, 0);
-      const apiSpendTotal = group.apiMetrics.reduce(
-        (sum, metric) => sum + metric.spend * (1 + ((metric.ppn || 0) + (metric.fee || 0)) / 100),
-        0,
-      );
-      const apiLeadsDashboard = group.apiMetrics.reduce((sum, metric) => sum + metric.leads, 0);
-      const hasApiMetrics = group.apiMetrics.some((metric) => metric.spend > 0 || metric.leads > 0);
       const operationalSpendDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.amountSpent) || 0), 0);
       const operationalSpendTotal = group.operationalAds.reduce(
         (sum, ad) => sum + (Number(ad.amountSpent) || 0) + (Number(ad.ppnAmount) || 0) + (Number(ad.feeAmount) || 0),
         0,
       );
       const operationalLeadsDashboard = group.operationalAds.reduce((sum, ad) => sum + (Number(ad.leadsDashboard) || 0), 0);
-      const spendDashboard = hasApiMetrics ? apiSpendDashboard : operationalSpendDashboard;
-      const spendTotal = hasApiMetrics ? apiSpendTotal : operationalSpendTotal;
-      const leadsDashboard = hasApiMetrics ? apiLeadsDashboard : operationalLeadsDashboard;
+      const spendDashboard = operationalSpendDashboard;
+      const spendTotal = operationalSpendTotal;
+      const leadsDashboard = operationalLeadsDashboard;
       const completedOrders = group.orders.filter((order) => order.status === 'done');
       const revenue = completedOrders.reduce((sum, order) => sum + (order.income || order.price || 0), 0);
       const orderCount = group.orders.length;
@@ -1624,7 +1704,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
         costPerDoneTotal: doneCount > 0 ? spendTotal / doneCount : 0,
         roas: spendDashboard > 0 ? revenue / spendDashboard : 0,
         roasTotal: spendTotal > 0 ? revenue / spendTotal : 0,
-        source: hasApiMetrics ? 'api' : 'operational',
+        source: 'operational',
       });
     }
 
@@ -1799,6 +1879,31 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       isClean: masterWarnings.length === 0 && missingOwnerAccounts.length === 0 && missingCsAccounts.length === 0 && unmappedSnapshots.length === 0,
     };
   }, [accountFilter, activeAdvertiserAccounts, adAccountAssignments, adAccountOwnerAssignments, adAccounts.length, apiUnmappedSnapshots, platformFilter, rangeParams]);
+
+  const primaryUnmappedApiSnapshot = csPerformanceDiagnostics.unmappedSnapshots[0] || null;
+  const unmatchedApiHref = useMemo(() => {
+    if (!primaryUnmappedApiSnapshot || !hasPermission('master_data.view')) return '';
+
+    const params = new URLSearchParams({
+      tab: 'ad-accounts',
+      view: 'unmatched',
+      action: 'pair-api',
+    });
+    if (primaryUnmappedApiSnapshot.platformKey) params.set('platform', primaryUnmappedApiSnapshot.platformKey);
+    if (primaryUnmappedApiSnapshot.externalAccountId) params.set('externalAccountId', primaryUnmappedApiSnapshot.externalAccountId);
+    if (primaryUnmappedApiSnapshot.externalAccountName || primaryUnmappedApiSnapshot.externalAccountId) {
+      params.set('q', primaryUnmappedApiSnapshot.externalAccountName || primaryUnmappedApiSnapshot.externalAccountId || '');
+    }
+
+    return `/master-data?${params.toString()}`;
+  }, [hasPermission, primaryUnmappedApiSnapshot]);
+  const shouldHighlightUnmappedApi = apiAdsStatus !== 'loading' && apiAdsStatus !== 'error' && csPerformanceDiagnostics.unmappedSnapshots.length > 0;
+  const resolvedCsPerformanceApiStatusClassName = shouldHighlightUnmappedApi
+    ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
+    : apiStatusClassName(apiAdsStatus);
+  const resolvedCsPerformanceApiStatusLabel = shouldHighlightUnmappedApi
+    ? 'Perlu mapping'
+    : apiStatusLabel(apiAdsStatus);
 
   const csPerformanceBreakdowns = useMemo(() => {
     type BreakdownRow = {
@@ -2847,20 +2952,20 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${apiStatusClassName(apiAdsStatus)}`}>
+                    <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${resolvedCsPerformanceApiStatusClassName}`}>
                       {apiAdsStatus === 'loading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                      {apiStatusLabel(apiAdsStatus)}
+                      {resolvedCsPerformanceApiStatusLabel}
                     </span>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="h-8 gap-2 bg-white dark:bg-slate-900"
-                      onClick={() => setApiRefreshNonce((value) => value + 1)}
-                      disabled={!rangeParams || apiAdsStatus === 'loading'}
+                      onClick={handleSyncAdsApiToDailyAds}
+                      disabled={!rangeParams || apiAdsStatus === 'loading' || isApiDailySyncing}
                     >
-                      <RefreshCw className={`h-4 w-4 ${apiAdsStatus === 'loading' ? 'animate-spin' : ''}`} />
-                      Muat Ulang API
+                      <RefreshCw className={`h-4 w-4 ${apiAdsStatus === 'loading' || isApiDailySyncing ? 'animate-spin' : ''}`} />
+                      Sinkron API
                     </Button>
                   </div>
                 </div>
@@ -2960,6 +3065,19 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                             ).join(', ')}
                             {csPerformanceDiagnostics.unmappedSnapshots.length > 3 && ` +${csPerformanceDiagnostics.unmappedSnapshots.length - 3}`}
                           </div>
+                          {unmatchedApiHref ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-3 h-8 w-fit bg-white dark:bg-slate-900"
+                              onClick={() => {
+                                window.location.href = unmatchedApiHref;
+                              }}
+                            >
+                              Cek Belum Match API
+                            </Button>
+                          ) : null}
                         </div>
                       )}
                     </div>

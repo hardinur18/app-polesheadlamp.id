@@ -33,6 +33,11 @@ import { useMasterData } from '@/app/pages/master-data/context';
 import { usePermissions } from '@/app/hooks/usePermissions';
 import { logActivity } from '@/app/services/auditService';
 import {
+  buildAdsDailySyncPreview,
+  commitAdsDailySyncPreview,
+  reconcileAdsDailySyncPreviewRows,
+} from '@/app/services/adsDailySyncService';
+import {
   isAdminManagementRole,
   isAdvertiserRole,
   isCsRole,
@@ -267,7 +272,7 @@ const buildAdMetricCompatibilityKey = (
 export function IklanHarian() {
   const { 
     dailyAds, platforms, subChannels, adAccounts, adAccountAssignments, adAccountOwnerAssignments, users, currentUser, currentRole,
-    addDailyAd, updateDailyAd, deleteDailyAd, leads, orders,
+    addDailyAd, updateDailyAd, deleteDailyAd, leads, orders, refreshAdPerformanceInputsForDateRange,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   const isAdminManagementUser = isAdminManagementRole(currentRole);
@@ -1015,7 +1020,6 @@ export function IklanHarian() {
     setApiRecapErrors([]);
     setApiRecapProviderStatuses([]);
     setIsApiRecapOpen(true);
-    void loadApiRecapIntegrationConfigs();
   };
 
   const buildExistingDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId'>) =>
@@ -1272,36 +1276,34 @@ export function IklanHarian() {
   useEffect(() => {
     setApiRecapRows((rows) => {
       if (rows.length === 0) return rows;
-      const existingByKey = new Map(dailyAds.map((row) => [buildExistingDailyAdKey(row), row]));
-
-      return rows.map((row) => {
-        if (row.status === 'unmapped') return row;
-        const existing = existingByKey.get(buildExistingDailyAdKey(row));
-
-        if (apiRecapAdvertiserId !== 'all' && row.advertiserId !== apiRecapAdvertiserId) {
-          return { ...row, existing, status: 'skip', reason: 'Di luar filter advertiser.' };
-        }
-
-        if (apiRecapCsId !== 'all' && row.csId !== apiRecapCsId) {
-          return { ...row, existing, status: 'skip', reason: 'Di luar filter CS.' };
-        }
-
-        if (!existing) {
-          return { ...row, existing: undefined, status: 'new', reason: 'Siap ditambahkan.' };
-        }
-
-        if (apiRecapMode === 'update-existing') {
-          if (apiRecapPreserveEdited && (existing.editCount || 0) > 0) {
-            return { ...row, existing, status: 'skip', reason: 'Data pernah dikoreksi, tidak ditimpa.' };
-          }
-
-          return { ...row, existing, status: 'update', reason: 'Akan update data yang sudah ada.' };
-        }
-
-        return { ...row, existing, status: 'skip', reason: 'Sudah ada di laporan harian.' };
+      return reconcileAdsDailySyncPreviewRows(rows, {
+        dailyAds,
+        platforms,
+        adAccounts,
+        adAccountAssignments,
+        adAccountOwnerAssignments,
+        users,
+      }, {
+        platformId: apiRecapPlatformId,
+        advertiserId: apiRecapAdvertiserId,
+        csId: apiRecapCsId,
+        mode: apiRecapMode,
+        preserveEdited: apiRecapPreserveEdited,
       });
     });
-  }, [apiRecapAdvertiserId, apiRecapCsId, apiRecapMode, apiRecapPreserveEdited, dailyAds]);
+  }, [
+    adAccountAssignments,
+    adAccountOwnerAssignments,
+    adAccounts,
+    apiRecapAdvertiserId,
+    apiRecapCsId,
+    apiRecapMode,
+    apiRecapPlatformId,
+    apiRecapPreserveEdited,
+    dailyAds,
+    platforms,
+    users,
+  ]);
 
   const handleOpenApiRecap = async () => {
     if (!apiRecapFromDate || !apiRecapToDate) {
@@ -1320,147 +1322,37 @@ export function IklanHarian() {
     setApiRecapProviderStatuses([]);
     setIsApiRecapLoading(true);
 
-    const configs = await loadApiRecapIntegrationConfigs();
-
-    const platformNameById = new Map(platforms.map((platform) => [platform.id, platform.name.toLowerCase()]));
-    const selectedProviderKey =
-      apiRecapPlatformId === 'all'
-        ? null
-        : getAdsProviderKeyByPlatformName(platformNameById.get(apiRecapPlatformId));
-    const shouldLoadProvider = (provider: AdsProviderKey) =>
-      apiRecapPlatformId === 'all' || selectedProviderKey === provider;
-    const getEnabledConfigCount = (provider: AdsProviderKey) => {
-      if (provider === 'meta') {
-        return configs.meta.filter((config) => config.enabled && config.liveMetaAccountId).length;
-      }
-      if (provider === 'google') {
-        return configs.google.filter((config) => config.enabled && config.liveGoogleCustomerId).length;
-      }
-      return configs.tiktok.filter((config) => config.enabled && config.liveTikTokAdvertiserId).length;
-    };
-
-    const tasks: Array<{
-      key: AdsProviderKey;
-      label: string;
-      enabledConfigCount: number;
-      request: Promise<ApiRecapBuildResult>;
-    }> = [];
-
-    if (shouldLoadProvider('meta')) {
-      tasks.push(
-        {
-          key: 'meta',
-          label: adsProviderLabels.meta,
-          enabledConfigCount: getEnabledConfigCount('meta'),
-          request: syncMetaSnapshotDataset({
-            from: selectedRecapRange.from,
-            to: selectedRecapRange.to,
-            force: true,
-            minFreshMinutes: 0,
-            mappedOnly: true,
-          }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.meta)),
-        },
-      );
-    }
-
-    if (shouldLoadProvider('google')) {
-      tasks.push(
-        {
-          key: 'google',
-          label: adsProviderLabels.google,
-          enabledConfigCount: getEnabledConfigCount('google'),
-          request: syncGoogleAdsSnapshotDataset({
-            from: selectedRecapRange.from,
-            to: selectedRecapRange.to,
-            force: true,
-            minFreshMinutes: 0,
-          }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.google)),
-        },
-      );
-    }
-
-    if (shouldLoadProvider('tiktok')) {
-      tasks.push(
-        {
-          key: 'tiktok',
-          label: adsProviderLabels.tiktok,
-          enabledConfigCount: getEnabledConfigCount('tiktok'),
-          request: syncTikTokAdsSnapshotDataset({
-            from: selectedRecapRange.from,
-            to: selectedRecapRange.to,
-            force: true,
-            minFreshMinutes: 0,
-          }).then((payload) => buildApiRecapRows(payload.rows || [], adsProviderLabels.tiktok)),
-        },
-      );
-    }
-
     try {
-      if (tasks.length === 0) {
+      const preview = await buildAdsDailySyncPreview({
+        range: selectedRecapRange,
+        context: {
+          dailyAds,
+          platforms,
+          adAccounts,
+          adAccountAssignments,
+          adAccountOwnerAssignments,
+          users,
+        },
+        filters: {
+          platformId: apiRecapPlatformId,
+          advertiserId: apiRecapAdvertiserId,
+          csId: apiRecapCsId,
+          mode: apiRecapMode,
+          preserveEdited: apiRecapPreserveEdited,
+          mappedOnly: true,
+        },
+        onProviderStatus: setApiRecapProviderStatuses,
+      });
+
+      if (preview.providerStatuses.length === 0) {
         toast.info('Platform ini belum punya konektor API laporan iklan.');
         return;
       }
 
-      const rows: ApiRecapPreviewRow[] = [];
-      const errors: string[] = [];
+      setApiRecapRows(preview.rows);
+      setApiRecapErrors(preview.errors);
 
-      setApiRecapProviderStatuses(tasks.map((task) => ({
-        key: task.key,
-        label: task.label,
-        state: 'loading',
-        count: 0,
-        message: 'Mengambil snapshot provider...',
-      })));
-
-      const sortPreviewRows = (previewRows: ApiRecapPreviewRow[]) => previewRows.sort((left, right) => {
-        if (left.date !== right.date) return left.date.localeCompare(right.date);
-        return left.accountName.localeCompare(right.accountName);
-      });
-
-      const updateProviderStatus = (status: ApiRecapProviderStatus) => {
-        setApiRecapProviderStatuses((current) =>
-          current.map((provider) => provider.key === status.key ? status : provider),
-        );
-      };
-
-      await Promise.allSettled(tasks.map(async (task) => {
-        try {
-          const buildResult = await task.request;
-          const providerRows = buildResult.rows;
-          rows.push(...providerRows);
-          setApiRecapRows(sortPreviewRows([...rows]));
-          const ignoredMessage = buildResult.ignoredZeroActivityCount > 0
-            ? ` ${buildResult.ignoredZeroActivityCount} snapshot kosong dilewati.`
-            : '';
-          const inactiveMessage = buildResult.ignoredInactiveAccountCount > 0
-            ? ` ${buildResult.ignoredInactiveAccountCount} akun OFF dilewati.`
-            : '';
-          updateProviderStatus({
-            key: task.key,
-            label: task.label,
-            state: providerRows.length > 0 ? 'success' : 'empty',
-            count: providerRows.length,
-            message: providerRows.length > 0
-              ? `${providerRows.length} snapshot terbaca.${ignoredMessage}${inactiveMessage}`
-              : `${getEmptyApiRecapMessage(task.key, task.enabledConfigCount)}${ignoredMessage}${inactiveMessage}`,
-          });
-        } catch (reason) {
-          const message = getApiRecapErrorMessage(task.key, reason);
-          errors.push(`${task.label}: ${message}`);
-          setApiRecapErrors([...errors]);
-          updateProviderStatus({
-            key: task.key,
-            label: task.label,
-            state: 'error',
-            count: 0,
-            message,
-          });
-        }
-      }));
-
-      setApiRecapErrors(errors);
-
-      if (rows.length === 0 && errors.length === 0) {
+      if (preview.rows.length === 0 && preview.errors.length === 0) {
         toast.info('Tidak ada snapshot API untuk periode ini.');
       }
     } finally {
@@ -1476,35 +1368,9 @@ export function IklanHarian() {
     }
 
     setIsApiRecapSaving(true);
-    let inserted = 0;
-    let updated = 0;
-
     try {
-      for (const row of actionableRows) {
-        const payload: DailyAd = {
-          id: row.existing?.id || crypto.randomUUID(),
-          date: row.date,
-          advertiserId: row.advertiserId,
-          platformId: row.platformId,
-          subChannelId: row.subChannelId,
-          adAccountId: row.adAccountId,
-          csId: row.csId,
-          amountSpent: row.amountSpent,
-          leadsDashboard: row.leadsDashboard,
-          ppnAmount: row.ppnAmount,
-          feeAmount: row.feeAmount,
-          editCount: row.status === 'update' ? (row.existing?.editCount || 0) + 1 : 0,
-        };
-
-        if (row.status === 'update') {
-          await Promise.resolve(updateDailyAd(payload));
-          updated += 1;
-        } else {
-          await Promise.resolve(addDailyAd(payload));
-          inserted += 1;
-        }
-      }
-
+      const { inserted, updated } = await commitAdsDailySyncPreview(actionableRows);
+      await refreshAdPerformanceInputsForDateRange(selectedRecapRange);
       toast.success(`Rekap API selesai: ${inserted} ditambahkan, ${updated} diperbarui.`);
       setIsApiRecapOpen(false);
       setApiRecapRows([]);

@@ -79,6 +79,7 @@ export const mapDailyAdToDB = (a: DailyAd) => ({
   leads_dashboard: a.leadsDashboard,
   ppn_amount: a.ppnAmount,
   fee_amount: a.feeAmount,
+  edit_count: a.editCount ?? 0,
 });
 
 export const mapLeadSpamDailyInputFromDB = (row: any): LeadSpamDailyInput => ({

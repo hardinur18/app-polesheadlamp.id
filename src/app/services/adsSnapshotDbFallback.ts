@@ -60,6 +60,7 @@ const SNAPSHOT_LATEST_KNOWN_READ_LIMIT = 1000;
 const SNAPSHOT_DATASET_CACHE_PREFIX = 'polesheadlamp_ads_snapshot_dataset_cache_v1';
 const SNAPSHOT_DATASET_CACHE_INDEX_KEY = 'polesheadlamp_ads_snapshot_dataset_cache_index_v1';
 const SNAPSHOT_DATASET_CACHE_LIMIT = 30;
+const SNAPSHOT_DATASET_CACHE_MAX_AGE_MS = 24 * 60 * 60_000;
 
 function toNumber(value: unknown) {
   const parsed = Number(value);
@@ -130,6 +131,11 @@ function readCachedSnapshotDataset(cacheKey: string) {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(cacheKey) || 'null');
     if (!parsed || !Array.isArray(parsed.rows)) return null;
+    const cachedAt = parsed.metadata?.cachedAt ? new Date(parsed.metadata.cachedAt).getTime() : Number.NaN;
+    if (!Number.isFinite(cachedAt) || Date.now() - cachedAt > SNAPSHOT_DATASET_CACHE_MAX_AGE_MS) {
+      window.localStorage.removeItem(cacheKey);
+      return null;
+    }
 
     return parsed as {
       rows: AdsSnapshotFallbackRow[];

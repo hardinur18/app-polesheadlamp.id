@@ -1,6 +1,6 @@
 # Fundamental Hardening Roadmap
 
-Terakhir update: 2026-10-07
+Terakhir update: 2026-10-08
 
 Dokumen ini dipakai sebagai tracker perapihan fundamental RHI System sebelum migrasi VPS.
 Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, terukur, dan mudah dirawat.
@@ -37,7 +37,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [x] Trigger duplicate prospek terverifikasi aktif di database.
 - [x] Audit query dan index database Phase 2 selesai: dashboard snapshot, orders/leads/schedule, daily ads/spam, proof assets, dan payment hot path sudah dirapikan/ditandai.
 - [~] Auth/login distabilkan: bootstrap current-user dipercepat, test login semua role masih perlu credential.
-- [~] Dashboard API distabilkan total.
+- [x] Dashboard API distabilkan total untuk pola snapshot DB, manual sync, cache TTL, dan mapping API baru.
 - [~] Phase 4 data access standardization dimulai: inventory direct Supabase/API sudah dibuat.
 - [ ] CRUD prospek, pesanan, payment, dan master data diaudit penuh.
 - [ ] Security/RLS diaudit dan dirapikan penuh.
@@ -159,16 +159,16 @@ Catatan progress 2026-10-07:
 
 Tujuan: data spending, lead dashboard, match akun, dan status API stabil.
 
-- [ ] Audit sumber data spending.
-- [ ] Audit sumber data lead dashboard.
-- [ ] Audit tabel snapshot API.
-- [ ] Audit mapping akun iklan internal.
-- [ ] Audit kasus Rahmansa 9 dan Rahmansa 10.
-- [ ] Audit penyebab akun "belum match".
+- [x] Audit sumber data spending.
+- [x] Audit sumber data lead dashboard.
+- [x] Audit tabel snapshot API.
+- [x] Audit mapping akun iklan internal.
+- [x] Audit kasus Rahmansa 9 dan Rahmansa 10.
+- [x] Audit penyebab akun "belum match".
 - [x] Tombol "Cek Belum Match API" diarahkan ke tab/section spesifik.
-- [ ] UI membaca database hasil sync, bukan menunggu API eksternal terus-menerus.
-- [ ] Refresh API hanya menjalankan sync snapshot.
-- [ ] Cache dashboard punya TTL dan invalidation yang jelas.
+- [x] UI membaca database hasil sync, bukan menunggu API eksternal terus-menerus.
+- [x] Refresh API hanya menjalankan sync snapshot.
+- [x] Cache dashboard punya TTL dan invalidation yang jelas.
 
 Definition of done:
 
@@ -181,6 +181,14 @@ Catatan progress 2026-10-07:
 - Warning CS dashboard untuk snapshot API belum match sekarang membuka Master Data Akun Iklan langsung ke view `Belum Match API`.
 - Deep link pairing API tetap membawa `action=pair-api`, `platform`, `externalAccountId`, dan search query agar dialog pairing bisa fokus ke akun yang bermasalah.
 - Deep link `pair-api` tidak lagi memaksa balik ke view `Integrasi API` kalau URL sudah membawa view spesifik seperti `Belum Match API`.
+
+Catatan progress 2026-10-08:
+
+- CS Dashboard dan Advertiser Dashboard sekarang ikut membaca mapping dari `ad_account_api_mappings`, bukan hanya config legacy Meta/Google/TikTok. Ini menutup kasus akun seperti Rahmansa 9/10 yang sudah dipair dari view `Belum Match API` tetapi belum ikut terhitung di dashboard.
+- Source operasional spending dan Lead Dashboard distandarkan ke `daily_ads`. `ads_live_daily_snapshots` tetap dipakai sebagai raw staging/audit dari provider eksternal, lalu tombol `Sinkron API` meng-commit snapshot terpetakan ke `daily_ads`.
+- Cache dataset snapshot localStorage diberi TTL 24 jam dan entry stale otomatis dihapus, sehingga angka valid terakhir masih bisa tampil saat API eksternal gagal tanpa membuat data basi menetap terlalu lama.
+- Advertiser Dashboard sekarang juga menandai status `Perlu mapping` saat ada snapshot spend/lead yang belum cocok ke akun internal, dan tombolnya deep link ke `master-data?tab=ad-accounts&view=unmatched&action=pair-api`.
+- Verifikasi Phase 5: `npm run typecheck:full`, `npm run lint`, `npm run build`, dan `npm run smoke:routes` pass.
 
 ## Phase 6 - Prospek CRUD
 

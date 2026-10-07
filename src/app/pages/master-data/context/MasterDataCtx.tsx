@@ -601,6 +601,7 @@ interface MasterDataContextType {
   ensureProspectBookingsForDateRange: (range: { from: string; to: string }) => Promise<void>;
   ensureTechnicianSchedulesForDateRange: (range: { from: string; to: string }) => Promise<void>;
   ensureAdPerformanceInputsForDateRange: (range: { from: string; to: string }) => Promise<void>;
+  refreshAdPerformanceInputsForDateRange: (range: { from: string; to: string }) => Promise<void>;
 
   // Setters (if needed for local state updates before refresh)
   setAreas: React.Dispatch<React.SetStateAction<Area[]>>;
@@ -1671,6 +1672,21 @@ export const MasterDataProvider: React.FC<{
     fetchingAdPerformanceDateRangesRef.current.set(rangeKey, request);
     return request;
   }, []);
+
+  const refreshAdPerformanceInputsForDateRange = React.useCallback(async ({
+    from,
+    to,
+  }: {
+    from: string;
+    to: string;
+  }) => {
+    if (!from || !to) return;
+
+    const rangeKey = `${from}:${to}`;
+    fetchedAdPerformanceDateRangesRef.current.delete(rangeKey);
+    fetchingAdPerformanceDateRangesRef.current.delete(rangeKey);
+    await ensureAdPerformanceInputsForDateRange({ from, to });
+  }, [ensureAdPerformanceInputsForDateRange]);
 
   // Helper to fetch data from a table
 	  const fetchData = async (
@@ -4181,7 +4197,7 @@ export const MasterDataProvider: React.FC<{
     currentRole, currentUser, isCurrentUserResolved, currentUserIssue, setCurrentRole, setCurrentUser,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
     ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange,
-    ensureAdPerformanceInputsForDateRange,
+    ensureAdPerformanceInputsForDateRange, refreshAdPerformanceInputsForDateRange,
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
@@ -4190,7 +4206,7 @@ export const MasterDataProvider: React.FC<{
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,
     ensureOrdersForDateRange, ensureLeadsForDateRange, ensureProspectBookingsForDateRange, ensureTechnicianSchedulesForDateRange,
-    ensureAdPerformanceInputsForDateRange
+    ensureAdPerformanceInputsForDateRange, refreshAdPerformanceInputsForDateRange
   ]);
 
   return (
