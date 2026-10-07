@@ -237,15 +237,6 @@ const resolvePlatformKey = (value?: string | null) => {
   return 'meta';
 };
 
-const apiStatusLabel = (status: ApiAdsStatus) => {
-  if (status === 'ready') return 'Connected';
-  if (status === 'loading') return 'Loading';
-  if (status === 'empty') return 'Data kosong';
-  if (status === 'error') return 'API error';
-  if (status === 'idle') return 'Belum dimuat';
-  return 'Unconnect';
-};
-
 const apiStatusClassName = (status: ApiAdsStatus) => {
   if (status === 'ready') return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300';
   if (status === 'loading') return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300';
@@ -263,6 +254,21 @@ const getCostPerLeadTextClass = (value: number) => {
 type SpendIndicatorTone = 'none' | 'low' | 'target' | 'high';
 type CostIndicatorTone = 'none' | 'good' | 'target' | 'bad';
 type RoasIndicatorTone = 'none' | 'bad' | 'target' | 'good';
+type VolumeIndicatorTone = 'none' | 'active';
+
+const getCostPerLeadIndicatorTone = (value: number): CostIndicatorTone => {
+  if (!Number.isFinite(value) || value <= 0) return 'none';
+  if (value < 8_000) return 'good';
+  if (value <= 10_000) return 'target';
+  return 'bad';
+};
+
+const getConversionRateIndicatorTone = (value: number): CostIndicatorTone => {
+  if (!Number.isFinite(value) || value <= 0) return 'none';
+  if (value < 10) return 'bad';
+  if (value <= 12) return 'target';
+  return 'good';
+};
 
 const getSpendIndicatorTone = (spendTotal: number): SpendIndicatorTone => {
   if (spendTotal <= 0) return 'none';
@@ -291,6 +297,19 @@ const spendIndicatorStyles: Record<SpendIndicatorTone, { badge: string; dot: str
     badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
     dot: 'bg-emerald-500',
     title: 'Total spending di atas Rp 1.200.000',
+  },
+};
+
+const volumeIndicatorStyles: Record<VolumeIndicatorTone, { badge: string; dot: string; title: string }> = {
+  none: {
+    badge: 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400',
+    dot: 'bg-slate-300',
+    title: 'Belum ada order',
+  },
+  active: {
+    badge: 'border border-blue-100 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300',
+    dot: 'bg-blue-500',
+    title: 'Order tercatat',
   },
 };
 
@@ -332,6 +351,52 @@ const costIndicatorStyles: Record<CostIndicatorTone, { badge: string; dot: strin
   },
 };
 
+const cplIndicatorStyles: Record<CostIndicatorTone, { badge: string; dot: string; title: string }> = {
+  none: {
+    badge: 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400',
+    dot: 'bg-slate-300',
+    title: 'Belum ada CPL',
+  },
+  good: {
+    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+    title: 'CPL di bawah Rp 8.000',
+  },
+  target: {
+    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
+    dot: 'bg-amber-500',
+    title: 'CPL Rp 8.000 sampai Rp 10.000',
+  },
+  bad: {
+    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
+    dot: 'bg-red-500',
+    title: 'CPL di atas Rp 10.000',
+  },
+};
+
+const conversionIndicatorStyles: Record<CostIndicatorTone, { badge: string; dot: string; title: string }> = {
+  none: {
+    badge: 'border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400',
+    dot: 'bg-slate-300',
+    title: 'Belum ada konversi',
+  },
+  good: {
+    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+    title: 'Konversi di atas 12%',
+  },
+  target: {
+    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
+    dot: 'bg-amber-500',
+    title: 'Konversi 10% sampai 12%',
+  },
+  bad: {
+    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
+    dot: 'bg-red-500',
+    title: 'Konversi di bawah 10%',
+  },
+};
+
 const getRoasIndicatorTone = (value: number): RoasIndicatorTone => {
   if (!Number.isFinite(value) || value <= 0) return 'none';
   if (value < 1) return 'bad';
@@ -365,12 +430,17 @@ const roasIndicatorStyles: Record<RoasIndicatorTone, { badge: string; dot: strin
 function SpendingCellValue({
   spendDashboard,
   spendTotal,
+  subtleTotal = false,
 }: {
   spendDashboard: number;
   spendTotal: number;
+  subtleTotal?: boolean;
 }) {
   const tone = getSpendIndicatorTone(spendTotal);
   const indicator = spendIndicatorStyles[tone];
+  const totalClassName = subtleTotal
+    ? 'inline-flex items-center justify-end gap-1.5 font-mono text-[11px] leading-tight text-slate-500 dark:text-slate-400'
+    : `inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] leading-tight ${indicator.badge}`;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -378,7 +448,7 @@ function SpendingCellValue({
         {formatCurrency(spendDashboard)}
       </div>
       <div
-        className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] leading-tight ${indicator.badge}`}
+        className={totalClassName}
         title={indicator.title}
       >
         {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
@@ -397,8 +467,53 @@ function CostIndicatorBadge({ value }: { value: number }) {
       className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold leading-tight ${indicator.badge}`}
       title={indicator.title}
     >
+      {tone !== 'none' && <i className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
+      <b className="font-mono font-semibold">{formatCurrency(value)}</b>
+    </div>
+  );
+}
+
+function CostPerLeadBadge({ value }: { value: number }) {
+  const tone = getCostPerLeadIndicatorTone(value);
+  const indicator = cplIndicatorStyles[tone];
+
+  return (
+    <div
+      className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold leading-tight ${indicator.badge}`}
+      title={indicator.title}
+    >
       {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
       <span>{formatCurrency(value)}</span>
+    </div>
+  );
+}
+
+function ConversionRateBadge({ value }: { value: number }) {
+  const tone = getConversionRateIndicatorTone(value);
+  const indicator = conversionIndicatorStyles[tone];
+
+  return (
+    <div
+      className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold leading-tight ${indicator.badge}`}
+      title={indicator.title}
+    >
+      {tone !== 'none' && <i className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
+      <b className="font-mono font-semibold">{formatPercent(value)}</b>
+    </div>
+  );
+}
+
+function OrderVolumeBadge({ value }: { value: number }) {
+  const tone: VolumeIndicatorTone = value > 0 ? 'active' : 'none';
+  const indicator = volumeIndicatorStyles[tone];
+
+  return (
+    <div
+      className={`inline-flex items-center justify-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold leading-tight ${indicator.badge}`}
+      title={indicator.title}
+    >
+      {tone !== 'none' && <i className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
+      <b className="font-mono font-semibold">{formatNumber(value)}</b>
     </div>
   );
 }
@@ -417,13 +532,6 @@ function RoasBadgeValue({ value }: { value: number }) {
     </div>
   );
 }
-
-const getConversionRateTextClass = (value: number) => {
-  if (!Number.isFinite(value)) return 'text-slate-950 dark:text-slate-100';
-  if (value < 10) return 'text-red-600 dark:text-red-300';
-  if (value <= 12) return 'text-amber-500 dark:text-amber-300';
-  return 'text-emerald-600 dark:text-emerald-300';
-};
 
 export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const {
@@ -462,6 +570,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
   const [isApiDailySyncing, setIsApiDailySyncing] = useState(false);
   const [expandedCsDates, setExpandedCsDates] = useState<string[]>([]);
+  const [expandedCprBreakdowns, setExpandedCprBreakdowns] = useState<string[]>([]);
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastApiSnapshotRefreshNonceRef = React.useRef(0);
   const apiRequestInFlightRef = React.useRef(false);
@@ -554,6 +663,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     if (!rangeParams) return;
 
     setIsApiDailySyncing(true);
+    setApiAdsStatus('loading');
     try {
       const preview = await buildAdsDailySyncPreview({
         range: rangeParams,
@@ -585,16 +695,16 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       if (actionableRows.length === 0) {
         const errorHint = preview.errors.length > 0 ? ` ${preview.errors[0]}` : '';
         toast.info(`Tidak ada data API yang perlu disimpan ke Iklan Harian.${errorHint}`);
-        setApiRefreshNonce((value) => value + 1);
+        setApiAdsStatus(preview.errors.length > 0 ? 'error' : preview.rows.length > 0 ? 'ready' : 'empty');
         return;
       }
 
       const result = await commitAdsDailySyncPreview(actionableRows);
       await refreshAdPerformanceInputsForDateRange(rangeParams);
-      setApiSnapshotRefreshNonce((value) => value + 1);
-      setApiRefreshNonce((value) => value + 1);
+      setApiAdsStatus('ready');
       toast.success(`Sinkron API selesai: ${result.inserted} ditambahkan, ${result.updated} diperbarui di Iklan Harian.`);
     } catch (error) {
+      setApiAdsStatus('error');
       toast.error(error instanceof Error ? error.message : 'Gagal sinkron API ke Iklan Harian.');
     } finally {
       setIsApiDailySyncing(false);
@@ -613,32 +723,6 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     targetAdvertiserId,
     users,
   ]);
-
-  React.useEffect(() => {
-    if (!rangeParams) return;
-
-    const refreshSnapshot = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (apiRequestInFlightRef.current) return;
-      if (!dashboardRangeIncludesToday(rangeParams, format(new Date(), 'yyyy-MM-dd'))) return;
-      setApiSnapshotRefreshNonce((value) => value + 1);
-    };
-    const handleVisibilityRefresh = () => {
-      if (document.visibilityState === 'visible') {
-        refreshSnapshot();
-      }
-    };
-
-    const intervalId = window.setInterval(refreshSnapshot, DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS);
-    window.addEventListener('focus', refreshSnapshot);
-    document.addEventListener('visibilitychange', handleVisibilityRefresh);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshSnapshot);
-      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
-    };
-  }, [rangeParams]);
 
   React.useEffect(() => {
     if (!rangeParams) return;
@@ -1185,6 +1269,12 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     if (forceRefresh) lastApiRefreshNonceRef.current = apiRefreshNonce;
     const backgroundRefresh = apiSnapshotRefreshNonce !== lastApiSnapshotRefreshNonceRef.current;
     if (backgroundRefresh) lastApiSnapshotRefreshNonceRef.current = apiSnapshotRefreshNonce;
+    if (!forceRefresh && !backgroundRefresh) {
+      setApiAdsByDateAccount({});
+      setApiUnmappedSnapshots([]);
+      setApiAdsStatus('idle');
+      return;
+    }
     const cacheKey = `${rangeParams.from}:${rangeParams.to}:${targetAdvertiserId || 'all'}:${adAccountAssignmentCacheKey}`;
     const persistentCachedSnapshot =
       !forceRefresh && !backgroundRefresh
@@ -1790,7 +1880,12 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       groups.set(row.date, current);
     }
 
-    return Array.from(groups.values()).sort((left, right) => right.date.localeCompare(left.date));
+    return Array.from(groups.values()).sort((left, right) => {
+      const leftHasAdMetrics = left.spendDashboard > 0 || left.leadsDash > 0;
+      const rightHasAdMetrics = right.spendDashboard > 0 || right.leadsDash > 0;
+      if (leftHasAdMetrics !== rightHasAdMetrics) return leftHasAdMetrics ? -1 : 1;
+      return right.date.localeCompare(left.date);
+    });
   }, [csPerformanceRows]);
 
   const csPerformanceTotals = useMemo(() => {
@@ -1900,10 +1995,18 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const shouldHighlightUnmappedApi = apiAdsStatus !== 'loading' && apiAdsStatus !== 'error' && csPerformanceDiagnostics.unmappedSnapshots.length > 0;
   const resolvedCsPerformanceApiStatusClassName = shouldHighlightUnmappedApi
     ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
-    : apiStatusClassName(apiAdsStatus);
+    : apiAdsStatus === 'loading' || isApiDailySyncing
+      ? apiStatusClassName('loading')
+      : apiAdsStatus === 'error'
+        ? apiStatusClassName('error')
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300';
   const resolvedCsPerformanceApiStatusLabel = shouldHighlightUnmappedApi
     ? 'Perlu mapping'
-    : apiStatusLabel(apiAdsStatus);
+    : apiAdsStatus === 'loading' || isApiDailySyncing
+      ? 'Sinkronisasi'
+      : apiAdsStatus === 'error'
+        ? 'API error'
+        : 'Data DB';
 
   const csPerformanceBreakdowns = useMemo(() => {
     type BreakdownRow = {
@@ -2054,6 +2157,14 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       ),
     ];
   }, [csPerformanceRows]);
+
+  const toggleCprBreakdown = React.useCallback((title: string) => {
+    setExpandedCprBreakdowns((current) =>
+      current.includes(title)
+        ? current.filter((item) => item !== title)
+        : [...current, title],
+    );
+  }, []);
 
   const csFilterOptions = useMemo(() => {
     const csIds = new Set<string>();
@@ -2829,22 +2940,38 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                       </p>
                     </div>
                   </CardHeader>
-                  <div className="advertiserDashboardLegacyCprGrid grid gap-4 p-3 sm:p-5 xl:grid-cols-2">
-                    {csPerformanceBreakdowns.map((breakdown) => (
-                      <div key={breakdown.title} className="advertiserDashboardLegacyCprPanel overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                        <div className="advertiserDashboardLegacyCprPanelHeader flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              Performa {breakdown.title}
-                            </div>
-                            <div className="mt-1 text-[11px] text-slate-400">
-                              Menampilkan {breakdown.rows.length} data aktif by CPR selesai
+                  <div className="advertiserDashboardLegacyCprGrid grid grid-cols-1 gap-4 p-3 sm:p-5">
+                    {csPerformanceBreakdowns.map((breakdown) => {
+                      const isBreakdownExpanded = expandedCprBreakdowns.includes(breakdown.title);
+
+                      return (
+                        <div key={breakdown.title} className="advertiserDashboardLegacyCprPanel overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                        <div className="advertiserDashboardLegacyCprPanelHeader flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+                              onClick={() => toggleCprBreakdown(breakdown.title)}
+                              aria-expanded={isBreakdownExpanded}
+                              aria-label={`${isBreakdownExpanded ? 'Tutup' : 'Buka'} Performa ${breakdown.title}`}
+                            >
+                              <ChevronDown className={`h-4 w-4 transition-transform ${isBreakdownExpanded ? 'rotate-180' : ''}`} />
+                            </Button>
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Performa {breakdown.title}
+                              </div>
+                              <div className="mt-1 text-[11px] text-slate-400">
+                                Menampilkan {breakdown.rows.length} data aktif by CPR selesai
+                              </div>
                             </div>
                           </div>
                           <div className="advertiserDashboardLegacyCprBadges grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
-                          <div className="advertiserDashboardLegacyCprBadge rounded-md bg-cyan-50 px-2.5 py-1.5 dark:bg-cyan-950/30">
-                            <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Lead Dashboard</div>
-                            <div className="mt-0.5 font-mono text-sm font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(breakdown.totals.leadsDash)}</div>
+                            <div className="advertiserDashboardLegacyCprBadge rounded-md bg-cyan-50 px-2.5 py-1.5 dark:bg-cyan-950/30">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Lead Dashboard</div>
+                              <div className="mt-0.5 font-mono text-sm font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(breakdown.totals.leadsDash)}</div>
                             </div>
                             <div className="advertiserDashboardLegacyCprBadge rounded-md bg-blue-50 px-2.5 py-1.5 dark:bg-blue-950/30">
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Lead Real</div>
@@ -2860,26 +2987,26 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                             </div>
                           </div>
                         </div>
-                        {breakdown.rows.length > 0 ? (
+                        {isBreakdownExpanded && (breakdown.rows.length > 0 ? (
                           <div className="overflow-x-auto">
                             <table className="w-full min-w-[760px] table-fixed text-xs">
                               <colgroup>
                                 <col className="w-[230px]" />
                                 <col className="w-[110px]" />
-                                <col className="w-[110px]" />
-                                <col className="w-[110px]" />
                                 <col className="w-[75px]" />
                                 <col className="w-[75px]" />
+                                <col className="w-[110px]" />
+                                <col className="w-[110px]" />
                                 <col className="w-[75px]" />
                               </colgroup>
                               <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
                                 <tr>
                                   <th className="px-4 py-2.5 text-left font-medium">{breakdown.title}</th>
-                                  <th className="px-3 py-2.5 text-right font-medium">CPR Closing</th>
-                                  <th className="px-3 py-2.5 text-right font-medium">CPR Selesai</th>
                                   <th className="px-3 py-2.5 text-right font-medium">Spend</th>
                                   <th className="px-3 py-2.5 text-center font-medium">Closing</th>
                                   <th className="px-3 py-2.5 text-center font-medium">Done</th>
+                                  <th className="px-3 py-2.5 text-right font-medium">CPR Closing</th>
+                                  <th className="px-3 py-2.5 text-right font-medium">CPR Selesai</th>
                                   <th className="px-3 py-2.5 text-center font-medium">ROAS</th>
                                 </tr>
                               </thead>
@@ -2906,15 +3033,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                       </div>
                                     </td>
                                     <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
-                                      <CostIndicatorBadge value={row.cprClosing} />
-                                    </td>
-                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
-                                      <CostIndicatorBadge value={row.cprDone} />
-                                    </td>
-                                    <td className="px-3 py-3 text-right align-top">
                                       <SpendingCellValue
                                         spendDashboard={row.spendDashboard}
                                         spendTotal={row.spendTotal}
+                                        subtleTotal
                                       />
                                     </td>
                                     <td className="px-3 py-3 text-center align-top font-mono font-semibold text-violet-600">
@@ -2923,6 +3045,12 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                     <td className="px-3 py-3 text-center align-top">
                                       <div className="font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</div>
                                       <div className="mt-1 font-mono text-[10px] text-slate-500">Lead {formatNumber(row.leadsDash)}</div>
+                                    </td>
+                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                      <CostIndicatorBadge value={row.cprClosing} />
+                                    </td>
+                                    <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                      <CostIndicatorBadge value={row.cprDone} />
                                     </td>
                                     <td className="px-3 py-3 text-center align-top">
                                       <RoasBadgeValue value={row.roas} />
@@ -2936,9 +3064,10 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                           <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                             Belum ada data real untuk kategori ini.
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </OperationalTableCard>
 
@@ -3227,13 +3356,19 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                   </div>
                                   <div>
                                     <span>Order</span>
-                                    <strong>{formatNumber(row.orders)}</strong>
+                                    <div className="mt-1">
+                                      <OrderVolumeBadge value={row.orders} />
+                                    </div>
                                     <small>Selesai: {formatNumber(row.done)}</small>
                                   </div>
                                   <div>
                                     <span>CPL</span>
-                                    <strong className={getCostPerLeadTextClass(row.cpl)}>{formatCurrency(row.cpl)}</strong>
-                                    <small>{formatPercent(row.orderRate)}</small>
+                                    <div className="mt-1">
+                                      <CostPerLeadBadge value={row.cpl} />
+                                    </div>
+                                    <div className="mt-1">
+                                      <ConversionRateBadge value={row.orderRate} />
+                                    </div>
                                   </div>
                                   <div>
                                     <span>Cost Selesai</span>
@@ -3321,9 +3456,15 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                     </td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-red-600">{formatNumber(row.spam)}</td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-amber-500">{formatPercentAllowZero(row.spamRate)}</td>
-                                    <td className="px-4 py-3 text-center align-top font-mono font-semibold text-blue-600">{formatNumber(row.orders)}</td>
-                                    <td className={`px-4 py-3 text-right align-top font-mono font-semibold ${getConversionRateTextClass(row.orderRate)}`}>{formatPercent(row.orderRate)}</td>
-                                      <td className={`px-4 py-3 text-right align-top font-mono font-semibold ${getCostPerLeadTextClass(row.cpl)}`}>{formatCurrency(row.cpl)}</td>
+                                    <td className="px-4 py-3 text-center align-top">
+                                      <OrderVolumeBadge value={row.orders} />
+                                    </td>
+                                    <td className="px-4 py-3 text-right align-top">
+                                      <ConversionRateBadge value={row.orderRate} />
+                                    </td>
+                                      <td className="px-4 py-3 text-right align-top">
+                                        <CostPerLeadBadge value={row.cpl} />
+                                      </td>
                                       <td className="px-4 py-3 text-right align-top">
                                         <CostIndicatorBadge value={row.cprClosing} />
                                       </td>

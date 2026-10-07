@@ -29078,7 +29078,7 @@ body {
 
 .advertiserDashboardFilterContent {
   display: grid;
-  grid-template-columns: minmax(198px, 218px) minmax(190px, 218px) minmax(260px, 1.25fr) repeat(4, minmax(138px, 0.86fr));
+  grid-template-columns: minmax(252px, 272px) minmax(190px, 218px) minmax(260px, 1.25fr) repeat(4, minmax(138px, 0.86fr));
   align-items: center;
   gap: 10px;
 }
@@ -29093,11 +29093,11 @@ body {
 }
 
 .advertiserDashboardHeaderDate {
-  max-width: 218px;
+  max-width: 272px;
 }
 
 .advertiserDashboardHeaderActions.dateOnly {
-  grid-template-columns: minmax(198px, 218px);
+  grid-template-columns: minmax(252px, 272px);
 }
 
 .advertiserDashboardControl.uiInput,
@@ -29124,9 +29124,13 @@ body {
 
 .advertiserDashboardHeaderDate .uiPeriodPicker > span {
   display: inline-flex;
+  min-width: 0;
   min-height: 0;
   align-items: center;
+  overflow: hidden;
   line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .advertiserDashboardHeaderDate .uiPeriodPicker svg {
@@ -29586,7 +29590,7 @@ body {
 
   .advertiserDashboardFilterContent {
     display: none;
-    grid-template-columns: minmax(198px, 218px) minmax(180px, 210px) minmax(250px, 280px) repeat(4, minmax(174px, 190px));
+    grid-template-columns: minmax(252px, 272px) minmax(180px, 210px) minmax(250px, 280px) repeat(4, minmax(174px, 190px));
     gap: 8px;
     padding-top: 10px;
     padding-bottom: 12px;
