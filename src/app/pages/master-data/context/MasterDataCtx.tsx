@@ -135,7 +135,7 @@ type MutationOptions = {
 const shouldUseLocalProfileFallback =
   import.meta.env.VITE_AUTH_MODE === 'local';
 
-const CURRENT_USER_PROFILE_TIMEOUT_MS = 8_000;
+const CURRENT_USER_PROFILE_TIMEOUT_MS = 5_000;
 const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
 const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
 const APP_DATA_FETCH_TIMEOUT_MS = 10_000;
@@ -584,7 +584,6 @@ export const MasterDataProvider: React.FC<{
   const [realUser, setRealUser] = useState<User | undefined>(undefined);
   const [isCurrentUserResolved, setIsCurrentUserResolved] = useState(!session?.user);
   const [currentUserIssue, setCurrentUserIssue] = useState<CurrentUserIssue | undefined>(undefined);
-  const [profileSyncRetryKey, setProfileSyncRetryKey] = useState(0);
   
   // Global Refresh Trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -1660,7 +1659,6 @@ export const MasterDataProvider: React.FC<{
     
     let isMounted = true;
     const abortController = new AbortController();
-    let profileRetryTimeoutId: number | undefined;
     setCurrentUserId('');
     setRealUser(undefined);
     setCurrentUserIssue(undefined);
@@ -1668,21 +1666,6 @@ export const MasterDataProvider: React.FC<{
 
     const syncUser = async () => {
       let profileSyncTimeoutId: number | undefined;
-
-      const scheduleProfileRetry = (reason: CurrentUserIssue) => {
-        if (reason.code !== 'profile_timeout' && reason.code !== 'profile_query_error') {
-          return;
-        }
-
-        if (profileRetryTimeoutId !== undefined) {
-          window.clearTimeout(profileRetryTimeoutId);
-        }
-
-        profileRetryTimeoutId = window.setTimeout(() => {
-          if (!isMounted) return;
-          setProfileSyncRetryKey(value => value + 1);
-        }, 3000);
-      };
 
       const applyCachedUser = (reason: CurrentUserIssue) => {
         const cachedUser = readCachedCurrentUser(session.user.id);
@@ -1713,7 +1696,6 @@ export const MasterDataProvider: React.FC<{
 
         if (!shouldUseLocalProfileFallback) {
           setCurrentUserIssue(reason);
-          scheduleProfileRetry(reason);
           return false;
         }
 
@@ -1936,12 +1918,9 @@ export const MasterDataProvider: React.FC<{
 
     return () => {
       isMounted = false;
-      if (profileRetryTimeoutId !== undefined) {
-        window.clearTimeout(profileRetryTimeoutId);
-      }
       abortController.abort();
     };
-  }, [session?.user?.id, profileSyncRetryKey]); // Only re-run when user ID changes or profile sync needs retry
+  }, [session?.user?.id]); // Only re-run when user ID changes.
 
   // Derived State
   const currentUser = React.useMemo(() => {

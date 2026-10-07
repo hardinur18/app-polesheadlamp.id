@@ -9,9 +9,9 @@ import { toast } from 'sonner';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
-const LOGIN_TIMEOUT_MS = 45_000;
-const LOGIN_MAX_ATTEMPTS = 3;
-const LOGIN_RETRY_BASE_DELAY_MS = 900;
+const LOGIN_TIMEOUT_MS = 8_000;
+const LOGIN_MAX_ATTEMPTS = 1;
+const LOGIN_RETRY_BASE_DELAY_MS = 500;
 
 const withTimeout = async <T,>(promise: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -61,7 +61,7 @@ const signInWithRetry = async (email: string, password: string): Promise<Passwor
       const result = await withTimeout(
         supabase.auth.signInWithPassword({ email, password }),
         LOGIN_TIMEOUT_MS,
-        'Login timeout. Koneksi ke server auth terlalu lama.',
+        'Login timeout. Koneksi ke server auth terlalu lama. Coba ulang beberapa detik lagi.',
       );
 
       if (!result.error || !isRetryableLoginError(result.error) || attempt === LOGIN_MAX_ATTEMPTS) {

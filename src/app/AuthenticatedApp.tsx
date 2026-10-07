@@ -127,10 +127,11 @@ export const AuthenticatedApp = () => {
     }
 
     let isActive = true;
-    const AUTH_BOOT_TIMEOUT_MS = 20000;
-    const AUTH_REQUEST_TIMEOUT_MS = 8000;
+    const AUTH_BOOT_TIMEOUT_MS = 12000;
+    const AUTH_REQUEST_TIMEOUT_MS = 6000;
     const AUTH_RETRY_DELAY_MS = 1500;
-    const MAX_AUTH_RETRIES = 3;
+    const MAX_AUTH_RETRIES = 1;
+    let usedBootCachedSession = false;
 
     const settleAuthState = (nextSession: Session | null) => {
       if (!isActive) return;
@@ -146,6 +147,15 @@ export const AuthenticatedApp = () => {
       if (!isActive) return;
 
       const message = getAuthErrorMessage(error);
+
+      if (isRecoverableAuthBootError(error) && hasCachedSupabaseSession()) {
+        console.warn('Network connection issue during auth check. Opening cached session while auth recovers.', message);
+        settleCachedAuthState();
+        if (retry && attempt < MAX_AUTH_RETRIES) {
+          window.setTimeout(retry, AUTH_RETRY_DELAY_MS);
+        }
+        return;
+      }
 
       if (isRecoverableAuthBootError(error) && retry && attempt < MAX_AUTH_RETRIES) {
         console.warn(`Network connection issue during auth check. Retrying (${attempt + 1}/${MAX_AUTH_RETRIES}).`, message);
@@ -226,8 +236,17 @@ export const AuthenticatedApp = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       window.clearTimeout(bootTimeout);
+      if (_event !== 'SIGNED_OUT' && !session && usedBootCachedSession && hasCachedSupabaseSession()) {
+        return;
+      }
       settleAuthState(session);
     });
+
+    const cachedSessionAtBoot = readCachedSupabaseSession();
+    if (cachedSessionAtBoot) {
+      usedBootCachedSession = true;
+      settleAuthState(cachedSessionAtBoot);
+    }
 
     // 2. Check active session
     const checkActiveSession = (attempt = 0) => {
@@ -240,15 +259,17 @@ export const AuthenticatedApp = () => {
         window.clearTimeout(bootTimeout);
 
         if (error) {
-          if (isRecoverableAuthBootError(error) && attempt < MAX_AUTH_RETRIES) {
-            console.warn('Network error during session check:', error.message);
-            window.setTimeout(() => checkActiveSession(attempt + 1), AUTH_RETRY_DELAY_MS);
-            return;
-          }
           if (isRecoverableAuthBootError(error)) {
             console.warn('Network error during session check. Not clearing auth session:', error.message);
             if (hasCachedSupabaseSession()) {
               settleCachedAuthState();
+              if (attempt < MAX_AUTH_RETRIES) {
+                window.setTimeout(() => checkActiveSession(attempt + 1), AUTH_RETRY_DELAY_MS);
+              }
+              return;
+            }
+            if (attempt < MAX_AUTH_RETRIES) {
+              window.setTimeout(() => checkActiveSession(attempt + 1), AUTH_RETRY_DELAY_MS);
               return;
             }
           } else {
