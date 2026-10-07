@@ -177,14 +177,29 @@ export const AuthenticatedApp = () => {
         return;
       }
 
+      let refreshResult: Awaited<ReturnType<typeof supabase.auth.refreshSession>>;
+      try {
+        refreshResult = await withAuthTimeout(
+          supabase.auth.refreshSession(),
+          AUTH_REQUEST_TIMEOUT_MS,
+          'Auth session refresh timed out',
+        );
+      } catch (refreshError) {
+        if (isRecoverableAuthBootError(refreshError)) {
+          console.warn('Session refresh timed out. Keeping cached session active.', refreshError);
+          settleAuthState(nextSession);
+          return;
+        }
+
+        console.error('Unexpected session refresh error:', refreshError);
+        settleAuthState(null);
+        return;
+      }
+
       const {
         data: { session: refreshedSession },
         error: refreshError,
-      } = await withAuthTimeout(
-        supabase.auth.refreshSession(),
-        AUTH_REQUEST_TIMEOUT_MS,
-        'Auth session refresh timed out',
-      );
+      } = refreshResult;
 
       if (!refreshError && refreshedSession?.access_token) {
         settleAuthState(refreshedSession);
