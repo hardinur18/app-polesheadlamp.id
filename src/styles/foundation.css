@@ -5838,11 +5838,15 @@
 }
 
 .loginShell {
+  box-sizing: border-box;
   display: grid;
   min-height: 100vh;
+  min-height: 100svh;
   min-height: 100dvh;
   place-items: center;
-  padding: 22px;
+  align-content: center;
+  justify-items: center;
+  padding: calc(22px + env(safe-area-inset-top)) calc(22px + env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) calc(22px + env(safe-area-inset-left));
   color: var(--ink);
   background:
     radial-gradient(circle at 50% -12%, rgba(118, 98, 255, 0.055), transparent 34%),
@@ -5857,6 +5861,7 @@
 }
 
 .loginCard {
+  box-sizing: border-box;
   display: flex;
   width: min(560px, 100%);
   flex-direction: column;
@@ -7014,9 +7019,13 @@
 
   .loginShell {
     width: 100%;
+    min-height: 100vh;
+    min-height: 100svh;
     min-height: 100dvh;
-    align-items: start;
-    padding: calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+    place-items: center;
+    align-content: center;
+    justify-items: center;
+    padding: calc(18px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));
     overflow-y: auto;
   }
 
