@@ -158,7 +158,7 @@ const CS_VIEW_FILTER_STORAGE_KEY = 'polesheadlamp_cs_view_filters_v1';
 const CS_VIEW_MAX_RANGE_DAYS = 62;
 const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
 const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 60_000;
-const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 15_000;
+const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 6_000;
 const csViewApiCache = new Map<string, CsViewApiCacheEntry>();
 
 function withDashboardProviderTimeout<T>(
@@ -1019,6 +1019,20 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return { byId, byName };
   }, [adAccounts, shouldShowAdAccountInCsView]);
 
+  const scopedApiPlatformKeys = useMemo(() => {
+    const platformNameById = new Map(platforms.map((platform) => [platform.id, platform.name]));
+    const keys = new Set<string>();
+
+    for (const account of adAccounts) {
+      if (account.status !== 'active') continue;
+      if (!shouldShowAdAccountInCsView(account)) continue;
+      if (targetPlatformId && account.platformId !== targetPlatformId) continue;
+      keys.add(resolvePlatformKey(platformNameById.get(account.platformId || '')));
+    }
+
+    return keys;
+  }, [adAccounts, platforms, shouldShowAdAccountInCsView, targetPlatformId]);
+
   const adAccountMappingCacheKey = useMemo(() => {
     const accountPart = adAccounts
       .filter((account) => account.status === 'active' && shouldShowAdAccountInCsView(account))
@@ -1118,6 +1132,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
       return;
     }
 
+    if (cachedSnapshot && !forceRefresh) {
+      setApiAdsMetrics(cachedSnapshot.metrics);
+      setApiAdsByDateAccount(cachedSnapshot.byDateAccount);
+      setApiAdsStatus(cachedSnapshot.status);
+      setApiLoadDiagnostics(cachedSnapshot.diagnostics);
+    }
+
     const resolveAdAccount = (row: AdsSnapshotRowLike) => {
       const internalId = row.internalAdAccountId || '';
       if (internalId && adAccountLookup.byId.has(internalId)) return adAccountLookup.byId.get(internalId) || null;
@@ -1194,33 +1215,45 @@ export function CSDashboard({ userId }: { userId?: string }) {
     };
 
     const loadApiAdsMetrics = async () => {
-      setApiAdsStatus('loading');
+      if (!cachedSnapshot || forceRefresh) {
+        setApiAdsStatus('loading');
+      }
 
       try {
-        const metaLoader = withDashboardProviderTimeout(
-          shouldForceApiSync
-            ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-                fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-              )
-            : fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-          'Meta Ads',
-        );
-        const googleLoader = withDashboardProviderTimeout(
-          shouldForceApiSync
-            ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-                fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-              )
-            : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-          'Google Ads',
-        );
-        const tiktokLoader = withDashboardProviderTimeout(
-          shouldForceApiSync
-            ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
-                fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-              )
-            : fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
-          'TikTok Ads',
-        );
+        const shouldLoadMeta = scopedApiPlatformKeys.has('meta');
+        const shouldLoadGoogle = scopedApiPlatformKeys.has('google');
+        const shouldLoadTikTok = scopedApiPlatformKeys.has('tiktok');
+        const emptySnapshotDataset = { rows: [] };
+        const metaLoader = shouldLoadMeta
+          ? withDashboardProviderTimeout(
+              shouldForceApiSync
+                ? syncMetaSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                    fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+                  )
+                : fetchMetaSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              'Meta Ads',
+            )
+          : Promise.resolve(emptySnapshotDataset);
+        const googleLoader = shouldLoadGoogle
+          ? withDashboardProviderTimeout(
+              shouldForceApiSync
+                ? syncGoogleAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                    fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+                  )
+                : fetchGoogleAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              'Google Ads',
+            )
+          : Promise.resolve(emptySnapshotDataset);
+        const tiktokLoader = shouldLoadTikTok
+          ? withDashboardProviderTimeout(
+              shouldForceApiSync
+                ? syncTikTokAdsSnapshotDataset({ ...rangeParams, force: true, minFreshMinutes: 0 }).catch(() =>
+                    fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+                  )
+                : fetchTikTokAdsSnapshotDataset({ ...rangeParams, includeLastKnown: true }),
+              'TikTok Ads',
+            )
+          : Promise.resolve(emptySnapshotDataset);
 
         const [meta, google, tiktok] = await Promise.allSettled([
           metaLoader,
@@ -1289,7 +1322,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, apiSnapshotRefreshNonce, isOperationalDataLoading, platforms, rangeParams]);
+  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, apiSnapshotRefreshNonce, isOperationalDataLoading, platforms, rangeParams, scopedApiPlatformKeys]);
 
   // Filter Logic
   const filteredData = useMemo(() => {
