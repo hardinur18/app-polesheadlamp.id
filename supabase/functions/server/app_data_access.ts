@@ -236,7 +236,7 @@ export const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     edit: ["order.edit", "order.status.edit", "order.payment.edit_status", "order.payment.edit_type", "order.assign_technician"],
     delete: ["order.delete"],
     orderBy: "created_at",
-    filterableColumns: ["service_date", "lead_date", "created_at", "status", "cs_id", "technician_id", "advertiser_id", "branch_id"],
+    filterableColumns: ["service_date", "lead_date", "created_at", "status", "cs_id", "technician_id", "advertiser_id", "platform_id", "sub_channel_id", "ad_account_id", "branch_id"],
   },
   wa_templates: {
     table: "wa_templates",

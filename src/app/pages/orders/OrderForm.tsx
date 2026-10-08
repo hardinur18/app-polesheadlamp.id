@@ -707,6 +707,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
 
   const inferAdAccountIdFromOrder = React.useCallback(
     (draft: Partial<Order>) => {
+      if (draft.adAccountId && orderAdAccountOptions.some((option) => option.account.id === draft.adAccountId)) {
+        return draft.adAccountId;
+      }
+
       const hasAdAttribution =
         Boolean(draft.advertiserId) ||
         Boolean(draft.platformId) ||
@@ -754,6 +758,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
 
       return {
         ...draft,
+        adAccountId: option.account.id,
         advertiserId: option.advertiserId,
         platformId: option.platformId,
         subChannelId: option.subChannelId,
@@ -1118,6 +1123,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
         next.advertiserId === prev.advertiserId &&
         next.platformId === prev.platformId &&
         next.subChannelId === prev.subChannelId &&
+        next.adAccountId === prev.adAccountId &&
         next.csId === prev.csId
       ) {
         return prev;
@@ -1187,10 +1193,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       csId,
       ...(orderSourceMode === 'paid_ads'
         ? {
-            advertiserId: undefined,
-            platformId: undefined,
-            subChannelId: undefined,
-          }
+	            advertiserId: undefined,
+	            platformId: undefined,
+	            subChannelId: undefined,
+	            adAccountId: undefined,
+	          }
         : {}),
     }));
     setSelectedAdAccountId('');
@@ -1214,10 +1221,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       setFormData((prev) => {
         const next = {
           ...prev,
-          advertiserId: undefined,
-          platformId: undefined,
-          subChannelId: undefined,
-          csId: isCsUser && currentUser ? currentUser.id : prev.csId,
+	          advertiserId: undefined,
+	          platformId: undefined,
+	          subChannelId: undefined,
+	          adAccountId: undefined,
+	          csId: isCsUser && currentUser ? currentUser.id : prev.csId,
         };
 
         return onlyCompleteAccount
@@ -1231,10 +1239,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     setSelectedAdAccountId('');
     setFormData((prev) => ({
       ...prev,
-      advertiserId: undefined,
-      platformId: sourcePlatform?.id,
-      subChannelId: undefined,
-      csId: isCsUser && currentUser ? currentUser.id : prev.csId,
+	      advertiserId: undefined,
+	      platformId: sourcePlatform?.id,
+	      subChannelId: undefined,
+	      adAccountId: undefined,
+	      csId: isCsUser && currentUser ? currentUser.id : prev.csId,
     }));
 
     if (!sourcePlatform) {
@@ -1290,9 +1299,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       : null;
 
     if (orderSourceMode !== 'paid_ads') {
+      next.adAccountId = undefined;
       next.advertiserId = undefined;
       next.subChannelId = undefined;
     } else if (selectedOption?.isComplete) {
+      next.adAccountId = selectedOption.account.id;
       next.advertiserId = selectedOption.advertiserId;
       next.platformId = selectedOption.platformId;
       next.subChannelId = selectedOption.subChannelId;
@@ -1347,7 +1358,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     // Sanitize empty strings to undefined to prevent Foreign Key Violation
     const sanitizedData = { ...formData };
     const nullableKeys: (keyof Order)[] = [
-      'advertiserId', 'platformId', 'subChannelId', 'vehicleId', 'csId', 
+      'advertiserId', 'platformId', 'subChannelId', 'adAccountId', 'vehicleId', 'csId',
       'branchId', 'technicianId', 'areaId', 'paymentMethodId', 'serviceId'
     ];
     
@@ -1377,10 +1388,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       return;
     }
 
-    if (orderSourceMode !== 'paid_ads') {
-      const sourcePlatform = getSourceModePlatform(orderSourceMode);
-      sanitizedData.advertiserId = undefined;
-      sanitizedData.subChannelId = undefined;
+	    if (orderSourceMode !== 'paid_ads') {
+	      const sourcePlatform = getSourceModePlatform(orderSourceMode);
+	      sanitizedData.adAccountId = undefined;
+	      sanitizedData.advertiserId = undefined;
+	      sanitizedData.subChannelId = undefined;
       sanitizedData.platformId = sourcePlatform?.id || sanitizedData.platformId;
     }
 
@@ -1390,8 +1402,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       subChannelId: sanitizedData.subChannelId,
       csId: sanitizedData.csId,
     };
-    const normalizedAttribution = normalizeOrderAttributionFields(sanitizedData);
-    sanitizedData.advertiserId = normalizedAttribution.advertiserId;
+	    const normalizedAttribution = normalizeOrderAttributionFields(sanitizedData);
+	    sanitizedData.adAccountId = normalizedAttribution.adAccountId;
+	    sanitizedData.advertiserId = normalizedAttribution.advertiserId;
     sanitizedData.platformId = normalizedAttribution.platformId;
     sanitizedData.subChannelId = normalizedAttribution.subChannelId;
     sanitizedData.csId = normalizedAttribution.csId;

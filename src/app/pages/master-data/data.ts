@@ -168,6 +168,7 @@ export interface Order {
   price: number; // Harga
   platformId?: string; // Platform
   subChannelId?: string; // Sub Channel
+  adAccountId?: string; // Akun Iklan
   csId?: string; // Customer Service
   advertiserId?: string; // Advertiser
   notes?: string; // Catatan
