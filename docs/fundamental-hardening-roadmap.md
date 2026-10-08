@@ -315,6 +315,7 @@ Tujuan: mengurangi risiko perubahan kecil bikin error besar.
 - [~] Pecah `supabase/functions/server/index.tsx`.
 - [~] Pecah `supabase/functions/server/meta_messaging.tsx`.
 - [~] Pecah dashboard CS logic.
+- [~] Pecah dashboard Advertiser logic.
 - [~] Pecah pesanan logic.
 - [~] Pecah prospek logic bila masih terlalu padat.
 - [ ] Pindahkan logic bisnis ke service/helper yang bisa dites.
@@ -352,6 +353,9 @@ Catatan progress 2026-10-08:
 - UI kecil halaman Prospek dipindah ke `src/app/pages/leads/prospectPageUi.tsx`, termasuk ikon WhatsApp, badge Auto WA API, dan skeleton table/mobile.
 - Schema/helper form Prospek dipindah ke `src/app/pages/leads/leadFormModel.ts`; kontrak `LeadForm`, duplicate warning, submit add/edit, assignment advertiser/platform/subchannel/CS, dan flow booking/order tetap dipertahankan.
 - Verifikasi setelah ekstraksi Prospek: `npm run typecheck:full` dan `npm run lint` pass.
+- Helper UI/formatter dashboard Advertiser dipindah ke `src/app/pages/advertiser/internal/advertiserDashboardUi.tsx`, termasuk format currency/number/percent, badge cost/volume/ROAS, status class API, dan skeleton KPI.
+- Refactor dashboard Advertiser ini hanya memindahkan presentational helper; flow sync API, cache snapshot, mapping akun, filter CS/advertiser, dan kalkulasi data tetap di `AdvertiserDashboard.tsx`.
+- Verifikasi setelah ekstraksi helper dashboard Advertiser: `npm run typecheck:full`, `npm run lint`, dan `git diff --check` pass.
 
 ## Phase 11 - Type Safety
 
