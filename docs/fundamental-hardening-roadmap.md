@@ -469,6 +469,7 @@ Catatan progress 2026-10-08:
 
 - Final gate lokal yang sudah pass: `npm run typecheck:full`, `npm run typecheck:strict-core`, `npm run lint`, `npm run build`, `npm run audit:fundamental`, dan `npm run smoke:release`.
 - `smoke:release` menjalankan route smoke dan core contract smoke penuh. `smoke:role-routes` serta `smoke:prospect-crud` exit pass tetapi status internalnya `skipped` karena belum ada credential smoke Owner/CS untuk test real login/CRUD.
+- `smoke:role-routes` dan `smoke:prospect-crud` sekarang mendukung `SMOKE_SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` sebagai opsi runtime-only untuk membuat akun smoke sementara dan cleanup tanpa menyimpan credential di repo.
 - Build masih menampilkan warning non-blocking Browserslist data lama.
 
 ## Catatan Prioritas

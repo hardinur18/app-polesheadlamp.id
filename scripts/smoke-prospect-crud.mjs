@@ -12,6 +12,7 @@ const envValue = (...keys) => {
 
 const SUPABASE_URL = envValue('SMOKE_SUPABASE_URL', 'SUPABASE_URL', 'VITE_SUPABASE_URL');
 const ANON_KEY = envValue('SMOKE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
+const SERVICE_ROLE_KEY = envValue('SMOKE_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY');
 const FUNCTIONS_BASE =
   envValue('SMOKE_FUNCTIONS_BASE_URL', 'VITE_FUNCTIONS_BASE_URL') ||
   `${SUPABASE_URL}/functions/v1/make-server-f781cd00`;
@@ -69,6 +70,21 @@ async function jsonFetch(url, options = {}) {
   return payload;
 }
 
+function serviceRoleHeaders(json = false) {
+  return {
+    apikey: SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+  };
+}
+
+async function serviceRoleFetch(url, options = {}) {
+  if (!SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY/SMOKE_SUPABASE_SERVICE_ROLE_KEY belum tersedia.');
+  }
+  return jsonFetch(url, options);
+}
+
 async function signIn(email, password) {
   return jsonFetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
@@ -107,6 +123,54 @@ async function createTemporaryCs(ownerToken) {
   };
 }
 
+async function createTemporaryCsViaServiceRole() {
+  const email = `prospect.cs.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const payload = await serviceRoleFetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: serviceRoleHeaders(true),
+    body: JSON.stringify({
+      email,
+      password: CS_PASSWORD,
+      email_confirm: true,
+      user_metadata: {
+        name: 'Prospect CRUD Smoke CS',
+        role: 'CS',
+      },
+    }),
+  });
+
+  const user = payload?.user || payload;
+  if (!user?.id) {
+    throw new Error('Service-role CS creation returned no id.');
+  }
+
+  await serviceRoleFetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+    method: 'POST',
+    headers: {
+      ...serviceRoleHeaders(true),
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      id: user.id,
+      email,
+      name: 'Prospect CRUD Smoke CS',
+      role: 'CS',
+      status: 'active',
+      branch_id: null,
+      employment_status: 'permanent',
+    }),
+  });
+
+  return {
+    id: user.id,
+    email,
+    password: CS_PASSWORD,
+    role: 'CS',
+    temporary: true,
+    createdBy: 'service-role',
+  };
+}
+
 async function deleteTemporaryUser(ownerToken, user) {
   if (!user?.id) return { deleted: false, error: 'missing user id' };
 
@@ -114,6 +178,34 @@ async function deleteTemporaryUser(ownerToken, user) {
     await jsonFetch(`${FUNCTIONS_BASE}/users/${encodeURIComponent(user.id)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${ownerToken}` },
+    });
+    return { deleted: true, id: user.id, email: user.email };
+  } catch (error) {
+    return {
+      deleted: false,
+      id: user.id,
+      email: user.email,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function deleteTemporaryUserViaServiceRole(user) {
+  if (!user?.id) return { deleted: false, error: 'missing user id' };
+
+  try {
+    try {
+      await serviceRoleFetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`, {
+        method: 'DELETE',
+        headers: serviceRoleHeaders(),
+      });
+    } catch {
+      // Auth deletion below is enough if profile cleanup already cascaded.
+    }
+
+    await serviceRoleFetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(user.id)}`, {
+      method: 'DELETE',
+      headers: serviceRoleHeaders(),
     });
     return { deleted: true, id: user.id, email: user.email };
   } catch (error) {
@@ -158,6 +250,13 @@ async function deleteLead(token, id) {
   });
 }
 
+async function deleteLeadViaServiceRole(id) {
+  await serviceRoleFetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: serviceRoleHeaders(),
+  });
+}
+
 async function expectFailure(action) {
   try {
     await action();
@@ -188,6 +287,7 @@ async function main() {
   let ownerToken = null;
   let csAccount = PROSPECT_ACCOUNT || ROLE_ACCOUNTS?.CS || null;
   let createdCs = null;
+  const canUseServiceRoleAdmin = Boolean(SERVICE_ROLE_KEY);
   const createdLeadIds = [];
   const runId = Date.now().toString(36).toUpperCase();
   const leadId = `SMK${runId.slice(-7)}`;
@@ -207,19 +307,24 @@ async function main() {
       createdCs = await createTemporaryCs(ownerToken);
       csAccount = createdCs;
       result.steps[result.steps.length - 1].passed = Boolean(createdCs?.id);
+    } else if (!csAccount && canUseServiceRoleAdmin) {
+      result.steps.push({ step: 'create-temporary-cs-service-role', passed: false });
+      createdCs = await createTemporaryCsViaServiceRole();
+      csAccount = createdCs;
+      result.steps[result.steps.length - 1].passed = Boolean(createdCs?.id);
     }
 
     if (!csAccount?.email || !csAccount?.password) {
       result.skipped = true;
       result.passed = true;
-      result.nextAction = 'Set SMOKE_OWNER_PASSWORD/PHASE1_OWNER_PASSWORD, SMOKE_PROSPECT_ACCOUNT, atau SMOKE_ROLE_ACCOUNTS.CS untuk menjalankan Prospek CRUD smoke.';
+      result.nextAction = 'Set SMOKE_OWNER_PASSWORD/PHASE1_OWNER_PASSWORD, SMOKE_SUPABASE_SERVICE_ROLE_KEY, SMOKE_PROSPECT_ACCOUNT, atau SMOKE_ROLE_ACCOUNTS.CS untuk menjalankan Prospek CRUD smoke.';
       return;
     }
 
-    if (!ownerToken) {
+    if (!ownerToken && !canUseServiceRoleAdmin) {
       result.skipped = true;
       result.passed = true;
-      result.nextAction = 'Prospek CRUD smoke butuh Owner credential untuk cleanup aman. Set SMOKE_OWNER_PASSWORD atau sertakan SMOKE_ROLE_ACCOUNTS.Owner.';
+      result.nextAction = 'Prospek CRUD smoke butuh Owner credential atau SUPABASE_SERVICE_ROLE_KEY untuk cleanup aman.';
       return;
     }
 
@@ -285,17 +390,25 @@ async function main() {
 
     result.steps.push({ step: 'delete-prospect-cleanup', passed: false, ids: [...createdLeadIds] });
     for (const id of [...createdLeadIds].reverse()) {
-      await deleteLead(ownerToken, id);
+      if (ownerToken) {
+        await deleteLead(ownerToken, id);
+      } else {
+        await deleteLeadViaServiceRole(id);
+      }
       createdLeadIds.splice(createdLeadIds.indexOf(id), 1);
     }
     result.steps[result.steps.length - 1].passed = true;
 
     result.passed = result.steps.every((step) => step.passed);
   } finally {
-    if (ownerToken && createdLeadIds.length > 0) {
+    if ((ownerToken || canUseServiceRoleAdmin) && createdLeadIds.length > 0) {
       for (const id of [...createdLeadIds].reverse()) {
         try {
-          await deleteLead(ownerToken, id);
+          if (ownerToken) {
+            await deleteLead(ownerToken, id);
+          } else {
+            await deleteLeadViaServiceRole(id);
+          }
           result.cleanup.push({ type: 'lead', deleted: true, id });
         } catch (error) {
           result.cleanup.push({
@@ -307,8 +420,12 @@ async function main() {
         }
       }
     }
-    if (createdCs && ownerToken) {
-      result.cleanup.push(await deleteTemporaryUser(ownerToken, createdCs));
+    if (createdCs) {
+      result.cleanup.push(
+        ownerToken
+          ? await deleteTemporaryUser(ownerToken, createdCs)
+          : await deleteTemporaryUserViaServiceRole(createdCs),
+      );
     }
     fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(result, null, 2)}\n`);
     console.log(JSON.stringify(result, null, 2));

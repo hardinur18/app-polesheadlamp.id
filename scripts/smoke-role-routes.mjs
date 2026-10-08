@@ -15,6 +15,8 @@ const SUPABASE_URL =
   envValue('SMOKE_SUPABASE_URL', 'SUPABASE_URL', 'VITE_SUPABASE_URL');
 const ANON_KEY =
   envValue('SMOKE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY');
+const SERVICE_ROLE_KEY =
+  envValue('SMOKE_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY');
 const FUNCTIONS_BASE =
   envValue('SMOKE_FUNCTIONS_BASE_URL', 'VITE_FUNCTIONS_BASE_URL') ||
   `${SUPABASE_URL}/functions/v1/make-server-f781cd00`;
@@ -204,6 +206,84 @@ async function createUser(role, name, bearerToken = ANON_KEY) {
   return { id: payload.user.id, email, role, name };
 }
 
+function serviceRoleHeaders(json = false) {
+  return {
+    apikey: SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+  };
+}
+
+async function serviceRoleFetch(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let payload = {};
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { raw: text };
+  }
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${payload?.error || payload?.message || payload?.raw || response.statusText}`);
+  }
+
+  return payload;
+}
+
+async function upsertProfileViaServiceRole(user, role, name) {
+  await serviceRoleFetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+    method: 'POST',
+    headers: {
+      ...serviceRoleHeaders(true),
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      id: user.id,
+      email: user.email,
+      name,
+      role,
+      status: 'active',
+      branch_id: null,
+      employment_status: 'permanent',
+    }),
+  });
+}
+
+async function createUserViaServiceRole(role, name) {
+  if (!SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY/SMOKE_SUPABASE_SERVICE_ROLE_KEY belum tersedia.');
+  }
+
+  const email = `route.${role.toLowerCase()}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const payload = await serviceRoleFetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: serviceRoleHeaders(true),
+    body: JSON.stringify({
+      email,
+      password: PASSWORD,
+      email_confirm: true,
+      user_metadata: { name, role },
+    }),
+  });
+
+  const user = payload?.user || payload;
+  if (!user?.id) {
+    throw new Error(`Service-role user creation returned no id for ${role}.`);
+  }
+
+  await upsertProfileViaServiceRole(user, role, name);
+  return {
+    id: user.id,
+    email,
+    password: PASSWORD,
+    role,
+    name,
+    createdBy: 'service-role',
+  };
+}
+
 async function deleteUser(userId, bearerToken = ANON_KEY) {
   const response = await fetch(`${USERS_ENDPOINT}/${userId}`, {
     method: 'DELETE',
@@ -215,6 +295,26 @@ async function deleteUser(userId, bearerToken = ANON_KEY) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload?.error || `Failed delete ${userId}: ${response.status}`);
   }
+}
+
+async function deleteUserViaServiceRole(userId) {
+  if (!SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY/SMOKE_SUPABASE_SERVICE_ROLE_KEY belum tersedia.');
+  }
+
+  try {
+    await serviceRoleFetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: serviceRoleHeaders(),
+    });
+  } catch {
+    // Auth deletion below is the authoritative cleanup. Profile cleanup may already cascade.
+  }
+
+  await serviceRoleFetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: serviceRoleHeaders(),
+  });
 }
 
 async function bodyPreview(page) {
@@ -289,7 +389,11 @@ async function cleanupUsers(users, bearerToken = ANON_KEY) {
   const cleanup = [];
   for (const user of users.toReversed()) {
     try {
-      await deleteUser(user.id, bearerToken);
+      if (user.createdBy === 'service-role') {
+        await deleteUserViaServiceRole(user.id);
+      } else {
+        await deleteUser(user.id, bearerToken);
+      }
       cleanup.push({ role: user.role, id: user.id, email: user.email, deleted: true });
     } catch (error) {
       cleanup.push({
@@ -324,6 +428,7 @@ async function main() {
   let browser = null;
   let ownerToken = null;
   let userManagementToken = ANON_KEY;
+  const canUseServiceRoleAdmin = Boolean(SERVICE_ROLE_KEY) && !PROVIDED_ACCOUNTS && !OWNER_PASSWORD;
 
   let cleanup = null;
   try {
@@ -335,7 +440,10 @@ async function main() {
 
     for (const scenario of scenarios) {
       const providedAccount = getProvidedAccount(scenario.role);
-      const account = providedAccount || (await createUser(scenario.role, scenario.name, userManagementToken));
+      const account = providedAccount ||
+        (canUseServiceRoleAdmin
+          ? await createUserViaServiceRole(scenario.role, scenario.name)
+          : await createUser(scenario.role, scenario.name, userManagementToken));
       if (!providedAccount) {
         createdUsers.push(account);
       }
@@ -364,6 +472,13 @@ async function main() {
   const payload = {
     generatedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
+    accountMode: PROVIDED_ACCOUNTS
+      ? 'provided-accounts'
+      : canUseServiceRoleAdmin
+        ? 'service-role-temporary-users'
+        : OWNER_PASSWORD
+          ? 'owner-created-temporary-users'
+          : 'unauthorized-skip',
     routes: results,
     cleanup,
     passed: results.every((result) => result.passed) && cleanup.passed,
@@ -390,8 +505,8 @@ main().catch((error) => {
     error: error instanceof Error ? error.message : String(error),
     nextAction: isCreateUnauthorized
       ? missingOwnerCredentials
-        ? 'Provide SMOKE_ROLE_ACCOUNTS with existing test credentials, or set SMOKE_OWNER_PASSWORD/PHASE1_OWNER_PASSWORD so the script can create temporary role users.'
-        : 'Owner credentials were provided but user creation was still unauthorized. Check Owner role permissions or function auth.'
+        ? 'Provide SMOKE_ROLE_ACCOUNTS with existing test credentials, set SMOKE_OWNER_PASSWORD/PHASE1_OWNER_PASSWORD, or set SMOKE_SUPABASE_SERVICE_ROLE_KEY for temporary smoke users.'
+        : 'Owner credentials were provided but user creation was still unauthorized. Check Owner role permissions/function auth, or use SMOKE_SUPABASE_SERVICE_ROLE_KEY for temporary smoke users.'
       : undefined,
   };
   fs.writeFileSync(OUTPUT_PATH, `${JSON.stringify(payload, null, 2)}\n`);

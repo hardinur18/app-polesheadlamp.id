@@ -22,8 +22,9 @@ Expected smoke setup:
 - `SMOKE_BASE_URL` points to the preview or deployed app URL.
 - `SMOKE_SUPABASE_URL` / `SMOKE_SUPABASE_ANON_KEY` point to the same Supabase project as the app.
 - `SMOKE_OWNER_PASSWORD` or `PHASE1_OWNER_PASSWORD` lets role smoke create temporary CS, Finance, Teknisi, and Advertiser users, then delete them after the run.
+- `SMOKE_SUPABASE_SERVICE_ROLE_KEY` can be used as a local/CI-only alternative for temporary smoke users and cleanup. Never commit this value.
 - `SMOKE_ROLE_ACCOUNTS` contains Owner, CS, Finance, Teknisi, and Advertiser credentials when using permanent test users instead of temporary generated users.
-- `SMOKE_PROSPECT_ACCOUNT` can provide a dedicated CS account for `smoke:prospect-crud`; Owner credentials are still required for safe cleanup.
+- `SMOKE_PROSPECT_ACCOUNT` can provide a dedicated CS account for `smoke:prospect-crud`; Owner credentials or `SMOKE_SUPABASE_SERVICE_ROLE_KEY` are still required for safe cleanup.
 - `smoke:routes` checks login redirects for protected routes and the public `/booking` route. Payment preview is treated as an internal authenticated workflow, not a public route.
 - `smoke:core-contracts` is credential-free and checks pure contracts for schedule conflict rules, order patching, prospect helpers, and ads daily sync reconciliation.
 - Smoke artifacts are written to `File Review/artifacts/` and are intentionally ignored by git.
