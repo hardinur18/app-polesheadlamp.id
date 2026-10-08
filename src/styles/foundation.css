@@ -29116,7 +29116,7 @@ body {
   }
 }
 
-@container (max-width: 1600px) {
+@container (max-width: 1180px) {
   .advertiserDashboardDateSummary,
   .csDashboardDateSummary {
     grid-template-columns: minmax(150px, 0.86fr) repeat(4, minmax(0, 1fr)) !important;
@@ -29167,7 +29167,7 @@ body {
   }
 }
 
-@media (min-width: 1024px) and (max-width: 1600px) {
+@media (min-width: 1024px) and (max-width: 1180px) {
   .advertiserDashboardDateSummary,
   .csDashboardDateSummary {
     grid-template-columns: minmax(150px, 0.86fr) repeat(4, minmax(0, 1fr)) !important;
