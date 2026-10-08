@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, LayerGroup, Tooltip, Circle, ScaleControl, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -16,6 +16,7 @@ export interface RoutePoint {
   status: MapRouteStatus;
   time?: string;
   distance?: string;
+  distanceKm?: number;
   travelTimeEstimate?: string;
   technicianName?: string;
   isFallback?: boolean;
@@ -41,7 +42,17 @@ export interface RouteGroup {
   technicianName: string;
   color: string;
   points: RoutePoint[];
+  totalDistance?: string;
+  totalDistanceKm?: number;
   hidePolyline?: boolean; // Option to hide route line
+}
+
+type RouteMetricSource = 'road' | 'direct' | 'loading' | 'unavailable';
+
+interface RouteMetric {
+  source: RouteMetricSource;
+  distanceMeters?: number;
+  durationSeconds?: number;
 }
 
 interface MapCardProps {
@@ -69,6 +80,38 @@ const isFiniteCoordinate = (lat?: number | null, lng?: number | null) => {
         Math.abs(numericLat) <= 90 &&
         Math.abs(numericLng) <= 180 &&
         !(numericLat === 0 && numericLng === 0);
+};
+
+const routeRenderer = typeof window === 'undefined' ? undefined : L.svg({ pane: 'overlayPane' });
+
+const formatEstimatedDistance = (meters?: number) => {
+    if (!Number.isFinite(meters) || !meters) return null;
+    if (meters >= 10000) return `${Math.round(meters / 1000)} km`;
+    if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+    return `${Math.max(1, Math.round(meters))} m`;
+};
+
+const formatEstimatedDuration = (seconds?: number) => {
+    if (!Number.isFinite(seconds) || !seconds) return null;
+    const minutes = Math.max(1, Math.round(seconds / 60));
+    if (minutes < 60) return `± ${minutes} mnt`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0 ? `± ${hours}j ${remainingMinutes} mnt` : `± ${hours}j`;
+};
+
+const formatRouteMetric = (metric?: RouteMetric | null, fallbackDistance?: string) => {
+    if (!metric) return fallbackDistance || null;
+    if (metric.source === 'loading') return 'Menghitung rute jalan...';
+    if (metric.source === 'unavailable') return fallbackDistance ? `Perkiraan ${fallbackDistance}` : null;
+
+    const distance = formatEstimatedDistance(metric.distanceMeters);
+    const duration = formatEstimatedDuration(metric.durationSeconds);
+    if (metric.source === 'direct') {
+        return distance ? `Perkiraan ${distance}` : fallbackDistance ? `Perkiraan ${fallbackDistance}` : null;
+    }
+    if (distance && duration) return `${distance} • ${duration}`;
+    return distance || duration || fallbackDistance || null;
 };
 
 // Custom Pin Icon
@@ -293,120 +336,233 @@ const MapEvents = ({ onBoundsChange }: { onBoundsChange?: (bounds: L.LatLngBound
 };
 
 // --- SMART ROUTING COMPONENT ---
-const SmartPolyline = ({ points, color, disableRouting = false }: { points: RoutePoint[], color: string, disableRouting?: boolean }) => {
-    const [path, setPath] = useState<[number, number][]>([]);
+const SmartPolyline = ({
+    points,
+    color,
+    disableRouting = false,
+    label,
+    fallbackDistanceKm,
+    onMetricsChange,
+}: {
+    points: RoutePoint[];
+    color: string;
+    disableRouting?: boolean;
+    label?: string;
+    fallbackDistanceKm?: number;
+    onMetricsChange?: (metric: RouteMetric) => void;
+}) => {
+    const [roadPath, setRoadPath] = useState<[number, number][]>([]);
+    const [routeMetric, setRouteMetric] = useState<RouteMetric | null>(null);
     const [isFetching, setIsFetching] = useState(false);
+    const onMetricsChangeRef = useRef(onMetricsChange);
+
+    useEffect(() => {
+        onMetricsChangeRef.current = onMetricsChange;
+    }, [onMetricsChange]);
     
     // Stable key to prevent infinite loops in useEffect
-    const pointsKey = JSON.stringify(points.map(p => ({ lat: p.lat, lng: p.lng })));
+    const routePoints = useMemo(() => (
+        points.filter(p => p.status !== 'branch_start')
+    ), [points]);
+    const pointsKey = JSON.stringify(routePoints.map(p => ({ lat: p.lat, lng: p.lng })));
     
     const validPoints = useMemo(() => {
-        return points.filter(p => isFiniteCoordinate(p.lat, p.lng));
-    }, [pointsKey]);
+        return routePoints.filter(p => isFiniteCoordinate(p.lat, p.lng));
+    }, [routePoints]);
+
+    const straightPath = useMemo(() => (
+        validPoints.map(p => [p.lat, p.lng] as [number, number])
+    ), [validPoints]);
 
     useEffect(() => {
         let isMounted = true;
+        let controller: AbortController | null = null;
+        let routeTimeoutId: number | null = null;
+        setRoadPath([]);
+        setRouteMetric(null);
+        setIsFetching(false);
 
         if (validPoints.length < 2) {
-            setPath(validPoints.map(p => [p.lat, p.lng]));
+            onMetricsChangeRef.current?.({ source: 'unavailable' });
             return;
         }
 
-        // Default to straight line first
-        const straightPath = validPoints.map(p => [p.lat, p.lng] as [number, number]);
-        setPath(straightPath);
+        if (disableRouting || validPoints.length > 8) {
+            const metric: RouteMetric = Number.isFinite(fallbackDistanceKm)
+                ? { source: 'direct', distanceMeters: Number(fallbackDistanceKm) * 1000 }
+                : { source: 'unavailable' };
+            setRouteMetric(metric);
+            onMetricsChangeRef.current?.(metric);
+            return;
+        }
 
-        if (disableRouting || validPoints.length > 8) return; // Keep large routes light on low-end phones
-
-        const fetchRoute = async () => {
+        const fetchRoute = async (abortController: AbortController) => {
             if (!isMounted) return;
-            
-            // Create a new abort controller for this fetch
-            const controller = new AbortController();
-            // Store it so we can abort it if needed (though we mostly rely on unmount cleanup)
-            
+
             setIsFetching(true);
+            const loadingMetric: RouteMetric = { source: 'loading' };
+            setRouteMetric(loadingMetric);
+            onMetricsChangeRef.current?.(loadingMetric);
+
             try {
                 // Construct OSRM URL: {lon},{lat};{lon},{lat}...
                 const coordsString = validPoints
                     .map(p => `${p.lng},${p.lat}`)
                     .join(';');
 
-                // Use OSRM public demo server (more reliable alternative)
-                // We use routing.openstreetmap.de which is often more stable for standard driving routes
-                const url = `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordsString}?overview=full&geometries=geojson`;
+                const endpoints = [
+                    'https://routing.openstreetmap.de/routed-car/route/v1/driving',
+                    'https://router.project-osrm.org/route/v1/driving',
+                ];
+                routeTimeoutId = window.setTimeout(() => abortController.abort(), 12000);
+                let lastError: unknown = null;
                 
-                const response = await fetch(url, { signal: controller.signal });
-                if (!response.ok) throw new Error(`OSRM error: ${response.status}`);
-                
-                const data = await response.json();
-                if (isMounted && data.routes && data.routes[0]) {
-                    // OSRM returns [lon, lat], Leaflet needs [lat, lon]
-                    const decodedPath = data.routes[0].geometry.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
-                    setPath(decodedPath);
+                for (const endpoint of endpoints) {
+                    try {
+                        const url = `${endpoint}/${coordsString}?overview=full&geometries=geojson&steps=false&alternatives=false`;
+                        const response = await fetch(url, { signal: abortController.signal });
+                        if (!response.ok) throw new Error(`OSRM error: ${response.status}`);
+                        
+                        const data = await response.json();
+                        const route = data.routes?.[0];
+                        if (route?.geometry?.coordinates?.length >= 2) {
+                            const decodedPath = route.geometry.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
+                            const metric: RouteMetric = {
+                                source: 'road',
+                                distanceMeters: Number(route.distance),
+                                durationSeconds: Number(route.duration),
+                            };
+                            if (isMounted) {
+                                setRoadPath(decodedPath);
+                                setRouteMetric(metric);
+                                onMetricsChangeRef.current?.(metric);
+                            }
+                            return;
+                        }
+                    } catch (error) {
+                        if (error instanceof DOMException && error.name === 'AbortError') throw error;
+                        lastError = error;
+                    }
                 }
+
+                throw lastError || new Error('No route geometry returned');
             } catch (e: unknown) {
                 // Ignore abort errors
                 if (e instanceof DOMException && e.name === 'AbortError') return;
                 
                 console.warn("Failed to fetch route geometry, falling back to straight lines.", e);
-                // Fallback is already set
+                const metric: RouteMetric = Number.isFinite(fallbackDistanceKm)
+                    ? { source: 'direct', distanceMeters: Number(fallbackDistanceKm) * 1000 }
+                    : { source: 'unavailable' };
+                if (isMounted) {
+                    setRouteMetric(metric);
+                    onMetricsChangeRef.current?.(metric);
+                }
             } finally {
+                if (routeTimeoutId !== null) {
+                    window.clearTimeout(routeTimeoutId);
+                }
                 if (isMounted) setIsFetching(false);
             }
-            
-            return controller;
         };
 
         // Debounce fetching
-        let controller: AbortController | null = null;
         const timeoutId = setTimeout(async () => {
-            controller = await fetchRoute() || null;
-        }, 500);
+            controller = new AbortController();
+            await fetchRoute(controller);
+        }, 250);
 
         return () => {
             isMounted = false;
             clearTimeout(timeoutId);
+            if (routeTimeoutId !== null) window.clearTimeout(routeTimeoutId);
             if (controller) controller.abort();
         };
-    }, [pointsKey, disableRouting]); // Use stable key instead of validPoints array reference
+    }, [pointsKey, disableRouting, fallbackDistanceKm, validPoints]); // Use stable key instead of validPoints array reference
 
-    if (path.length < 2) return null;
+    if (straightPath.length < 2) return null;
+
+    const fallbackDistance = Number.isFinite(fallbackDistanceKm) ? `${Number(fallbackDistanceKm).toFixed(1)} km` : undefined;
+    const routeSummary = formatRouteMetric(routeMetric, fallbackDistance);
+    const routeLabel = [label || 'Rute Jalan', routeSummary].filter(Boolean).join(' • ');
+    const hasRoadPath = roadPath.length >= 2;
 
     return (
         <>
-            <Polyline
-                positions={path}
-                interactive={false}
-                pathOptions={{
-                    color: '#FFFFFF',
-                    weight: 9,
-                    opacity: 0.72,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                    className: 'mapRoutePolylineHalo',
-                }}
-            />
-            <Polyline
-                positions={path}
-                pathOptions={{
-                    color: color,
-                    weight: 5,
-                    opacity: isFetching ? 0.55 : 0.95,
-                    dashArray: isFetching ? '10, 10' : undefined,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                    className: 'mapRoutePolyline',
-                }}
-            >
-                 {!isFetching && (
-                    <Tooltip sticky direction="top" offset={[0, -10]}>
-                        <span className="flex items-center gap-1 text-xs font-semibold">
-                            <Navigation className="w-3 h-3" /> Rute Jalan
-                        </span>
-                    </Tooltip>
-                 )}
-            </Polyline>
+            {!hasRoadPath && (
+                <>
+                    <Polyline
+                        positions={straightPath}
+                        renderer={routeRenderer}
+                        interactive={false}
+                        pathOptions={{
+                            color: '#FFFFFF',
+                            weight: 6,
+                            opacity: 0.72,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            dashArray: '8, 10',
+                            className: 'mapRoutePolylineHalo',
+                        }}
+                    />
+                    <Polyline
+                        positions={straightPath}
+                        renderer={routeRenderer}
+                        pathOptions={{
+                            color,
+                            weight: 3,
+                            opacity: isFetching ? 0.56 : 0.78,
+                            dashArray: '8, 10',
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            className: 'mapRoutePolyline',
+                        }}
+                    >
+                        {!isFetching && (
+                        <Tooltip sticky direction="top" offset={[0, -10]}>
+                            <span className="flex items-center gap-1 text-xs font-semibold">
+                                <Navigation className="w-3 h-3" /> {routeLabel}
+                            </span>
+                        </Tooltip>
+                        )}
+                    </Polyline>
+                </>
+            )}
+            {hasRoadPath && (
+                <>
+                    <Polyline
+                        positions={roadPath}
+                        renderer={routeRenderer}
+                        interactive={false}
+                        pathOptions={{
+                            color: '#FFFFFF',
+                            weight: 7,
+                            opacity: 0.72,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            className: 'mapRoutePolylineHalo',
+                        }}
+                    />
+                    <Polyline
+                        positions={roadPath}
+                        renderer={routeRenderer}
+                        pathOptions={{
+                            color,
+                            weight: 4,
+                            opacity: 0.92,
+                            lineCap: 'round',
+                            lineJoin: 'round',
+                            className: 'mapRoutePolyline',
+                        }}
+                    >
+                        <Tooltip sticky direction="top" offset={[0, -10]}>
+                            <span className="flex items-center gap-1 text-xs font-semibold">
+                                <Navigation className="w-3 h-3" /> {routeLabel}
+                            </span>
+                        </Tooltip>
+                    </Polyline>
+                </>
+            )}
         </>
     );
 };
@@ -433,6 +589,22 @@ export function MapCard({
   ));
   const [showMonthFilter, setShowMonthFilter] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [routeMetricsByGroupId, setRouteMetricsByGroupId] = useState<Record<string, RouteMetric>>({});
+
+  const handleRouteMetricChange = useCallback((groupId: string, metric: RouteMetric) => {
+      setRouteMetricsByGroupId((current) => {
+          const previous = current[groupId];
+          if (
+              previous?.source === metric.source &&
+              previous?.distanceMeters === metric.distanceMeters &&
+              previous?.durationSeconds === metric.durationSeconds
+          ) {
+              return current;
+          }
+
+          return { ...current, [groupId]: metric };
+      });
+  }, []);
 
   // Extract available months from coming_soon branches
   const availableMonths = useMemo(() => {
@@ -773,7 +945,16 @@ export function MapCard({
             {displayGroups.map((group) => (
                 <LayerGroup key={group.id}>
                     {/* Use SmartPolyline for road routing if not hidden */}
-                    {!group.hidePolyline && <SmartPolyline points={group.points} color={group.color} disableRouting={disableRouting} />}
+                    {!group.hidePolyline && (
+                        <SmartPolyline
+                            points={group.points}
+                            color={group.color}
+                            disableRouting={disableRouting}
+                            fallbackDistanceKm={group.totalDistanceKm}
+                            label="Rute Jalan"
+                            onMetricsChange={(metric) => handleRouteMetricChange(group.id, metric)}
+                        />
+                    )}
 
                     {/* Draw Markers */}
                     {group.points.map((point, index) => {
@@ -890,6 +1071,11 @@ export function MapCard({
                                     style={{ backgroundColor: group.color }}
                                 ></div>
                                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{group.technicianName}</span>
+                                {formatRouteMetric(routeMetricsByGroupId[group.id], group.totalDistance) && (
+                                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                        {formatRouteMetric(routeMetricsByGroupId[group.id], group.totalDistance)}
+                                    </span>
+                                )}
                             </div>
                         ))}
                     </div>

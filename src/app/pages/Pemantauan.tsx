@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   MapPin, Clock, User, CheckCircle2,
   ChevronDown, ChevronUp, Calendar, Filter, Truck, ArrowRight,
-  Search, Banknote, Layers, Shield, X
+  Search, Banknote, Layers, Shield, X, Ruler
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -415,6 +415,10 @@ export function Pemantauan() {
                     <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: group.color }}></div>
                     <span className="font-bold text-sm uppercase text-slate-800 dark:text-slate-200 tracking-wide">{group.technicianName}</span>
                     <span className="text-xs text-slate-400 font-medium">({group.points.length} titik)</span>
+                    <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                        <Ruler className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                        {group.totalDistance}
+                    </span>
                 </div>
 
                 <div>
@@ -533,6 +537,7 @@ export function Pemantauan() {
 
         // Calculate points and distances
         let previousCoordinate: { lat: number; lng: number } | null = null;
+        let routeDistanceKm = 0;
         const points = sorted.map((order, index) => {
             let coordinate = resolveStoredCoordinate(order.lat, order.lng, order.mapsUrl);
             let isFallback = false;
@@ -551,10 +556,13 @@ export function Pemantauan() {
             }
 
             let distance = '0 km';
+            let distanceKm = 0;
             let travelTimeEstimate = '';
 
             if (coordinate && previousCoordinate) {
                     const d = getDistance(previousCoordinate.lat, previousCoordinate.lng, coordinate.lat, coordinate.lng);
+                    distanceKm = d;
+                    routeDistanceKm += d;
                     distance = `${d.toFixed(1)} km`;
                     const minutes = Math.round(d * 2); 
                     const finalMinutes = minutes + (d > 0.5 ? 5 : 0); // +5 min buffer
@@ -572,6 +580,7 @@ export function Pemantauan() {
                 status: order.status,
                 time: order.serviceTime,
                 distance: distance,
+                distanceKm,
                 travelTimeEstimate,
                 technicianName: groupName, // Rename to groupName conceptually but keep key for compat
                 orderData: order,
@@ -586,7 +595,9 @@ export function Pemantauan() {
             technicianName: groupName, // Backward compatibility
             color,
             points,
-            ordersCount: sorted.length
+            ordersCount: sorted.length,
+            totalDistanceKm: routeDistanceKm,
+            totalDistance: `${routeDistanceKm.toFixed(1)} km`
         };
     }).filter(group => group.points.length > 0);
   }, [filteredOrders, users, groupingMode, branchPointById]);

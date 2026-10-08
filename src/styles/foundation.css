@@ -26450,6 +26450,9 @@ body {
 .fieldMonitorPage .leaflet-container svg,
 .mapSpreadPage .leaflet-container svg,
 .technicianMobilePage .leaflet-container svg,
+.fieldMonitorPage .leaflet-pane > canvas,
+.mapSpreadPage .leaflet-pane > canvas,
+.technicianMobilePage .leaflet-pane > canvas,
 .leaflet-container svg.leaflet-zoom-animated {
   max-width: none !important;
   max-height: none !important;
