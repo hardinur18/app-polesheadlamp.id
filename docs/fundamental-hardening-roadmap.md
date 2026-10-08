@@ -43,7 +43,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [x] Phase 7 Pesanan/Jadwal dirapikan: validasi jadwal diaudit, error order dirapikan, dan side effect update kecil dijaga.
 - [x] Phase 8 Payment & Proof Assets dirapikan: modal scroll-safe, upload bukti bayar lebih stabil, dan proof asset dialog aman di mobile.
 - [ ] CRUD prospek, pesanan, payment, dan master data diaudit penuh.
-- [~] Security/RLS diaudit dan dirapikan: anonymous access dan service-role fallback sudah dirapikan; granular RLS menunggu refactor data access.
+- [~] Security/RLS diaudit dan dirapikan: anonymous access ditutup ulang lewat migration lanjutan, service-role fallback sudah dirapikan; granular RLS menunggu refactor data access.
 - [x] Phase 10 refactor struktur besar selesai untuk batch fundamental: server app-data, MasterDataCtx, dashboard CS/Advertiser, pesanan, prospek, modal shared, API snapshot, dan Iklan Harian sudah dirapikan tanpa mengubah flow bisnis utama.
 - [x] Phase 11 type safety flow kritis selesai: `@ts-ignore` global dibersihkan, payload app-data, sync iklan harian, Iklan Harian, dan flow pesanan utama sudah typed.
 - [~] Test automation core flow lengkap: smoke contract deterministic sudah ada; login real-role dan payment upload masih perlu credential/manual.
@@ -292,7 +292,7 @@ Tujuan: akses database tidak terlalu longgar dan role user benar-benar dibatasi.
 - [x] Audit semua policy `with check (true)`.
 - [~] Audit akses `authenticated` yang terlalu luas: sudah dipetakan, tapi belum semua bisa dicabut karena beberapa flow frontend masih direct Supabase.
 - [x] Audit tabel sensitif: users, profiles, leads, orders, payments, finance.
-- [~] Cabut akses yang tidak perlu: anon dicabut untuk tabel internal dan `payment_transactions` dikunci backend-only; akses `authenticated` granular menunggu refactor data access.
+- [~] Cabut akses yang tidak perlu: anon dicabut untuk tabel internal dan `payment_transactions` dikunci backend-only; migration lanjutan menutup grant `PUBLIC`/policy public yang masih bocor; akses `authenticated` granular menunggu refactor data access.
 - [x] Pastikan service role hanya dipakai di server.
 - [!] Rotate credential yang pernah dibagikan di chat.
 - [x] Dokumentasikan matrix role permission: `docs/security-rls-audit.md`.
@@ -306,6 +306,7 @@ Definition of done:
 Catatan progress 2026-10-08:
 
 - Migration `202610081130_phase9_security_rls_foundation.sql` ditambahkan untuk memastikan RLS aktif, mencabut akses `anon` dari tabel internal, mengunci `payment_transactions` hanya untuk `service_role`, dan menghapus anonymous storage write policy lama.
+- Migration `202610081815_lock_internal_anon_rest_access.sql` ditambahkan karena audit live menemukan beberapa tabel internal masih bisa dibaca anon lewat grant `PUBLIC` atau policy public/anon lama. Migration ini mencabut `PUBLIC/anon`, drop policy public/anon internal, memisahkan tabel browser-authenticated, read-only snapshot, dan service-role-only payroll/payment, lalu membuat ulang policy minimal agar app tidak patah.
 - `ads_snapshot_store` sekarang wajib memakai `SUPABASE_SERVICE_ROLE_KEY`; tidak lagi fallback ke anon key.
 - Auth check Google Ads, TikTok Ads, dan Meta Messaging memakai anon key lebih dulu untuk `auth.getUser`, dengan service role hanya sebagai fallback server-side.
 - Granular RLS per role bisnis belum dipaksakan penuh karena frontend masih punya direct Supabase access untuk beberapa CRUD inti. Kalau langsung dicabut, risiko login, prospek, pesanan, dashboard, finance, dan master data patah.
@@ -446,6 +447,7 @@ Tujuan: memastikan app sudah layak dianggap fundamental kuat.
 - [x] `npm run lint` pass.
 - [x] `npm run build` pass.
 - [x] `npm run audit:fundamental` pass.
+- [~] `npm run audit:anon-rest` tersedia; harus pass setelah migration anon REST diterapkan ke Supabase production.
 - [x] Smoke routes pass.
 - [~] Smoke role routes pass: script exit pass, tetapi skenario real skip karena credential smoke belum tersedia.
 - [~] Smoke prospek CRUD pass: script exit pass, tetapi skenario real skip karena credential smoke belum tersedia.
@@ -470,7 +472,7 @@ Catatan progress 2026-10-08:
 - Final gate lokal yang sudah pass: `npm run typecheck:full`, `npm run typecheck:strict-core`, `npm run lint`, `npm run build`, `npm run audit:fundamental`, dan `npm run smoke:release`.
 - `smoke:release` menjalankan route smoke dan core contract smoke penuh. `smoke:role-routes` serta `smoke:prospect-crud` exit pass tetapi status internalnya `skipped` karena belum ada credential smoke Owner/CS untuk test real login/CRUD.
 - `smoke:role-routes` dan `smoke:prospect-crud` sekarang mendukung `SMOKE_SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` sebagai opsi runtime-only untuk membuat akun smoke sementara dan cleanup tanpa menyimpan credential di repo.
-- Build masih menampilkan warning non-blocking Browserslist data lama.
+- Audit non-destruktif live sebelum migration `202610081815_lock_internal_anon_rest_access.sql` menemukan anon REST masih bisa membaca beberapa tabel internal/master data seperti `branches`, `services`, `leads`, `orders`, `daily_ads`, `ad_accounts`, `roles`, `products`, dan `kv_store_f781cd00`. Ini ditutup lewat migration baru dan perlu diverifikasi ulang setelah migration diterapkan.
 
 ## Catatan Prioritas
 

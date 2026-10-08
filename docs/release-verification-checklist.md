@@ -11,6 +11,7 @@ Use this checklist before marking the app release-ready. Local checks can pass w
 - [ ] `npm run typecheck:phase4`
 - [ ] `npm run build`
 - [ ] `npm run audit:fundamental`
+- [ ] `npm run audit:anon-rest` after production migrations are applied.
 - [ ] `npm run smoke:routes` against a local preview build.
 - [ ] `npm run smoke:core-contracts` to verify deterministic order, prospect, schedule, and ads snapshot contracts.
 - [ ] `npm run smoke:role-routes` with `SMOKE_ROLE_ACCOUNTS` for real test accounts, or an authorized user-management token.
@@ -94,6 +95,7 @@ Run each role in a fresh browser session.
 
 - [ ] Confirm the frontend app project ref from `.env.local` / `.env.supabase.local`.
 - [ ] Apply all pending Supabase migrations to that frontend app project.
+- [ ] Confirm anonymous REST cannot read internal tables (`npm run audit:anon-rest`).
 - [ ] Deploy `make-server-f781cd00`, `meta-messaging-webhook`, and `kirimdev-messaging-webhook` to that same project.
 - [ ] Verify required Edge Function secrets exist in that project.
 - [ ] Verify CORS allows only approved app/embed origins in production.

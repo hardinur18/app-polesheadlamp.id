@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { MasterDataProvider } from '@/app/pages/master-data/context';
 import { PermissionsProvider } from '@/app/hooks/usePermissions';
@@ -153,6 +153,7 @@ export const AuthenticatedApp = () => {
   const location = useLocation();
   const currentRoute = getAppRouteByPath(location.pathname);
   const canonicalPath = currentRoute ? getCanonicalAppPath(currentRoute) : location.pathname;
+  const lastStableSessionRef = useRef<Session | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -173,7 +174,25 @@ export const AuthenticatedApp = () => {
 
     const settleAuthState = (nextSession: Session | null) => {
       if (!isActive) return;
-      setSession(nextSession);
+
+      const validNextSession = isSessionForCurrentProject(nextSession) ? nextSession : null;
+      if (validNextSession?.access_token) {
+        lastStableSessionRef.current = validNextSession;
+        setSession(validNextSession);
+        setLoading(false);
+        return;
+      }
+
+      const cachedSession = readCachedSupabaseSession();
+      if (cachedSession?.access_token) {
+        lastStableSessionRef.current = cachedSession;
+        setSession(cachedSession);
+        setLoading(false);
+        return;
+      }
+
+      lastStableSessionRef.current = null;
+      setSession(null);
       setLoading(false);
     };
 
@@ -274,7 +293,7 @@ export const AuthenticatedApp = () => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       window.clearTimeout(bootTimeout);
-      if (_event !== 'SIGNED_OUT' && !session && usedBootCachedSession && hasCachedSupabaseSession()) {
+      if (!session && (usedBootCachedSession || lastStableSessionRef.current) && hasCachedSupabaseSession()) {
         return;
       }
       settleAuthState(session);

@@ -7,6 +7,7 @@ Dokumen ini mencatat hasil Phase 9 hardening. Target fase ini adalah memperketat
 ## Ringkasan Status
 
 - Akses `anon` ke tabel internal dicabut lewat migration `202610081130_phase9_security_rls_foundation.sql`.
+- Hardening lanjutan `202610081815_lock_internal_anon_rest_access.sql` menutup sisa akses anon yang masih lolos lewat grant `PUBLIC` atau policy public/anon lama. Migration ini juga memisahkan tabel yang masih dibaca/ditulis browser authenticated, tabel snapshot read-only, dan tabel backend-only seperti payroll/payment.
 - RLS dipastikan aktif untuk tabel internal utama.
 - `payment_transactions` dikunci backend-only untuk `service_role`.
 - Policy storage lama yang mengizinkan anonymous write ke bank logo/proof asset dihapus.
@@ -47,6 +48,12 @@ Jadi Phase 9 mengunci lapisan yang aman dulu: anonymous access, backend-only pay
 - Beberapa flow sensitif masih direct Supabase dari frontend, terutama master data, finance, proof assets, prospek, pesanan, dan audit log.
 - Bucket/file publik tetap perlu daftar eksplisit mana yang memang boleh public-read.
 - Credential yang pernah dibagikan di chat harus dirotate dari dashboard penyedia sebelum dianggap production-safe.
+
+## Verifikasi Anon REST
+
+- Script `npm run audit:anon-rest` mengecek anon key terhadap tabel internal seperti `leads`, `orders`, `daily_ads`, `ad_accounts`, `roles`, `products`, `kv_store_f781cd00`, `payment_transactions`, dan tabel operasional lain.
+- Audit ini harus dijalankan setelah migration production diterapkan. Sebelum migration `202610081815_lock_internal_anon_rest_access.sql`, anon REST masih bisa membaca minimal row dari beberapa tabel internal.
+- Tabel public embed form tetap diperlakukan sebagai pengecualian terbatas; public page utama tetap memakai Edge Function, bukan direct internal-table CRUD.
 
 ## Next Hardening Untuk Nilai 10/10
 

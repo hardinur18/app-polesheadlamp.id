@@ -177,7 +177,7 @@ const setSupabaseSessionBestEffort = async (session: Session): Promise<PasswordS
   } as PasswordSignInResult;
 
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       supabase.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
@@ -186,6 +186,13 @@ const setSupabaseSessionBestEffort = async (session: Session): Promise<PasswordS
         window.setTimeout(() => resolve(fallbackResult), SUPABASE_SET_SESSION_TIMEOUT_MS);
       }),
     ]);
+
+    if (result.error && isRetryableLoginError(result.error)) {
+      console.warn('[Login] Supabase setSession returned retryable error after direct auth; using persisted session.', result.error);
+      return fallbackResult;
+    }
+
+    return result;
   } catch (error) {
     console.warn('[Login] Supabase setSession failed after direct auth; using persisted session.', error);
     return fallbackResult;
