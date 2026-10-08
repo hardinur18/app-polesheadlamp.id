@@ -2576,19 +2576,53 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                     ))
                   )}
                 </div>
-                <div className="advertiserDashboardSummaryDesktop overflow-x-auto">
-                    <Table>
+                <div className="advertiserDashboardSummaryDesktop">
+                    <Table
+                        className="table-fixed"
+                        style={{ '--table-min-width': '1540px' } as React.CSSProperties}
+                    >
+                        <colgroup>
+                            <col className="w-[135px]" />
+                            <col className="w-[170px]" />
+                            <col className="w-[170px]" />
+                            <col className="w-[180px]" />
+                            <col className="w-[150px]" />
+                            <col className="w-[190px]" />
+                            <col className="w-[155px]" />
+                            <col className="w-[160px]" />
+                            <col className="w-[230px]" />
+                        </colgroup>
                         <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow className="border-b border-slate-100 dark:border-slate-700">
-                                <TableHead className="py-4 pl-6 w-[130px] font-semibold cursor-pointer" onClick={() => handleSort('date')}>Tgl Lead <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
-                                <TableHead className="py-4 font-semibold text-center px-4">Advertiser</TableHead>
-                                <TableHead className="py-4 font-semibold text-center px-4">CS</TableHead>
-                                <TableHead className="py-4 font-semibold text-center px-4">Platform / Sub Channel</TableHead>
-                                <TableHead className="py-4 font-semibold text-center px-4">Akun</TableHead>
-                                <TableHead className="py-4 text-right font-semibold cursor-pointer px-4" onClick={() => handleSort('spending')}>Spending <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
-                                <TableHead className="py-4 text-right font-semibold cursor-pointer px-4" onClick={() => handleSort('leads_real')}>Leads (Dash | Real) <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
-                                <TableHead className="py-4 text-right font-semibold cursor-pointer px-4" onClick={() => handleSort('orders_done')}>Orders (Deal | Done) <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
-                                <TableHead className="py-4 text-right font-semibold cursor-pointer pr-6" onClick={() => handleSort('cpl_real')}>Efisiensi (CPL) <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
+                                <TableHead className="py-4 pl-6 font-semibold cursor-pointer whitespace-nowrap" onClick={() => handleSort('date')}>Tgl Lead <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
+                                <TableHead className="py-4 font-semibold text-center px-3 whitespace-nowrap">Advertiser</TableHead>
+                                <TableHead className="py-4 font-semibold text-center px-3 whitespace-nowrap">CS</TableHead>
+                                <TableHead className="py-4 font-semibold text-center px-3">
+                                  <div className="leading-tight">
+                                    <span className="block whitespace-nowrap">Platform</span>
+                                    <span className="block text-[10px] font-medium text-slate-400">Sub Channel</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead className="py-4 font-semibold text-center px-3 whitespace-nowrap">Akun</TableHead>
+                                <TableHead className="py-4 text-right font-semibold cursor-pointer px-3 whitespace-nowrap" onClick={() => handleSort('spending')}>Spending <ArrowUpDown className="w-3 h-3 inline" /></TableHead>
+                                <TableHead className="py-4 text-right font-semibold cursor-pointer px-3" onClick={() => handleSort('leads_real')}>
+                                  <div className="leading-tight">
+                                    <span className="block whitespace-nowrap">Leads</span>
+                                    <span className="block text-[10px] font-medium text-slate-400">Dash | Real</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead className="py-4 text-right font-semibold cursor-pointer px-3" onClick={() => handleSort('orders_done')}>
+                                  <div className="leading-tight">
+                                    <span className="block whitespace-nowrap">Orders</span>
+                                    <span className="block text-[10px] font-medium text-slate-400">Deal | Done</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead className="py-4 text-right font-semibold cursor-pointer pr-6" onClick={() => handleSort('cpl_real')}>
+                                  <div className="leading-tight">
+                                    <span className="block whitespace-nowrap">Efisiensi</span>
+                                    <span className="block text-[10px] font-medium text-slate-400">CPL & CPR</span>
+                                  </div>
+                                </TableHead>
                             </TableRow>
 	                        </TableHeader>
 	                        <TableBody>
@@ -2602,7 +2636,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                ))
                              ) : processedData.length === 0 ? (
 	                               <TableRow>
-	                                   <TableCell colSpan={10} className="py-0">
+	                                   <TableCell colSpan={9} className="py-0">
                                        <OperationalEmptyState
                                           icon={BarChart3}
                                           title="Tidak ada data"
@@ -2619,35 +2653,35 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                                <span className="text-[10px] text-slate-400">{format(new Date(item.date), 'EEEE', { locale: idLocale })}</span>
                                            </div>
                                        </TableCell>
-                                       <TableCell className="py-4 align-top text-center text-xs text-slate-600 dark:text-slate-400 px-4">
+                                       <TableCell className="py-4 align-top text-center text-xs text-slate-600 dark:text-slate-400 px-3">
                                            {renderSimpleList(item.advertisers, getAdvertiserName)}
                                        </TableCell>
-                                       <TableCell className="py-4 align-top text-center text-xs text-slate-600 dark:text-slate-400 px-4">
+                                       <TableCell className="py-4 align-top text-center text-xs text-slate-600 dark:text-slate-400 px-3">
                                             {renderMultilineList(item.csIds, getCsName)}
                                        </TableCell>
-                                       <TableCell className="py-4 align-top text-center text-xs text-slate-600 dark:text-slate-400 px-4">
+                                       <TableCell className="py-4 align-top text-center text-xs text-slate-600 dark:text-slate-400 px-3">
                                             <div className="flex flex-col gap-1 items-center">
-                                                <Badge variant="outline" className="font-normal bg-slate-50 text-slate-600 border-slate-200">
+                                                <Badge variant="outline" className="max-w-full truncate font-normal bg-slate-50 text-slate-600 border-slate-200">
                                                     {renderSimpleList(item.platforms, getPlatformName)}
                                                 </Badge>
                                                 {item.subChannels && item.subChannels.length > 0 && (
-                                                    <span className="text-[10px] text-slate-500">
+                                                    <span className="max-w-full truncate text-[10px] text-slate-500">
                                                         {renderSimpleList(item.subChannels, getSubChannelName)}
                                                     </span>
                                                 )}
                                             </div>
                                        </TableCell>
-                                       <TableCell className="py-4 align-top text-center text-xs text-slate-500 dark:text-slate-400 px-4">
+                                       <TableCell className="py-4 align-top text-center text-xs text-slate-500 dark:text-slate-400 px-3">
                                             {item.isMissingReport ? (
                                                 <span className="text-red-500 flex items-center justify-center gap-1">
                                                     <AlertCircle className="w-3 h-3" />
                                                     <span className="text-[10px] font-medium">Belum Laporan</span>
                                                 </span>
                                             ) : (
-                                                renderSimpleList(item.accounts, getAccountName)
+                                                <span className="line-clamp-2">{renderSimpleList(item.accounts, getAccountName)}</span>
                                             )}
                                        </TableCell>
-                                       <TableCell className="py-4 text-right align-top px-4">
+                                       <TableCell className="py-4 text-right align-top px-3">
                                             <div className="flex flex-col items-end gap-0.5">
                                                 <span className="font-bold text-slate-900 dark:text-slate-100">
                                                     {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(item.spend)}
@@ -2657,52 +2691,52 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                                                 </span>
                                             </div>
                                        </TableCell>
-                                       <TableCell className="py-4 text-right align-top px-4">
+                                       <TableCell className="py-4 text-right align-top px-3">
                                             <div className="flex flex-col items-end gap-1">
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                                <div className="grid grid-cols-[auto_3.5rem] items-center gap-2 text-xs">
                                                     <span className="text-slate-400">Dash:</span>
-                                                    <span className="font-medium text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20 px-1.5 rounded">{item.leadsDashboard}</span>
+                                                    <span className="rounded bg-cyan-50 px-1.5 text-right font-medium text-cyan-600 dark:bg-cyan-900/20 dark:text-cyan-400">{item.leadsDashboard}</span>
                                                 </div>
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                                <div className="grid grid-cols-[auto_3.5rem] items-center gap-2 text-xs">
                                                     <span className="text-slate-400">Real:</span>
-                                                    <span className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 rounded">{item.realLeads}</span>
+                                                    <span className="rounded bg-blue-50 px-1.5 text-right font-bold text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">{item.realLeads}</span>
                                                 </div>
                                             </div>
                                        </TableCell>
-                                       <TableCell className="py-4 text-right align-top px-4">
+                                       <TableCell className="py-4 text-right align-top px-3">
                                             <div className="flex flex-col items-end gap-1">
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                                <div className="grid grid-cols-[auto_3.5rem] items-center gap-2 text-xs">
                                                     <span className="text-slate-400">Deal:</span>
-                                                    <span className="font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 rounded">{item.realOrders}</span>
+                                                    <span className="rounded bg-emerald-50 px-1.5 text-right font-medium text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">{item.realOrders}</span>
                                                 </div>
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                                <div className="grid grid-cols-[auto_3.5rem] items-center gap-2 text-xs">
                                                     <span className="text-slate-400">Done:</span>
-                                                    <span className="font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-1.5 rounded">{item.realOrdersDone}</span>
+                                                    <span className="rounded bg-purple-50 px-1.5 text-right font-bold text-purple-600 dark:bg-purple-900/20 dark:text-purple-400">{item.realOrdersDone}</span>
                                                 </div>
                                             </div>
                                        </TableCell>
                                        <TableCell className="py-4 text-right align-top pr-6">
-                                            <div className="flex flex-col items-end gap-1.5">
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                            <div className="flex flex-col items-stretch gap-1.5">
+                                                <div className="grid grid-cols-[4.75rem_1fr] items-start gap-2 text-xs">
                                                     <span className="text-slate-400">CPL:</span>
-                                                    <div className="flex gap-1">
-                                                        <span className="font-medium text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/40 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap">
+                                                    <div className="grid grid-cols-2 gap-1">
+                                                        <span className="rounded bg-cyan-100 px-1.5 py-0.5 text-right text-[10px] font-medium text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300">
                                                             D: {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(item.cplDash)}
                                                         </span>
-                                                        <span className="font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap">
+                                                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-right text-[10px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                                                             R: {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(item.cplReal)}
                                                         </span>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                                <div className="grid grid-cols-[4.75rem_1fr] items-center gap-2 text-xs">
                                                     <span className="text-slate-400">CPR(Deal):</span>
-                                                    <span className="font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap">
+                                                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-right text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                                                         {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(item.cprDeal)}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center justify-end gap-2 text-xs">
+                                                <div className="grid grid-cols-[4.75rem_1fr] items-center gap-2 text-xs">
                                                     <span className="text-slate-400">CPR(Done):</span>
-                                                    <span className="font-medium text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/40 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap">
+                                                    <span className="rounded bg-purple-100 px-1.5 py-0.5 text-right text-[10px] font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
                                                         {new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(item.cprDone)}
                                                     </span>
                                                 </div>
