@@ -49,7 +49,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [~] Test automation core flow lengkap: smoke contract deterministic sudah ada; login real-role dan payment upload masih perlu credential/manual.
 - [~] Observability/error handling distandarkan: client error reporter, app boundary, route boundary, dan global runtime listener sudah ada.
 - [~] Sisa phase lama dipetakan ulang: audit debt fundamental, strict-core gate, dan matrix CRUD inti sudah dibuat.
-- [ ] Final release checklist 100% pass.
+- [~] Final release checklist: gate lokal pass; smoke role/prospek real dan manual role masih butuh credential.
 
 ## Phase 1 - Baseline Safety
 
@@ -441,14 +441,14 @@ Catatan progress 2026-10-08:
 
 Tujuan: memastikan app sudah layak dianggap fundamental kuat.
 
-- [ ] `npm run typecheck:full` pass.
-- [ ] `npm run typecheck:strict-core` pass.
-- [ ] `npm run lint` pass.
-- [ ] `npm run build` pass.
-- [ ] `npm run audit:fundamental` pass.
-- [ ] Smoke routes pass.
-- [ ] Smoke role routes pass.
-- [ ] Smoke prospek CRUD pass.
+- [x] `npm run typecheck:full` pass.
+- [x] `npm run typecheck:strict-core` pass.
+- [x] `npm run lint` pass.
+- [x] `npm run build` pass.
+- [x] `npm run audit:fundamental` pass.
+- [x] Smoke routes pass.
+- [~] Smoke role routes pass: script exit pass, tetapi skenario real skip karena credential smoke belum tersedia.
+- [~] Smoke prospek CRUD pass: script exit pass, tetapi skenario real skip karena credential smoke belum tersedia.
 - [ ] Manual login semua role pass.
 - [ ] Manual dashboard CS/Advertiser/Teknisi pass.
 - [ ] Manual prospek pass.
@@ -464,6 +464,12 @@ Definition of done:
 - Tidak ada blocker utama.
 - Semua flow inti lolos.
 - Dokumentasi progress terupdate.
+
+Catatan progress 2026-10-08:
+
+- Final gate lokal yang sudah pass: `npm run typecheck:full`, `npm run typecheck:strict-core`, `npm run lint`, `npm run build`, `npm run audit:fundamental`, dan `npm run smoke:release`.
+- `smoke:release` menjalankan route smoke dan core contract smoke penuh. `smoke:role-routes` serta `smoke:prospect-crud` exit pass tetapi status internalnya `skipped` karena belum ada credential smoke Owner/CS untuk test real login/CRUD.
+- Build masih menampilkan warning non-blocking Browserslist data lama.
 
 ## Catatan Prioritas
 
