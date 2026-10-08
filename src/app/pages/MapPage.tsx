@@ -3,7 +3,7 @@ import { MapCard } from '../components/ui/MapCard';
 import { useMasterData } from '@/app/pages/master-data/context';
 import { isOwnerLikeRole } from '@/app/data/roleHelpers';
 import { getTodayDateKey } from '@/app/pages/master-data/dateKeys';
-import { MapPin, UserCog, User, Loader2, X } from 'lucide-react';
+import { MapPin, UserCog, User, Loader2, X, Maximize2, Minimize2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
@@ -62,6 +62,7 @@ export const MapPage = () => {
   const [filterBranch, setFilterBranch] = useState('all');
   const [viewMode, setViewMode] = useState<ViewMode>('technician');
   const [isLegendOpen, setIsLegendOpen] = useState(true);
+  const [isFullPage, setIsFullPage] = useState(false);
 
   // Lazy Loading States
   const [lazyOrders, setLazyOrders] = useState<Order[]>([]);
@@ -177,6 +178,17 @@ export const MapPage = () => {
       requestAbortRef.current?.abort();
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
   }, []);
+
+  useEffect(() => {
+      if (!isFullPage) return;
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') setIsFullPage(false);
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullPage]);
 
   // Prepare points for the map
   const mapPoints = useMemo(() => {
@@ -384,7 +396,7 @@ export const MapPage = () => {
   }, [mapPoints]);
 
   return (
-    <div className="mapSpreadPage flex flex-col h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-900">
+    <div className={`mapSpreadPage flex flex-col h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-900 ${isFullPage ? 'isFullPage' : ''}`}>
       {/* Header Controls */}
       <div className="mapSpreadHeader flex-none p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 z-10 shadow-sm flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
         <div>
@@ -402,6 +414,7 @@ export const MapPage = () => {
             {/* View Mode Toggle */}
             <div className="mapSpreadViewSwitch bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex items-center border border-slate-200 dark:border-slate-700">
                 <button
+                    type="button"
                     onClick={() => setViewMode('technician')}
                     className={`mapSpreadViewTab px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2 ${
                         viewMode === 'technician' 
@@ -413,6 +426,7 @@ export const MapPage = () => {
                     Teknisi
                 </button>
                 <button
+                    type="button"
                     onClick={() => setViewMode('cs')}
                     className={`mapSpreadViewTab px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-2 ${
                         viewMode === 'cs' 
@@ -421,7 +435,7 @@ export const MapPage = () => {
                     }`}
                 >
                     <User className="w-3.5 h-3.5" />
-                    CS View
+                    CS
                 </button>
             </div>
 
@@ -436,6 +450,16 @@ export const MapPage = () => {
                     ))}
                 </SelectContent>
             </Select>
+
+            <button
+                type="button"
+                onClick={() => setIsFullPage((current) => !current)}
+                className="mapSpreadFullPageButton inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                title={isFullPage ? 'Keluar layar penuh (Esc)' : 'Layar penuh'}
+                aria-label={isFullPage ? 'Keluar layar penuh' : 'Layar penuh'}
+            >
+                {isFullPage ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
         </div>
       </div>
 

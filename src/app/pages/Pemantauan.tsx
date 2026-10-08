@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   MapPin, Clock, User, CheckCircle2,
   ChevronDown, ChevronUp, Calendar, Filter, Truck, ArrowRight,
-  Search, Banknote, Layers, Shield, X, Ruler
+  Search, Banknote, Layers, Shield, X, Ruler, Maximize2, Minimize2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -91,6 +91,7 @@ export function Pemantauan() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
   const [showRadius, setShowRadius] = useState(true);
+  const [isFullPage, setIsFullPage] = useState(false);
   const [viewMode, setViewMode] = useState<'calendar' | 'list' | 'history'>('calendar');
   
   // Date default to Today
@@ -127,6 +128,17 @@ export function Pemantauan() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  React.useEffect(() => {
+    if (!isFullPage) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsFullPage(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullPage]);
 
   React.useEffect(() => {
     if (!isMobile || hasAppliedMobileDefaults.current) return;
@@ -825,7 +837,7 @@ export function Pemantauan() {
   };
 
   return (
-    <div className="fieldMonitorPage flex flex-col h-screen bg-slate-100 dark:bg-slate-900 overflow-hidden">
+    <div className={`fieldMonitorPage flex flex-col h-screen bg-slate-100 dark:bg-slate-900 overflow-hidden ${isFullPage ? 'isFullPage' : ''}`}>
         
         {/* --- 1. TOP FILTER CONTAINER (Static Layout) --- */}
         {isFiltersOpen && (
@@ -1433,6 +1445,16 @@ export function Pemantauan() {
 
              {/* FLOATING CONTROLS (Top Right - Inside Map) */}
              <div className="absolute top-4 right-4 z-[60] flex flex-col gap-3 pointer-events-none">
+                  <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setIsFullPage((current) => !current)}
+                        className="pointer-events-auto h-10 w-10 rounded-xl border-slate-200 bg-white/95 p-0 text-slate-700 shadow-md backdrop-blur-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/95 dark:text-slate-200 dark:hover:bg-slate-700"
+                        title={isFullPage ? "Keluar layar penuh (Esc)" : "Layar penuh"}
+                    >
+                        {isFullPage ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                    </Button>
+
                   {/* Toggle Filter (Only show if filter is CLOSED) */}
                    {!isFiltersOpen && (
                        <Button

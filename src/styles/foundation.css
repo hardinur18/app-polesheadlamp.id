@@ -25691,6 +25691,25 @@ body {
   white-space: nowrap;
 }
 
+.mapSpreadViewSwitch {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(88px, 1fr));
+  min-width: 212px;
+  overflow: hidden;
+}
+
+.mapSpreadViewTab {
+  height: 36px;
+  min-width: 0 !important;
+  padding-inline: 12px !important;
+  width: 100%;
+}
+
+.mapSpreadViewTab svg {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .fieldActivityTab:hover,
 .mapSpreadViewTab:hover {
   background: #ffffff;
@@ -26486,6 +26505,36 @@ body {
   overflow: hidden;
 }
 
+.fieldMonitorPage.isFullPage,
+.mapSpreadPage.isFullPage {
+  height: 100dvh !important;
+  inset: 0;
+  min-height: 100dvh !important;
+  padding-bottom: 0 !important;
+  position: fixed;
+  width: 100vw;
+  z-index: 999;
+}
+
+.fieldMonitorPage.isFullPage {
+  background: #f1f5f9;
+}
+
+.mapSpreadPage.isFullPage {
+  background: #f8fafc;
+}
+
+.fieldMonitorPage.isFullPage .fieldMonitorFilters,
+.mapSpreadPage.isFullPage .mapSpreadHeader {
+  padding-top: max(12px, env(safe-area-inset-top));
+}
+
+.fieldMonitorPage.isFullPage .leaflet-container,
+.mapSpreadPage.isFullPage .leaflet-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+
 .mapSpreadHeader {
   border-color: rgba(226, 232, 240, 0.92) !important;
   box-shadow: 0 18px 42px -36px rgba(15, 23, 42, 0.5) !important;
@@ -26506,6 +26555,10 @@ body {
 
 .mapSpreadSelect {
   min-width: 170px;
+}
+
+.mapSpreadFullPageButton {
+  min-width: 40px;
 }
 
 .mapSpreadCanvas {
@@ -26672,7 +26725,7 @@ body {
   .fieldActivityTabs,
   .mapSpreadViewSwitch {
     width: 100%;
-    overflow-x: auto;
+    overflow: hidden;
     scrollbar-width: none;
   }
 
@@ -26682,10 +26735,15 @@ body {
   }
 
   .fieldActivityTab,
-  .mapSpreadViewTab {
+  .fieldActivityTab {
     flex: 1 0 auto;
     min-width: 112px;
     padding-inline: 12px;
+  }
+
+  .mapSpreadViewTab {
+    min-width: 0 !important;
+    padding-inline: 10px !important;
   }
 
   .fieldActivityDateControls {
@@ -26933,6 +26991,10 @@ body {
 
   .mapSpreadSelect {
     width: 100% !important;
+  }
+
+  .mapSpreadFullPageButton {
+    width: 100%;
   }
 
   .mapSpreadCanvas {
