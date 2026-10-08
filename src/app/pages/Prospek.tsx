@@ -60,12 +60,37 @@ import {
   WATemplate,
 } from './master-data/data';
 import { LeadForm } from './leads/LeadForm';
+import { getProspectCrudErrorMessage } from './leads/prospectCrudErrors';
+import {
+  ALL_FILTER,
+  EDITABLE_LEAD_STATUS_OPTIONS,
+  LEAD_PAGE_SIZE_OPTIONS,
+  MANDATORY_PLATFORM_NAMES,
+  buildActiveBookingByLeadId,
+  buildLatestBookingByLeadId,
+  formatProspectBookingDate,
+  getLeadNotesPreview,
+  getProspectBookingStatusLabel,
+  getProspectBookingSummary,
+  getProspectStatusBadgeClass,
+  isAutoWhatsAppLead,
+  normalizeLeadNotes,
+  sortLeadTemplatesForDisplay,
+  toLocalDateKey,
+  uniqueById,
+} from './leads/prospectModel';
+import {
+  AutoWhatsAppLeadBadge,
+  LeadMobileSkeleton,
+  LeadTableSkeleton,
+  WhatsappIcon,
+} from './leads/prospectPageUi';
 import { OrderForm } from './orders/OrderForm';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/clipboard';
 import { FoundationDateRangePicker } from '../components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
-import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { getTodayDateKey } from './master-data/dateKeys';
 import {
   OperationalEmptyState,
@@ -114,122 +139,6 @@ import {
   resolveLeadSocialPrimaryUrl,
 } from './leads/socialContact';
 import { ProspectBookingForm } from './leads/ProspectBookingForm';
-
-const WhatsappIcon = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    fill="currentColor" 
-    className={className}
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-  </svg>
-)
-
-const AUTO_WHATSAPP_LEAD_ORIGIN = 'auto_wa_api';
-const ALL_FILTER = 'all';
-const LEAD_PAGE_SIZE_OPTIONS = [50, 100, 300, 500] as const;
-const MANDATORY_PLATFORM_NAMES = ['repeat order', 'organik'];
-const EDITABLE_LEAD_STATUS_OPTIONS: LeadStatus[] = ['Pending', 'Follow Up', 'Booking', 'Cancel'];
-
-const toLocalDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const uniqueById = <T extends { id: string }>(items: T[]) =>
-  Array.from(new Map(items.map((item) => [item.id, item])).values());
-
-const isAutoWhatsAppLead = (lead: Pick<Lead, 'origin' | 'lastContact' | 'notes'>) => (
-  lead.origin === AUTO_WHATSAPP_LEAD_ORIGIN ||
-  lead.lastContact === 'Auto WA API' ||
-  Boolean(lead.notes?.toLowerCase().includes('auto wa api'))
-);
-
-const AutoWhatsAppLeadBadge = ({ lead, className }: { lead: Lead; className?: string }) => (
-  isAutoWhatsAppLead(lead) ? (
-    <Badge
-      variant="outline"
-      className={`h-5 rounded border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 ${className || ''}`}
-    >
-      Auto WA API
-    </Badge>
-  ) : null
-);
-
-function LeadTableSkeleton({ columns, rows = 8 }: { columns: number; rows?: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, rowIndex) => (
-        <tr key={`lead-table-skeleton-${rowIndex}`}>
-          {Array.from({ length: columns }).map((__, columnIndex) => (
-            <td key={`lead-table-skeleton-${rowIndex}-${columnIndex}`} className="py-5 align-top">
-              <Skeleton
-                className={
-                  columnIndex === 0
-                    ? 'mx-auto h-4 w-8 rounded-md'
-                    : columnIndex === 3
-                      ? 'h-10 w-full max-w-[220px] rounded-md'
-                      : 'h-4 w-full max-w-[150px] rounded-md'
-                }
-              />
-            </td>
-          ))}
-        </tr>
-      ))}
-    </>
-  );
-}
-
-function LeadMobileSkeleton({ rows = 4 }: { rows?: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={`lead-mobile-skeleton-${index}`} className="leadMobileCard">
-          <div className="leadMobileCardHeader">
-            <div className="leadMobileCardIdentity">
-              <Skeleton className="h-5 w-40 rounded-md" />
-              <Skeleton className="mt-3 h-4 w-28 rounded-md" />
-            </div>
-            <Skeleton className="h-8 w-8 rounded-md" />
-          </div>
-          <div className="leadMobileMetaGrid">
-            <Skeleton className="h-12 rounded-md" />
-            <Skeleton className="h-12 rounded-md" />
-            <Skeleton className="h-12 rounded-md" />
-            <Skeleton className="h-12 rounded-md" />
-          </div>
-          <Skeleton className="mt-4 h-4 w-full rounded-md" />
-          <Skeleton className="mt-2 h-4 w-2/3 rounded-md" />
-        </div>
-      ))}
-    </>
-  );
-}
-
-const LEAD_TEMPLATE_TITLE_ORDER = [
-  'salam pertama',
-  'sapaan awal',
-  'follow up penawaran',
-  'upsell',
-  'upsel',
-];
-
-const getLeadTemplateOrder = (template: WATemplate) => {
-  const title = template.title.trim().toLowerCase();
-  const index = LEAD_TEMPLATE_TITLE_ORDER.findIndex((keyword) => title.includes(keyword));
-  return index === -1 ? 90 : index;
-};
-
-const sortLeadTemplatesForDisplay = (left: WATemplate, right: WATemplate) => {
-  const leftOrder = getLeadTemplateOrder(left);
-  const rightOrder = getLeadTemplateOrder(right);
-
-  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-  return left.title.localeCompare(right.title, 'id-ID', { sensitivity: 'base' });
-};
 
 export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void }) => {
   const {
@@ -524,38 +433,15 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         .sort(sortLeadTemplatesForDisplay);
   }, [waTemplates]);
 
-  const latestBookingByLeadId = useMemo(() => {
-    const sortedBookings = [...prospectBookings].sort((left, right) => {
-      const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime();
-      const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime();
-      return rightTime - leftTime;
-    });
+  const latestBookingByLeadId = useMemo(
+    () => buildLatestBookingByLeadId(prospectBookings),
+    [prospectBookings],
+  );
 
-    const map = new Map<string, ProspectBooking>();
-    sortedBookings.forEach((booking) => {
-      if (!map.has(booking.leadId)) {
-        map.set(booking.leadId, booking);
-      }
-    });
-    return map;
-  }, [prospectBookings]);
-
-  const activeBookingByLeadId = useMemo(() => {
-    const sortedBookings = [...prospectBookings].sort((left, right) => {
-      const leftTime = new Date(left.updatedAt || left.createdAt || 0).getTime();
-      const rightTime = new Date(right.updatedAt || right.createdAt || 0).getTime();
-      return rightTime - leftTime;
-    });
-
-    const map = new Map<string, ProspectBooking>();
-    sortedBookings.forEach((booking) => {
-      const isActive = booking.status !== 'cancelled' && !booking.orderId;
-      if (isActive && !map.has(booking.leadId)) {
-        map.set(booking.leadId, booking);
-      }
-    });
-    return map;
-  }, [prospectBookings]);
+  const activeBookingByLeadId = useMemo(
+    () => buildActiveBookingByLeadId(prospectBookings),
+    [prospectBookings],
+  );
 
   const getPlatformName = (id?: string) => {
     if (!id) return '-';
@@ -596,29 +482,12 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const getActiveLeadBooking = (leadId: string) => activeBookingByLeadId.get(leadId);
 
   const getBookingSummary = (leadId: string) => {
-    const booking = getLeadBooking(leadId);
-    if (!booking?.scheduleDate || !booking?.scheduleTime) return null;
-    return `${format(new Date(booking.scheduleDate), 'dd MMM yyyy')} - ${booking.scheduleTime}`;
+    return getProspectBookingSummary(getLeadBooking(leadId));
   };
 
-  const formatBookingDate = (booking?: ProspectBooking | null) => {
-    if (!booking?.scheduleDate) return '-';
-    return format(new Date(booking.scheduleDate), 'dd MMM yyyy');
-  };
+  const formatBookingDate = formatProspectBookingDate;
 
-  const getBookingStatusLabel = (booking?: ProspectBooking | null) => {
-    switch (booking?.status) {
-      case 'confirmed':
-        return 'Confirmed';
-      case 'reschedule':
-        return 'Reschedule';
-      case 'cancelled':
-        return 'Cancelled';
-      case 'tentative':
-      default:
-        return 'Tentative';
-    }
-  };
+  const getBookingStatusLabel = getProspectBookingStatusLabel;
 
   const openBookingForm = (lead: Lead) => {
     if (!canManageLeadBooking(lead)) {
@@ -655,15 +524,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const getLeadSocialHandle = (lead: Lead) => formatLeadSocialHandle(lead.socialUsername);
 
   const getLeadSocialUrl = (lead: Lead) => resolveLeadSocialPrimaryUrl(lead);
-
-  const normalizeLeadNotes = (notes?: string) => notes?.replace(/\s+/g, ' ').trim() || '';
-
-  const getLeadNotesPreview = (notes?: string, maxLength = 96) => {
-    const normalizedNotes = normalizeLeadNotes(notes);
-    if (!normalizedNotes) return '-';
-    if (normalizedNotes.length <= maxLength) return normalizedNotes;
-    return `${normalizedNotes.slice(0, maxLength).trimEnd()}...`;
-  };
 
   const resetLeadTableDrag = (target: HTMLDivElement, pointerId?: number) => {
     if (pointerId !== undefined && target.hasPointerCapture?.(pointerId)) {
@@ -1055,7 +915,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
       setBookingLead(null);
     } catch (error: any) {
-      toast.error(error?.message || 'Booking prospek gagal disimpan');
+      toast.error('Booking prospek gagal disimpan', {
+        description: getProspectCrudErrorMessage(error),
+      });
     }
   };
 
@@ -1531,7 +1393,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       } catch (error: any) {
         console.error("Error updating lead:", error);
         toast.error("Gagal memperbarui prospek", {
-          description: error?.message || "Coba ulang beberapa detik lagi.",
+          description: getProspectCrudErrorMessage(error),
         });
       }
     } else {
@@ -1569,7 +1431,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       } catch (err: any) {
           console.error("Error submitting lead:", err);
           toast.error("Gagal menambahkan prospek", {
-            description: err?.message || "Coba ulang beberapa detik lagi.",
+            description: getProspectCrudErrorMessage(err),
           });
       }
     }
@@ -1597,16 +1459,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     }
   };
 
-  const getStatusBadgeVariant = (status: LeadStatus) => {
-    switch (status) {
-      case 'Pending': return "bg-yellow-50 text-yellow-700 border-yellow-200";
-      case 'Follow Up': return "bg-blue-50 text-blue-700 border-blue-200";
-      case 'Booking': return "bg-violet-50 text-violet-700 border-violet-200";
-      case 'Closing': return "bg-emerald-50 text-emerald-700 border-emerald-200";
-      case 'Cancel': return "bg-red-50 text-red-700 border-red-200";
-      default: return "bg-slate-100 text-slate-700 border-slate-200";
-    }
-  };
+  const getStatusBadgeVariant = getProspectStatusBadgeClass;
 
   // Kanban Component (Memoized View)
   const kanbanView = useMemo(() => {

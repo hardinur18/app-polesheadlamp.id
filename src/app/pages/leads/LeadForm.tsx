@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
@@ -62,24 +61,17 @@ import {
   formatLeadDuplicateWarning,
   getLeadDuplicateCsId,
 } from '/utils/leadDuplicate';
-
-const leadSchema = z.object({
-  name: z.string().min(1, "Nama wajib diisi"),
-  phone: z.string().min(1, "Nomor HP wajib diisi"),
-  platformId: z.string().optional(),
-  subChannelId: z.string().optional(),
-  advertiserId: z.string().optional(),
-  vehicleId: z.string().optional(),
-  csId: z.string().optional(),
-  status: z.enum(['Pending', 'Follow Up', 'Booking', 'Closing', 'Cancel']),
-  notes: z.string().optional(),
-  socialPlatform: z.enum(['instagram', 'tiktok']).optional(),
-  socialUsername: z.string().optional(),
-  socialProfileUrl: z.string().optional(),
-  socialChatUrl: z.string().optional(),
-});
-
-type LeadFormValues = z.infer<typeof leadSchema>;
+import {
+  NONE_ADVERTISER,
+  NONE_CS,
+  NONE_PLATFORM,
+  NONE_SOCIAL_PLATFORM,
+  NONE_SUBCHANNEL,
+  leadSchema,
+  normalizeSelectValue,
+  uniqueById,
+  type LeadFormValues,
+} from './leadFormModel';
 
 interface LeadFormProps {
   item?: Lead | null;
@@ -92,19 +84,6 @@ interface LeadFormProps {
   onSubmit: (data: any) => void;
   onCancel: () => void;
 }
-
-const NONE_ADVERTISER = 'none_advertiser';
-const NONE_PLATFORM = 'none_platform';
-const NONE_SUBCHANNEL = 'none_subchannel';
-const NONE_CS = 'none_cs';
-const NONE_VEHICLE = '__no_vehicle__';
-const NONE_SOCIAL_PLATFORM = 'none_social_platform';
-
-const uniqueById = <T extends { id: string }>(items: T[]) =>
-  Array.from(new Map(items.map((item) => [item.id, item])).values());
-
-const normalizeSelectValue = (value?: string, noneValue?: string) =>
-  !value || value === noneValue ? '' : value;
 
 export const LeadForm: React.FC<LeadFormProps> = ({ 
   item, 

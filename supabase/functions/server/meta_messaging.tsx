@@ -1,745 +1,117 @@
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-import {
-  getRequesterAccessContext,
-  hasEffectivePermission,
-} from "./requester_access.ts";
 import type { RequesterAccessContext } from "./requester_access.ts";
 import type { PermissionKey } from "../../../src/app/data/permissions.ts";
 import { findLeadDuplicates } from "../../../utils/leadDuplicate.ts";
+import type {
+  KirimdevSendMediaInput,
+  KirimdevSendResult,
+  KirimdevSendTemplateInput,
+  KirimdevSendTextInput,
+  KirimdevSyncOptions,
+  KirimdevTemplateParameter,
+  DailyInboxAccumulator,
+  DailyInboxBucket,
+  DailyTrackedPlatform,
+  LiveInboxConversation,
+  LiveInboxMessage,
+  MessageDeliveryStatus,
+  MessagingProvider,
+  MetaConversationRecord,
+  MetaMessageRecord,
+  MetaMessagingChannel,
+  WhatsAppAccountOwnerView,
+  WhatsAppBroadcastRecord,
+  WhatsAppBroadcastRecipientResult,
+  WhatsAppContactRecord,
+  WhatsAppContactView,
+  StoredMessageReadOptions,
+  WhatsAppConversationView,
+  WhatsAppCsPerformanceStatus,
+  WhatsAppCsPerformanceView,
+  WhatsAppPerformanceSummaryView,
+  WhatsAppTemplateView,
+} from "./meta_messaging_types.ts";
+import {
+  KIRIMDEV_API_BASE_URL,
+  KIRIMDEV_API_KEY,
+  KIRIMDEV_BROADCAST_MAX_RECIPIENTS,
+  KIRIMDEV_BROADCAST_SEND_DELAY_MS,
+  KIRIMDEV_DISPLAY_PHONE_NUMBER,
+  KIRIMDEV_PHONE_NUMBER_ID,
+  KIRIMDEV_RECOMMENDED_EVENTS,
+  KIRIMDEV_WEBHOOK_PATH,
+  KIRIMDEV_WEBHOOK_SECRETS,
+  KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS,
+  META_APP_SECRET,
+  META_DM_PAGE_TOKEN_MAP,
+  META_GRAPH_VERSION,
+  META_IG_ACCESS_TOKEN,
+  META_IG_ACCOUNT_ID,
+  META_IG_USER_ID,
+  META_IG_USERNAME,
+  META_MESSAGING_VERIFY_TOKEN,
+  META_WA_DISPLAY_PHONE_NUMBER,
+  META_WA_PHONE_NUMBER_ID,
+  WHATSAPP_MEDIA_BUCKET,
+  WHATSAPP_MEDIA_MAX_BYTES,
+} from "./meta_messaging_config.ts";
+import {
+  buildChannelKey,
+  buildConversationKey,
+  buildConversationStorageKey,
+  buildKirimdevDedupKey,
+  buildKirimdevWebhookEventKey,
+  buildMessageStorageKey,
+  buildWebhookEventKey,
+  buildWhatsAppBroadcastStorageKey,
+  buildWhatsAppContactStorageKey,
+} from "./meta_messaging_storage_keys.ts";
+import {
+  asArray,
+  buildQueryString,
+  chunkArray,
+  clampPositiveInteger,
+  firstNonEmptyString,
+  getIsoTimestampDaysAgo,
+  isValidTimestampFilter,
+  normalizeIsoTimestampFilter,
+  readQueryBoolean,
+  sleep,
+  toIsoTimestamp,
+} from "./meta_messaging_utils.ts";
+import {
+  createAppSecretProof,
+  verifyKirimdevSignature,
+  verifyWebhookSignature,
+} from "./meta_messaging_signature.ts";
+import {
+  debugCurrentMetaToken,
+  fetchKirimdevJson,
+  fetchMetaAbsolutePaged,
+  fetchMetaJson,
+  fetchMetaPaged,
+} from "./meta_messaging_http.ts";
+import {
+  requireAnyMessagingPermission,
+  requireAnyMessagingPermissionOrInternalSync,
+  requireMessagingPermission,
+} from "./meta_messaging_access.ts";
+import {
+  inferKirimdevMediaTypeFromMime,
+  isKirimdevOutboundMediaType,
+  sanitizeMediaFileName,
+  validateKirimdevMediaFile,
+} from "./meta_messaging_media.ts";
 
 const app = new Hono();
 
-const META_GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION")?.trim() || "v25.0";
-const META_ACCESS_TOKEN = Deno.env.get("META_ACCESS_TOKEN")?.trim() || "";
-const META_DM_USER_TOKEN = Deno.env.get("META_DM_USER_TOKEN")?.trim() || "";
-const META_IG_ACCESS_TOKEN = Deno.env.get("META_IG_ACCESS_TOKEN")?.trim() || "";
-const META_IG_ACCOUNT_ID = Deno.env.get("META_IG_ACCOUNT_ID")?.trim() || "";
-const META_IG_USER_ID = Deno.env.get("META_IG_USER_ID")?.trim() || "";
-const META_IG_USERNAME = Deno.env.get("META_IG_USERNAME")?.trim() || "";
-const META_WA_PHONE_NUMBER_ID = Deno.env.get("META_WA_PHONE_NUMBER_ID")?.trim() || "";
-const META_WA_DISPLAY_PHONE_NUMBER =
-  Deno.env.get("META_WA_DISPLAY_PHONE_NUMBER")?.trim() || "";
-const META_APP_ID = Deno.env.get("META_APP_ID")?.trim() || "";
-const META_APP_SECRET = Deno.env.get("META_APP_SECRET")?.trim() || "";
-const META_MESSAGING_VERIFY_TOKEN =
-  Deno.env.get("META_MESSAGING_VERIFY_TOKEN")?.trim() || "";
-
-function readSeedPageTokenMap() {
-  const raw = Deno.env.get("META_DM_PAGE_TOKEN_MAP")?.trim() || "";
-  if (!raw) return {} as Record<string, string>;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {} as Record<string, string>;
-    }
-
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .flatMap(([pageId, accessToken]) => {
-          if (
-            typeof pageId !== "string" ||
-            !pageId.trim() ||
-            typeof accessToken !== "string" ||
-            !accessToken.trim()
-          ) {
-            return [];
-          }
-
-          return [[pageId.trim(), accessToken.trim()] as const];
-        }),
-    ) as Record<string, string>;
-  } catch {
-    return {} as Record<string, string>;
-  }
-}
-
-const META_DM_PAGE_TOKEN_MAP = readSeedPageTokenMap();
-
-// --- Kirimdev WhatsApp provider configuration ---------------------------------
-// Kirimdev forwards WhatsApp webhooks (and exposes a List Messages API) so the
-// inbox can read WhatsApp conversations without talking to Meta Graph directly.
-// All credentials live here on the server only; nothing is exposed to the client.
-const KIRIMDEV_API_BASE_URL =
-  Deno.env.get("KIRIMDEV_API_BASE_URL")?.trim().replace(/\/+$/, "") ||
-  "https://api.kirimdev.com/v1";
-const KIRIMDEV_API_KEY = Deno.env.get("KIRIMDEV_API_KEY")?.trim() || "";
-const KIRIMDEV_PHONE_NUMBER_ID = Deno.env.get("KIRIMDEV_PHONE_NUMBER_ID")?.trim() || "";
-const KIRIMDEV_DISPLAY_PHONE_NUMBER =
-  Deno.env.get("KIRIMDEV_DISPLAY_PHONE_NUMBER")?.trim() || "";
-const KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS = (() => {
-  const raw = Number(Deno.env.get("KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS")?.trim() || "300");
-  return Number.isFinite(raw) && raw > 0 ? Math.min(900, Math.floor(raw)) : 300;
-})();
-const KIRIMDEV_BROADCAST_MAX_RECIPIENTS = (() => {
-  const raw = Number(Deno.env.get("KIRIMDEV_BROADCAST_MAX_RECIPIENTS")?.trim() || "25");
-  return Number.isFinite(raw) && raw > 0 ? Math.min(100, Math.floor(raw)) : 25;
-})();
-const KIRIMDEV_BROADCAST_SEND_DELAY_MS = (() => {
-  const raw = Number(Deno.env.get("KIRIMDEV_BROADCAST_SEND_DELAY_MS")?.trim() || "150");
-  return Number.isFinite(raw) && raw >= 0 ? Math.min(1000, Math.floor(raw)) : 150;
-})();
-
-// Comma-separated list supports zero-downtime secret rotation: accept a delivery
-// if ANY active secret validates ANY signature segment.
-function readKirimdevWebhookSecrets() {
-  const raw = Deno.env.get("KIRIMDEV_WEBHOOK_SECRET")?.trim() || "";
-  return raw
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-}
-
-const KIRIMDEV_WEBHOOK_SECRETS = readKirimdevWebhookSecrets();
-
-// Events we recommend subscribing to from the Kirimdev dashboard/API. Surfaced
-// read-only in the WhatsApp module's Inbox Settings panel.
-const KIRIMDEV_RECOMMENDED_EVENTS = [
-  "message.received",
-  "message.status",
-  "message.sent",
-  "contact.created",
-  "contact.updated",
-  "conversation.assigned",
-  "conversation.closed",
-];
-
-const KIRIMDEV_WEBHOOK_PATH = "/functions/v1/kirimdev-messaging-webhook";
-
-type KirimdevOutboundMediaType = "image" | "video" | "audio" | "document";
-
-const WHATSAPP_MEDIA_BUCKET =
-  Deno.env.get("WHATSAPP_MEDIA_BUCKET")?.trim() || "whatsapp-media";
-const WHATSAPP_MEDIA_MAX_BYTES: Record<KirimdevOutboundMediaType, number> = {
-  image: 5 * 1024 * 1024,
-  video: 16 * 1024 * 1024,
-  audio: 16 * 1024 * 1024,
-  document: 100 * 1024 * 1024,
-};
-
-type MessagingProvider = "meta" | "kirimdev";
-type MessageDeliveryStatus = "pending" | "sent" | "delivered" | "read" | "failed";
-
-type MetaMessagingChannel = {
-  id: string;
-  platform: "facebook_page" | "instagram" | "whatsapp";
-  provider?: MessagingProvider;
-  pageId: string;
-  pageName: string;
-  instagramAccountId?: string | null;
-  instagramUsername?: string | null;
-  instagramName?: string | null;
-  whatsappPhoneNumberId?: string | null;
-  whatsappDisplayPhoneNumber?: string | null;
-  tasks: string[];
-  supportsMessaging: boolean;
-  subscribedFields: string[];
-  accessToken: string;
-  updatedAt: string;
-};
-
-type MetaMessageRecord = {
-  id: string;
-  channelId: string;
-  conversationId: string;
-  source?: "webhook" | "api";
-  contactId: string;
-  entryId: string | null;
-  objectType: string | null;
-  provider?: MessagingProvider;
-  direction: "inbound" | "outbound";
-  eventType: string;
-  text: string | null;
-  attachments: unknown[];
-  mediaUrl?: string | null;
-  status?: MessageDeliveryStatus | null;
-  timestamp: string;
-  raw: unknown;
-};
-
-type MetaConversationRecord = {
-  id: string;
-  channelId: string;
-  source?: "webhook" | "api";
-  contactId: string;
-  entryId: string | null;
-  objectType: string | null;
-  provider?: MessagingProvider;
-  contactName?: string | null;
-  contactPhone?: string | null;
-  contactAvatarUrl?: string | null;
-  lastMessageAt: string;
-  lastMessageText: string | null;
-  lastDirection: "inbound" | "outbound";
-  lastStatus?: MessageDeliveryStatus | null;
-  lastHasAttachment?: boolean;
-  conversationStatus?: string | null;
-  unreadCount: number;
-  updatedAt: string;
-  raw?: unknown;
-};
-
-// WhatsApp contacts captured from webhook payloads (Meta passthrough contacts[]
-// and Kirimdev native contact.* events). Stored separately so the Contacts page
-// can read them without scanning every conversation.
-type WhatsAppContactRecord = {
-  id: string;
-  provider: MessagingProvider;
-  channelId: string;
-  phoneNumberId: string | null;
-  phoneNumber: string | null;
-  name: string | null;
-  email?: string | null;
-  avatarUrl?: string | null;
-  raw?: unknown;
-  createdAt: string | null;
-  updatedAt: string;
-};
-
-type WhatsAppContactView = WhatsAppContactRecord & {
-  accountLabel: string | null;
-  accountPhoneNumber: string | null;
-  csProfileId: string | null;
-  csDisplayName: string | null;
-  csWhatsappNumber: string | null;
-  csAssignmentStatus: string | null;
-};
-
-type WhatsAppAccountOwnerView = {
-  id: string;
-  displayName: string;
-  whatsappNumber: string;
-  assignmentStatus: string | null;
-};
-
-type KirimdevSendTextInput = {
-  phoneNumberId: string;
-  to: string;
-  text: string;
-  replyToMessageId?: string | null;
-  idempotencyKey?: string | null;
-};
-
-type KirimdevSendMediaInput = {
-  phoneNumberId: string;
-  to: string;
-  type: KirimdevOutboundMediaType;
-  mediaUrl: string;
-  caption?: string | null;
-  fileName?: string | null;
-  mimeType?: string | null;
-  replyToMessageId?: string | null;
-  idempotencyKey?: string | null;
-};
-
-type KirimdevTemplateParameter = {
-  name?: string | null;
-  text: string;
-};
-
-type KirimdevSendTemplateInput = {
-  phoneNumberId: string;
-  to: string;
-  templateName: string;
-  language: string;
-  bodyParameters?: KirimdevTemplateParameter[];
-  idempotencyKey?: string | null;
-};
-
-type KirimdevSendResult = {
-  response: any;
-  message: MetaMessageRecord;
-  conversation: MetaConversationRecord;
-};
-
-type WhatsAppTemplateView = {
-  id: string;
-  name: string;
-  language: string;
-  status: "pending" | "approved" | "rejected";
-  category: string | null;
-  content: string | null;
-  variables: string[];
-  components: unknown[];
-  phoneNumberId: string | null;
-  phoneNumber: string | null;
-  providerTemplateId: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-  raw: unknown;
-};
-
-type WhatsAppBroadcastRecipientResult = {
-  contactId: string | null;
-  phoneNumber: string;
-  name: string | null;
-  status: "sent" | "failed";
-  messageId: string | null;
-  error: string | null;
-  sentAt: string | null;
-};
-
-type WhatsAppBroadcastRecord = {
-  id: string;
-  provider: "kirimdev";
-  campaignName: string;
-  phoneNumberId: string;
-  templateName: string;
-  language: string;
-  bodyParameters: KirimdevTemplateParameter[];
-  recipientCount: number;
-  successCount: number;
-  failureCount: number;
-  status: "completed" | "partial_failed" | "failed";
-  createdAt: string;
-  createdBy: string | null;
-  results: WhatsAppBroadcastRecipientResult[];
-};
-
-type KirimdevSyncOptions = {
-  phoneNumberId?: string | null;
-  cursor?: string | null;
-  since?: string | null;
-  until?: string | null;
-  conversationLimit?: number;
-  maxPages?: number;
-  includeMessages?: boolean;
-  messageLimit?: number;
-  messageMaxPages?: number;
-};
-
-type LiveInboxConversation = {
-  id: string;
-  channelId: string;
-  platform: "facebook_page" | "instagram" | "whatsapp";
-  source: "meta-live" | "webhook-store";
-  provider?: MessagingProvider;
-  pageName: string;
-  channelLabel: string;
-  contactId: string;
-  contactName: string | null;
-  contactHandle: string | null;
-  lastMessageAt: string;
-  lastMessageText: string | null;
-  unreadCount: number;
-  messageCount: number | null;
-  updatedAt: string;
-  graphLink: string | null;
-  objectType: string | null;
-};
-
-type LiveInboxMessage = {
-  id: string;
-  channelId: string;
-  conversationId: string;
-  source: "meta-live" | "webhook-store";
-  provider?: MessagingProvider;
-  direction: "inbound" | "outbound";
-  senderId: string | null;
-  senderName: string | null;
-  text: string | null;
-  attachments: unknown[];
-  mediaUrl?: string | null;
-  status?: MessageDeliveryStatus | null;
-  timestamp: string;
-};
-
 app.options("/*", (c) => c.body(null, 204));
-
-function buildChannelKey(channelId: string) {
-  return `meta_messaging_channel:${channelId}`;
-}
-
-function buildConversationKey(channelId: string, contactId: string) {
-  return `${channelId}:${contactId}`;
-}
-
-function buildConversationStorageKey(conversationId: string) {
-  return `meta_messaging_conversation:${conversationId}`;
-}
-
-function buildMessageStorageKey(conversationId: string, messageId: string) {
-  return `meta_messaging_message:${conversationId}:${messageId}`;
-}
-
-function buildWebhookEventKey() {
-  return `meta_messaging_webhook:${Date.now()}:${crypto.randomUUID()}`;
-}
-
-function buildKirimdevWebhookEventKey() {
-  return `kirimdev_messaging_webhook:${Date.now()}:${crypto.randomUUID()}`;
-}
-
-function buildKirimdevDedupKey(eventId: string) {
-  return `kirimdev_messaging_dedup:${eventId}`;
-}
-
-function buildWhatsAppContactStorageKey(channelId: string, contactKey: string) {
-  return `whatsapp_contact:${channelId}:${contactKey}`;
-}
-
-function buildWhatsAppBroadcastStorageKey(broadcastId: string) {
-  return `whatsapp_broadcast:${broadcastId}`;
-}
 
 function sanitizeChannel(channel: MetaMessagingChannel) {
   const { accessToken, ...rest } = channel;
   return rest;
-}
-
-function toIsoTimestamp(value: unknown) {
-  const parsed = Number(value);
-  if (Number.isFinite(parsed) && parsed > 0) {
-    const normalized = parsed < 1_000_000_000_000 ? parsed * 1000 : parsed;
-    return new Date(normalized).toISOString();
-  }
-  if (typeof value === "string" && value.trim()) {
-    const parsedDate = Date.parse(value);
-    if (Number.isFinite(parsedDate)) return new Date(parsedDate).toISOString();
-  }
-  return new Date().toISOString();
-}
-
-function compareStrings(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let index = 0; index < a.length; index += 1) {
-    mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
-  }
-  return mismatch === 0;
-}
-
-async function createHmacHex(secret: string, payload: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-  return Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function createAppSecretProof(accessToken: string) {
-  if (!META_APP_SECRET) return null;
-  return createHmacHex(META_APP_SECRET, accessToken);
-}
-
-async function verifyWebhookSignature(rawBody: string, signatureHeader: string | null) {
-  if (!META_APP_SECRET) return false;
-  if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
-  const expected = await createHmacHex(META_APP_SECRET, rawBody);
-  return compareStrings(expected, signatureHeader.slice("sha256=".length));
-}
-
-// Verifies a Kirimdev webhook signature.
-// Header format: `X-Kirim-Signature: t=<unix_seconds>,v1=<hex>[,v1=<hex>...]`.
-// Signed string is `${t}.${rawBody}`, HMAC-SHA256, lowercase hex.
-// Unlike the Meta handler above this FAILS CLOSED when no secret is configured,
-// because the Kirimdev webhook function is deployed with --no-verify-jwt and the
-// signature is the only thing standing between the public internet and the store.
-async function verifyKirimdevSignature(rawBody: string, signatureHeader: string | null) {
-  if (KIRIMDEV_WEBHOOK_SECRETS.length === 0) {
-    return { ok: false, reason: "KIRIMDEV_WEBHOOK_SECRET belum dikonfigurasi di server." };
-  }
-  if (!signatureHeader) {
-    return { ok: false, reason: "Header X-Kirim-Signature tidak ada." };
-  }
-
-  let timestamp: number | null = null;
-  const providedSignatures: string[] = [];
-  for (const part of signatureHeader.split(",")) {
-    const separatorIndex = part.indexOf("=");
-    if (separatorIndex === -1) continue;
-    const key = part.slice(0, separatorIndex).trim();
-    const value = part.slice(separatorIndex + 1).trim();
-    if (key === "t") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) timestamp = parsed;
-    } else if (key === "v1" && value) {
-      providedSignatures.push(value.toLowerCase());
-    }
-  }
-
-  if (timestamp === null || providedSignatures.length === 0) {
-    return { ok: false, reason: "Format X-Kirim-Signature tidak valid." };
-  }
-
-  const nowSeconds = Date.now() / 1000;
-  if (Math.abs(nowSeconds - timestamp) > KIRIMDEV_WEBHOOK_TOLERANCE_SECONDS) {
-    return { ok: false, reason: "Timestamp signature di luar toleransi (replay protection)." };
-  }
-
-  const signedPayload = `${timestamp}.${rawBody}`;
-  for (const secret of KIRIMDEV_WEBHOOK_SECRETS) {
-    const expected = (await createHmacHex(secret, signedPayload)).toLowerCase();
-    if (providedSignatures.some((candidate) => compareStrings(expected, candidate))) {
-      return { ok: true as const };
-    }
-  }
-
-  return { ok: false, reason: "Signature Kirimdev tidak cocok." };
-}
-
-async function fetchMetaJson(url: string, init?: RequestInit) {
-  const response = await fetch(url, init);
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.error) {
-    const error = new Error(
-      payload?.error?.message || payload?.message || `Meta Graph API error (${response.status})`,
-    ) as Error & { payload?: unknown };
-    error.payload = payload;
-    throw error;
-  }
-  return payload;
-}
-
-function buildKirimdevApiUrl(path: string) {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${KIRIMDEV_API_BASE_URL}${normalizedPath}`;
-}
-
-function buildQueryString(params: Record<string, string | number | boolean | null | undefined>) {
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value === null || value === undefined || value === "") continue;
-    searchParams.set(key, String(value));
-  }
-  const query = searchParams.toString();
-  return query ? `?${query}` : "";
-}
-
-function asArray<T = any>(value: any): T[] {
-  if (Array.isArray(value)) return value as T[];
-  if (value === null || value === undefined) return [];
-  return [value as T];
-}
-
-function firstNonEmptyString(...values: unknown[]) {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return "";
-}
-
-function clampPositiveInteger(value: unknown, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.min(Math.floor(parsed), max);
-}
-
-function readQueryBoolean(value: string | null | undefined, fallback: boolean) {
-  if (value === undefined || value === null || value === "") return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) return true;
-  if (["0", "false", "no", "off"].includes(normalized)) return false;
-  return fallback;
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchKirimdevJson(path: string, init?: RequestInit) {
-  if (!KIRIMDEV_API_KEY) {
-    throw new Error("KIRIMDEV_API_KEY belum dikonfigurasi di server.");
-  }
-
-  const response = await fetch(buildKirimdevApiUrl(path), {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${KIRIMDEV_API_KEY}`,
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...(init?.headers || {}),
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.error) {
-    const upstreamError = payload?.error || {};
-    const message =
-      upstreamError?.message ||
-      upstreamError?.code ||
-      payload?.message ||
-      `Kirimdev API error (${response.status})`;
-    const error = new Error(message) as Error & { status?: number; payload?: unknown };
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-  return payload;
-}
-
-async function fetchMetaPaged<T>(
-  path: string,
-  params: Record<string, string>,
-  accessToken = META_DM_USER_TOKEN || META_ACCESS_TOKEN,
-) {
-  if (!accessToken) {
-    throw new Error("META_DM_USER_TOKEN atau META_ACCESS_TOKEN belum dikonfigurasi di server.");
-  }
-
-  const authParams = new URLSearchParams({ access_token: accessToken });
-  const appSecretProof = await createAppSecretProof(accessToken);
-  if (appSecretProof) {
-    authParams.set("appsecret_proof", appSecretProof);
-  }
-
-  const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}${path}`);
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
-  }
-  authParams.forEach((value, key) => url.searchParams.set(key, value));
-
-  const rows: T[] = [];
-  let nextUrl: string | null = url.toString();
-  while (nextUrl) {
-    const currentUrl = new URL(nextUrl);
-    if (!currentUrl.searchParams.get("access_token")) {
-      authParams.forEach((value, key) => currentUrl.searchParams.set(key, value));
-    } else if (!currentUrl.searchParams.get("appsecret_proof") && appSecretProof) {
-      currentUrl.searchParams.set("appsecret_proof", appSecretProof);
-    }
-
-    const payload = await fetchMetaJson(currentUrl.toString());
-    if (Array.isArray(payload?.data)) {
-      rows.push(...payload.data);
-    }
-    nextUrl = payload?.paging?.next || null;
-  }
-
-  return rows;
-}
-
-async function fetchMetaAbsolutePaged<T>(
-  initialUrl: string | URL,
-  accessToken?: string,
-  maxPages = 20,
-) {
-  const rows: T[] = [];
-  let nextUrl: string | null = typeof initialUrl === "string" ? initialUrl : initialUrl.toString();
-  const appSecretProof = accessToken ? await createAppSecretProof(accessToken) : null;
-  let pageCount = 0;
-
-  while (nextUrl && pageCount < maxPages) {
-    const currentUrl = new URL(nextUrl);
-    if (accessToken && !currentUrl.searchParams.get("access_token")) {
-      currentUrl.searchParams.set("access_token", accessToken);
-    }
-    if (
-      currentUrl.hostname === "graph.facebook.com" &&
-      appSecretProof &&
-      !currentUrl.searchParams.get("appsecret_proof")
-    ) {
-      currentUrl.searchParams.set("appsecret_proof", appSecretProof);
-    }
-
-    const payload = await fetchMetaJson(currentUrl.toString());
-    if (Array.isArray(payload?.data)) {
-      rows.push(...payload.data);
-    }
-    nextUrl = payload?.paging?.next || null;
-    pageCount += 1;
-  }
-
-  return rows;
-}
-
-async function debugCurrentMetaToken() {
-  const inputToken = META_DM_USER_TOKEN || META_ACCESS_TOKEN;
-  if (!META_APP_ID || !META_APP_SECRET || !inputToken) {
-    throw new Error(
-      "META_APP_ID, META_APP_SECRET, atau META_DM_USER_TOKEN / META_ACCESS_TOKEN belum lengkap.",
-    );
-  }
-
-  const url = new URL("https://graph.facebook.com/debug_token");
-  url.searchParams.set("input_token", inputToken);
-  url.searchParams.set("access_token", `${META_APP_ID}|${META_APP_SECRET}`);
-  return fetchMetaJson(url.toString());
-}
-
-async function checkAuth(req: Request) {
-  let token = req.headers.get("x-client-token");
-  if (!token) {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return { error: "Missing Authorization header" };
-    token = authHeader.replace("Bearer ", "");
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const supabaseServiceOrAnonKey =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-  const supabase = createClient(supabaseUrl, supabaseServiceOrAnonKey);
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
-    return { error: `Invalid token: ${error?.message || "Unknown"}` };
-  }
-
-  return { user };
-}
-
-type MessagingPermissionAccess =
-  | { requester: RequesterAccessContext; error?: never }
-  | { error: Response; requester?: never };
-
-type MessagingPermissionOrInternalSyncAccess =
-  | MessagingPermissionAccess
-  | { requester: null; internal: true; error?: never };
-
-async function requireMessagingPermission(c: any, permission: PermissionKey): Promise<MessagingPermissionAccess> {
-  const requester = await getRequesterAccessContext(c.req.raw.headers);
-  if (!requester) {
-    return { error: c.json({ error: "Missing or invalid Authorization header" }, 401) };
-  }
-  if (!hasEffectivePermission(requester, permission)) {
-    return { error: c.json({ error: "Forbidden: Insufficient WhatsApp permission" }, 403) };
-  }
-
-  return { requester };
-}
-
-async function requireAnyMessagingPermission(c: any, permissions: PermissionKey[]): Promise<MessagingPermissionAccess> {
-  const requester = await getRequesterAccessContext(c.req.raw.headers);
-  if (!requester) {
-    return { error: c.json({ error: "Missing or invalid Authorization header" }, 401) };
-  }
-  if (!permissions.some((permission) => hasEffectivePermission(requester, permission))) {
-    return { error: c.json({ error: "Forbidden: Insufficient WhatsApp permission" }, 403) };
-  }
-
-  return { requester };
-}
-
-function isInternalMessagingSyncRequest(c: any) {
-  const token =
-    c.req.header("x-internal-sync-token")?.trim() ||
-    c.req.header("x-sync-token")?.trim() ||
-    "";
-  const expectedToken =
-    Deno.env.get("WHATSAPP_INTERNAL_SYNC_TOKEN")?.trim() ||
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ||
-    "";
-
-  return Boolean(expectedToken && token && token === expectedToken);
-}
-
-async function requireAnyMessagingPermissionOrInternalSync(
-  c: any,
-  permissions: PermissionKey[],
-): Promise<MessagingPermissionOrInternalSyncAccess> {
-  if (isInternalMessagingSyncRequest(c)) {
-    return { requester: null, internal: true };
-  }
-
-  return requireAnyMessagingPermission(c, permissions);
 }
 
 const MESSAGING_READ_PERMISSIONS: PermissionKey[] = ["whatsapp.view"];
@@ -748,71 +120,6 @@ const MESSAGING_ASSET_PERMISSIONS: PermissionKey[] = [
   ...MESSAGING_READ_PERMISSIONS,
 ];
 const MESSAGING_SEND_PERMISSIONS: PermissionKey[] = ["whatsapp.chats.reply"];
-
-function isKirimdevOutboundMediaType(value: unknown): value is KirimdevOutboundMediaType {
-  return value === "image" || value === "video" || value === "audio" || value === "document";
-}
-
-function inferKirimdevMediaTypeFromMime(mimeType: string): KirimdevOutboundMediaType | null {
-  const normalized = mimeType.toLowerCase();
-  if (normalized.startsWith("image/")) return "image";
-  if (normalized.startsWith("video/")) return "video";
-  if (normalized.startsWith("audio/")) return "audio";
-  if (
-    normalized === "application/pdf" ||
-    normalized.startsWith("text/") ||
-    normalized.includes("word") ||
-    normalized.includes("excel") ||
-    normalized.includes("powerpoint") ||
-    normalized.includes("spreadsheet") ||
-    normalized.includes("presentation") ||
-    normalized.includes("officedocument")
-  ) {
-    return "document";
-  }
-  return null;
-}
-
-function validateKirimdevMediaFile({
-  type,
-  mimeType,
-  size,
-}: {
-  type: KirimdevOutboundMediaType;
-  mimeType: string;
-  size: number;
-}) {
-  const normalizedMime = mimeType.toLowerCase();
-  const maxBytes = WHATSAPP_MEDIA_MAX_BYTES[type];
-  if (!Number.isFinite(size) || size <= 0) {
-    throw new Error("File lampiran kosong atau tidak valid.");
-  }
-  if (size > maxBytes) {
-    throw new Error(`Ukuran file ${type} melebihi batas WhatsApp.`);
-  }
-  if (type === "image" && !["image/jpeg", "image/jpg", "image/png"].includes(normalizedMime)) {
-    throw new Error("Gambar WhatsApp harus JPG atau PNG.");
-  }
-  if (type === "video" && !["video/mp4", "video/3gpp", "video/quicktime"].includes(normalizedMime)) {
-    throw new Error("Video WhatsApp harus MP4 atau 3GPP.");
-  }
-  if (type === "audio" && !normalizedMime.startsWith("audio/")) {
-    throw new Error("Audio WhatsApp harus berupa file audio.");
-  }
-  if (type === "document" && (normalizedMime.startsWith("image/") || normalizedMime.startsWith("video/") || normalizedMime.startsWith("audio/"))) {
-    throw new Error("Gunakan tombol media khusus untuk gambar, video, atau audio.");
-  }
-}
-
-function sanitizeMediaFileName(fileName: string) {
-  const cleaned = fileName
-    .normalize("NFKD")
-    .replace(/[^\w.\-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^\.+/, "")
-    .slice(0, 120);
-  return cleaned || "attachment";
-}
 
 function resolveSupabaseAdminClient() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -1626,39 +933,6 @@ function mapDbRowToMessageRecord(row: any): MetaMessageRecord {
   };
 }
 
-type StoredMessageReadOptions = {
-  limit?: number;
-  before?: string | null;
-  since?: string | null;
-  until?: string | null;
-  descending?: boolean;
-};
-
-function chunkArray<T>(values: T[], size: number) {
-  const chunks: T[][] = [];
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-  return chunks;
-}
-
-function isValidTimestampFilter(value: string | null | undefined) {
-  if (!value) return false;
-  return Number.isFinite(new Date(value).getTime());
-}
-
-function normalizeIsoTimestampFilter(value: string | null | undefined) {
-  if (!isValidTimestampFilter(value)) return null;
-  return new Date(value as string).toISOString();
-}
-
-function getIsoTimestampDaysAgo(days: unknown, fallbackDays: number) {
-  const parsed = Number(days);
-  const finalDays =
-    Number.isFinite(parsed) && parsed > 0 ? Math.min(Math.floor(parsed), 365) : fallbackDays;
-  return new Date(Date.now() - finalDays * 24 * 60 * 60 * 1000).toISOString();
-}
-
 function sortMessagesAscending(messages: MetaMessageRecord[]) {
   return [...messages].sort((left, right) => left.timestamp.localeCompare(right.timestamp));
 }
@@ -1876,27 +1150,6 @@ async function listMessagesForConversations(
   );
   return sortMessagesAscending(kvRows);
 }
-
-type DailyTrackedPlatform = "instagram" | "facebook_page";
-
-type DailyInboxBucket = {
-  date: string;
-  inboundMessages: number;
-  newConversations: number;
-  uniqueContacts: number;
-  instagramInboundMessages: number;
-  instagramNewConversations: number;
-  instagramUniqueContacts: number;
-  messengerInboundMessages: number;
-  messengerNewConversations: number;
-  messengerUniqueContacts: number;
-};
-
-type DailyInboxAccumulator = DailyInboxBucket & {
-  uniqueContactSet: Set<string>;
-  instagramUniqueContactSet: Set<string>;
-  messengerUniqueContactSet: Set<string>;
-};
 
 function formatJakartaDateKey(value: string) {
   const date = new Date(value);
@@ -2560,6 +1813,7 @@ function normalizeWhatsAppPhoneNumber(value: unknown) {
 function normalizeComparableWhatsAppPhoneNumber(value: unknown) {
   const normalized = normalizeWhatsAppPhoneNumber(value);
   if (!normalized) return "";
+  if (normalized.startsWith("620")) return `62${normalized.slice(3)}`;
   if (normalized.startsWith("0")) return `62${normalized.slice(1)}`;
   if (normalized.startsWith("8")) return `62${normalized}`;
   return normalized;
@@ -2699,6 +1953,10 @@ async function insertAutoWhatsAppLead(
   const result = await supabase.from("leads").insert(payload).select().single();
   if (!result.error) return result.data as Record<string, unknown> | null;
 
+  if (String(result.error?.code || "") === "23505") {
+    return null;
+  }
+
   if (!isSupabaseSchemaError(result.error)) {
     throw result.error;
   }
@@ -2708,6 +1966,9 @@ async function insertAutoWhatsAppLead(
     .insert(leadSchemaFallbackPayload(payload))
     .select()
     .single();
+  if (String(fallbackResult.error?.code || "") === "23505") {
+    return null;
+  }
   if (fallbackResult.error) throw fallbackResult.error;
   return fallbackResult.data as Record<string, unknown> | null;
 }
@@ -2808,7 +2069,10 @@ async function autoCreateLeadFromWhatsAppInbound({
     });
 
     const lead = await insertAutoWhatsAppLead(supabase, payload);
-    return { created: true, leadId: lead?.id || payload.id };
+    if (!lead) {
+      return { created: false, reason: "existing_exact_duplicate" };
+    }
+    return { created: true, leadId: lead.id || payload.id };
   } catch (error) {
     console.warn("Auto WA API lead create skipped.", error);
     return { created: false, reason: "error" };
@@ -4977,78 +4241,6 @@ app.post("/send", async (c) => {
 // These power the dedicated WhatsApp module UI (Chats / Contacts / Accounts /
 // Inbox Settings). They only READ the KV store (no Meta Graph live calls), so the
 // WhatsApp-only module stays fast and never depends on Instagram/Messenger tokens.
-
-type WhatsAppConversationView = {
-  id: string;
-  channelId: string;
-  provider: MessagingProvider;
-  source: "webhook" | "api";
-  contactId: string;
-  contactName: string | null;
-  contactPhone: string | null;
-  contactAvatarUrl: string | null;
-  lastMessageAt: string;
-  lastMessageText: string | null;
-  lastDirection: "inbound" | "outbound";
-  lastStatus: MessageDeliveryStatus | null;
-  unreadCount: number;
-  hasAttachment: boolean;
-  conversationStatus: string | null;
-  updatedAt: string;
-  messageCount: number;
-  mergedConversationIds: string[];
-  mergedConversationCount: number;
-};
-
-type WhatsAppCsPerformanceStatus =
-  | "performing"
-  | "monitor"
-  | "needs_attention"
-  | "insufficient_data";
-
-type WhatsAppCsPerformanceView = {
-  csProfileId: string | null;
-  csDisplayName: string;
-  csWhatsappNumber: string | null;
-  accountCount: number;
-  conversationCount: number;
-  inboundMessages: number;
-  outboundMessages: number;
-  responseSampleCount: number;
-  firstResponseSampleCount: number;
-  avgFirstResponseSeconds: number | null;
-  medianFirstResponseSeconds: number | null;
-  avgResponseSeconds: number | null;
-  medianResponseSeconds: number | null;
-  slaTargetSeconds: number;
-  slaHitRate: number | null;
-  slaBreachedCount: number;
-  unansweredConversationCount: number;
-  leads: number;
-  closing: number;
-  conversionRate: number | null;
-  score: number | null;
-  status: WhatsAppCsPerformanceStatus;
-  evaluation: string[];
-  lastActivityAt: string | null;
-};
-
-type WhatsAppPerformanceSummaryView = {
-  windowDays: number;
-  since: string;
-  until: string;
-  slaTargetSeconds: number;
-  totals: {
-    csCount: number;
-    needsAttentionCount: number;
-    conversationCount: number;
-    leads: number;
-    closing: number;
-    avgResponseSeconds: number | null;
-    slaHitRate: number | null;
-  };
-  cs: WhatsAppCsPerformanceView[];
-};
 
 const WHATSAPP_CS_PERFORMANCE_WINDOW_DAYS = 30;
 const WHATSAPP_CS_RESPONSE_SLA_SECONDS = 10 * 60;

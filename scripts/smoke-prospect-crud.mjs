@@ -158,6 +158,16 @@ async function deleteLead(token, id) {
   });
 }
 
+async function expectFailure(action) {
+  try {
+    await action();
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error('Expected request to fail, but it succeeded.');
+}
+
 async function main() {
   ensureArtifactDir();
 
@@ -178,8 +188,11 @@ async function main() {
   let ownerToken = null;
   let csAccount = PROSPECT_ACCOUNT || ROLE_ACCOUNTS?.CS || null;
   let createdCs = null;
+  const createdLeadIds = [];
   const runId = Date.now().toString(36).toUpperCase();
   const leadId = `SMK${runId.slice(-7)}`;
+  const samePhoneLeadId = `SMP${runId.slice(-7)}`;
+  const duplicateLeadId = `SMD${runId.slice(-7)}`;
 
   try {
     if (OWNER_PASSWORD) {
@@ -236,7 +249,31 @@ async function main() {
 
     result.steps.push({ step: 'create-prospect', passed: false, id: leadId });
     const created = await createLead(csToken, basePayload);
+    createdLeadIds.push(leadId);
     result.steps[result.steps.length - 1].passed = created?.id === leadId;
+
+    result.steps.push({ step: 'reject-exact-active-duplicate', passed: false, id: duplicateLeadId });
+    const duplicateError = await expectFailure(() =>
+      createLead(csToken, {
+        ...basePayload,
+        id: duplicateLeadId,
+        notes: `Smoke exact duplicate ${runId}`,
+      }),
+    );
+    result.steps[result.steps.length - 1].passed =
+      /nomor dan nama yang sama|prospek tidak double|duplicate|409|23505/i.test(
+        duplicateError instanceof Error ? duplicateError.message : String(duplicateError),
+      );
+
+    result.steps.push({ step: 'same-phone-different-name-allowed', passed: false, id: samePhoneLeadId });
+    const samePhoneDifferentName = await createLead(csToken, {
+      ...basePayload,
+      id: samePhoneLeadId,
+      name: `Smoke Prospek Nama Beda ${runId}`,
+      notes: `Smoke same phone different name ${runId}`,
+    });
+    createdLeadIds.push(samePhoneLeadId);
+    result.steps[result.steps.length - 1].passed = samePhoneDifferentName?.id === samePhoneLeadId;
 
     result.steps.push({ step: 'update-prospect', passed: false, id: leadId });
     const updated = await updateLead(csToken, leadId, {
@@ -246,12 +283,30 @@ async function main() {
     });
     result.steps[result.steps.length - 1].passed = updated?.status === 'Follow Up';
 
-    result.steps.push({ step: 'delete-prospect-cleanup', passed: false, id: leadId });
-    await deleteLead(ownerToken, leadId);
+    result.steps.push({ step: 'delete-prospect-cleanup', passed: false, ids: [...createdLeadIds] });
+    for (const id of [...createdLeadIds].reverse()) {
+      await deleteLead(ownerToken, id);
+      createdLeadIds.splice(createdLeadIds.indexOf(id), 1);
+    }
     result.steps[result.steps.length - 1].passed = true;
 
     result.passed = result.steps.every((step) => step.passed);
   } finally {
+    if (ownerToken && createdLeadIds.length > 0) {
+      for (const id of [...createdLeadIds].reverse()) {
+        try {
+          await deleteLead(ownerToken, id);
+          result.cleanup.push({ type: 'lead', deleted: true, id });
+        } catch (error) {
+          result.cleanup.push({
+            type: 'lead',
+            deleted: false,
+            id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
     if (createdCs && ownerToken) {
       result.cleanup.push(await deleteTemporaryUser(ownerToken, createdCs));
     }

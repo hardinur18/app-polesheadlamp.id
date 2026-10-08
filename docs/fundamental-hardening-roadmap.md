@@ -218,6 +218,7 @@ Catatan progress 2026-10-08:
 
 - UI Prospek sekarang memakai helper pesan error `prospectCrudErrors` agar error Supabase/Postgres tidak tampil mentah ke user.
 - `smoke:prospect-crud` diperluas dari create-update-delete menjadi create, exact duplicate rejected, same phone different name allowed, update, dan cleanup.
+- Auto WA API lead capture diperkuat: normalisasi nomor WhatsApp menangani format `620...`, error unique duplicate tidak lagi dianggap webhook fatal, dan migration `202610081430_guard_auto_wa_lead_duplicates.sql` menambahkan unique guard untuk exact duplicate aktif baru plus view audit `active_lead_exact_duplicate_audit` untuk duplicate lama.
 - Verifikasi code Phase 6: `npm run typecheck:full`, `npm run lint`, dan `npm run build` pass.
 - Verifikasi API real `smoke:prospect-crud` exit pass tetapi statusnya skip karena credential smoke belum tersedia di env. Saat credential smoke diisi, skenario duplicate dan add/edit akan jalan otomatis.
 
@@ -315,7 +316,7 @@ Tujuan: mengurangi risiko perubahan kecil bikin error besar.
 - [~] Pecah `supabase/functions/server/meta_messaging.tsx`.
 - [~] Pecah dashboard CS logic.
 - [~] Pecah pesanan logic.
-- [ ] Pecah prospek logic bila masih terlalu padat.
+- [~] Pecah prospek logic bila masih terlalu padat.
 - [ ] Pindahkan logic bisnis ke service/helper yang bisa dites.
 - [ ] Pastikan refactor tidak mengubah perilaku bisnis.
 
@@ -347,6 +348,10 @@ Catatan progress 2026-10-08:
 - Helper model form order dipindah ke `src/app/pages/orders/orderFormModel.ts`, termasuk normalisasi nomor, mode sumber order, dedupe by id, dan patch builder edit order.
 - Helper UI kecil halaman pesanan dipindah ke `src/app/pages/orders/orderPageUi.tsx`, termasuk action button dan skeleton table/mobile.
 - Refactor Pesanan ini tidak mengubah kontrak `addOrder`, `updateOrder`, `updateOrderPatch`, validasi jadwal, payment status, atau flow booking/order.
+- Helper pure halaman Prospek dipindah ke `src/app/pages/leads/prospectModel.ts`, termasuk konstanta filter/page size, deteksi Auto WA API, sort template WA, map booking terbaru/aktif, formatter booking/status, dan preview catatan.
+- UI kecil halaman Prospek dipindah ke `src/app/pages/leads/prospectPageUi.tsx`, termasuk ikon WhatsApp, badge Auto WA API, dan skeleton table/mobile.
+- Schema/helper form Prospek dipindah ke `src/app/pages/leads/leadFormModel.ts`; kontrak `LeadForm`, duplicate warning, submit add/edit, assignment advertiser/platform/subchannel/CS, dan flow booking/order tetap dipertahankan.
+- Verifikasi setelah ekstraksi Prospek: `npm run typecheck:full` dan `npm run lint` pass.
 
 ## Phase 11 - Type Safety
 
