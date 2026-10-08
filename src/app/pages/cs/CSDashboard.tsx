@@ -1166,8 +1166,9 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
         diagnostics.matchedRows += 1;
 
-        const assignment = adAccountCsLookup.resolveAssignment(adAccount.id, date);
-        const canonicalAdvertiserId = adAccount?.advertiserId || row.advertiserId || null;
+	        const assignment = adAccountCsLookup.resolveAssignment(adAccount.id, date);
+	        const owner = adAccountOwnerLookup.resolveOwner(adAccount.id, date);
+	        const canonicalAdvertiserId = owner?.advertiserId || adAccount?.advertiserId || row.advertiserId || null;
         const canonicalPlatformId = adAccount?.platformId || row.platformId || null;
 
         const spend = Number(row.spend) || 0;
@@ -1401,7 +1402,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, apiSnapshotRefreshNonce, isOperationalDataLoading, platforms, rangeParams, scopedApiPlatformKeys]);
+	  }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, adAccountOwnerLookup, apiRefreshNonce, apiSnapshotRefreshNonce, isOperationalDataLoading, platforms, rangeParams, scopedApiPlatformKeys]);
 
   const spamScopeInputs = useMemo(() => {
     if (!rangeParams) return [];
@@ -1549,6 +1550,29 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const candidatesByScope = new Map<string, AssignedAccountGroup[]>();
     const getScopeKey = (date: string, advertiserId?: string | null, platformId?: string | null, csId?: string | null) =>
       `${date}::${advertiserId || 'none'}::${platformId || 'none'}::${csId || 'none'}`;
+    const candidatesByOperationalScope = new Map<string, AssignedAccountGroup[]>();
+    const getOperationalScopeKey = (date: string, platformId?: string | null, csId?: string | null) =>
+      `${date}::${platformId || 'none'}::${csId || 'none'}`;
+    const registerCandidate = (
+      collection: Map<string, AssignedAccountGroup[]>,
+      key: string,
+      group: AssignedAccountGroup,
+    ) => {
+      const current = collection.get(key) || [];
+      if (!current.some((item) => item.account.id === group.account.id && item.date === group.date)) {
+        current.push(group);
+        collection.set(key, current);
+      }
+    };
+    const registerGroupScopes = (
+      group: AssignedAccountGroup,
+      advertiserId?: string | null,
+      platformId?: string | null,
+      csId?: string | null,
+    ) => {
+      registerCandidate(candidatesByScope, getScopeKey(group.date, advertiserId, platformId, csId), group);
+      registerCandidate(candidatesByOperationalScope, getOperationalScopeKey(group.date, platformId, csId), group);
+    };
     const spamByScope = new Map<string, number>();
     for (const item of spamScopeInputs) {
       const key = getScopeKey(item.inputDate, item.advertiserId, item.platformId, item.csId);
@@ -1559,10 +1583,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
       for (const account of activeAdAccounts) {
         const group = getGroup(date, account);
         if (!group) continue;
-        const key = getScopeKey(date, group.advertiserId, account.platformId, group.assignment?.csId);
-        const current = candidatesByScope.get(key) || [];
-        current.push(group);
-        candidatesByScope.set(key, current);
+        registerGroupScopes(group, group.advertiserId, account.platformId, group.assignment?.csId);
+      }
+    }
+
+    for (const group of groups.values()) {
+      for (const ad of group.operationalAds) {
+        registerGroupScopes(group, ad.advertiserId, ad.platformId, ad.csId);
       }
     }
 
@@ -1609,8 +1636,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (!date || date < rangeParams.from || date > rangeParams.to) continue;
       if (targetId && order.csId !== targetId) continue;
       if (targetPlatformId && order.platformId !== targetPlatformId) continue;
+
       const candidates = candidatesByScope.get(getScopeKey(date, order.advertiserId, order.platformId, order.csId));
-      const group = selectBestGroup(candidates, order.subChannelId);
+      const fallbackCandidates = candidatesByOperationalScope.get(getOperationalScopeKey(date, order.platformId, order.csId));
+      const group = selectBestGroup(candidates, order.subChannelId) || selectBestGroup(fallbackCandidates, order.subChannelId);
       if (!group) continue;
       group.orders.push(order);
     }
@@ -1622,7 +1651,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (targetPlatformId && lead.platformId !== targetPlatformId) continue;
 
       const candidates = candidatesByScope.get(getScopeKey(date, lead.advertiserId, lead.platformId, lead.csId));
-      const group = selectBestGroup(candidates, lead.subChannelId);
+      const fallbackCandidates = candidatesByOperationalScope.get(getOperationalScopeKey(date, lead.platformId, lead.csId));
+      const group = selectBestGroup(candidates, lead.subChannelId) || selectBestGroup(fallbackCandidates, lead.subChannelId);
       if (!group) continue;
       group.leads.push(lead);
     }

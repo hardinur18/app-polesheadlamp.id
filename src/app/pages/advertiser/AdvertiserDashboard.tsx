@@ -673,27 +673,93 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
             subChannelId: assignment?.subChannelId || adAccount?.subChannelId || dailyAd.subChannelId || undefined,
             csId: assignment?.csId || dailyAd.csId || undefined,
         };
-    }).filter(d => {
-        if (targetUserId && d.advertiserId !== targetUserId) return false;
-        return checkDate(d.date);
-    });
+	    }).filter(d => {
+	        if (targetUserId && d.advertiserId !== targetUserId) return false;
+	        return checkDate(d.date);
+	    });
 
-    const leadItems = leads.filter(l => {
-        if (!l.timestamp) return false;
-        if (targetUserId && l.advertiserId !== targetUserId) return false;
-        let dateStr = '';
-        try { dateStr = format(new Date(l.timestamp), 'yyyy-MM-dd'); } catch(e) { return false; }
-        return checkDate(dateStr);
-    });
+	    type NormalizedAd = (typeof ads)[number];
+	    const getScopeKey = (date: string, advertiserId?: string | null, platformId?: string | null, csId?: string | null) =>
+	        `${date}::${advertiserId || 'none'}::${platformId || 'none'}::${csId || 'none'}`;
+	    const getOperationalScopeKey = (date: string, platformId?: string | null, csId?: string | null) =>
+	        `${date}::${platformId || 'none'}::${csId || 'none'}`;
+	    const candidatesByScope = new Map<string, NormalizedAd[]>();
+	    const candidatesByOperationalScope = new Map<string, NormalizedAd[]>();
+	    const registerCandidate = (collection: Map<string, NormalizedAd[]>, key: string, ad: NormalizedAd) => {
+	        const current = collection.get(key) || [];
+	        if (!current.some((item) => item.adAccountId === ad.adAccountId && item.date === ad.date)) {
+	            current.push(ad);
+	            collection.set(key, current);
+	        }
+	    };
 
-    const orderItems = orders.filter(o => {
-        const dateStr = getOrderDateKey(o);
-        if (!dateStr) return false;
-        if (targetUserId && o.advertiserId !== targetUserId) return false;
-        return checkDate(dateStr);
-    });
+	    for (const ad of ads) {
+	        registerCandidate(candidatesByScope, getScopeKey(ad.date, ad.advertiserId, ad.platformId, ad.csId), ad);
+	        registerCandidate(candidatesByOperationalScope, getOperationalScopeKey(ad.date, ad.platformId, ad.csId), ad);
+	    }
 
-    return { ads, leads: leadItems, orders: orderItems };
+	    const selectBestAdCandidate = (candidates: NormalizedAd[] | undefined, subChannelId?: string | null) => {
+	        if (!candidates?.length) return null;
+	        const score = (ad: NormalizedAd) => (Number(ad.amountSpent) || 0) + ((Number(ad.leadsDashboard) || 0) * 100000);
+	        const bySignal = (left: NormalizedAd, right: NormalizedAd) => {
+	            const delta = score(right) - score(left);
+	            if (delta !== 0) return delta;
+	            return left.adAccountId.localeCompare(right.adAccountId, 'id-ID', { numeric: true });
+	        };
+	        const chooseBest = (items: NormalizedAd[]) => [...items].sort(bySignal)[0];
+	        const exactSubChannel = subChannelId ? candidates.filter((ad) => ad.subChannelId === subChannelId) : [];
+	        if (exactSubChannel.length > 0) return chooseBest(exactSubChannel);
+	        const activeCandidates = candidates.filter((ad) => score(ad) > 0);
+	        if (activeCandidates.length > 0) return chooseBest(activeCandidates);
+	        return chooseBest(candidates);
+	    };
+
+	    const normalizeTransactionalAttribution = <T extends { advertiserId?: string; platformId?: string; subChannelId?: string; csId?: string }>(
+	        item: T,
+	        dateStr: string,
+	    ): (T & { adAccountId?: string }) | null => {
+	        const exactCandidates =
+	            targetUserId && item.advertiserId !== targetUserId
+	                ? undefined
+	                : candidatesByScope.get(getScopeKey(dateStr, item.advertiserId, item.platformId, item.csId));
+	        const fallbackCandidates = candidatesByOperationalScope.get(getOperationalScopeKey(dateStr, item.platformId, item.csId));
+	        const matchedAd =
+	            selectBestAdCandidate(exactCandidates, item.subChannelId) ||
+	            selectBestAdCandidate(fallbackCandidates, item.subChannelId);
+
+	        if (matchedAd) {
+	            if (targetUserId && matchedAd.advertiserId !== targetUserId) return null;
+	            return {
+	                ...item,
+	                advertiserId: matchedAd.advertiserId,
+	                platformId: matchedAd.platformId,
+	                subChannelId: matchedAd.subChannelId,
+	                csId: matchedAd.csId,
+	                adAccountId: matchedAd.adAccountId,
+	            };
+	        }
+
+	        if (targetUserId && item.advertiserId !== targetUserId) return null;
+	        return item;
+	    };
+
+	    const leadItems = leads.flatMap(l => {
+	        if (!l.timestamp) return [];
+	        let dateStr = '';
+	        try { dateStr = format(new Date(l.timestamp), 'yyyy-MM-dd'); } catch(e) { return []; }
+	        if (!checkDate(dateStr)) return [];
+	        const normalized = normalizeTransactionalAttribution(l, dateStr);
+	        return normalized ? [normalized] : [];
+	    });
+
+	    const orderItems = orders.flatMap(o => {
+	        const dateStr = getOrderDateKey(o);
+	        if (!dateStr || !checkDate(dateStr)) return [];
+	        const normalized = normalizeTransactionalAttribution(o, dateStr);
+	        return normalized ? [normalized] : [];
+	    });
+
+	    return { ads, leads: leadItems, orders: orderItems };
   }, [adAccountCsLookup, adAccountMasterLookup, adAccountOwnerLookup, dailyAds, leads, orders, dateRange, currentUser, isOwner, selectedAdvertiserId]);
 
   // 2. Dynamic Filter Options (Based on Base Data)
@@ -1344,8 +1410,31 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     }).map((date) => format(date, 'yyyy-MM-dd'));
     const groups = new Map<string, AssignedAccountGroup>();
     const candidatesByScope = new Map<string, AssignedAccountGroup[]>();
+    const candidatesByOperationalScope = new Map<string, AssignedAccountGroup[]>();
     const getScopeKey = (date: string, advertiserId?: string | null, platformId?: string | null, csId?: string | null) =>
       `${date}::${advertiserId || 'none'}::${platformId || 'none'}::${csId || 'none'}`;
+    const getOperationalScopeKey = (date: string, platformId?: string | null, csId?: string | null) =>
+      `${date}::${platformId || 'none'}::${csId || 'none'}`;
+    const registerCandidate = (
+      collection: Map<string, AssignedAccountGroup[]>,
+      key: string,
+      group: AssignedAccountGroup,
+    ) => {
+      const current = collection.get(key) || [];
+      if (!current.some((item) => item.account.id === group.account.id && item.date === group.date)) {
+        current.push(group);
+        collection.set(key, current);
+      }
+    };
+    const registerGroupScopes = (
+      group: AssignedAccountGroup,
+      advertiserId?: string | null,
+      platformId?: string | null,
+      csId?: string | null,
+    ) => {
+      registerCandidate(candidatesByScope, getScopeKey(group.date, advertiserId, platformId, csId), group);
+      registerCandidate(candidatesByOperationalScope, getOperationalScopeKey(group.date, platformId, csId), group);
+    };
 
     const getGroup = (date: string, account: (typeof activeAdvertiserAccounts)[number]) => {
       const advertiserId = getAdAccountAdvertiserId(account, date);
@@ -1374,10 +1463,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       for (const account of activeAdvertiserAccounts) {
         const group = getGroup(date, account);
         if (!group) continue;
-        const key = getScopeKey(date, group.advertiserId, account.platformId, group.assignment?.csId);
-        const current = candidatesByScope.get(key) || [];
-        current.push(group);
-        candidatesByScope.set(key, current);
+        registerGroupScopes(group, group.advertiserId, account.platformId, group.assignment?.csId);
       }
     }
 
@@ -1404,16 +1490,35 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
       const group = getGroup(ad.date, account);
       if (!group) continue;
       group.operationalAds.push(ad);
+      registerGroupScopes(group, ad.advertiserId, ad.platformId, ad.csId);
     }
 
     const selectBestGroup = (candidates: AssignedAccountGroup[] | undefined, subChannelId?: string | null) => {
       if (!candidates?.length) return null;
+      const getAttributionSignal = (group: AssignedAccountGroup) =>
+        group.apiMetrics.reduce(
+          (sum, metric) => sum + (Number(metric.spend) || 0) + ((Number(metric.leads) || 0) * 100000),
+          0,
+        ) +
+        group.operationalAds.reduce(
+          (sum, ad) => sum + (Number(ad.amountSpent) || 0) + ((Number(ad.leadsDashboard) || 0) * 100000),
+          0,
+        );
+      const byBestSignal = (left: AssignedAccountGroup, right: AssignedAccountGroup) => {
+        const signalDelta = getAttributionSignal(right) - getAttributionSignal(left);
+        if (signalDelta !== 0) return signalDelta;
+        return left.account.accountName.localeCompare(right.account.accountName, 'id-ID', { numeric: true });
+      };
+      const chooseBest = (items: AssignedAccountGroup[]) => [...items].sort(byBestSignal)[0];
       const exactSubChannel = subChannelId
-        ? candidates.find((group) => group.assignment?.subChannelId === subChannelId)
-        : null;
-      if (exactSubChannel) return exactSubChannel;
-      const defaultSubChannel = candidates.find((group) => !group.assignment?.subChannelId);
-      return defaultSubChannel || candidates[0];
+        ? candidates.filter((group) => group.assignment?.subChannelId === subChannelId)
+        : [];
+      if (exactSubChannel.length > 0) return chooseBest(exactSubChannel);
+      const activeCandidates = candidates.filter((group) => getAttributionSignal(group) > 0);
+      if (activeCandidates.length > 0) return chooseBest(activeCandidates);
+      const defaultSubChannel = candidates.filter((group) => !group.assignment?.subChannelId);
+      if (defaultSubChannel.length > 0) return chooseBest(defaultSubChannel);
+      return chooseBest(candidates);
     };
 
     const getLeadDate = (lead: (typeof leads)[number]) => lead.timestamp?.slice(0, 10) || '';
@@ -1421,24 +1526,36 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
     for (const lead of leads) {
       const date = getLeadDate(lead);
       if (!date || date < rangeParams.from || date > rangeParams.to) continue;
-      if (targetAdvertiserId && lead.advertiserId !== targetAdvertiserId) continue;
       if (platformFilter !== 'all' && lead.platformId !== platformFilter) continue;
       if (csFilter !== 'all' && lead.csId !== csFilter) continue;
-      const candidates = candidatesByScope.get(getScopeKey(date, lead.advertiserId, lead.platformId, lead.csId));
-      const group = selectBestGroup(candidates, lead.subChannelId);
+
+      const exactCandidates =
+        targetAdvertiserId && lead.advertiserId !== targetAdvertiserId
+          ? undefined
+          : candidatesByScope.get(getScopeKey(date, lead.advertiserId, lead.platformId, lead.csId));
+      const fallbackCandidates = candidatesByOperationalScope.get(getOperationalScopeKey(date, lead.platformId, lead.csId));
+      const group =
+        selectBestGroup(exactCandidates, lead.subChannelId) || selectBestGroup(fallbackCandidates, lead.subChannelId);
       if (!group) continue;
+      if (targetAdvertiserId && group.advertiserId !== targetAdvertiserId) continue;
       group.leads.push(lead);
     }
 
     for (const order of orders) {
       const date = getOrderDateKey(order);
       if (!date || date < rangeParams.from || date > rangeParams.to) continue;
-      if (targetAdvertiserId && order.advertiserId !== targetAdvertiserId) continue;
       if (platformFilter !== 'all' && order.platformId !== platformFilter) continue;
       if (csFilter !== 'all' && order.csId !== csFilter) continue;
-      const candidates = candidatesByScope.get(getScopeKey(date, order.advertiserId, order.platformId, order.csId));
-      const group = selectBestGroup(candidates, order.subChannelId);
+
+      const exactCandidates =
+        targetAdvertiserId && order.advertiserId !== targetAdvertiserId
+          ? undefined
+          : candidatesByScope.get(getScopeKey(date, order.advertiserId, order.platformId, order.csId));
+      const fallbackCandidates = candidatesByOperationalScope.get(getOperationalScopeKey(date, order.platformId, order.csId));
+      const group =
+        selectBestGroup(exactCandidates, order.subChannelId) || selectBestGroup(fallbackCandidates, order.subChannelId);
       if (!group) continue;
+      if (targetAdvertiserId && group.advertiserId !== targetAdvertiserId) continue;
       group.orders.push(order);
     }
 
