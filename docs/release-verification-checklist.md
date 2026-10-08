@@ -1,6 +1,6 @@
 # Release Verification Checklist
 
-Last updated: 2026-10-07
+Last updated: 2026-10-08
 
 Use this checklist before marking the app release-ready. Local checks can pass without production access, but production validation must run against the real Supabase project used by the frontend app.
 
@@ -10,6 +10,7 @@ Use this checklist before marking the app release-ready. Local checks can pass w
 - [ ] `npm run typecheck:phase4`
 - [ ] `npm run build`
 - [ ] `npm run smoke:routes` against a local preview build.
+- [ ] `npm run smoke:core-contracts` to verify deterministic order, prospect, schedule, and ads snapshot contracts.
 - [ ] `npm run smoke:role-routes` with `SMOKE_ROLE_ACCOUNTS` for real test accounts, or an authorized user-management token.
 - [ ] `npm run smoke:prospect-crud` with Owner cleanup access to verify Prospek create/update/delete.
 - [ ] `npm run smoke:release` when all smoke credentials are available.
@@ -22,6 +23,7 @@ Expected smoke setup:
 - `SMOKE_ROLE_ACCOUNTS` contains Owner, CS, Finance, Teknisi, and Advertiser credentials when using permanent test users instead of temporary generated users.
 - `SMOKE_PROSPECT_ACCOUNT` can provide a dedicated CS account for `smoke:prospect-crud`; Owner credentials are still required for safe cleanup.
 - `smoke:routes` checks login redirects for protected routes and the public `/booking` route. Payment preview is treated as an internal authenticated workflow, not a public route.
+- `smoke:core-contracts` is credential-free and checks pure contracts for schedule conflict rules, order patching, prospect helpers, and ads daily sync reconciliation.
 - Smoke artifacts are written to `File Review/artifacts/` and are intentionally ignored by git.
 
 Example smoke env:

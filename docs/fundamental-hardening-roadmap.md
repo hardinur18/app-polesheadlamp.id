@@ -46,7 +46,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [~] Security/RLS diaudit dan dirapikan: anonymous access dan service-role fallback sudah dirapikan; granular RLS menunggu refactor data access.
 - [x] Phase 10 refactor struktur besar selesai untuk batch fundamental: server app-data, MasterDataCtx, dashboard CS/Advertiser, pesanan, prospek, modal shared, API snapshot, dan Iklan Harian sudah dirapikan tanpa mengubah flow bisnis utama.
 - [x] Phase 11 type safety flow kritis selesai: `@ts-ignore` global dibersihkan, payload app-data, sync iklan harian, Iklan Harian, dan flow pesanan utama sudah typed.
-- [ ] Test automation core flow lengkap.
+- [~] Test automation core flow lengkap: smoke contract deterministic sudah ada; login real-role dan payment upload masih perlu credential/manual.
 - [ ] Final release checklist 100% pass.
 
 ## Phase 1 - Baseline Safety
@@ -389,18 +389,25 @@ Tujuan: bug besar bisa ketangkap sebelum push/live.
 
 - [ ] Test login/session.
 - [ ] Test permission role.
-- [ ] Test prospek duplicate.
-- [ ] Test forward booking/order.
-- [ ] Test pesanan jadwal conflict.
-- [ ] Test dashboard snapshot.
+- [~] Test prospek duplicate: skenario sudah ada di `smoke:prospect-crud`, eksekusi real masih butuh credential smoke.
+- [x] Test forward booking/order.
+- [x] Test pesanan jadwal conflict.
+- [x] Test dashboard snapshot.
 - [ ] Test payment modal/upload.
-- [ ] Test master data mapping akun API.
-- [ ] Tambah release checklist yang wajib pass sebelum deploy.
+- [~] Test master data mapping akun API: provider key dan reconcile snapshot sudah otomatis; pairing UI masih perlu browser/manual.
+- [x] Tambah release checklist yang wajib pass sebelum deploy.
 
 Definition of done:
 
 - Core flow punya test otomatis.
 - Deploy tidak hanya mengandalkan manual feeling.
+
+Catatan progress 2026-10-08:
+
+- Script `npm run smoke:core-contracts` ditambahkan untuk test deterministic tanpa credential dan tanpa koneksi live.
+- Coverage smoke contract mencakup conflict jadwal order/booking, false conflict saat booking lead yang sama dikonversi ke order, validasi slot aktif/nonaktif, normalisasi nomor order, patch minimal order, helper Prospek Auto WA/latest booking, provider key iklan, dan reconcile preview daily ads agar edit manual tidak tertimpa.
+- `smoke:release` sekarang menjalankan `smoke:core-contracts` sebelum smoke role/prospek, sehingga regresi contract inti bisa tertangkap lebih awal meskipun credential smoke live belum tersedia.
+- Verifikasi Phase 12 sementara: `npm run smoke:core-contracts` pass pada 2026-10-08.
 
 ## Phase 13 - Observability & Error Handling
 
