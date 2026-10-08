@@ -7,8 +7,10 @@ Use this checklist before marking the app release-ready. Local checks can pass w
 ## Automated Gates
 
 - [ ] `npm run lint`
+- [ ] `npm run typecheck:strict-core`
 - [ ] `npm run typecheck:phase4`
 - [ ] `npm run build`
+- [ ] `npm run audit:fundamental`
 - [ ] `npm run smoke:routes` against a local preview build.
 - [ ] `npm run smoke:core-contracts` to verify deterministic order, prospect, schedule, and ads snapshot contracts.
 - [ ] `npm run smoke:role-routes` with `SMOKE_ROLE_ACCOUNTS` for real test accounts, or an authorized user-management token.

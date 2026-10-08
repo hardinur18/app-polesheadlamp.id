@@ -52,12 +52,14 @@ export const normalizeSocialUsername = (value?: string) => {
     normalized = rawValue;
   }
 
-  normalized = normalized
+  normalized = (
+    normalized
     .replace(/^www\./i, '')
     .replace(/^instagram\.com\//i, '')
     .replace(/^tiktok\.com\//i, '')
     .replace(/^@/, '')
-    .split(/[?#]/)[0]
+    .split(/[?#]/)[0] ?? normalized
+  )
     .split('/')
     .filter(Boolean)
     .pop() || normalized;

@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false
+  },
+  "include": [
+    "src/vite-env.d.ts",
+    "src/app/errors/**/*.ts",
+    "src/app/services/errorTelemetry.ts",
+    "src/app/services/internal/**/*.ts",
+    "src/app/services/orderScheduleValidation.ts",
+    "src/app/pages/leads/socialContact.ts",
+    "src/app/pages/leads/prospectModel.ts",
+    "src/app/pages/orders/orderFormModel.ts",
+    "src/app/pages/orders/orderSideEffectGuards.ts"
+  ]
+}

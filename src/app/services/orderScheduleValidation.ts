@@ -558,8 +558,8 @@ export async function validateOrderScheduleFromDB(
     if (bookingError) throw bookingError;
 
     // 1. Check technician off-schedule
-    if (offSchedules && offSchedules.length > 0) {
-      const offSchedule = offSchedules[0];
+    const offSchedule = offSchedules?.[0];
+    if (offSchedule) {
       const technicianName = getTechnicianName(order.technicianId, users);
       const scheduleType = offSchedule.type || "OFF";
       const reason = offSchedule.reason ? ` (${offSchedule.reason})` : "";
@@ -654,8 +654,8 @@ export async function validateProspectBookingScheduleFromDB(
     if (orderError) throw orderError;
     if (bookingError) throw bookingError;
 
-    if (offSchedules && offSchedules.length > 0) {
-      const offSchedule = offSchedules[0];
+    const offSchedule = offSchedules?.[0];
+    if (offSchedule) {
       const technicianName = getTechnicianName(booking.technicianId, users);
       const scheduleType = offSchedule.type || "OFF";
       const reason = offSchedule.reason ? ` (${offSchedule.reason})` : "";

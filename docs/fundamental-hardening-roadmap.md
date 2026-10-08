@@ -48,6 +48,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [x] Phase 11 type safety flow kritis selesai: `@ts-ignore` global dibersihkan, payload app-data, sync iklan harian, Iklan Harian, dan flow pesanan utama sudah typed.
 - [~] Test automation core flow lengkap: smoke contract deterministic sudah ada; login real-role dan payment upload masih perlu credential/manual.
 - [~] Observability/error handling distandarkan: client error reporter, app boundary, route boundary, dan global runtime listener sudah ada.
+- [~] Sisa phase lama dipetakan ulang: audit debt fundamental, strict-core gate, dan matrix CRUD inti sudah dibuat.
 - [ ] Final release checklist 100% pass.
 
 ## Phase 1 - Baseline Safety
@@ -159,6 +160,7 @@ Catatan progress 2026-10-07:
 - Fondasi API client standar ditambahkan di `src/app/services/internal/apiClient.ts` untuk request Edge Function dengan timeout, session/public headers, query builder, JSON parsing, dan error envelope yang konsisten. Belum ada domain aktif yang direfactor memakai helper ini agar tidak konflik dengan agent lain.
 - Verifikasi Phase 4 sementara: `npm run typecheck:full` dan `npm run lint` pass setelah penambahan dokumentasi dan API client.
 - Hotspot refactor berikutnya: stock, finance/payment, prospek, pesanan, dashboard snapshot, proof assets, dan audit log.
+- Catatan 2026-10-08: script `npm run audit:fundamental` ditambahkan untuk menghitung direct Supabase access, storage access, explicit `any`, TypeScript suppression, dan `console.log` mentah. Baseline audit terakhir: 314 file discan; direct table access 55, direct storage access 25, explicit any 714, TypeScript suppression 0, console.log 118.
 
 ## Phase 5 - Dashboard API & Snapshot
 
@@ -374,7 +376,7 @@ Tujuan: mengurangi bug akibat data shape tidak jelas.
 - [x] Buat type untuk payload API utama: app-data route sudah memakai typed payload/query/error response.
 - [x] Buat type untuk dashboard snapshot iklan: mapper sync iklan harian dan row hasil database sudah typed.
 - [x] Buat type untuk order/payment kritis: order photos, payment deletion metadata, shadow status, import, bulk action, filter, export, dan form enum guard sudah typed.
-- [ ] Aktifkan strict mode bertahap per area.
+- [~] Aktifkan strict mode bertahap per area: `npm run typecheck:strict-core` sudah tersedia dan pass untuk helper kritis.
 - [x] Hilangkan `any` di flow kritis Phase 11.
 - [~] Sisa debt global non-kritis: repo masih punya `any` di area legacy/lower-risk di luar scope Phase 11 ini dan perlu dibersihkan bertahap agar tidak menimbulkan refactor besar sekaligus.
 
@@ -383,6 +385,7 @@ Definition of done:
 - Flow kritis punya type yang jelas.
 - TypeScript mulai benar-benar membantu cegah bug.
 - Verifikasi Phase 11: `npm run typecheck:full`, `npm run lint`, `npm run build`, `npm run smoke:routes`, dan `git diff --check` pass pada 2026-10-08. Build masih menampilkan warning non-blocking Browserslist data lama.
+- Catatan 2026-10-08: `tsconfig.strict-core.json` ditambahkan untuk strict checking bertahap pada recoverable errors, error telemetry, internal service helpers, schedule validation, social contact helper, prospect model, order form model, dan order side-effect guards. Strict-core pass setelah null-safety guard kecil di helper social handle dan off-schedule validator.
 
 ## Phase 12 - Test Automation
 
@@ -439,8 +442,10 @@ Catatan progress 2026-10-08:
 Tujuan: memastikan app sudah layak dianggap fundamental kuat.
 
 - [ ] `npm run typecheck:full` pass.
+- [ ] `npm run typecheck:strict-core` pass.
 - [ ] `npm run lint` pass.
 - [ ] `npm run build` pass.
+- [ ] `npm run audit:fundamental` pass.
 - [ ] Smoke routes pass.
 - [ ] Smoke role routes pass.
 - [ ] Smoke prospek CRUD pass.
