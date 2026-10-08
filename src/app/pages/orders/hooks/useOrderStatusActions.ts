@@ -1,14 +1,14 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Order } from '../../master-data/data';
+import { Order, User } from '../../master-data/data';
 import { isReasonRequiredStatus } from '../cancelReasonOptions';
 import { getOrderCrudErrorMessage } from '../orderCrudErrors';
 import { getStatusLabel } from '../orderHelpers';
 import { logActivity } from '@/app/services/auditService';
 
 interface UseOrderStatusActionsParams {
-  updateOrder: (order: any) => any;
-  currentUser: any;
+  updateOrder: (order: Order) => Promise<unknown> | unknown;
+  currentUser: User | null;
 }
 
 export function useOrderStatusActions({
@@ -39,8 +39,8 @@ export function useOrderStatusActions({
     reasonNote?: string,
   ) => {
     const nextPhotos = order.photos ? { ...order.photos } : order.photos;
-    if (nextPhotos && (nextPhotos as any)._status) {
-      delete (nextPhotos as any)._status;
+    if (nextPhotos?._status) {
+      delete nextPhotos._status;
     }
 
     const updatedOrder: Order = {

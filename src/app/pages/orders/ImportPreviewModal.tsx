@@ -15,6 +15,11 @@ import { CheckCircle2, Trash2, Edit2, AlertCircle, Calculator } from 'lucide-rea
 import { toast } from 'sonner';
 import { isAdvertiserRole, isCsRole, isTechnicianRole } from '@/app/data/roleHelpers';
 
+type ImportLookupOption = {
+  id: string;
+  name: string;
+};
+
 interface ImportPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -51,7 +56,7 @@ export function ImportPreviewModal({ isOpen, onClose, onConfirm, initialData }: 
     currentPage * itemsPerPage
   );
 
-  const handleUpdateRow = (relativeIndex: number, field: keyof Order, value: any) => {
+  const handleUpdateRow = (relativeIndex: number, field: keyof Order, value: Order[keyof Order]) => {
     // Calculate absolute index based on current page
     const absoluteIndex = (currentPage - 1) * itemsPerPage + relativeIndex;
     const newData = [...data];
@@ -103,7 +108,7 @@ export function ImportPreviewModal({ isOpen, onClose, onConfirm, initialData }: 
     return data.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   };
 
-  const isValidPrice = (price: any) => {
+  const isValidPrice = (price: unknown) => {
     return !isNaN(Number(price)) && Number(price) >= 0;
   };
 
@@ -115,7 +120,7 @@ export function ImportPreviewModal({ isOpen, onClose, onConfirm, initialData }: 
 
   const getServiceName = (id?: string) => services.find(s => s.id === id)?.name || id;
 
-  const isValidOption = (list: any[], id: any) => {
+  const isValidOption = (list: ImportLookupOption[], id: unknown) => {
       if (!id) return true; // Allow empty if optional? Or handle separately. Assuming required for critical fields.
       // If the ID matches one in the list, it's valid.
       // Also check if the 'id' is actually the name (fallback), which is definitely invalid (unless name == id, which is rare)
@@ -151,17 +156,18 @@ export function ImportPreviewModal({ isOpen, onClose, onConfirm, initialData }: 
   };
 
   const renderSelect = (
-      list: any[], 
-      value: any, 
-      field: keyof Order, 
-      idx: number, 
+      list: ImportLookupOption[],
+      value: string | undefined,
+      field: keyof Order,
+      idx: number,
       placeholder: string
   ) => {
       const isValid = isValidOption(list, value);
+      const selectedValue = isValid && value ? value : undefined;
       
       return (
           <Select 
-            value={isValid ? value : undefined} 
+            value={selectedValue}
             onValueChange={(val) => handleUpdateRow(idx, field, val)}
           >
             <SelectTrigger className={`h-9 text-xs w-full bg-white ${!isValid && value ? 'border-red-500 text-red-600 bg-red-50' : 'border-slate-200'}`}>

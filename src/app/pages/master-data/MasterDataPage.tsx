@@ -114,13 +114,18 @@ const MasterDataContent: React.FC<{
 
       for (const v of importedVehicles) {
           try {
-              // @ts-ignore
-              await addVehicle(v);
+              const vehicle: VehicleType = {
+                id: v.id || `vehicle-${Date.now()}-${successCount + failCount}`,
+                name: v.name || '',
+                category: v.category || 'medium',
+                status: v.status || 'active',
+              };
+              await addVehicle(vehicle);
               successCount++;
-          } catch (e: any) {
+          } catch (e: unknown) {
               console.error("Failed to add vehicle", v, e);
               failCount++;
-              lastError = e.message || "Unknown error";
+              lastError = e instanceof Error ? e.message : "Unknown error";
           }
       }
       

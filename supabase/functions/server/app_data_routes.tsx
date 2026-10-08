@@ -1,26 +1,65 @@
+import type { Context, Hono } from "npm:hono";
 import { APP_DATA_ACCESS, type AppDataAccessConfig } from "./app_data_access.ts";
 import { parseBooleanFlag } from "./ads_snapshot_utils.tsx";
 import type { PermissionKey } from "../../../src/app/data/permissions.ts";
 
+type AppDataRow = Record<string, unknown>;
+type AppDataPayload = Record<string, unknown>;
+type AppDataError = {
+  code?: string | null;
+  message?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  status?: number;
+};
+type AppDataQueryResult = { data: AppDataRow[] | null; error: AppDataError | null };
+type AppDataSingleQueryResult = { data: AppDataRow | null; error: AppDataError | null };
+type AppDataQuery = PromiseLike<AppDataQueryResult> & {
+  eq: (column: string, value: string) => AppDataQuery;
+  gte: (column: string, value: string) => AppDataQuery;
+  lte: (column: string, value: string) => AppDataQuery;
+  order: (column: string, options?: { ascending?: boolean }) => AppDataQuery;
+  range: (from: number, to: number) => AppDataQuery;
+  select: (columns?: string) => AppDataQuery;
+  single: () => PromiseLike<AppDataSingleQueryResult>;
+};
+type AppDataTableQuery = {
+  select: (columns?: string) => AppDataQuery;
+  insert: (payload: AppDataPayload) => AppDataQuery;
+  update: (payload: AppDataPayload) => AppDataQuery;
+  delete: () => AppDataQuery;
+};
+type AppDataSupabaseClient = {
+  from: (table: string) => AppDataTableQuery;
+};
+type AppDataJsonResponse = ReturnType<Context["json"]>;
+
 type AppDataAuthResult = {
   requester?: { actorName?: string | null } | null;
-  response?: any;
+  response?: AppDataJsonResponse;
 };
 
 type RegisterAppDataRoutesDependencies = {
-  supabase: any;
-  requireAuthorizedRequester: (c: any, permissions: readonly PermissionKey[]) => Promise<AppDataAuthResult>;
+  supabase: AppDataSupabaseClient;
+  requireAuthorizedRequester: (c: Context, permissions: readonly PermissionKey[]) => Promise<AppDataAuthResult>;
   logActivity: (user: string, action: string, detail: string, ip: string) => Promise<unknown>;
   runBackgroundTask: (label: string, task: Promise<unknown>) => void;
-  assertNoBlockingLeadDuplicate: (payload: Record<string, unknown>, ignoreId?: string | null) => Promise<void>;
-  getHttpErrorStatus: (error: any, fallback?: number) => number;
+  assertNoBlockingLeadDuplicate: (payload: AppDataPayload, ignoreId?: string | null) => Promise<void>;
+  getHttpErrorStatus: (error: unknown, fallback?: number) => number;
 };
 
 function getAppDataAccessConfig(type: string) {
   return APP_DATA_ACCESS[type] || null;
 }
 
-function getAppDataRange(c: any, config: AppDataAccessConfig) {
+const getAppDataErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error
+    ? error.message
+    : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+      ? error.message
+      : fallback;
+
+function getAppDataRange(c: Context, config: AppDataAccessConfig) {
   const rawFrom = Number(c.req.query("from") || 0);
   const rawTo = Number(c.req.query("to") || 999);
   const from = Number.isFinite(rawFrom) && rawFrom >= 0 ? Math.floor(rawFrom) : 0;
@@ -30,7 +69,7 @@ function getAppDataRange(c: any, config: AppDataAccessConfig) {
   return { from, to };
 }
 
-function applyAppDataFilters(query: any, c: any, config: AppDataAccessConfig) {
+function applyAppDataFilters(query: AppDataQuery, c: Context, config: AppDataAccessConfig) {
   let nextQuery = query;
 
   (config.filterableColumns || []).forEach((column) => {
@@ -52,7 +91,7 @@ function applyAppDataFilters(query: any, c: any, config: AppDataAccessConfig) {
   return nextQuery;
 }
 
-function getAppDataOrderBy(c: any, config: AppDataAccessConfig) {
+function getAppDataOrderBy(c: Context, config: AppDataAccessConfig) {
   const fallbackOrderBy = config.orderBy || "created_at";
   const requestedOrderBy = c.req.query("orderBy");
   if (!requestedOrderBy) return fallbackOrderBy;
@@ -67,7 +106,7 @@ function getAppDataOrderBy(c: any, config: AppDataAccessConfig) {
   return orderableColumns.has(requestedOrderBy) ? requestedOrderBy : fallbackOrderBy;
 }
 
-function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
+function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: AppDataError | null) {
   const text = [
     error?.code,
     error?.message,
@@ -111,7 +150,7 @@ function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
   );
 }
 
-function withoutAppDataDraftColumns(config: AppDataAccessConfig, payload: Record<string, unknown>) {
+function withoutAppDataDraftColumns(config: AppDataAccessConfig, payload: AppDataPayload) {
   if (config.table === "ad_account_assignments" || config.table === "ad_account_owner_assignments") {
     const { notes: _notes, ...rest } = payload;
     return rest;
@@ -145,7 +184,7 @@ function withoutAppDataDraftColumns(config: AppDataAccessConfig, payload: Record
 }
 
 async function requireAppDataAccess(
-  c: any,
+  c: Context,
   config: AppDataAccessConfig,
   action: "read" | "create" | "edit" | "delete",
   deps: RegisterAppDataRoutesDependencies,
@@ -165,8 +204,8 @@ async function requireAppDataAccess(
   return deps.requireAuthorizedRequester(c, permissions);
 }
 
-export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDependencies) {
-  app.get("/make-server-f781cd00/app-data/:type", async (c: any) => {
+export function registerAppDataRoutes(app: Hono, deps: RegisterAppDataRoutesDependencies) {
+  app.get("/make-server-f781cd00/app-data/:type", async (c) => {
     const type = c.req.param("type");
     const config = getAppDataAccessConfig(type);
     if (!config) return c.json({ error: "Unknown app data type" }, 404);
@@ -205,12 +244,12 @@ export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDepen
         range: { from, to },
         rowCount: data?.length || 0,
       });
-    } catch (err: any) {
-      return c.json({ error: err.message || "Gagal memuat app data." }, 500);
+    } catch (err: unknown) {
+      return c.json({ error: getAppDataErrorMessage(err, "Gagal memuat app data.") }, 500);
     }
   });
 
-  app.post("/make-server-f781cd00/app-data/:type", async (c: any) => {
+  app.post("/make-server-f781cd00/app-data/:type", async (c) => {
     const type = c.req.param("type");
     const config = getAppDataAccessConfig(type);
     if (!config) return c.json({ error: "Unknown app data type" }, 404);
@@ -219,7 +258,7 @@ export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDepen
     if (auth.response) return auth.response;
 
     try {
-      const payload = await c.req.json();
+      const payload = await c.req.json() as AppDataPayload;
       if (config.table === "leads") {
         await deps.assertNoBlockingLeadDuplicate(payload);
       }
@@ -245,16 +284,16 @@ export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDepen
       const actor = auth.requester?.actorName || "System";
       deps.runBackgroundTask(
         `audit create ${type}`,
-        deps.logActivity(actor, `Create ${type}`, `Created ${type} ${(payload as any)?.id || ""}`, "System"),
+        deps.logActivity(actor, `Create ${type}`, `Created ${type} ${String(payload.id || "")}`, "System"),
       );
 
       return c.json({ row: data }, 201);
-    } catch (err: any) {
-      return c.json({ error: err.message || "Gagal menyimpan app data." }, deps.getHttpErrorStatus(err));
+    } catch (err: unknown) {
+      return c.json({ error: getAppDataErrorMessage(err, "Gagal menyimpan app data.") }, deps.getHttpErrorStatus(err));
     }
   });
 
-  app.put("/make-server-f781cd00/app-data/:type/:id", async (c: any) => {
+  app.put("/make-server-f781cd00/app-data/:type/:id", async (c) => {
     const type = c.req.param("type");
     const id = c.req.param("id");
     const config = getAppDataAccessConfig(type);
@@ -264,7 +303,7 @@ export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDepen
     if (auth.response) return auth.response;
 
     try {
-      const payload = await c.req.json();
+      const payload = await c.req.json() as AppDataPayload;
       if (config.table === "leads") {
         await deps.assertNoBlockingLeadDuplicate(payload, id);
       }
@@ -296,12 +335,12 @@ export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDepen
       );
 
       return c.json({ row: data });
-    } catch (err: any) {
-      return c.json({ error: err.message || "Gagal memperbarui app data." }, deps.getHttpErrorStatus(err));
+    } catch (err: unknown) {
+      return c.json({ error: getAppDataErrorMessage(err, "Gagal memperbarui app data.") }, deps.getHttpErrorStatus(err));
     }
   });
 
-  app.delete("/make-server-f781cd00/app-data/:type/:id", async (c: any) => {
+  app.delete("/make-server-f781cd00/app-data/:type/:id", async (c) => {
     const type = c.req.param("type");
     const id = c.req.param("id");
     const config = getAppDataAccessConfig(type);
@@ -324,8 +363,8 @@ export function registerAppDataRoutes(app: any, deps: RegisterAppDataRoutesDepen
       );
 
       return c.json({ success: true });
-    } catch (err: any) {
-      return c.json({ error: err.message || "Gagal menghapus app data." }, 500);
+    } catch (err: unknown) {
+      return c.json({ error: getAppDataErrorMessage(err, "Gagal menghapus app data.") }, 500);
     }
   });
 }

@@ -71,7 +71,7 @@ export function OrderPhotoViewerDialog({
                 Sesudah ({getOrderPhotoUrls(order, 'after').length})
               </TabsTrigger>
               <TabsTrigger value="payment" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">
-                Bayar ({getOrderPhotoUrls(order, 'payment').length === 0 && (order.photos as any)?.paymentDeleted ? <span className="text-red-500 font-medium">Dihapus</span> : getOrderPhotoUrls(order, 'payment').length})
+                Bayar ({getOrderPhotoUrls(order, 'payment').length === 0 && order.photos?.paymentDeleted ? <span className="text-red-500 font-medium">Dihapus</span> : getOrderPhotoUrls(order, 'payment').length})
               </TabsTrigger>
               <TabsTrigger value="signature" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">
                 TTD ({getOrderPhotoUrls(order, 'signature').length})
@@ -114,12 +114,12 @@ export function OrderPhotoViewerDialog({
                     </>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl mb-4">
-                      {type === 'payment' && (order.photos as any)?.paymentDeleted ? (
+                      {type === 'payment' && order.photos?.paymentDeleted ? (
                         <>
                           <Trash2 className="w-12 h-12 mb-3 text-red-400 opacity-50" />
                           <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Bukti pembayaran telah dihapus</p>
                           <p className="text-xs text-slate-500 mt-1">
-                            Dihapus pada {(order.photos as any)?.paymentDeletedAt ? new Date((order.photos as any).paymentDeletedAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : 'sistem'}
+                            Dihapus pada {order.photos?.paymentDeletedAt ? new Date(order.photos.paymentDeletedAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : 'sistem'}
                           </p>
                         </>
                       ) : (

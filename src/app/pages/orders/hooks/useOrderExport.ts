@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { Order } from '../../master-data/data';
+import { Area, Branch, Order, PaymentMethod, Platform, ServiceType, User, VehicleType } from '../../master-data/data';
 import { getStatusLabel } from '../orderHelpers';
 
 const loadCsvParser = async () => (await import('papaparse')).default;
@@ -16,13 +16,13 @@ const loadPdfTools = async () => {
 
 interface UseOrderExportParams {
   filteredOrders: Order[];
-  users: any[];
-  services: any[];
-  vehicles: any[];
-  branches: any[];
-  areas: any[];
-  platforms: any[];
-  payments: any[];
+  users: User[];
+  services: ServiceType[];
+  vehicles: VehicleType[];
+  branches: Branch[];
+  areas: Area[];
+  platforms: Platform[];
+  payments: PaymentMethod[];
 }
 
 export function useOrderExport({
@@ -67,7 +67,7 @@ export function useOrderExport({
       const paymentMethod = payments.find(p => p.id === order.paymentMethodId);
 
       const rawStatus = order.status;
-      const customStatus = (order.photos as any)?._status;
+      const customStatus = order.photos?._status;
       const effectiveStatus = customStatus && (rawStatus === 'processing' || rawStatus === 'pending') ? customStatus : rawStatus;
 
       return [

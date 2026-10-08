@@ -1,6 +1,15 @@
 import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Order } from '../../master-data/data';
+import {
+  Area,
+  Branch,
+  Order,
+  PaymentMethod,
+  Platform,
+  ServiceType,
+  User,
+  VehicleType,
+} from '../../master-data/data';
 import {
   isAdvertiserRole,
   isCsRole,
@@ -17,15 +26,18 @@ const loadCsvParser = async () => (await import('papaparse')).default;
 const loadSpreadsheet = async () => import('xlsx');
 
 interface UseOrderImportParams {
-  users: any[];
-  services: any[];
-  vehicles: any[];
-  branches: any[];
-  areas: any[];
-  platforms: any[];
-  payments: any[];
-  addOrder: (order: any) => any;
+  users: User[];
+  services: ServiceType[];
+  vehicles: VehicleType[];
+  branches: Branch[];
+  areas: Area[];
+  platforms: Platform[];
+  payments: PaymentMethod[];
+  addOrder: (order: Order) => Promise<unknown> | unknown;
 }
+
+type ImportRow = Record<string, unknown>;
+type LookupItem = { id: string; name?: string };
 
 export function useOrderImport({
   users,
@@ -59,13 +71,13 @@ export function useOrderImport({
 
     for (const order of confirmedData) {
       try {
-        // @ts-ignore
         await addOrder(order);
         savedCount++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Failed to save order", order, err);
+        const message = err instanceof Error ? err.message : 'Gagal disimpan';
         saveErrors++;
-        failureDetails.push(`${order.customerName}: ${err?.message || 'Gagal disimpan'}`);
+        failureDetails.push(`${order.customerName}: ${message}`);
       }
     }
 
@@ -95,7 +107,7 @@ export function useOrderImport({
 
     event.target.value = '';
 
-    const processRows = async (rows: any[]) => {
+    const processRows = async (rows: ImportRow[]) => {
       const newOrders: Order[] = [];
 
       for (const row of rows) {
@@ -106,14 +118,14 @@ export function useOrderImport({
             return typeof val === 'string' ? val.trim() : val;
           };
 
-          const findId = (list: any[], name: any) => {
+          const findId = (list: LookupItem[], name: unknown) => {
             if (!name) return undefined;
             const strName = String(name).trim();
             if (!strName) return undefined;
             return list.find(item => item.name?.toLowerCase() === strName.toLowerCase())?.id || strName;
           };
 
-          const parseDate = (val: any) => {
+          const parseDate = (val: unknown) => {
             if (!val) return new Date().toISOString().split('T')[0];
             try {
               if (val instanceof Date) {
@@ -136,7 +148,7 @@ export function useOrderImport({
             return new Date().toISOString().split('T')[0];
           };
 
-          const parsePrice = (val: any) => {
+          const parsePrice = (val: unknown) => {
             if (typeof val === 'number') return val;
             if (!val) return 0;
             let str = String(val);
@@ -150,6 +162,11 @@ export function useOrderImport({
             return isNaN(num) ? 0 : num;
           };
 
+          const parseUnits = (val: unknown) => {
+            const units = Math.round(parsePrice(val));
+            return units > 0 ? units : 1;
+          };
+
           const generateOrderId = () => {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             let result = 'OP-';
@@ -159,8 +176,27 @@ export function useOrderImport({
             return result;
           };
 
-          const parseTime = (val: any) => {
+          const parseTime = (val: unknown) => {
             return normalizeOrderTime(val, "09:00");
+          };
+
+          const normalizePaymentType = (value: unknown): Order['paymentType'] => {
+            const normalized = String(value || '').trim().toLowerCase();
+            return normalized === 'cash' ? 'Cash' : 'Transfer';
+          };
+
+          const normalizePaymentStatus = (value: unknown): Order['paymentStatus'] => {
+            const normalized = String(value || '').trim().toLowerCase();
+            if (normalized === 'paid' || normalized === 'lunas') return 'Paid';
+            if (normalized === 'down payment' || normalized === 'dp') return 'Down Payment';
+            return 'Unpaid';
+          };
+
+          const normalizePaymentValidation = (value: unknown): Order['paymentValidation'] => {
+            const normalized = String(value || '').trim().toLowerCase();
+            if (normalized === 'valid') return 'Valid';
+            if (normalized === 'invalid' || normalized === 'tidak valid') return 'Invalid';
+            return 'Pending';
           };
 
           const technicianId = findId(users.filter((u) => isTechnicianRole(u.role)), getValue("Teknisi"));
@@ -174,7 +210,7 @@ export function useOrderImport({
           const paymentMethodName = getValue("Metode Pembayaran");
           const paymentMethodId = payments.find(p => p.bankName?.toLowerCase() === String(paymentMethodName).toLowerCase())?.id;
 
-          const getStatusCode = (label: string) => {
+          const getStatusCode = (label: unknown): Order['status'] => {
             const l = String(label || '').toLowerCase();
             if (l === 'terjadwal' || l === 'pending') return 'pending';
             if (l === 'selesai' || l === 'done') return 'done';
@@ -187,34 +223,35 @@ export function useOrderImport({
             return 'pending';
           };
 
-          const order: any = {
-            id: getValue("ID") || generateOrderId(),
+          const order: Order = {
+            id: String(getValue("ID") || generateOrderId()),
             created_at: new Date().toISOString(),
             leadDate: parseDate(getValue("Tanggal Lead")),
-            customerName: getValue("Nama Customer") || "Unknown",
-            customerPhone: getValue("No HP") || "",
-            address: getValue("Alamat") || "",
-            mapsUrl: getValue("Maps URL") || "",
+            customerName: String(getValue("Nama Customer") || "Unknown"),
+            customerPhone: String(getValue("No HP") || ""),
+            address: String(getValue("Alamat") || ""),
+            mapsUrl: String(getValue("Maps URL") || ""),
             serviceDate: parseDate(getValue("Tanggal Service")),
             serviceTime: parseTime(getValue("Jam Service")),
-            serviceId: serviceId,
-            serviceCategory: getValue("Kategori Layanan") || "Visit",
-            vehicleId: vehicleId,
+            serviceId: serviceId || '',
+            serviceCategory: String(getValue("Kategori Layanan") || "Visit"),
+            vehicleId: vehicleId || '',
+            units: parseUnits(getValue("Unit") || getValue("Units") || getValue("Jumlah Unit")),
             price: parsePrice(getValue("Harga")),
             platformId: platformId,
             csId: csId,
             advertiserId: advertiserId,
-            notes: getValue("Catatan") || "",
+            notes: String(getValue("Catatan") || ""),
             technicianId: technicianId,
-            branchId: branchId,
+            branchId: branchId || '',
             areaId: areaId,
             status: getStatusCode(getValue("Status Order")),
-            paymentType: getValue("Tipe Pembayaran") || "Transfer",
+            paymentType: normalizePaymentType(getValue("Tipe Pembayaran")),
             paymentMethodId: paymentMethodId,
-            paymentStatus: (getValue("Status Pembayaran") || "Unpaid") as any,
-            paymentValidation: (getValue("Validasi Pembayaran") || "Pending") as any,
+            paymentStatus: normalizePaymentStatus(getValue("Status Pembayaran")),
+            paymentValidation: normalizePaymentValidation(getValue("Validasi Pembayaran")),
             income: parsePrice(getValue("Income")),
-            affiliateName: getValue("Affiliate") || ""
+            affiliateName: String(getValue("Affiliate") || "")
           };
 
           newOrders.push(order);
@@ -238,7 +275,7 @@ export function useOrderImport({
           header: true,
           skipEmptyLines: true,
           complete: async (results) => {
-            await processRows(results.data as any[]);
+            await processRows(results.data as ImportRow[]);
           },
           error: (error) => {
             console.error("Error reading CSV file:", error);
@@ -266,10 +303,11 @@ export function useOrderImport({
           const workbook = XLSX.read(data, {
             type: 'array',
             sheetRows: getSpreadsheetReadRowLimit(),
+            cellDates: true,
           });
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
-          const rows = XLSX.utils.sheet_to_json(sheet, { cellDates: true } as any);
+          const rows = XLSX.utils.sheet_to_json<ImportRow>(sheet);
           assertSpreadsheetRowLimit(rows, { label: 'Import pesanan' });
           await processRows(rows);
         } catch (error) {

@@ -102,8 +102,8 @@ export function OrderDetailDialog({ isOpen, onClose, order }: OrderDetailDialogP
   };
 
   const formatCurrency = (value?: number | null) => `Rp ${(value || 0).toLocaleString('id-ID')}`;
-  const effectiveStatus = ((order.photos as any)?._status && ['processing', 'pending'].includes(order.status))
-    ? (order.photos as any)._status
+  const effectiveStatus = (order.photos?._status && ['processing', 'pending'].includes(order.status))
+    ? order.photos._status
     : order.status;
   const reasonSummary = getStatusReasonSummary(order, effectiveStatus);
   const reasonSectionLabel = isReasonRequiredStatus(order.status)

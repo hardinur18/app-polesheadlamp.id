@@ -205,6 +205,10 @@ type StagedDailyAdRow = {
     _rawAccount?: string;
 };
 
+type DailyAdImportRow = Record<string, unknown>;
+type StagedDailyAdField = keyof StagedDailyAdRow;
+type StagedDailyAdValue = StagedDailyAdRow[StagedDailyAdField];
+
 const normalizeMetricPart = (value: unknown) => {
     if (value === undefined || value === null) return 'empty';
     const normalized = String(value).trim();
@@ -642,22 +646,22 @@ export function IklanHarian() {
       };
 
       leads.forEach((lead) => {
-          const leadDate = formatMetricDate((lead as any).timestamp);
+          const leadDate = formatMetricDate(lead.timestamp);
           if (!leadDate) return;
           if (activeDateBounds && !isWithinInterval(new Date(leadDate), activeDateBounds)) return;
 
           const exactKey = buildAdMetricKey(
               leadDate,
-              (lead as any).advertiserId,
-              (lead as any).platformId,
-              (lead as any).subChannelId,
-              (lead as any).csId,
+              lead.advertiserId,
+              lead.platformId,
+              lead.subChannelId,
+              lead.csId,
           );
           const fallbackKey = buildAdMetricCompatibilityKey(
               leadDate,
-              (lead as any).advertiserId,
-              (lead as any).platformId,
-              (lead as any).csId,
+              lead.advertiserId,
+              lead.platformId,
+              lead.csId,
           );
 
           increment(realLeadsByKey, exactKey);
@@ -665,27 +669,27 @@ export function IklanHarian() {
       });
 
       orders.forEach((order) => {
-          const orderLeadDate = formatMetricDate((order as any).leadDate);
+          const orderLeadDate = formatMetricDate(order.leadDate);
           if (!orderLeadDate) return;
           if (activeDateBounds && !isWithinInterval(new Date(orderLeadDate), activeDateBounds)) return;
 
           const key = buildAdMetricKey(
               orderLeadDate,
-              (order as any).advertiserId,
-              (order as any).platformId,
-              (order as any).subChannelId,
-              (order as any).csId,
+              order.advertiserId,
+              order.platformId,
+              order.subChannelId,
+              order.csId,
           );
           const fallbackKey = buildAdMetricCompatibilityKey(
               orderLeadDate,
-              (order as any).advertiserId,
-              (order as any).platformId,
-              (order as any).csId,
+              order.advertiserId,
+              order.platformId,
+              order.csId,
           );
 
           increment(realOrdersByKey, key);
           if (fallbackKey !== key) increment(realOrdersByKey, fallbackKey);
-          if ((order as any).status === 'done') {
+          if (order.status === 'done') {
               increment(realOrdersDoneByKey, key);
               if (fallbackKey !== key) increment(realOrdersDoneByKey, fallbackKey);
           }
@@ -754,8 +758,8 @@ export function IklanHarian() {
     // Sorting
     if (sortConfig) {
       data = [...data].sort((a, b) => { // Create a copy to avoid mutating strict mode props
-        let valA: any = a[sortConfig.key as keyof typeof a];
-        let valB: any = b[sortConfig.key as keyof typeof b];
+        let valA: string | number = String(a[sortConfig.key as keyof typeof a] ?? '');
+        let valB: string | number = String(b[sortConfig.key as keyof typeof b] ?? '');
 
         // Custom Keys Handling
         if (sortConfig.key === 'spending') {
@@ -1300,6 +1304,19 @@ export function IklanHarian() {
     return rawValue;
   };
 
+  const normalizeImportNumber = (value: unknown): string | number => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const rawValue = String(value || '').trim();
+    if (!rawValue) return 0;
+    const numericValue = rawValue.replace(/[^\d,.-]/g, '');
+    if (!numericValue) return 0;
+    const normalizedValue = numericValue.includes(',') && numericValue.lastIndexOf(',') > numericValue.lastIndexOf('.')
+      ? numericValue.replace(/\./g, '').replace(',', '.')
+      : numericValue.replace(/,/g, '');
+    const parsedValue = Number(normalizedValue);
+    return Number.isFinite(parsedValue) ? parsedValue : rawValue;
+  };
+
   const findAdAccountByImportValue = (value: unknown) => {
     const rawValue = String(value || '').trim();
     if (!rawValue) return undefined;
@@ -1355,10 +1372,10 @@ export function IklanHarian() {
             });
             const wsname = wb.SheetNames[0];
             const ws = wb.Sheets[wsname];
-            const data = spreadsheet.utils.sheet_to_json(ws);
+            const data = spreadsheet.utils.sheet_to_json<DailyAdImportRow>(ws);
             assertSpreadsheetRowLimit(data, { label: 'Import iklan harian' });
             
-            const staged = data.map((row: any) => {
+            const staged = data.map((row) => {
                  const dateStr = normalizeImportDate(row['Date'] || row['Tanggal'] || row['date']);
                  const accountValue =
                    row['Account'] ||
@@ -1368,8 +1385,8 @@ export function IklanHarian() {
                    row['adAccountId'] ||
                    row['account'];
                  const account = findAdAccountByImportValue(accountValue);
-                 const spending = row['Spending'] || row['spending'] || row['Amount Spent'] || 0;
-                 const leads = row['Leads'] || row['leads'] || row['Leads Dashboard'] || 0;
+                 const spending = normalizeImportNumber(row['Spending'] || row['spending'] || row['Amount Spent'] || 0);
+                 const leads = normalizeImportNumber(row['Leads'] || row['leads'] || row['Leads Dashboard'] || 0);
 
                  return hydrateStagedAdRow({
                      id: crypto.randomUUID(),
@@ -1399,7 +1416,7 @@ export function IklanHarian() {
     reader.readAsBinaryString(file);
   };
 
-  const handleStagedChange = (id: string, field: string, value: any) => {
+  const handleStagedChange = (id: string, field: StagedDailyAdField, value: StagedDailyAdValue) => {
       setStagedData(prev => prev.map(item => {
           if (item.id !== id) return item;
 

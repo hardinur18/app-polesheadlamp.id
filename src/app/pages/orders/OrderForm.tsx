@@ -106,6 +106,19 @@ interface OrderFormProps {
   onSuccess?: (order: Order) => Promise<void> | void;
 }
 
+const ORDER_PAYMENT_TYPES: NonNullable<Order['paymentType']>[] = ['Transfer', 'Cash'];
+const ORDER_PAYMENT_STATUSES: Order['paymentStatus'][] = ['Unpaid', 'Down Payment', 'Paid'];
+const ORDER_PAYMENT_VALIDATIONS: Order['paymentValidation'][] = ['Pending', 'Valid', 'Invalid'];
+
+const isOrderPaymentType = (value: string): value is NonNullable<Order['paymentType']> =>
+  ORDER_PAYMENT_TYPES.includes(value as NonNullable<Order['paymentType']>);
+
+const isOrderPaymentStatus = (value: string): value is Order['paymentStatus'] =>
+  ORDER_PAYMENT_STATUSES.includes(value as Order['paymentStatus']);
+
+const isOrderPaymentValidation = (value: string): value is Order['paymentValidation'] =>
+  ORDER_PAYMENT_VALIDATIONS.includes(value as Order['paymentValidation']);
+
 export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialData, prefillData, onSuccess }) => {
   const { 
     addOrder, updateOrderPatch, orders, prospectBookings, leads,
@@ -323,6 +336,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const originalPlatformId = sourceOrder?.platformId || '';
   const originalSubChannelId = sourceOrder?.subChannelId || '';
   const originalCsId = sourceOrder?.csId || '';
+  const attributionDateKey = formData.leadDate || sourceOrder?.leadDate || todayKey;
   const preserveOriginalPlatform = Boolean(sourceOrder) && selectedAdvertiserId === originalAdvertiserId;
   const preserveOriginalSubChannel = preserveOriginalPlatform && selectedPlatformId === originalPlatformId;
   const preserveOriginalCs = preserveOriginalSubChannel && selectedSubChannelId === originalSubChannelId;
@@ -330,11 +344,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
   const isActiveAdAssignment = React.useCallback(
     (assignment: { startDate?: string | null; endDate?: string | null; status?: string | null }) => {
       if (assignment.status && assignment.status !== 'active') return false;
-      if (assignment.startDate && assignment.startDate > todayKey) return false;
-      if (assignment.endDate && assignment.endDate < todayKey) return false;
+      if (assignment.startDate && assignment.startDate > attributionDateKey) return false;
+      if (assignment.endDate && assignment.endDate < attributionDateKey) return false;
       return true;
     },
-    [todayKey],
+    [attributionDateKey],
   );
 
   const activeAdAccounts = React.useMemo<AdAccount[]>(
@@ -1079,11 +1093,43 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     applyAdAccountFieldsToDraft,
     formData.advertiserId,
     formData.csId,
+    formData.leadDate,
     formData.platformId,
     formData.subChannelId,
     inferAdAccountIdFromOrder,
     isOpen,
     orderAdAccountOptions.length,
+    selectedAdAccountId,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || orderSourceMode !== 'paid_ads' || !selectedAdAccountId) {
+      return;
+    }
+
+    const selectedOption = orderAdAccountOptions.find((option) => option.account.id === selectedAdAccountId);
+    if (!selectedOption?.isComplete) {
+      return;
+    }
+
+    setFormData((prev) => {
+      const next = applyAdAccountFieldsToDraft(prev, selectedAdAccountId);
+      if (
+        next.advertiserId === prev.advertiserId &&
+        next.platformId === prev.platformId &&
+        next.subChannelId === prev.subChannelId &&
+        next.csId === prev.csId
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [
+    applyAdAccountFieldsToDraft,
+    attributionDateKey,
+    isOpen,
+    orderAdAccountOptions,
+    orderSourceMode,
     selectedAdAccountId,
   ]);
 
@@ -1100,7 +1146,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     }
   }, [formData.technicianId, users]);
 
-  const handleChange = (field: keyof Order, value: any) => {
+  const handleChange = <K extends keyof Order>(field: K, value: Order[K]) => {
     setSubmitError(null);
     setFormData(prev => {
       const normalizedValue = field === 'serviceTime' ? normalizeOrderTime(value) : value;
@@ -1307,8 +1353,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
     
     nullableKeys.forEach(key => {
         if (sanitizedData[key] === "") {
-            // @ts-ignore
-            sanitizedData[key] = undefined;
+            delete sanitizedData[key];
         }
     });
 
@@ -1493,7 +1538,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
       }
       if (onSuccess) await onSuccess((savedOrder || sanitizedData) as Order);
       onClose();
-    } catch (error: any) {
+    } catch (error: unknown) {
       reportSubmitError(error, 'Gagal menyimpan pesanan');
     } finally {
       setIsSubmitting(false);
@@ -1848,7 +1893,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                      <Select 
                         value={String(formData.units || 1)} 
                         onValueChange={(val) => handleChange('units', parseInt(val))}
-                        disabled={!canEdit('units' as any)}
+                        disabled={!canEdit('units')}
                      >
                         <SelectTrigger className="bg-white dark:bg-slate-800">
                            <SelectValue placeholder="1 Unit" />
@@ -2175,13 +2220,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Jenis Pembayaran</Label>
-                    <Select 
-                      value={formData.paymentType || 'Transfer'} 
-                      onValueChange={(val) => {
-                         handleChange('paymentType', val);
-                         if (val === 'Cash') {
-                            handleChange('paymentMethodId', undefined);
-                         }
+	                    <Select
+	                      value={formData.paymentType || 'Transfer'}
+	                      onValueChange={(val) => {
+	                         if (!isOrderPaymentType(val)) return;
+	                         handleChange('paymentType', val);
+	                         if (val === 'Cash') {
+	                            handleChange('paymentMethodId', undefined);
+	                         }
                       }}
                       disabled={!canEdit('paymentMethodId')}
                     >
@@ -2229,12 +2275,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Status Pembayaran</Label>
-                    <Select 
-                      value={formData.paymentStatus} 
-                      onValueChange={(val) => handleChange('paymentStatus', val)}
-                      disabled={!canEdit('paymentStatus')}
+	                  <div className="space-y-2">
+	                    <Label>Status Pembayaran</Label>
+	                    <Select
+	                      value={formData.paymentStatus}
+	                      onValueChange={(val) => {
+	                        if (isOrderPaymentStatus(val)) handleChange('paymentStatus', val);
+	                      }}
+	                      disabled={!canEdit('paymentStatus')}
                     >
                       <SelectTrigger><SelectValue placeholder="Status Bayar" /></SelectTrigger>
                       <SelectContent>
@@ -2248,10 +2296,12 @@ export const OrderForm: React.FC<OrderFormProps> = ({ isOpen, onClose, initialDa
                     <Label className={canEdit('paymentValidation') ? "text-blue-600 dark:text-blue-400 font-bold" : ""}>
                         Validasi Payment
                     </Label>
-                    <Select 
-                      value={formData.paymentValidation} 
-                      onValueChange={(val) => handleChange('paymentValidation', val)}
-                      disabled={!canEdit('paymentValidation')}
+	                    <Select
+	                      value={formData.paymentValidation}
+	                      onValueChange={(val) => {
+	                        if (isOrderPaymentValidation(val)) handleChange('paymentValidation', val);
+	                      }}
+	                      disabled={!canEdit('paymentValidation')}
                     >
                       <SelectTrigger className={canEdit('paymentValidation') ? "border-blue-200 bg-blue-50/50" : ""}><SelectValue placeholder="Validasi" /></SelectTrigger>
                       <SelectContent>

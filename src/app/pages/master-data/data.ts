@@ -192,6 +192,9 @@ export interface Order {
     before?: string[];
     after?: string[];
     payment?: string[];
+    _status?: Order['status'];
+    paymentDeleted?: boolean;
+    paymentDeletedAt?: string;
     signature?: string; // URL of the signature image
   };
   // Tracking

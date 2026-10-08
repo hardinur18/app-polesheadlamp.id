@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Order } from '../../master-data/data';
+import { Order, ServiceType, User } from '../../master-data/data';
 import { isReasonRequiredStatus } from '../cancelReasonOptions';
 import { getOrderCrudErrorMessage } from '../orderCrudErrors';
 import { logActivity } from '@/app/services/auditService';
@@ -8,15 +8,25 @@ import { supabase } from '@/lib/supabaseClient';
 
 interface UseOrderBulkActionsParams {
   orders: Order[];
-  services: any[];
+  services: ServiceType[];
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
-  updateOrder: (order: any) => any;
+  updateOrder: (order: Order) => Promise<unknown> | unknown;
   deleteOrder: (id: string) => Promise<void>;
-  currentUser: any;
+  currentUser: User | null;
   buildStatusUpdatePayload: (order: Order, nextStatus: Order['status'], reason?: string, reasonNote?: string) => Order;
   canApplyBulkUpdate?: (order: Order, field: string, value: string) => boolean;
 }
+
+type OrderPhotosWithPaymentDeletion = NonNullable<Order['photos']> & {
+  paymentDeleted?: boolean;
+  paymentDeletedAt?: string;
+};
+
+const ORDER_PAYMENT_STATUSES: Order['paymentStatus'][] = ['Unpaid', 'Down Payment', 'Paid'];
+
+const isOrderPaymentStatus = (value: string): value is Order['paymentStatus'] =>
+  ORDER_PAYMENT_STATUSES.includes(value as Order['paymentStatus']);
 
 export function useOrderBulkActions({
   orders,
@@ -88,32 +98,31 @@ export function useOrderBulkActions({
           continue;
         }
 
-        const updates: any = {};
+        const updates: Partial<Order> = {};
         let paymentProofPathsToRemove: string[] = [];
         if (bulkField === 'technicianId') updates.technicianId = bulkValue;
         else if (bulkField === 'csId') updates.csId = bulkValue;
         else if (bulkField === 'advertiserId') updates.advertiserId = bulkValue;
         else if (bulkField === 'branchId') updates.branchId = bulkValue;
-        else if (bulkField === 'paymentStatus') updates.paymentStatus = bulkValue;
+        else if (bulkField === 'paymentStatus' && isOrderPaymentStatus(bulkValue)) updates.paymentStatus = bulkValue;
         else if (bulkField === 'serviceId') {
           updates.serviceId = bulkValue;
           const service = services.find(s => s.id === bulkValue);
           if (service) updates.price = service.price;
         }
         else if (bulkField === 'deletePaymentProof' && bulkValue === 'confirm') {
-          const currentPhotos = order.photos || {};
-          const paymentPhotos = (currentPhotos as any).payment || [];
+          const currentPhotos: OrderPhotosWithPaymentDeletion = order.photos || {};
+          const paymentPhotos = currentPhotos.payment || [];
 
           if (paymentPhotos.length > 0) {
             paymentProofPathsToRemove = paymentPhotos.map((url: string) => {
               const parts = url.split('/public/orders/');
               return parts.length > 1 ? parts[1] : null;
-            }).filter(Boolean);
+            }).filter((path): path is string => Boolean(path));
           }
           updates.photos = { ...currentPhotos, payment: [], paymentDeleted: true, paymentDeletedAt: new Date().toISOString() };
         }
 
-        // @ts-ignore
         await updateOrder({ ...order, ...updates });
         if (paymentProofPathsToRemove.length > 0) {
           const { error: storageError } = await supabase.storage.from('orders').remove(paymentProofPathsToRemove);
@@ -122,7 +131,7 @@ export function useOrderBulkActions({
           }
         }
         successCount++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(error);
         failedIds.add(order.id);
         failureDetails.push(`${order.customerName}: ${getOrderCrudErrorMessage(error, 'Gagal diperbarui')}`);
@@ -182,10 +191,11 @@ export function useOrderBulkActions({
       try {
         await deleteOrder(id);
         successCount++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(error);
         failedIds.add(id);
-        failureDetails.push(`${order?.customerName || id}: ${error?.message || 'Gagal dihapus'}`);
+        const message = error instanceof Error ? error.message : 'Gagal dihapus';
+        failureDetails.push(`${order?.customerName || id}: ${message}`);
       }
     }
 

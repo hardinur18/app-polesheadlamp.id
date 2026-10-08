@@ -5,13 +5,15 @@ import 'leaflet/dist/leaflet.css';
 import { IndicatorBadge as Badge, BadgeStatus } from './IndicatorBadge';
 import { Clock, Ruler, User as UserIcon, Navigation, Building2, Layers, Timer, AlertTriangle, Info, Type, Calendar, X } from 'lucide-react';
 
+type MapRouteStatus = BadgeStatus | 'branch_start';
+
 export interface RoutePoint {
   id: string;
   name: string;
   address: string;
   lat: number;
   lng: number;
-  status: BadgeStatus;
+  status: MapRouteStatus;
   time?: string;
   distance?: string;
   travelTimeEstimate?: string;
@@ -199,8 +201,8 @@ const FitBounds = ({ groups, branches, autoFit = true }: { groups: RouteGroup[],
         if (hasPoints && map) {
              // Add a small delay and check if map container exists to prevent "_leaflet_pos" errors during transitions
              const timeoutId = setTimeout(() => {
-                // @ts-ignore - Accessing internal property to check if map is valid
-                if (map && map._container) {
+                const container = map.getContainer();
+                if (container) {
                     try {
                         map.fitBounds(bounds, { 
                             padding: [50, 50],
@@ -336,9 +338,9 @@ const SmartPolyline = ({ points, color, disableRouting = false }: { points: Rout
                     const decodedPath = data.routes[0].geometry.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
                     setPath(decodedPath);
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
                 // Ignore abort errors
-                if (e.name === 'AbortError') return;
+                if (e instanceof DOMException && e.name === 'AbortError') return;
                 
                 console.warn("Failed to fetch route geometry, falling back to straight lines.", e);
                 // Fallback is already set
@@ -467,7 +469,7 @@ export function MapCard({
           : [];
   const visibleRoutePointCount = useMemo(
       () => displayGroups.reduce((total, group) => (
-          total + group.points.filter((point) => point.status !== ('branch_start' as any)).length
+          total + group.points.filter((point) => point.status !== 'branch_start').length
       ), 0),
       [displayGroups],
   );
@@ -755,7 +757,7 @@ export function MapCard({
                     {group.points.map((point, index) => {
                         if (!isFiniteCoordinate(point.lat, point.lng)) return null;
                         // Skip rendering start points (branch locations) as customer markers if they are marked as such
-                        if (point.status === 'branch_start' as any) return null;
+                        if (point.status === 'branch_start') return null;
 
                         return (
                             <Marker 

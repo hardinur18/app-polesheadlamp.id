@@ -66,8 +66,8 @@ export function OrderInvoicePreviewDialog({ isOpen, onClose, context }: OrderInv
       }
 
       printOrderInvoiceHtml(invoiceHtml);
-    } catch (error: any) {
-      toast.error(error?.message || 'Gagal mencetak kwitansi');
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Gagal mencetak kwitansi');
     }
   };
 

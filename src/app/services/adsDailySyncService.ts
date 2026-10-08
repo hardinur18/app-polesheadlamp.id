@@ -152,6 +152,46 @@ type ProviderBuildResult = {
   diagnosticMessage?: string;
 };
 
+type DailyAdDbRow = {
+  id: string;
+  date: string;
+  advertiser_id: string;
+  platform_id: string;
+  sub_channel_id?: string | null;
+  ad_account_id: string;
+  cs_id?: string | null;
+  amount_spent?: number | string | null;
+  leads_dashboard?: number | string | null;
+  ppn_amount?: number | string | null;
+  fee_amount?: number | string | null;
+  edit_count?: number | string | null;
+};
+
+type AdsDailySyncRunDbRow = {
+  id: string;
+  created_at?: string | null;
+  run_kind?: string | null;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  actor_role?: string | null;
+  range_from?: string | null;
+  range_to?: string | null;
+  platform_id?: string | null;
+  advertiser_id?: string | null;
+  cs_id?: string | null;
+  mode?: string | null;
+  preserve_edited?: boolean | null;
+  inserted_count?: number | string | null;
+  updated_count?: number | string | null;
+  new_count?: number | string | null;
+  update_count?: number | string | null;
+  skipped_count?: number | string | null;
+  unmapped_count?: number | string | null;
+  spend?: number | string | null;
+  provider_statuses?: unknown;
+  errors?: unknown;
+};
+
 const providerLabels: Record<AdsProviderKey, string> = {
   meta: 'Meta',
   google: 'Google Ads',
@@ -182,7 +222,37 @@ const createClientId = () => {
 
 const safeHistoryNumber = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
-const mapSyncRunFromDbRow = (row: any): AdsDailySyncHistoryItem => ({
+const isAdsProviderKey = (value: unknown): value is AdsProviderKey =>
+  value === 'meta' || value === 'google' || value === 'tiktok';
+
+const isProviderStatusState = (value: unknown): value is AdsDailySyncProviderStatus['state'] =>
+  value === 'loading' || value === 'success' || value === 'empty' || value === 'error';
+
+const normalizeProviderStatusesFromDb = (value: unknown): AdsDailySyncProviderStatus[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item): AdsDailySyncProviderStatus[] => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    if (!isAdsProviderKey(row.key)) return [];
+
+    return [{
+      key: row.key,
+      label: typeof row.label === 'string' ? row.label : row.key,
+      state: isProviderStatusState(row.state) ? row.state : 'empty',
+      count: safeHistoryNumber(row.count),
+      message: typeof row.message === 'string' ? row.message : '',
+    }];
+  });
+};
+
+const normalizeHistoryErrorsFromDb = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map(String) : [];
+
+const normalizeHistoryModeFromDb = (value: unknown): AdsDailySyncMode | undefined =>
+  value === 'insert-missing' || value === 'update-existing' ? value : undefined;
+
+const mapSyncRunFromDbRow = (row: AdsDailySyncRunDbRow): AdsDailySyncHistoryItem => ({
   id: String(row.id),
   createdAt: row.created_at || new Date().toISOString(),
   kind: row.run_kind === 'commit' ? 'commit' : 'preview',
@@ -197,7 +267,7 @@ const mapSyncRunFromDbRow = (row: any): AdsDailySyncHistoryItem => ({
     platformId: row.platform_id || undefined,
     advertiserId: row.advertiser_id || undefined,
     csId: row.cs_id || undefined,
-    mode: row.mode || undefined,
+    mode: normalizeHistoryModeFromDb(row.mode),
     preserveEdited: typeof row.preserve_edited === 'boolean' ? row.preserve_edited : undefined,
   },
   counts: {
@@ -209,8 +279,8 @@ const mapSyncRunFromDbRow = (row: any): AdsDailySyncHistoryItem => ({
     unmappedRows: safeHistoryNumber(row.unmapped_count),
   },
   spend: safeHistoryNumber(row.spend),
-  providerStatuses: Array.isArray(row.provider_statuses) ? row.provider_statuses : [],
-  errors: Array.isArray(row.errors) ? row.errors.map(String) : [],
+  providerStatuses: normalizeProviderStatusesFromDb(row.provider_statuses),
+  errors: normalizeHistoryErrorsFromDb(row.errors),
 });
 
 const readLocalSyncHistory = (): AdsDailySyncHistoryItem[] => {
@@ -349,7 +419,7 @@ export const getAdsProviderKeyByPlatformName = (name: unknown): AdsProviderKey |
 const getDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId'>) =>
   `${row.date}|${row.adAccountId}`;
 
-const mapDailyAdFromDbRow = (row: any): DailyAd => ({
+const mapDailyAdFromDbRow = (row: DailyAdDbRow): DailyAd => ({
   id: row.id,
   date: row.date,
   advertiserId: row.advertiser_id,

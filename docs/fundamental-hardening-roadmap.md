@@ -45,6 +45,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [ ] CRUD prospek, pesanan, payment, dan master data diaudit penuh.
 - [~] Security/RLS diaudit dan dirapikan: anonymous access dan service-role fallback sudah dirapikan; granular RLS menunggu refactor data access.
 - [x] Phase 10 refactor struktur besar selesai untuk batch fundamental: server app-data, MasterDataCtx, dashboard CS/Advertiser, pesanan, prospek, modal shared, API snapshot, dan Iklan Harian sudah dirapikan tanpa mengubah flow bisnis utama.
+- [x] Phase 11 type safety flow kritis selesai: `@ts-ignore` global dibersihkan, payload app-data, sync iklan harian, Iklan Harian, dan flow pesanan utama sudah typed.
 - [ ] Test automation core flow lengkap.
 - [ ] Final release checklist 100% pass.
 
@@ -367,18 +368,20 @@ Catatan progress 2026-10-08:
 
 Tujuan: mengurangi bug akibat data shape tidak jelas.
 
-- [ ] Audit `as any`.
-- [ ] Audit `@ts-ignore`.
-- [ ] Buat type untuk payload API utama.
-- [ ] Buat type untuk dashboard snapshot.
-- [ ] Buat type untuk prospek/order/payment.
+- [x] Audit `as any` di flow kritis: pesanan utama, order form/import/export/filter, Iklan Harian, ads daily sync, dan app-data route.
+- [x] Audit `@ts-ignore`: tidak ada lagi `@ts-ignore/@ts-expect-error` di `src`, `supabase/functions`, dan `scripts`.
+- [x] Buat type untuk payload API utama: app-data route sudah memakai typed payload/query/error response.
+- [x] Buat type untuk dashboard snapshot iklan: mapper sync iklan harian dan row hasil database sudah typed.
+- [x] Buat type untuk order/payment kritis: order photos, payment deletion metadata, shadow status, import, bulk action, filter, export, dan form enum guard sudah typed.
 - [ ] Aktifkan strict mode bertahap per area.
-- [ ] Hilangkan `any` di flow kritis.
+- [x] Hilangkan `any` di flow kritis Phase 11.
+- [~] Sisa debt global non-kritis: repo masih punya `any` di area legacy/lower-risk di luar scope Phase 11 ini dan perlu dibersihkan bertahap agar tidak menimbulkan refactor besar sekaligus.
 
 Definition of done:
 
 - Flow kritis punya type yang jelas.
 - TypeScript mulai benar-benar membantu cegah bug.
+- Verifikasi Phase 11: `npm run typecheck:full`, `npm run lint`, `npm run build`, `npm run smoke:routes`, dan `git diff --check` pass pada 2026-10-08. Build masih menampilkan warning non-blocking Browserslist data lama.
 
 ## Phase 12 - Test Automation
 

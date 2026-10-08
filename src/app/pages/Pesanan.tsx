@@ -154,6 +154,12 @@ const ORDER_STATUS_FILTER_OPTIONS = [
   { value: 'cancelled', label: 'Cancel' },
 ] as const;
 
+const isOrderDateFilterMode = (value: string): value is 'service' | 'lead' =>
+  value === 'service' || value === 'lead';
+
+const getUnknownErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
 const toLocalDateKey = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -757,7 +763,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from('orders').getPublicUrl(fileName);
       return data.publicUrl;
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Upload failed:', e);
       throw e;
     }
@@ -772,19 +778,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
       );
       const newPhotos = await Promise.all(uploadPromises);
       const currentPhotos = photoViewerOrder.photos || {};
-      const existingPaymentPhotos = (currentPhotos as any)['payment'] || [];
+      const existingPaymentPhotos = currentPhotos.payment || [];
       const updatedPhotos = {
         ...currentPhotos,
         payment: [...existingPaymentPhotos, ...newPhotos],
         paymentDeleted: false,
         paymentDeletedAt: undefined,
       };
-      // @ts-ignore
       await updateOrder({ ...photoViewerOrder, photos: updatedPhotos });
       setPhotoViewerOrder(prev => prev ? ({ ...prev, photos: updatedPhotos }) : null);
       toast.success("Bukti pembayaran berhasil diupload");
       setUploadedFiles([]);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(getOrderCrudErrorMessage(e, 'Gagal upload bukti pembayaran'));
     } finally {
       setIsUploading(false);
@@ -1041,7 +1046,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     try {
       await updateOrderPatch(order.id, patch, { silent: true });
       toast.success(successMessage);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to update order:', error);
       toast.error(getOrderCrudErrorMessage(error, 'Gagal memperbarui pesanan'));
       throw error;
@@ -1156,8 +1161,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           );
         }
         setDeleteId(null);
-      } catch (error: any) {
-        toast.error(error?.message || 'Gagal menghapus pesanan');
+      } catch (error: unknown) {
+        toast.error(getUnknownErrorMessage(error, 'Gagal menghapus pesanan'));
       }
     }
   }, [deleteId, orders, deleteOrder, currentUser]);
@@ -1207,9 +1212,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         return;
       }
       toast.success('Pelanggan tersimpan ke Kontak CRM');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.dismiss(toastId);
-      toast.error(error?.message || 'Gagal menyimpan pelanggan ke Kontak CRM');
+      toast.error(getUnknownErrorMessage(error, 'Gagal menyimpan pelanggan ke Kontak CRM'));
     }
   }, [currentUser?.id]);
 
@@ -1238,9 +1243,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         toast.warning(`${result.failed} pelanggan gagal disimpan ke Kontak CRM`);
       }
       setSelectedIds(new Set());
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.dismiss(toastId);
-      toast.error(error?.message || 'Gagal menyimpan pelanggan ke Kontak CRM');
+      toast.error(getUnknownErrorMessage(error, 'Gagal menyimpan pelanggan ke Kontak CRM'));
     }
   }, [currentUser?.id, orders, selectedIds, setSelectedIds]);
 
@@ -1865,7 +1870,12 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
             {/* Row 2: Filters & Search */}
             <div className={`orderFilterGrid ${statusFilter === 'cancelled' ? 'hasCancelReason' : ''}`}>
               <div className="orderFilterMode">
-                <Select value={dateFilterMode} onValueChange={(v: any) => setDateFilterMode(v)}>
+                <Select
+                  value={dateFilterMode}
+                  onValueChange={(value) => {
+                    if (isOrderDateFilterMode(value)) setDateFilterMode(value);
+                  }}
+                >
                   <SelectTrigger className={ORDER_FILTER_CONTROL_CLASS}>
                     <SelectValue />
                   </SelectTrigger>
@@ -2572,8 +2582,8 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                              <div className="flex flex-wrap items-center gap-1 mt-0.5">
                                 <span className="text-[10px] text-slate-500 dark:text-slate-400">
                                    {platformMap[order.platformId]?.name || '-'}
-                                   {(order as any).subChannelId && subChannelMap[(order as any).subChannelId]?.name && (
-                                      <> | {subChannelMap[(order as any).subChannelId]?.name}</>
+                                   {order.subChannelId && subChannelMap[order.subChannelId]?.name && (
+                                      <> | {subChannelMap[order.subChannelId]?.name}</>
                                    )}
                                 </span>
                              </div>
@@ -2837,7 +2847,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                                           'technician',
                                                         );
                                                         
-                                                      } catch (error: any) {
+                                                      } catch (error: unknown) {
                                                         console.error(error);
                                                       }
                                                    }}
@@ -2847,7 +2857,9 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                                       <span className="font-medium text-sm">
                                                         {tech.name} {isTechnicianOff ? `(Sedang ${technicianOffSchedule?.type || 'Libur'})` : ''}
                                                       </span>
-                                                      {tech.branch && <span className="text-[10px] text-slate-500">{tech.branch}</span>}
+                                                      {tech.branchId && branchMap[tech.branchId]?.name && (
+                                                        <span className="text-[10px] text-slate-500">{branchMap[tech.branchId]?.name}</span>
+                                                      )}
                                                    </div>
                                                    {order.technicianId === tech.id && <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-blue-600" />}
                                                 </DropdownMenuItem>
@@ -3020,7 +3032,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                         {(() => {
                             // Resolve Effective Status (Shadow Status from photos._status)
                             const rawStatus = order.status;
-                            const customStatus = (order.photos as any)?._status;
+                            const customStatus = order.photos?._status;
                             const effectiveStatus = customStatus && (rawStatus === 'processing' || rawStatus === 'pending') 
                                 ? customStatus 
                                 : rawStatus;
@@ -3402,10 +3414,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
                                     <span className="font-medium text-slate-700 dark:text-slate-300">
                                         {platformMap[order.platformId]?.name || '-'}
                                     </span>
-                                    {(order as any).subChannelId && subChannelMap[(order as any).subChannelId]?.name && (
+                                    {order.subChannelId && subChannelMap[order.subChannelId]?.name && (
                                         <>
                                             <span className="text-slate-300 dark:text-slate-600">|</span>
-                                            <span>{subChannelMap[(order as any).subChannelId]?.name}</span>
+                                            <span>{subChannelMap[order.subChannelId]?.name}</span>
                                         </>
                                     )}
                                 </div>

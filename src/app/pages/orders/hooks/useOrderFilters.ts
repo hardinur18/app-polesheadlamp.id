@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { DateRange } from 'react-day-picker';
 import { isWithinInterval, startOfDay, endOfDay } from 'date-fns';
-import { Order } from '../../master-data/data';
+import { Branch, CancelReason, Order, Platform, ServiceType, SubChannel, User, VehicleType } from '../../master-data/data';
 import { normalizeReasonFilterValue } from '../orderHelpers';
 import { getCancelReasonOptions } from '../cancelReasonOptions';
 import {
@@ -14,14 +14,14 @@ import {
 
 interface UseOrderFiltersParams {
   orders: Order[];
-  users: any[];
-  services: any[];
-  vehicles: any[];
-  branches: any[];
-  platforms: any[];
-  subChannels: any[];
-  cancelReasons: any[];
-  currentUser: any;
+  users: User[];
+  services: ServiceType[];
+  vehicles: VehicleType[];
+  branches: Branch[];
+  platforms: Platform[];
+  subChannels: SubChannel[];
+  cancelReasons: CancelReason[];
+  currentUser: User | null;
   currentRole: string;
   conflictOrderIds?: ReadonlySet<string>;
 }
@@ -124,7 +124,7 @@ export function useOrderFilters({
   }, [accessibleOrders, platforms]);
 
   const availableSubChannels = useMemo(() => {
-    const usedIds = new Set(accessibleOrders.map(o => (o as any).subChannelId).filter(Boolean));
+    const usedIds = new Set(accessibleOrders.map(o => o.subChannelId).filter(Boolean));
     return subChannels.filter(s => usedIds.has(s.id));
   }, [accessibleOrders, subChannels]);
 
@@ -173,7 +173,7 @@ export function useOrderFilters({
       const matchesPaymentStatus = paymentStatusFilter === 'all' || order.paymentStatus === paymentStatusFilter;
       const matchesPaymentValidation = paymentValidationFilter === 'all' || order.paymentValidation === paymentValidationFilter;
       const matchesAffiliate = affiliateFilter === 'all' || order.affiliateName === affiliateFilter;
-      const matchesSubChannel = subChannelFilter === 'all' || (order as any).subChannelId === subChannelFilter;
+      const matchesSubChannel = subChannelFilter === 'all' || order.subChannelId === subChannelFilter;
       const matchesScheduleConflict = scheduleConflictFilter === 'all' || Boolean(conflictOrderIds?.has(order.id));
 
       let matchesDate = true;
