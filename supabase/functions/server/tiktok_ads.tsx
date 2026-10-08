@@ -27,9 +27,8 @@ import type { PermissionKey } from "../../../src/app/data/permissions.ts";
 const app = new Hono();
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseServiceOrAnonKey =
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-const authSupabase = createClient(supabaseUrl, supabaseServiceOrAnonKey);
+const supabaseAuthKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const authSupabase = createClient(supabaseUrl, supabaseAuthKey);
 
 const TIKTOK_API_VERSION = Deno.env.get("TIKTOK_API_VERSION")?.trim() || "v1.3";
 const TIKTOK_BASE_URL = `https://business-api.tiktok.com/open_api/${TIKTOK_API_VERSION}`;

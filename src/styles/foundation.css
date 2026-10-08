@@ -15829,6 +15829,14 @@ body {
   border-radius: 10px;
 }
 
+.dailyAdsPlatformLogo.platformLogo {
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  border-color: rgba(226, 232, 240, 0.9);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
 .dailyAdsMetricStack,
 .dailyAdsEfficiencyStack,
 .dailyAdsMetricStack > div,
@@ -15929,6 +15937,24 @@ body {
   min-width: 0;
 }
 
+.dailyAdsRecapLastCheck {
+  display: flex;
+  margin-left: auto;
+  min-width: 150px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.dailyAdsRecapLastCheck strong {
+  color: #0f172a;
+  font-weight: 850;
+}
+
 .dailyAdsApiProviderStatusGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -15963,7 +15989,7 @@ body {
 }
 
 .dailyAdsApiProviderStatus small {
-  display: block;
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   color: #64748b;
@@ -15971,7 +15997,9 @@ body {
   font-weight: 650;
   line-height: 1.35;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .dailyAdsApiProviderStatus.is-success {
@@ -15982,6 +16010,15 @@ body {
 .dailyAdsApiProviderStatus.is-empty {
   border-color: #e2e8f0;
   background: #f8fafc;
+}
+
+.dailyAdsApiProviderStatus.is-pending {
+  border-color: #e2e8f0;
+  background: #ffffff;
+}
+
+.dailyAdsApiProviderStatus.is-pending strong {
+  color: #64748b;
 }
 
 .dailyAdsApiProviderStatus.is-loading {
@@ -16161,6 +16198,28 @@ body {
   white-space: nowrap;
 }
 
+.dailyAdsRecapEmptyState {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  max-width: 520px;
+  margin: 0 auto;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.dailyAdsRecapEmptyState strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.dailyAdsRecapEmptyState span {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
 .dailyAdsRecapStatusCell {
   display: grid;
   min-width: 0;
@@ -16173,7 +16232,7 @@ body {
   text-transform: capitalize;
 }
 
-.dailyAdsRecapStatusCell span:last-child {
+.dailyAdsRecapReasonText {
   display: block;
   max-width: 100%;
   overflow: hidden;
@@ -16183,6 +16242,17 @@ body {
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dailyAdsRecapMappingButton.uiButton {
+  width: fit-content;
+  min-height: 28px;
+  margin-top: 7px;
+  border-radius: 9px;
+  padding-inline: 9px;
+  color: #075bb5;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .dailyAdsRecapFooter {
@@ -16213,6 +16283,15 @@ body {
   .dailyAdsRecapDialog {
     width: calc(100vw - 32px) !important;
     max-width: calc(100vw - 32px) !important;
+  }
+
+  .dailyAdsSyncHealthPanel {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .dailyAdsSyncHealthActions {
+    justify-content: flex-start;
   }
 
   .dailyAdsRecapControlGrid {
@@ -16303,6 +16382,12 @@ body {
     padding: 10px 12px;
   }
 
+  .dailyAdsRecapLastCheck {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
   .dailyAdsApiProviderStatusGrid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -16386,6 +16471,190 @@ body {
   font-size: clamp(1.05rem, 4cqi, 1.34rem);
 }
 
+.dailyAdsSyncHealthPanel {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(260px, 1.2fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.055);
+  padding: 14px 16px;
+}
+
+.dailyAdsSyncHealthPanel.is-success {
+  border-color: #bbf7d0;
+  background: linear-gradient(180deg, #ffffff, #f7fef9);
+}
+
+.dailyAdsSyncHealthPanel.is-error {
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #ffffff, #fff8ed);
+}
+
+.dailyAdsSyncHealthMain {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.dailyAdsSyncHealthIcon {
+  display: inline-flex;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #e0ecff;
+  color: #0b63ce;
+}
+
+.dailyAdsSyncHealthPanel.is-success .dailyAdsSyncHealthIcon {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.dailyAdsSyncHealthPanel.is-error .dailyAdsSyncHealthIcon {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.dailyAdsSyncHealthCopy {
+  min-width: 0;
+}
+
+.dailyAdsSyncHealthTitle {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.dailyAdsSyncHealthTitle span {
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dailyAdsSyncHealthTitle strong {
+  color: #0f172a;
+  font-size: 0.94rem;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.dailyAdsSyncHealthCopy p {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dailyAdsSyncHealthProviders {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dailyAdsSyncHealthProvider {
+  display: inline-flex;
+  max-width: 180px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 780;
+  line-height: 1;
+  padding: 7px 9px;
+}
+
+.dailyAdsSyncHealthProvider strong {
+  color: #0f172a;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.dailyAdsSyncHealthProvider.is-success {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.dailyAdsSyncHealthProvider.is-error {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.dailyAdsSyncHealthProvider.is-loading {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.dailyAdsSyncHealthActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dailyAdsSyncHealthMeta {
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.dailyAdsSyncHealthButton.uiButton {
+  min-height: 38px;
+  border-radius: 12px;
+  padding-inline: 13px;
+}
+
+.dailyAdsSyncHistoryList {
+  display: flex;
+  grid-column: 1 / -1;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.dailyAdsSyncHistoryList span {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 7px 9px;
+}
+
+.dailyAdsSyncHistoryList strong {
+  color: #334155;
+  font-weight: 850;
+}
+
 .dailyAdsFilterPanel.filterPanel {
   display: grid;
   gap: 12px;
@@ -16411,13 +16680,23 @@ body {
   max-width: none;
 }
 
+.dailyAdsFilterBar .dailyAdsDateRange.uiPeriodPicker.uiPeriodPicker--foundation,
+.dailyAdsFilterBar .dailyAdsSearchInput.uiInput,
+.dailyAdsFilterBar .dailyAdsFilterButton.uiButton {
+  height: 52px !important;
+  min-height: 52px !important;
+  border-radius: 16px;
+}
+
+.dailyAdsSearchBox > .relative {
+  width: 100%;
+}
+
 .dailyAdsFilterButton.uiButton {
   position: relative;
-  min-height: 44px;
   min-width: 112px;
   justify-content: center;
   gap: 8px;
-  border-radius: 12px;
   background: #ffffff;
   color: #0f172a;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
@@ -16705,6 +16984,33 @@ body {
     padding: 12px !important;
     border-radius: 18px !important;
     box-shadow: 0 16px 34px -30px rgba(15, 23, 42, 0.4) !important;
+  }
+
+  .dailyAdsSyncHealthPanel {
+    gap: 12px;
+    border-radius: 16px;
+    padding: 12px;
+  }
+
+  .dailyAdsSyncHealthProviders,
+  .dailyAdsSyncHealthActions {
+    width: 100%;
+  }
+
+  .dailyAdsSyncHealthActions {
+    flex-wrap: wrap;
+  }
+
+  .dailyAdsSyncHealthButton.uiButton {
+    flex: 1 1 120px;
+  }
+
+  .dailyAdsSyncHealthMeta {
+    width: 100%;
+  }
+
+  .dailyAdsSyncHealthCopy p {
+    white-space: normal;
   }
 
   .dailyAdsFilterBar {
@@ -20564,23 +20870,59 @@ body {
 
 .operationalReportControlFilters {
   align-items: center;
-  display: grid;
-  gap: 12px;
-  max-width: 100%;
-  min-width: 0;
-  width: 100%;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  justify-content: flex-start;
+  max-width: none;
+  min-width: max-content;
+  width: max-content;
 }
 
-.operationalReportControlFilters.isDaily {
-  grid-template-areas:
-    "dateType dateRange search"
-    "technician role status";
-  grid-template-columns: minmax(154px, 0.75fr) minmax(220px, 1fr) minmax(320px, 1.45fr);
+.operationalReportControlFilters.isDaily,
+.operationalReportControlFilters.isSummary,
+.operationalReportControlFilters.isTransactions {
+  min-width: max-content;
+}
+
+.operationalReportFilterContent,
+.csDashboardFilterContent {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 10px;
+  scrollbar-color: rgba(148, 163, 184, 0.32) transparent;
+  scrollbar-width: thin;
+}
+
+.operationalReportFilterContent::-webkit-scrollbar,
+.csDashboardFilterContent::-webkit-scrollbar {
+  height: 7px;
+}
+
+.operationalReportFilterContent::-webkit-scrollbar-track,
+.csDashboardFilterContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.operationalReportFilterContent::-webkit-scrollbar-thumb,
+.csDashboardFilterContent::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  background-clip: padding-box;
+}
+
+.operationalReportFilterContent::-webkit-scrollbar-thumb:hover,
+.csDashboardFilterContent::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.36);
+  background-clip: padding-box;
 }
 
 .operationalReportFilterControl {
+  flex: 0 0 220px;
   min-width: 0;
-  width: 100%;
+  width: 220px;
 }
 
 .operationalReportFilterControl :where(.uiInput, .uiSelectTrigger, .uiPeriodPicker),
@@ -20614,26 +20956,38 @@ body {
 
 .operationalReportFilterSearch {
   grid-area: search;
+  flex-basis: 320px;
+  width: 320px;
 }
 
 .operationalReportFilterDateType {
   grid-area: dateType;
+  flex-basis: 210px;
+  width: 210px;
 }
 
 .operationalReportDateRange {
   grid-area: dateRange;
+  flex-basis: 260px;
+  width: 260px;
 }
 
 .operationalReportFilterTechnician {
   grid-area: technician;
+  flex-basis: 220px;
+  width: 220px;
 }
 
 .operationalReportFilterRole {
   grid-area: role;
+  flex-basis: 220px;
+  width: 220px;
 }
 
 .operationalReportFilterStatus {
   grid-area: status;
+  flex-basis: 220px;
+  width: 220px;
 }
 
 .operationalReportDatePicker.uiPeriodPicker {
@@ -20719,22 +21073,10 @@ body {
   color: #0f172a;
 }
 
-.operationalReportControlFilters.isSummary {
-  grid-template-areas:
-    "dateType dateRange search"
-    "technician role status";
-  grid-template-columns: minmax(154px, 0.75fr) minmax(220px, 1fr) minmax(320px, 1.45fr);
-}
-
-.operationalReportControlFilters.isTransactions {
-  grid-template-areas:
-    "transactionTabs dateRange search"
-    "technician role status";
-  grid-template-columns: minmax(276px, 1.08fr) minmax(220px, 0.95fr) minmax(310px, 1.45fr);
-}
-
 .operationalReportTransactionTabs {
   grid-area: transactionTabs;
+  flex-basis: 320px;
+  width: 320px;
 }
 
 .operationalReportTableCard {
@@ -21888,6 +22230,48 @@ body {
   }
 }
 
+/* Shared modal scroll guards */
+.appModalLayer {
+  -webkit-overflow-scrolling: touch;
+}
+
+.appModalPanel {
+  min-width: 0;
+}
+
+.appModalHeader,
+.appModalFooter {
+  flex: 0 0 auto;
+}
+
+.appModalBody {
+  min-width: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.appModalFooter {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 640px) {
+  .appModalLayer {
+    padding:
+      calc(10px + env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      calc(10px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+
+  .appModalHeader h2 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .appModalFooter {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
+
 /* Proof Asset Library */
 .proofAssetFilterPanel {
   overflow: hidden;
@@ -22107,8 +22491,10 @@ body {
 .proofAssetFormDialog.masterDataFormDialogContent,
 .proofAssetDetailDialog.masterDataFormDialogContent,
 .proofAssetForwardDialog.masterDataFormDialogContent {
+  max-height: min(90dvh, calc(100dvh - 24px));
   width: min(calc(100vw - 48px), 1040px);
   max-width: min(calc(100vw - 48px), 1040px);
+  overflow: hidden;
 }
 
 .proofAssetFormDialog .masterDataFormHeader,
@@ -22134,7 +22520,9 @@ body {
   grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px 44px 8px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .proofAssetUploadPanel {
@@ -22199,15 +22587,18 @@ body {
 }
 
 .proofAssetManagedForm .masterDataFormActions {
+  flex: 0 0 auto;
   margin-top: 0;
-  padding: 18px 44px 22px;
+  padding: 18px 44px calc(22px + env(safe-area-inset-bottom));
 }
 
 .proofAssetDetailBody {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px 44px 8px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .proofAssetDetailLayout {
@@ -22317,9 +22708,10 @@ body {
   align-items: center;
   border-top: 1px solid rgba(226, 232, 240, 0.92);
   display: flex;
+  flex: 0 0 auto;
   gap: 12px;
   justify-content: flex-end;
-  padding: 18px 44px 22px;
+  padding: 18px 44px calc(22px + env(safe-area-inset-bottom));
 }
 
 .proofAssetForwardBody {
@@ -22329,7 +22721,9 @@ body {
   grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr);
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px 44px 8px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .proofAssetForwardPreview {
@@ -22425,9 +22819,10 @@ body {
   align-items: center;
   border-top: 1px solid rgba(226, 232, 240, 0.92);
   display: flex;
+  flex: 0 0 auto;
   gap: 12px;
   justify-content: flex-end;
-  padding: 18px 44px 22px;
+  padding: 18px 44px calc(22px + env(safe-area-inset-bottom));
 }
 
 @media (max-width: 1080px) {
@@ -22455,6 +22850,7 @@ body {
   .proofAssetFormDialog.masterDataFormDialogContent,
   .proofAssetDetailDialog.masterDataFormDialogContent,
   .proofAssetForwardDialog.masterDataFormDialogContent {
+    max-height: calc(100dvh - 18px);
     max-width: calc(100vw - 18px);
     width: calc(100vw - 18px);
   }
@@ -22477,6 +22873,7 @@ body {
   .proofAssetManagedForm .masterDataFormActions {
     align-items: stretch;
     flex-direction: column-reverse;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
 
   .proofAssetDetailActions .uiButton,
@@ -23605,6 +24002,22 @@ body {
   gap: 8px;
 }
 
+.orderPaymentDialog.appModalPanel {
+  width: min(calc(100vw - 36px), 1120px);
+  max-width: min(calc(100vw - 36px), 1120px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 24px;
+  box-shadow: 0 30px 80px -48px rgba(15, 23, 42, 0.62);
+}
+
+.orderPaymentDialog .appModalBody {
+  min-height: 0;
+}
+
+.orderPaymentDialogBody {
+  min-width: 0;
+}
+
 .orderPhotoDialog.appModalPanel {
   width: min(calc(100vw - 36px), 920px);
   max-width: min(calc(100vw - 36px), 920px);
@@ -23631,11 +24044,23 @@ body {
   min-height: 320px;
 }
 
+.orderPhotoViewer .uiTabs {
+  min-height: 0;
+}
+
+.orderPhotoDialog .uiTabsList {
+  flex: 0 0 auto;
+}
+
 .orderPhotoTabContent {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   padding-right: 4px;
+}
+
+.orderPhotoPaymentUpload {
+  padding-bottom: 4px;
 }
 
 .orderPhotoImageFrame {
@@ -24156,6 +24581,24 @@ body {
     width: 100%;
   }
 
+  .orderPaymentDialog.appModalPanel {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px;
+  }
+
+  .orderPaymentDialog .appModalHeader,
+  .orderPaymentDialog .appModalBody,
+  .orderPaymentDialog .appModalFooter {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .orderPaymentDialog .appModalFooter > div {
+    align-items: stretch;
+  }
+
   .orderPhotoDialog.appModalPanel {
     width: calc(100vw - 20px);
     max-width: calc(100vw - 20px);
@@ -24190,6 +24633,10 @@ body {
     min-height: 0;
     overflow: visible;
     padding-bottom: calc(22px + env(safe-area-inset-bottom));
+  }
+
+  .orderPhotoPaymentUpload {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }
 
   .orderPhotoImageFrame {
@@ -27730,6 +28177,42 @@ body {
 
 .csDashboardFilterPanel.filterPanel {
   padding: 14px;
+}
+
+.csDashboardFilterRow {
+  display: inline-flex;
+  width: max-content;
+  min-width: max-content;
+  align-items: center;
+  gap: 10px;
+}
+
+.csDashboardFilterField {
+  flex: 0 0 240px;
+  width: 240px;
+  min-width: 0;
+}
+
+.csDashboardFilterDateField {
+  flex-basis: 272px;
+  width: 272px;
+}
+
+.csDashboardFilterActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.csDashboardActionButton.uiButton {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 14px;
+  padding-inline: 16px;
+  font-size: 0.82rem;
+  font-weight: 820;
 }
 
 .csDashboardFilterControl.uiSelectTrigger,

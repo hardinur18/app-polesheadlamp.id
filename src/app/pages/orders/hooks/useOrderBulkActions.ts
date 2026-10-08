@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Order } from '../../master-data/data';
 import { isReasonRequiredStatus } from '../cancelReasonOptions';
+import { getOrderCrudErrorMessage } from '../orderCrudErrors';
 import { logActivity } from '@/app/services/auditService';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -124,7 +125,7 @@ export function useOrderBulkActions({
       } catch (error: any) {
         console.error(error);
         failedIds.add(order.id);
-        failureDetails.push(`${order.customerName}: ${error?.message || 'Gagal diperbarui'}`);
+        failureDetails.push(`${order.customerName}: ${getOrderCrudErrorMessage(error, 'Gagal diperbarui')}`);
       }
     }
 

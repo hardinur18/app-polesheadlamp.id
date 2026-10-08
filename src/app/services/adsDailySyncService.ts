@@ -95,6 +95,47 @@ export type AdsDailySyncCommitResult = {
   updated: number;
 };
 
+export type AdsDailySyncRunKind = 'preview' | 'commit';
+
+export type AdsDailySyncHistoryItem = {
+  id: string;
+  createdAt: string;
+  kind: AdsDailySyncRunKind;
+  actorId?: string;
+  actorName?: string;
+  actorRole?: string;
+  range: { from: string; to: string };
+  filters: {
+    platformId?: string;
+    advertiserId?: string;
+    csId?: string;
+    mode?: AdsDailySyncMode;
+    preserveEdited?: boolean;
+  };
+  counts: {
+    inserted: number;
+    updated: number;
+    newRows: number;
+    updateRows: number;
+    skippedRows: number;
+    unmappedRows: number;
+  };
+  spend: number;
+  providerStatuses: AdsDailySyncProviderStatus[];
+  errors: string[];
+};
+
+export type RecordAdsDailySyncRunInput = Omit<AdsDailySyncHistoryItem, 'id' | 'createdAt'> & {
+  id?: string;
+  createdAt?: string;
+};
+
+export type AdsDailySyncRunResult = AdsDailySyncPreviewResult & {
+  inserted: number;
+  updated: number;
+  actionableCount: number;
+};
+
 type AdsSnapshotRow = MetaSnapshotRow | GoogleAdsSnapshotRow | TikTokAdsSnapshotRow;
 
 type IntegrationConfigs = {
@@ -108,6 +149,7 @@ type ProviderBuildResult = {
   rows: AdsDailySyncPreviewRow[];
   ignoredZeroActivityCount: number;
   ignoredInactiveAccountCount: number;
+  diagnosticMessage?: string;
 };
 
 const providerLabels: Record<AdsProviderKey, string> = {
@@ -121,6 +163,136 @@ const defaultFilters: Required<Pick<AdsDailySyncFilters, 'mode' | 'preserveEdite
   preserveEdited: true,
   mappedOnly: true,
 };
+
+const PROVIDER_PREVIEW_TIMEOUT_MS: Record<AdsProviderKey, number> = {
+  meta: 100_000,
+  google: 100_000,
+  tiktok: 100_000,
+};
+
+const ADS_DAILY_SYNC_HISTORY_STORAGE_KEY = 'rhi.dailyAds.syncHistory.v1';
+const ADS_DAILY_SYNC_HISTORY_LIMIT = 20;
+
+const createClientId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const safeHistoryNumber = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+
+const mapSyncRunFromDbRow = (row: any): AdsDailySyncHistoryItem => ({
+  id: String(row.id),
+  createdAt: row.created_at || new Date().toISOString(),
+  kind: row.run_kind === 'commit' ? 'commit' : 'preview',
+  actorId: row.actor_id || undefined,
+  actorName: row.actor_name || undefined,
+  actorRole: row.actor_role || undefined,
+  range: {
+    from: row.range_from || '',
+    to: row.range_to || row.range_from || '',
+  },
+  filters: {
+    platformId: row.platform_id || undefined,
+    advertiserId: row.advertiser_id || undefined,
+    csId: row.cs_id || undefined,
+    mode: row.mode || undefined,
+    preserveEdited: typeof row.preserve_edited === 'boolean' ? row.preserve_edited : undefined,
+  },
+  counts: {
+    inserted: safeHistoryNumber(row.inserted_count),
+    updated: safeHistoryNumber(row.updated_count),
+    newRows: safeHistoryNumber(row.new_count),
+    updateRows: safeHistoryNumber(row.update_count),
+    skippedRows: safeHistoryNumber(row.skipped_count),
+    unmappedRows: safeHistoryNumber(row.unmapped_count),
+  },
+  spend: safeHistoryNumber(row.spend),
+  providerStatuses: Array.isArray(row.provider_statuses) ? row.provider_statuses : [],
+  errors: Array.isArray(row.errors) ? row.errors.map(String) : [],
+});
+
+const readLocalSyncHistory = (): AdsDailySyncHistoryItem[] => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ADS_DAILY_SYNC_HISTORY_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed)
+      ? parsed
+          .filter((item): item is AdsDailySyncHistoryItem => Boolean(item?.id && item?.createdAt && item?.range))
+          .slice(0, ADS_DAILY_SYNC_HISTORY_LIMIT)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalSyncHistory = (rows: AdsDailySyncHistoryItem[]) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const sortedRows = [...rows]
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+      .slice(0, ADS_DAILY_SYNC_HISTORY_LIMIT);
+    window.localStorage.setItem(ADS_DAILY_SYNC_HISTORY_STORAGE_KEY, JSON.stringify(sortedRows));
+  } catch {
+    // Local history is a resilience cache only; DB writes remain the source of truth.
+  }
+};
+
+const upsertLocalSyncHistory = (item: AdsDailySyncHistoryItem) => {
+  const rowsById = new Map(readLocalSyncHistory().map((row) => [row.id, row]));
+  rowsById.set(item.id, item);
+  writeLocalSyncHistory([...rowsById.values()]);
+};
+
+const buildSyncHistoryItem = (input: RecordAdsDailySyncRunInput): AdsDailySyncHistoryItem => ({
+  id: input.id || createClientId(),
+  createdAt: input.createdAt || new Date().toISOString(),
+  kind: input.kind,
+  actorId: input.actorId,
+  actorName: input.actorName,
+  actorRole: input.actorRole,
+  range: input.range,
+  filters: input.filters,
+  counts: {
+    inserted: safeHistoryNumber(input.counts.inserted),
+    updated: safeHistoryNumber(input.counts.updated),
+    newRows: safeHistoryNumber(input.counts.newRows),
+    updateRows: safeHistoryNumber(input.counts.updateRows),
+    skippedRows: safeHistoryNumber(input.counts.skippedRows),
+    unmappedRows: safeHistoryNumber(input.counts.unmappedRows),
+  },
+  spend: safeHistoryNumber(input.spend),
+  providerStatuses: input.providerStatuses,
+  errors: input.errors,
+});
+
+const mapSyncHistoryItemToDbRow = (item: AdsDailySyncHistoryItem) => ({
+  id: item.id,
+  created_at: item.createdAt,
+  run_kind: item.kind,
+  actor_id: item.actorId || null,
+  actor_name: item.actorName || null,
+  actor_role: item.actorRole || null,
+  range_from: item.range.from,
+  range_to: item.range.to,
+  platform_id: item.filters.platformId || null,
+  advertiser_id: item.filters.advertiserId || null,
+  cs_id: item.filters.csId || null,
+  mode: item.filters.mode || null,
+  preserve_edited: item.filters.preserveEdited ?? null,
+  inserted_count: item.counts.inserted,
+  updated_count: item.counts.updated,
+  new_count: item.counts.newRows,
+  update_count: item.counts.updateRows,
+  skipped_count: item.counts.skippedRows,
+  unmapped_count: item.counts.unmappedRows,
+  spend: item.spend,
+  provider_statuses: item.providerStatuses,
+  errors: item.errors,
+});
 
 const normalizeLookupKey = (value: unknown) =>
   String(value || '')
@@ -177,6 +349,56 @@ export const getAdsProviderKeyByPlatformName = (name: unknown): AdsProviderKey |
 const getDailyAdKey = (row: Pick<DailyAd, 'date' | 'adAccountId'>) =>
   `${row.date}|${row.adAccountId}`;
 
+const mapDailyAdFromDbRow = (row: any): DailyAd => ({
+  id: row.id,
+  date: row.date,
+  advertiserId: row.advertiser_id,
+  platformId: row.platform_id,
+  subChannelId: row.sub_channel_id || undefined,
+  adAccountId: row.ad_account_id,
+  csId: row.cs_id || undefined,
+  amountSpent: Number(row.amount_spent) || 0,
+  leadsDashboard: Number(row.leads_dashboard) || 0,
+  ppnAmount: Number(row.ppn_amount) || 0,
+  feeAmount: Number(row.fee_amount) || 0,
+  editCount: Number(row.edit_count) || 0,
+});
+
+const mergeDailyAdsByBusinessKey = (left: DailyAd[], right: DailyAd[]) => {
+  const rowsByKey = new Map<string, DailyAd>();
+  [...left, ...right].forEach((row) => {
+    if (!row.date || !row.adAccountId) return;
+    rowsByKey.set(getDailyAdKey(row), row);
+  });
+  return [...rowsByKey.values()];
+};
+
+async function fetchDailyAdsForRange(range: { from: string; to: string }): Promise<DailyAd[]> {
+  const rows: DailyAd[] = [];
+  const pageSize = 1000;
+  let page = 0;
+
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('daily_ads')
+      .select('*')
+      .gte('date', range.from)
+      .lte('date', range.to)
+      .order('date', { ascending: false })
+      .range(from, to);
+
+    if (error) throw new Error(error.message);
+    const pageRows = data || [];
+    rows.push(...pageRows.map(mapDailyAdFromDbRow));
+    if (pageRows.length < pageSize) break;
+    page += 1;
+  }
+
+  return rows;
+}
+
 const getUserName = (users: User[], id?: string) =>
   users.find((user) => user.id === id)?.name || 'Tidak diketahui';
 
@@ -215,11 +437,87 @@ const getErrorMessage = (provider: AdsProviderKey, reason: unknown) => {
   return rawMessage;
 };
 
+const withProviderTimeout = async <T,>(provider: AdsProviderKey, request: Promise<T>): Promise<T> => {
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(`${providerLabels[provider]} terlalu lama merespons. Coba refresh lagi atau cek koneksi API provider.`));
+    }, PROVIDER_PREVIEW_TIMEOUT_MS[provider]);
+  });
+
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
+  }
+};
+
+const isProviderTimeoutError = (reason: unknown) => {
+  const message = reason instanceof Error ? reason.message : String(reason || '');
+  return /terlalu lama merespons/i.test(message);
+};
+
 const getEmptyMessage = (provider: AdsProviderKey, enabledConfigCount: number) => {
   if (enabledConfigCount === 0) {
     return `Belum ada akun ${providerLabels[provider]} aktif yang dipetakan ke Master Data Akun Iklan.`;
   }
   return `${enabledConfigCount} akun terpetakan, tetapi tidak ada snapshot pada periode/filter ini.`;
+};
+
+type ExternalAccountTarget = {
+  accountId: string;
+  accountName?: string;
+  groupId?: string;
+  groupName?: string;
+};
+
+const uniqueExternalAccountTargets = (values: ExternalAccountTarget[]) => {
+  const seen = new Set<string>();
+  const result: ExternalAccountTarget[] = [];
+
+  values.forEach((value) => {
+    const raw = String(value.accountId || '').trim();
+    const key = normalizeExternalAccountId(raw);
+    if (!raw || !key || seen.has(key)) return;
+    seen.add(key);
+    result.push({
+      accountId: raw,
+      accountName: value.accountName?.trim() || undefined,
+      groupId: value.groupId?.trim() || undefined,
+      groupName: value.groupName?.trim() || undefined,
+    });
+  });
+
+  return result;
+};
+
+const getSnapshotMergeIdentity = (row: AdsSnapshotRow, index: number) => {
+  const externalId = normalizeExternalAccountId(row.externalAccountId);
+  if (externalId) return `external:${externalId}`;
+
+  const internalId = String(row.internalAdAccountId || '').trim();
+  if (internalId) return `internal:${internalId}`;
+
+  const externalName = normalizeFlexibleLookupKey(row.externalAccountName);
+  if (externalName) {
+    const groupKey =
+      normalizeExternalAccountId(row.externalGroupId) ||
+      normalizeFlexibleLookupKey(row.externalGroupName) ||
+      'no-group';
+    return `name:${groupKey}:${externalName}`;
+  }
+
+  return `row:${String(row.id || index)}`;
+};
+
+const mergeSnapshotRowsByBusinessKey = (rows: AdsSnapshotRow[]) => {
+  const merged = new Map<string, AdsSnapshotRow>();
+  rows.forEach((row, index) => {
+    const key = `${row.platformKey}|${row.snapshotDate}|${getSnapshotMergeIdentity(row, index)}`;
+    if (!key) return;
+    merged.set(key, row);
+  });
+  return [...merged.values()];
 };
 
 export async function loadAdsDailySyncIntegrationConfigs(): Promise<IntegrationConfigs> {
@@ -236,6 +534,54 @@ export async function loadAdsDailySyncIntegrationConfigs(): Promise<IntegrationC
     tiktok: tiktok.status === 'fulfilled' ? tiktok.value : [],
     mappings: mappings.status === 'fulfilled' ? mappings.value : [],
   };
+}
+
+export async function fetchRecentAdsDailySyncRuns(limit = 5): Promise<AdsDailySyncHistoryItem[]> {
+  const localRows = readLocalSyncHistory().slice(0, limit);
+
+  try {
+    const { data, error } = await supabase
+      .from('daily_ads_sync_runs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    const remoteRows = (data || []).map(mapSyncRunFromDbRow);
+    if (remoteRows.length > 0) {
+      writeLocalSyncHistory(remoteRows);
+      return remoteRows;
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[adsDailySync] falling back to local sync history', error);
+    }
+  }
+
+  return localRows;
+}
+
+export async function recordAdsDailySyncRun(input: RecordAdsDailySyncRunInput): Promise<AdsDailySyncHistoryItem> {
+  const item = buildSyncHistoryItem(input);
+  upsertLocalSyncHistory(item);
+
+  try {
+    const { data, error } = await supabase
+      .from('daily_ads_sync_runs')
+      .insert(mapSyncHistoryItemToDbRow(item))
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    const savedItem = data ? mapSyncRunFromDbRow(data) : item;
+    upsertLocalSyncHistory(savedItem);
+    return savedItem;
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.warn('[adsDailySync] sync history DB write skipped', error);
+    }
+    return item;
+  }
 }
 
 const resolveAdAccountFromSnapshot = (
@@ -333,12 +679,14 @@ const buildPreviewRowsForProvider = ({
   context,
   configs,
   filters,
+  range,
 }: {
   snapshotRows: AdsSnapshotRow[];
   sourceLabel: string;
   context: AdsDailySyncContext;
   configs: IntegrationConfigs;
   filters: Required<Pick<AdsDailySyncFilters, 'mode' | 'preserveEdited' | 'mappedOnly'>> & AdsDailySyncFilters;
+  range: { from: string; to: string };
 }): ProviderBuildResult => {
   const existingByKey = new Map(context.dailyAds.map((row) => [getDailyAdKey(row), row]));
   const activeAccounts = context.adAccounts.filter((account) => account.status === 'active');
@@ -347,6 +695,10 @@ const buildPreviewRowsForProvider = ({
   let ignoredInactiveAccountCount = 0;
 
   const rows = snapshotRows.flatMap<AdsDailySyncPreviewRow>((snapshot) => {
+    if (snapshot.snapshotDate < range.from || snapshot.snapshotDate > range.to) {
+      return [];
+    }
+
     const spend = Number(snapshot.spend) || 0;
     const leads = Math.round(Number(snapshot.conversions) || 0);
     if (spend <= 0 && leads <= 0) {
@@ -354,13 +706,15 @@ const buildPreviewRowsForProvider = ({
       return [];
     }
 
-    const inactiveAccount = resolveAdAccountFromSnapshot(snapshot, inactiveAccounts, context.platforms, configs);
-    if (inactiveAccount) {
-      ignoredInactiveAccountCount += 1;
-      return [];
+    const account = resolveAdAccountFromSnapshot(snapshot, activeAccounts, context.platforms, configs);
+    if (!account) {
+      const inactiveAccount = resolveAdAccountFromSnapshot(snapshot, inactiveAccounts, context.platforms, configs);
+      if (inactiveAccount) {
+        ignoredInactiveAccountCount += 1;
+        return [];
+      }
     }
 
-    const account = resolveAdAccountFromSnapshot(snapshot, activeAccounts, context.platforms, configs);
     if (!account) {
       return [{
         id: `${sourceLabel}:${snapshot.snapshotDate}:${snapshot.externalAccountId}`,
@@ -438,6 +792,59 @@ const buildPreviewRowsForProvider = ({
   return { rows, ignoredZeroActivityCount, ignoredInactiveAccountCount };
 };
 
+const buildExistingDailyAdPreviewRows = (
+  dailyAds: DailyAd[],
+  context: AdsDailySyncContext,
+  filters: AdsDailySyncFilters,
+): AdsDailySyncPreviewRow[] => {
+  const accountById = new Map(context.adAccounts.map((account) => [account.id, account]));
+  const userNameById = new Map(context.users.map((user) => [user.id, user.name]));
+  const rowsByKey = new Map<string, DailyAd>();
+
+  dailyAds.forEach((row) => {
+    if (!row.date || !row.adAccountId) return;
+    rowsByKey.set(getDailyAdKey(row), row);
+  });
+
+  return [...rowsByKey.values()]
+    .filter((row) => {
+      const account = accountById.get(row.adAccountId);
+      if (!account || account.status !== 'active') return false;
+      if (filters.platformId && filters.platformId !== 'all' && row.platformId !== filters.platformId) return false;
+      if (filters.advertiserId && filters.advertiserId !== 'all' && row.advertiserId !== filters.advertiserId) return false;
+      if (filters.csId && filters.csId !== 'all' && row.csId !== filters.csId) return false;
+      if (filters.adAccountId && filters.adAccountId !== 'all' && row.adAccountId !== filters.adAccountId) return false;
+      return true;
+    })
+    .map((row) => {
+      const account = accountById.get(row.adAccountId);
+      return {
+        id: `daily_ads:${row.date}:${row.adAccountId}`,
+        date: row.date,
+        platformId: row.platformId,
+        adAccountId: row.adAccountId,
+        advertiserId: row.advertiserId,
+        csId: row.csId || undefined,
+        subChannelId: row.subChannelId || undefined,
+        amountSpent: Number(row.amountSpent) || 0,
+        leadsDashboard: Number(row.leadsDashboard) || 0,
+        ppnAmount: Number(row.ppnAmount) || 0,
+        feeAmount: Number(row.feeAmount) || 0,
+        sourceLabel: 'Database',
+        accountName: account?.accountName || 'Akun tidak ditemukan',
+        advertiserName: userNameById.get(row.advertiserId) || 'Tidak diketahui',
+        status: 'skip' as const,
+        reason: 'Sudah tersimpan di Iklan Harian.',
+        existing: row,
+      };
+    });
+};
+
+const getPreviewRowMergeKey = (row: AdsDailySyncPreviewRow) =>
+  row.status === 'unmapped'
+    ? row.id
+    : getDailyAdKey(row);
+
 export const reconcileAdsDailySyncPreviewRows = (
   rows: AdsDailySyncPreviewRow[],
   context: AdsDailySyncContext,
@@ -466,6 +873,10 @@ export const reconcileAdsDailySyncPreviewRows = (
       return { ...row, existing: undefined, status: 'new' as const, reason: 'Siap ditambahkan.' };
     }
 
+    if (row.sourceLabel === 'Database') {
+      return { ...row, existing, status: 'skip' as const, reason: 'Sudah tersimpan di Iklan Harian.' };
+    }
+
     if (mergedFilters.mode === 'update-existing') {
       if (mergedFilters.preserveEdited && (existing.editCount || 0) > 0) {
         return { ...row, existing, status: 'skip' as const, reason: 'Data pernah dikoreksi manual, tidak ditimpa.' };
@@ -482,34 +893,114 @@ export async function buildAdsDailySyncPreview({
   context,
   filters = {},
   onProviderStatus,
+  onPreviewRows,
 }: {
   range: { from: string; to: string };
   context: AdsDailySyncContext;
   filters?: AdsDailySyncFilters;
   onProviderStatus?: (statuses: AdsDailySyncProviderStatus[]) => void;
+  onPreviewRows?: (rows: AdsDailySyncPreviewRow[]) => void;
 }): Promise<AdsDailySyncPreviewResult> {
   const mergedFilters = { ...defaultFilters, ...filters };
+  const currentDailyAds = await fetchDailyAdsForRange(range);
+  const resolvedContext: AdsDailySyncContext = {
+    ...context,
+    dailyAds: mergeDailyAdsByBusinessKey(context.dailyAds, currentDailyAds),
+  };
   const configs = await loadAdsDailySyncIntegrationConfigs();
-  const platformNameById = new Map(context.platforms.map((platform) => [platform.id, platform.name]));
+  const existingPreviewRows = buildExistingDailyAdPreviewRows(currentDailyAds, resolvedContext, mergedFilters);
+  const prepareRowsForDisplay = (apiRows: AdsDailySyncPreviewRow[]) => {
+    const mergedRows = new Map<string, AdsDailySyncPreviewRow>();
+    existingPreviewRows.forEach((row) => mergedRows.set(getPreviewRowMergeKey(row), row));
+    apiRows.forEach((row) => mergedRows.set(getPreviewRowMergeKey(row), row));
+
+    return reconcileAdsDailySyncPreviewRows(
+      [...mergedRows.values()].sort((left, right) => left.date.localeCompare(right.date) || left.accountName.localeCompare(right.accountName)),
+      resolvedContext,
+      mergedFilters,
+    );
+  };
+
+  if (existingPreviewRows.length > 0) {
+    onPreviewRows?.(prepareRowsForDisplay([]));
+  }
+
+  const platformNameById = new Map(resolvedContext.platforms.map((platform) => [platform.id, platform.name]));
   const selectedProviderKey =
     mergedFilters.platformId && mergedFilters.platformId !== 'all'
       ? getAdsProviderKeyByPlatformName(platformNameById.get(mergedFilters.platformId))
       : null;
   const shouldLoadProvider = (provider: AdsProviderKey) =>
     !mergedFilters.platformId || mergedFilters.platformId === 'all' || selectedProviderKey === provider;
-  const getEnabledConfigCount = (provider: AdsProviderKey) => {
-    if (provider === 'meta') {
-      return configs.meta.filter((config) => config.enabled && config.liveMetaAccountId).length +
-        configs.mappings.filter((mapping) => mapping.status === 'active' && mapping.platformKey === 'meta').length;
-    }
-    if (provider === 'google') {
-      return configs.google.filter((config) => config.enabled && config.liveGoogleCustomerId).length +
-        configs.mappings.filter((mapping) => mapping.status === 'active' && mapping.platformKey === 'google').length;
-    }
-    return configs.tiktok.filter((config) => config.enabled && config.liveTikTokAdvertiserId).length +
-      configs.mappings.filter((mapping) => mapping.status === 'active' && mapping.platformKey === 'tiktok').length;
-  };
+  const getActiveAdAccountIdsForProvider = (provider: AdsProviderKey) => new Set(
+    resolvedContext.adAccounts
+      .filter((account) => {
+        if (account.status !== 'active') return false;
+        if (getAdsProviderKeyByPlatformName(platformNameById.get(account.platformId)) !== provider) return false;
+        if (mergedFilters.platformId && mergedFilters.platformId !== 'all' && account.platformId !== mergedFilters.platformId) return false;
+        if (mergedFilters.adAccountId && mergedFilters.adAccountId !== 'all' && account.id !== mergedFilters.adAccountId) return false;
+        return true;
+      })
+      .map((account) => account.id),
+  );
+  const activeAccountById = new Map(
+    resolvedContext.adAccounts
+      .filter((account) => account.status === 'active')
+      .map((account) => [account.id, account]),
+  );
+  const getConfiguredExternalAccountTargets = (provider: AdsProviderKey) => {
+    const activeAccountIds = getActiveAdAccountIdsForProvider(provider);
+    const mappedTargets = configs.mappings
+      .filter((mapping) =>
+        mapping.status === 'active' &&
+        mapping.platformKey === provider &&
+        activeAccountIds.has(mapping.internalAdAccountId)
+      )
+      .map((mapping) => ({
+        accountId: mapping.externalAccountId,
+        accountName: activeAccountById.get(mapping.internalAdAccountId)?.accountName,
+      }));
 
+    if (provider === 'meta') {
+      return uniqueExternalAccountTargets([
+        ...configs.meta
+          .filter((config) => config.enabled && config.liveMetaAccountId && activeAccountIds.has(config.adAccountId))
+          .map((config) => ({
+            accountId: config.liveMetaAccountId || '',
+            accountName: config.liveMetaAccountName || activeAccountById.get(config.adAccountId)?.accountName,
+            groupId: config.businessManagerId,
+            groupName: config.businessManagerName,
+          })),
+        ...mappedTargets,
+      ]);
+    }
+
+    if (provider === 'google') {
+      return uniqueExternalAccountTargets([
+        ...configs.google
+          .filter((config) => config.enabled && config.liveGoogleCustomerId && activeAccountIds.has(config.adAccountId))
+          .map((config) => ({
+            accountId: config.liveGoogleCustomerId || '',
+            accountName: config.liveGoogleCustomerName || activeAccountById.get(config.adAccountId)?.accountName,
+            groupId: config.managerCustomerId,
+            groupName: config.managerCustomerName,
+          })),
+        ...mappedTargets,
+      ]);
+    }
+
+    return uniqueExternalAccountTargets([
+      ...configs.tiktok
+        .filter((config) => config.enabled && config.liveTikTokAdvertiserId && activeAccountIds.has(config.adAccountId))
+        .map((config) => ({
+          accountId: config.liveTikTokAdvertiserId || '',
+          accountName: config.liveTikTokAdvertiserName || activeAccountById.get(config.adAccountId)?.accountName,
+          groupId: config.businessCenterId,
+          groupName: config.businessCenterName,
+        })),
+      ...mappedTargets,
+    ]);
+  };
   const tasks: Array<{
     key: AdsProviderKey;
     label: string;
@@ -518,75 +1009,286 @@ export async function buildAdsDailySyncPreview({
   }> = [];
 
   if (shouldLoadProvider('meta')) {
+    const metaTargets = getConfiguredExternalAccountTargets('meta');
+    const buildMetaResult = async () => {
+      let fulfilledRows: AdsSnapshotRow[] = [];
+      const diagnostics: string[] = [];
+      const rejectedMessages: string[] = [];
+
+      try {
+        const broadPayload = await syncMetaSnapshotDataset({
+          from: range.from,
+          to: range.to,
+          force: true,
+          minFreshMinutes: 0,
+          mappedOnly: false,
+        });
+        fulfilledRows = broadPayload.rows || [];
+
+        const servedFrom = broadPayload.metadata?.servedFrom;
+        if (servedFrom && servedFrom !== 'meta-live') {
+          diagnostics.push(`Meta memakai ${servedFrom}, bukan live penuh.`);
+        }
+      } catch (error) {
+        rejectedMessages.push(error instanceof Error ? error.message : String(error || 'Meta sync broad gagal.'));
+      }
+
+      if (fulfilledRows.length === 0 && metaTargets.length > 0) {
+        const metaRequests = metaTargets.map((target) => syncMetaSnapshotDataset({
+          from: range.from,
+          to: range.to,
+          accountId: target.accountId,
+          accountName: target.accountName,
+          force: true,
+          minFreshMinutes: 0,
+          mappedOnly: false,
+        }));
+        const results = await Promise.allSettled(metaRequests);
+        fulfilledRows = results.flatMap((result) =>
+          result.status === 'fulfilled' ? result.value.rows || [] : [],
+        );
+        rejectedMessages.push(
+          ...results
+            .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+            .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason || 'Meta sync per akun gagal.')),
+        );
+
+        if (fulfilledRows.length > 0) {
+          diagnostics.push(`${metaTargets.length} akun Meta aktif diminta per akun setelah broad live kosong.`);
+        }
+      }
+
+      if (fulfilledRows.length === 0 && rejectedMessages.length > 0) {
+        throw new Error(rejectedMessages[0]);
+      }
+
+      const buildResult = buildPreviewRowsForProvider({
+        snapshotRows: mergeSnapshotRowsByBusinessKey(fulfilledRows),
+        sourceLabel: providerLabels.meta,
+        context: resolvedContext,
+        configs,
+        filters: mergedFilters,
+        range,
+      });
+
+      if (metaTargets.length > 0 && fulfilledRows.length === 0) {
+        diagnostics.push(`${metaTargets.length} akun Meta aktif sudah dicek, tetapi API mengembalikan 0 row untuk periode ini.`);
+      }
+      if (rejectedMessages.length > 0) {
+        diagnostics.push(`${rejectedMessages.length} request Meta gagal: ${rejectedMessages.slice(0, 2).join(' ')}`);
+      }
+
+      return {
+        ...buildResult,
+        diagnosticMessage: diagnostics.join(' ') || undefined,
+      };
+    };
+
     tasks.push({
       key: 'meta',
       label: providerLabels.meta,
-      enabledConfigCount: getEnabledConfigCount('meta'),
-      request: syncMetaSnapshotDataset({
-        from: range.from,
-        to: range.to,
-        force: true,
-        minFreshMinutes: 0,
-        mappedOnly: mergedFilters.mappedOnly,
-      }).then((payload) => buildPreviewRowsForProvider({
-        snapshotRows: payload.rows || [],
-        sourceLabel: providerLabels.meta,
-        context,
-        configs,
-        filters: mergedFilters,
-      })),
+      enabledConfigCount: metaTargets.length,
+      request: buildMetaResult(),
     });
   }
 
   if (shouldLoadProvider('google')) {
+    const googleTargets = getConfiguredExternalAccountTargets('google');
+    const googleRequests = googleTargets.length > 0
+      ? googleTargets.map((target) => syncGoogleAdsSnapshotDataset({
+          from: range.from,
+          to: range.to,
+          managerId: target.groupId,
+          customerId: target.accountId,
+          force: true,
+          minFreshMinutes: 0,
+        }))
+      : [syncGoogleAdsSnapshotDataset({
+          from: range.from,
+          to: range.to,
+          force: true,
+          minFreshMinutes: 0,
+        })];
+
     tasks.push({
       key: 'google',
       label: providerLabels.google,
-      enabledConfigCount: getEnabledConfigCount('google'),
-      request: syncGoogleAdsSnapshotDataset({
-        from: range.from,
-        to: range.to,
-        force: true,
-        minFreshMinutes: 0,
-      }).then((payload) => buildPreviewRowsForProvider({
-        snapshotRows: payload.rows || [],
-        sourceLabel: providerLabels.google,
-        context,
-        configs,
-        filters: mergedFilters,
-      })),
+      enabledConfigCount: googleTargets.length,
+      request: Promise.allSettled(googleRequests).then(async (results) => {
+        const requestedCount = googleTargets.length;
+        let fulfilledRows = results.flatMap((result) =>
+          result.status === 'fulfilled' ? result.value.rows || [] : [],
+        );
+        const rejectedMessages = results
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason || 'Google Ads sync gagal.'));
+
+        let usedBroadFallback = false;
+        let broadFallbackMessage = '';
+        if (requestedCount > 0 && fulfilledRows.length === 0) {
+          try {
+            const fallbackPayload = await syncGoogleAdsSnapshotDataset({
+              from: range.from,
+              to: range.to,
+              force: true,
+              minFreshMinutes: 0,
+            });
+            const fallbackRows = fallbackPayload.rows || [];
+            if (fallbackRows.length > 0) {
+              fulfilledRows = fallbackRows;
+              usedBroadFallback = true;
+            } else {
+              broadFallbackMessage = 'Fallback semua akun Google Ads juga mengembalikan 0 row.';
+            }
+          } catch (error) {
+            const fallbackError = error instanceof Error ? error.message : String(error || 'Fallback semua akun Google Ads gagal.');
+            broadFallbackMessage = `Fallback semua akun Google Ads gagal: ${fallbackError}`;
+          }
+        }
+
+        if (
+          fulfilledRows.length === 0 &&
+          rejectedMessages.length === results.length &&
+          rejectedMessages.length > 0 &&
+          !broadFallbackMessage
+        ) {
+          throw new Error(rejectedMessages[0]);
+        }
+
+        const buildResult = buildPreviewRowsForProvider({
+          snapshotRows: mergeSnapshotRowsByBusinessKey(fulfilledRows),
+          sourceLabel: providerLabels.google,
+          context: resolvedContext,
+          configs,
+          filters: mergedFilters,
+          range,
+        });
+
+        const diagnostics: string[] = [];
+        if (usedBroadFallback) {
+          diagnostics.push(`${requestedCount} akun Google Ads aktif diminta per akun, lalu fallback semua akun Google Ads dipakai.`);
+        } else if (requestedCount > 0 && fulfilledRows.length === 0) {
+          diagnostics.push(`${requestedCount} akun Google Ads aktif sudah diminta, tetapi API mengembalikan 0 row untuk periode ini.`);
+        }
+        if (broadFallbackMessage) {
+          diagnostics.push(broadFallbackMessage);
+        }
+        if (rejectedMessages.length > 0) {
+          diagnostics.push(`${rejectedMessages.length} akun gagal: ${rejectedMessages.slice(0, 2).join(' ')}`);
+        }
+
+        return {
+          ...buildResult,
+          diagnosticMessage: diagnostics.join(' ') || undefined,
+        };
+      }),
     });
   }
 
   if (shouldLoadProvider('tiktok')) {
+    const tiktokTargets = getConfiguredExternalAccountTargets('tiktok');
+    const tiktokRequests = tiktokTargets.length > 0
+      ? tiktokTargets.map((target) => syncTikTokAdsSnapshotDataset({
+          from: range.from,
+          to: range.to,
+          businessCenterId: target.groupId,
+          advertiserId: target.accountId,
+          force: true,
+          minFreshMinutes: 0,
+        }))
+      : [syncTikTokAdsSnapshotDataset({
+          from: range.from,
+          to: range.to,
+          force: true,
+          minFreshMinutes: 0,
+        })];
+
     tasks.push({
       key: 'tiktok',
       label: providerLabels.tiktok,
-      enabledConfigCount: getEnabledConfigCount('tiktok'),
-      request: syncTikTokAdsSnapshotDataset({
-        from: range.from,
-        to: range.to,
-        force: true,
-        minFreshMinutes: 0,
-      }).then((payload) => buildPreviewRowsForProvider({
-        snapshotRows: payload.rows || [],
-        sourceLabel: providerLabels.tiktok,
-        context,
-        configs,
-        filters: mergedFilters,
-      })),
+      enabledConfigCount: tiktokTargets.length,
+      request: Promise.allSettled(tiktokRequests).then(async (results) => {
+        const requestedCount = tiktokTargets.length;
+        let fulfilledRows = results.flatMap((result) =>
+          result.status === 'fulfilled' ? result.value.rows || [] : [],
+        );
+        const rejectedMessages = results
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason || 'TikTok Ads sync gagal.'));
+
+        let usedBroadFallback = false;
+        let broadFallbackMessage = '';
+        if (requestedCount > 0 && fulfilledRows.length === 0) {
+          try {
+            const fallbackPayload = await syncTikTokAdsSnapshotDataset({
+              from: range.from,
+              to: range.to,
+              force: true,
+              minFreshMinutes: 0,
+            });
+            const fallbackRows = fallbackPayload.rows || [];
+            if (fallbackRows.length > 0) {
+              fulfilledRows = fallbackRows;
+              usedBroadFallback = true;
+            } else {
+              broadFallbackMessage = 'Fallback semua akun TikTok Ads juga mengembalikan 0 row.';
+            }
+          } catch (error) {
+            const fallbackError = error instanceof Error ? error.message : String(error || 'Fallback semua akun TikTok Ads gagal.');
+            broadFallbackMessage = `Fallback semua akun TikTok Ads gagal: ${fallbackError}`;
+          }
+        }
+
+        if (
+          fulfilledRows.length === 0 &&
+          rejectedMessages.length === results.length &&
+          rejectedMessages.length > 0 &&
+          !broadFallbackMessage
+        ) {
+          throw new Error(rejectedMessages[0]);
+        }
+
+        const buildResult = buildPreviewRowsForProvider({
+          snapshotRows: mergeSnapshotRowsByBusinessKey(fulfilledRows),
+          sourceLabel: providerLabels.tiktok,
+          context: resolvedContext,
+          configs,
+          filters: mergedFilters,
+          range,
+        });
+
+        const diagnostics: string[] = [];
+        if (usedBroadFallback) {
+          diagnostics.push(`${requestedCount} akun TikTok Ads aktif diminta per akun, lalu fallback semua akun TikTok Ads dipakai.`);
+        } else if (requestedCount > 0 && fulfilledRows.length === 0) {
+          diagnostics.push(`${requestedCount} akun TikTok Ads aktif sudah diminta, tetapi API mengembalikan 0 row untuk periode ini.`);
+        }
+        if (broadFallbackMessage) {
+          diagnostics.push(broadFallbackMessage);
+        }
+        if (rejectedMessages.length > 0) {
+          diagnostics.push(`${rejectedMessages.length} akun gagal: ${rejectedMessages.slice(0, 2).join(' ')}`);
+        }
+
+        return {
+          ...buildResult,
+          diagnosticMessage: diagnostics.join(' ') || undefined,
+        };
+      }),
     });
   }
 
   if (tasks.length === 0) {
+    const fallbackRows = prepareRowsForDisplay([]);
+    onPreviewRows?.(fallbackRows);
     return {
-      rows: [],
+      rows: fallbackRows,
       providerStatuses: [],
       errors: [],
-      insertedCount: 0,
-      updatedCount: 0,
-      skippedCount: 0,
-      unmappedCount: 0,
+      insertedCount: fallbackRows.filter((row) => row.status === 'new').length,
+      updatedCount: fallbackRows.filter((row) => row.status === 'update').length,
+      skippedCount: fallbackRows.filter((row) => row.status === 'skip').length,
+      unmappedCount: fallbackRows.filter((row) => row.status === 'unmapped').length,
     };
   }
 
@@ -609,8 +1311,11 @@ export async function buildAdsDailySyncPreview({
 
   await Promise.allSettled(tasks.map(async (task) => {
     try {
-      const buildResult = await task.request;
+      const buildResult = await withProviderTimeout(task.key, task.request);
       rows.push(...buildResult.rows);
+      if (rows.length > 0 || existingPreviewRows.length > 0) {
+        onPreviewRows?.(prepareRowsForDisplay(rows));
+      }
       const ignoredMessage = buildResult.ignoredZeroActivityCount > 0
         ? ` ${buildResult.ignoredZeroActivityCount} snapshot kosong dilewati.`
         : '';
@@ -624,27 +1329,29 @@ export async function buildAdsDailySyncPreview({
         state: buildResult.rows.length > 0 ? 'success' : 'empty',
         count: buildResult.rows.length,
         message: buildResult.rows.length > 0
-          ? `${buildResult.rows.length} snapshot terbaca.${ignoredMessage}${inactiveMessage}`
-          : `${getEmptyMessage(task.key, task.enabledConfigCount)}${ignoredMessage}${inactiveMessage}`,
+          ? `${buildResult.rows.length} snapshot terbaca.${ignoredMessage}${inactiveMessage}${buildResult.diagnosticMessage ? ` ${buildResult.diagnosticMessage}` : ''}`
+          : `${buildResult.diagnosticMessage || getEmptyMessage(task.key, task.enabledConfigCount)}${ignoredMessage}${inactiveMessage}`,
       });
     } catch (reason) {
       const message = getErrorMessage(task.key, reason);
-      errors.push(`${task.label}: ${message}`);
+      const isTimeout = isProviderTimeoutError(reason);
+      if (!isTimeout) {
+        errors.push(`${task.label}: ${message}`);
+      }
       setStatus({
         key: task.key,
         label: task.label,
-        state: 'error',
+        state: isTimeout ? 'empty' : 'error',
         count: 0,
-        message,
+        message: isTimeout
+          ? `${task.label} belum selesai. Provider dilewati sementara supaya preview lain tetap tampil.`
+          : message,
       });
     }
   }));
 
-  const sortedRows = reconcileAdsDailySyncPreviewRows(
-    rows.sort((left, right) => left.date.localeCompare(right.date) || left.accountName.localeCompare(right.accountName)),
-    context,
-    mergedFilters,
-  );
+  const sortedRows = prepareRowsForDisplay(rows);
+  onPreviewRows?.(sortedRows);
 
   return {
     rows: sortedRows,
@@ -672,29 +1379,134 @@ const mapPreviewRowToDailyAdPayload = (row: AdsDailySyncPreviewRow) => ({
   edit_count: row.existing?.editCount || 0,
 });
 
+const withoutEditCount = (payload: ReturnType<typeof mapPreviewRowToDailyAdPayload>) => {
+  const { edit_count: _editCount, ...safePayload } = payload;
+  return safePayload;
+};
+
+const getDatabaseErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const parts = ['message', 'details', 'hint', 'code']
+      .map((key) => (error as Record<string, unknown>)[key])
+      .filter(Boolean)
+      .map(String);
+    if (parts.length > 0) return parts.join(' ');
+  }
+  return String(error || '');
+};
+
+const isMissingEditCountError = (error: unknown) => {
+  const message = getDatabaseErrorMessage(error);
+  return /edit_count/i.test(message) && /schema cache|column|could not find|does not exist/i.test(message);
+};
+
+async function findExistingDailyAdByBusinessKey(row: Pick<AdsDailySyncPreviewRow, 'date' | 'adAccountId'>) {
+  const { data, error } = await supabase
+    .from('daily_ads')
+    .select('*')
+    .eq('date', row.date)
+    .eq('ad_account_id', row.adAccountId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+  const [existing] = data || [];
+  return existing ? mapDailyAdFromDbRow(existing) : undefined;
+}
+
+async function updateDailyAdFromPreview(row: AdsDailySyncPreviewRow, existing: DailyAd) {
+  const payload = mapPreviewRowToDailyAdPayload({ ...row, existing });
+  const { error } = await supabase
+    .from('daily_ads')
+    .update(payload)
+    .eq('id', existing.id);
+
+  if (!error) return;
+  if (!isMissingEditCountError(error)) throw new Error(error.message);
+
+  const fallback = await supabase
+    .from('daily_ads')
+    .update(withoutEditCount(payload))
+    .eq('id', existing.id);
+
+  if (fallback.error) throw new Error(fallback.error.message);
+}
+
+async function insertDailyAdFromPreview(row: AdsDailySyncPreviewRow) {
+  const payload = mapPreviewRowToDailyAdPayload(row);
+  const { error } = await supabase
+    .from('daily_ads')
+    .insert(payload);
+
+  if (!error) return;
+  if (!isMissingEditCountError(error)) throw new Error(error.message);
+
+  const fallback = await supabase
+    .from('daily_ads')
+    .insert(withoutEditCount(payload));
+
+  if (fallback.error) throw new Error(fallback.error.message);
+}
+
 export async function commitAdsDailySyncPreview(rows: AdsDailySyncPreviewRow[]): Promise<AdsDailySyncCommitResult> {
   const actionableRows = rows.filter((row) => row.status === 'new' || row.status === 'update');
   let inserted = 0;
   let updated = 0;
 
   for (const row of actionableRows) {
-    const payload = mapPreviewRowToDailyAdPayload(row);
+    const currentExisting = row.existing || await findExistingDailyAdByBusinessKey(row);
 
-    if (row.status === 'update' && row.existing?.id) {
-      const { error } = await supabase
-        .from('daily_ads')
-        .update(payload)
-        .eq('id', row.existing.id);
-      if (error) throw new Error(error.message);
+    if (currentExisting && (currentExisting.editCount || 0) > 0) {
+      continue;
+    }
+
+    if (currentExisting) {
+      await updateDailyAdFromPreview(row, currentExisting);
       updated += 1;
     } else {
-      const { error } = await supabase
-        .from('daily_ads')
-        .insert(payload);
-      if (error) throw new Error(error.message);
-      inserted += 1;
+      try {
+        await insertDailyAdFromPreview(row);
+        inserted += 1;
+      } catch (error) {
+        const freshExisting = await findExistingDailyAdByBusinessKey(row);
+        if (!freshExisting) throw error;
+        if ((freshExisting.editCount || 0) > 0) continue;
+        await updateDailyAdFromPreview(row, freshExisting);
+        updated += 1;
+      }
     }
   }
 
   return { inserted, updated };
+}
+
+export async function syncAdsApiToDailyAds({
+  range,
+  context,
+  filters = {},
+  onProviderStatus,
+}: {
+  range: { from: string; to: string };
+  context: AdsDailySyncContext;
+  filters?: AdsDailySyncFilters;
+  onProviderStatus?: (statuses: AdsDailySyncProviderStatus[]) => void;
+}): Promise<AdsDailySyncRunResult> {
+  const preview = await buildAdsDailySyncPreview({
+    range,
+    context,
+    filters,
+    onProviderStatus,
+  });
+  const actionableRows = preview.rows.filter((row) => row.status === 'new' || row.status === 'update');
+  const commitResult = actionableRows.length > 0
+    ? await commitAdsDailySyncPreview(actionableRows)
+    : { inserted: 0, updated: 0 };
+
+  return {
+    ...preview,
+    inserted: commitResult.inserted,
+    updated: commitResult.updated,
+    actionableCount: actionableRows.length,
+  };
 }

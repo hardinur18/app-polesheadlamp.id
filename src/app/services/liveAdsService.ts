@@ -851,6 +851,7 @@ export async function syncMetaSnapshotDataset({
   to,
   businessId,
   accountId,
+  accountName,
   force = false,
   minFreshMinutes = 10,
   mappedOnly = false,
@@ -859,6 +860,7 @@ export async function syncMetaSnapshotDataset({
   to: string;
   businessId?: string;
   accountId?: string;
+  accountName?: string;
   force?: boolean;
   minFreshMinutes?: number;
   mappedOnly?: boolean;
@@ -902,6 +904,7 @@ export async function syncMetaSnapshotDataset({
           to,
           businessId: businessId && businessId !== 'all' ? businessId : undefined,
           accountId: accountId && accountId !== 'all' ? accountId : undefined,
+          accountName: accountName && accountName !== 'all' ? accountName : undefined,
           force,
           minFreshMinutes,
           mappedOnly,

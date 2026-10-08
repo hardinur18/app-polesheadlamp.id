@@ -27,10 +27,14 @@ export type AdsDailySnapshotRecord = {
   syncedAt?: string;
 };
 
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL") || "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "",
-);
+const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() || "";
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  throw new Error("SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY wajib dikonfigurasi untuk ads snapshot store.");
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 const ADS_SNAPSHOT_LATEST_KNOWN_READ_LIMIT = 1000;
 
 function toNullableNumber(value: unknown) {

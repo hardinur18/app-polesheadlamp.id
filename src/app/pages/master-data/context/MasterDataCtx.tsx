@@ -114,6 +114,48 @@ import {
   upsertLeadSocialContactRecord,
 } from './internal/leadSocialAdapter';
 import { createMasterDataFetchCatalog } from './internal/masterDataFetchCatalog';
+import {
+  APP_DATA_FETCH_TIMEOUT_MS,
+  CACHEABLE_MASTER_TABLES,
+  CACHEABLE_RANGE_TABLES,
+  DIRECT_APP_DATA_FETCH_TIMEOUT_MS,
+  MASTER_BOOTSTRAP_CONCURRENCY,
+  OPERATIONAL_BOOTSTRAP_CONCURRENCY,
+  buildRangeCacheSuffix,
+  isLikelySupabaseOutage,
+  readCachedAppDataPageRows,
+  runSettledWithConcurrency,
+  safeReadCachedRows,
+  safeWriteCachedRows,
+} from './internal/masterDataCache';
+import {
+  CURRENT_USER_PROFILE_FALLBACK_MAX_PAGES,
+  CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE,
+  CURRENT_USER_PROFILE_FALLBACK_TIMEOUT_MS,
+  CURRENT_USER_PROFILE_TIMEOUT_MS,
+  buildLocalProfileFallbackUser,
+  buildSessionMetadataProfileFallback,
+  clearCachedCurrentUser,
+  mergeUsersById,
+  readCachedCurrentUser,
+  writeCachedCurrentUser,
+} from './internal/currentUserBootstrap';
+import {
+  getCurrentMonthDateRange,
+  getDeferredBootstrapTablesForPath,
+  shouldBootstrapAdPerformanceInputsForPath,
+} from './internal/masterDataBootstrapPlan';
+import {
+  mapFetchedRows,
+  mergeRowsById,
+  toBusinessDayUtcRange,
+} from './internal/masterDataRangeUtils';
+import {
+  shouldSyncOrderCrmForOrder,
+  shouldSyncOrderCrmForPatch,
+  shouldSyncOrderLifecycleForOrder,
+  shouldSyncOrderLifecycleForPatch,
+} from './internal/orderSideEffectGuards';
 import { saveOrderToCrmContact } from '@/app/services/crmContactsService';
 import {
   findLeadDuplicates,
@@ -139,313 +181,6 @@ type MutationOptions = {
 
 const shouldUseLocalProfileFallback =
   import.meta.env.VITE_AUTH_MODE === 'local';
-
-const CURRENT_USER_PROFILE_TIMEOUT_MS = 4_000;
-const CURRENT_USER_PROFILE_FALLBACK_TIMEOUT_MS = 2_500;
-const CURRENT_USER_PROFILE_FALLBACK_MAX_PAGES = 1;
-const CURRENT_USER_PROFILE_FALLBACK_PAGE_SIZE = 500;
-const CURRENT_USER_CACHE_KEY = 'rhi-v2-current-user-cache';
-const APP_DATA_FETCH_TIMEOUT_MS = 8_000;
-const DIRECT_APP_DATA_FETCH_TIMEOUT_MS = 6_000;
-const MASTER_BOOTSTRAP_CONCURRENCY = 2;
-const OPERATIONAL_BOOTSTRAP_CONCURRENCY = 1;
-const MASTER_DATA_CACHE_PREFIX = 'rhi-v2-master-data-cache';
-const MASTER_DATA_CACHE_MAX_BYTES = 900_000;
-const CACHEABLE_MASTER_TABLES = new Set([
-  'profiles',
-  'branches',
-  'areas',
-  'services',
-  'vehicle_types',
-  'ad_platforms',
-  'ad_sub_channels',
-  'ad_accounts',
-  'ad_account_assignments',
-  'ad_account_owner_assignments',
-  'ad_sources',
-  'payment_methods',
-  'roles',
-  'wa_templates',
-]);
-const CACHEABLE_RANGE_TABLES = new Set([
-  'orders',
-  'leads',
-  'daily_ads',
-  'lead_spam_daily_inputs',
-  'prospect_bookings',
-  'technician_schedules',
-]);
-
-const buildCacheKey = (table: string, suffix = 'full') =>
-  `${MASTER_DATA_CACHE_PREFIX}:${table}:${suffix}`;
-
-const runSettledWithConcurrency = async (
-  tasks: Array<() => Promise<unknown>>,
-  concurrency: number,
-) => {
-  const limit = Math.max(1, Math.min(concurrency, tasks.length || 1));
-  let cursor = 0;
-
-  const workers = Array.from({ length: limit }, async () => {
-    while (cursor < tasks.length) {
-      const index = cursor;
-      cursor += 1;
-
-      try {
-        await tasks[index]();
-      } catch {
-        // Keep batch behavior equivalent to Promise.allSettled.
-      }
-    }
-  });
-
-  await Promise.all(workers);
-};
-
-const safeReadCachedRows = (table: string, suffix = 'full') => {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const raw = window.localStorage.getItem(buildCacheKey(table, suffix));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed?.rows) ? parsed.rows : null;
-  } catch {
-    return null;
-  }
-};
-
-const safeWriteCachedRows = (table: string, rows: any[], suffix = 'full') => {
-  if (typeof window === 'undefined' || rows.length === 0) return;
-
-  try {
-    const payload = JSON.stringify({
-      cachedAt: new Date().toISOString(),
-      rows,
-    });
-    if (payload.length > MASTER_DATA_CACHE_MAX_BYTES) return;
-    window.localStorage.setItem(buildCacheKey(table, suffix), payload);
-  } catch {
-    // Cache is best-effort only.
-  }
-};
-
-const isLikelySupabaseOutage = (status?: number, error?: unknown) => {
-  if (typeof status === 'number') {
-    return status === 502 || status === 503 || status === 504 || status === 522 || status === 524;
-  }
-
-  if (!error) return false;
-
-  const message = error instanceof Error ? error.message : String(error);
-  return /timeout|terlalu lama|failed to fetch|network|load failed|gateway|connection|server data sedang lambat/i.test(message);
-};
-
-const buildRangeCacheSuffix = (options: {
-  orderBy?: string;
-  ascending?: boolean;
-  eq?: Record<string, string>;
-  gte?: Record<string, string>;
-  lte?: Record<string, string>;
-}) =>
-  `range:${JSON.stringify({
-    orderBy: options.orderBy || '',
-    ascending: options.ascending ?? true,
-    eq: options.eq || {},
-    gte: options.gte || {},
-    lte: options.lte || {},
-  })}`;
-
-const readCachedAppDataPageRows = (
-  table: string,
-  from: number,
-  to: number,
-  options: {
-    orderBy?: string;
-    ascending?: boolean;
-    eq?: Record<string, string>;
-    gte?: Record<string, string>;
-    lte?: Record<string, string>;
-  } = {},
-) => {
-  const fullRows = CACHEABLE_MASTER_TABLES.has(table)
-    ? safeReadCachedRows(table)
-    : null;
-  const rangeRows = CACHEABLE_RANGE_TABLES.has(table)
-    ? safeReadCachedRows(table, buildRangeCacheSuffix(options))
-    : null;
-  const cachedRows = fullRows || rangeRows;
-
-  return cachedRows?.slice(from, to + 1) || null;
-};
-
-const getDeferredBootstrapTablesForPath = (path: string) => {
-  const normalizedPath = path.toLowerCase();
-  const isTechnicianMobilePath = normalizedPath.startsWith('/technician/mobile');
-  const tables = new Set<string>();
-
-  const add = (...tableNames: string[]) => {
-    tableNames.forEach((tableName) => tables.add(tableName));
-  };
-
-  if (
-    normalizedPath.startsWith('/orders') ||
-    normalizedPath.startsWith('/leads') ||
-    normalizedPath.startsWith('/schedule') ||
-    normalizedPath.startsWith('/monitoring') ||
-    (normalizedPath.startsWith('/technician') && !isTechnicianMobilePath)
-  ) {
-    add('prospect_bookings', 'technician_schedules');
-  }
-
-  if (normalizedPath.startsWith('/leads')) {
-    add('lead_social_contacts');
-  }
-
-  if (
-    normalizedPath.startsWith('/orders') ||
-    normalizedPath.startsWith('/leads') ||
-    normalizedPath.startsWith('/technician') ||
-    normalizedPath.startsWith('/whatsapp')
-  ) {
-    add('wa_templates');
-  }
-
-  if (
-    normalizedPath.startsWith('/audit-logs') ||
-    normalizedPath.startsWith('/reports') ||
-    normalizedPath.startsWith('/finance')
-  ) {
-    add('audit_logs');
-  }
-
-  return tables;
-};
-
-const shouldBootstrapAdPerformanceInputsForPath = (path: string) => {
-  const normalizedPath = path.toLowerCase();
-  return (
-    normalizedPath.startsWith('/dashboard') ||
-    normalizedPath.startsWith('/reports') ||
-    normalizedPath.startsWith('/ads')
-  );
-};
-
-const getCurrentMonthDateRange = () => {
-  const now = new Date();
-  return {
-    from: getTodayDateKey(new Date(now.getFullYear(), now.getMonth(), 1)),
-    to: getTodayDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
-  };
-};
-
-const readCachedCurrentUser = (userId: string): User | undefined => {
-  if (typeof window === 'undefined' || !userId) return undefined;
-
-  try {
-    const raw = window.localStorage.getItem(CURRENT_USER_CACHE_KEY);
-    if (!raw) return undefined;
-
-    const cached = JSON.parse(raw) as { user?: User; savedAt?: string };
-    if (cached?.user?.id !== userId || cached.user.status === 'inactive') {
-      return undefined;
-    }
-
-    return cached.user;
-  } catch (error) {
-    console.warn('[MasterData] Failed to read cached current user:', error);
-    return undefined;
-  }
-};
-
-const writeCachedCurrentUser = (user: User) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(CURRENT_USER_CACHE_KEY, JSON.stringify({
-      user,
-      savedAt: new Date().toISOString(),
-    }));
-  } catch (error) {
-    console.warn('[MasterData] Failed to cache current user:', error);
-  }
-};
-
-const clearCachedCurrentUser = (userId?: string) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    if (userId && !readCachedCurrentUser(userId)) {
-      return;
-    }
-
-    window.localStorage.removeItem(CURRENT_USER_CACHE_KEY);
-  } catch (error) {
-    console.warn('[MasterData] Failed to clear cached current user:', error);
-  }
-};
-
-const buildLocalProfileFallbackUser = (session: Session): User => ({
-  id: session.user.id || 'local-owner',
-  name:
-    session.user.user_metadata?.name ||
-    session.user.email?.split('@')[0] ||
-    'Owner Polesheadlamp',
-  email: session.user.email || 'owner@polesheadlamp.id',
-  role: 'Owner',
-  status: 'active',
-  branchId: 'B1',
-  joinDate: new Date().toISOString().slice(0, 10),
-  phone: '',
-});
-
-const buildSessionMetadataProfileFallback = (session: Session) => {
-  const metadata = session.user.user_metadata || {};
-  const role = typeof metadata.role === 'string' ? metadata.role.trim() : '';
-
-  if (!role) {
-    return null;
-  }
-
-  const name =
-    typeof metadata.name === 'string' && metadata.name.trim()
-      ? metadata.name.trim()
-      : session.user.email?.split('@')[0] || 'User';
-  const status =
-    typeof metadata.status === 'string' && metadata.status.trim()
-      ? metadata.status.trim()
-      : 'active';
-  const branchId =
-    typeof metadata.branch_id === 'string' && metadata.branch_id.trim()
-      ? metadata.branch_id.trim()
-      : typeof metadata.branchId === 'string' && metadata.branchId.trim()
-        ? metadata.branchId.trim()
-        : 'B1';
-
-  return {
-    id: session.user.id,
-    email: session.user.email || '',
-    name,
-    role,
-    status,
-    branch_id: branchId,
-    phone: typeof metadata.phone === 'string' ? metadata.phone : '',
-    join_date:
-      typeof metadata.join_date === 'string'
-        ? metadata.join_date
-        : typeof metadata.joinDate === 'string'
-          ? metadata.joinDate
-          : new Date().toISOString().slice(0, 10),
-    created_at: new Date().toISOString(),
-  };
-};
-
-const mergeUsersById = (nextUsers: User[], previousUsers: User[]) => {
-  const merged = new Map<string, User>();
-  previousUsers.forEach((user) => merged.set(user.id, user));
-  nextUsers.forEach((user) => merged.set(user.id, user));
-  return Array.from(merged.values());
-};
 
 export type CurrentUserIssue =
   | { code: 'profile_not_found'; message: string }
@@ -1274,34 +1009,6 @@ export const MasterDataProvider: React.FC<{
     mergeProgressiveWithPrevious?: boolean;
     pageSize?: number;
     appData?: AppDataPageOptions;
-  };
-
-  const mapFetchedRows = (rows: any[], mapper?: (data: any[]) => any[]) =>
-    mapper ? mapper(rows) : [...rows];
-
-  const mergeRowsById = (nextRows: any[], previousRows: any[]) => {
-    const seen = new Set(nextRows.map((row) => row?.id).filter(Boolean));
-    return [
-      ...nextRows,
-      ...previousRows.filter((row) => row?.id && !seen.has(row.id)),
-    ];
-  };
-
-  const toBusinessDayUtcRange = (fromDateKey: string, toDateKey = fromDateKey) => {
-    const parseDateKey = (dateKey: string) => {
-      const [year, month, day] = dateKey.split('-').map(Number);
-      return { year, month, day };
-    };
-    const fromParts = parseDateKey(fromDateKey);
-    const toParts = parseDateKey(toDateKey);
-    const jakartaOffsetMs = 7 * 60 * 60 * 1000;
-    const startMs = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day, 0, 0, 0, 0) - jakartaOffsetMs;
-    const endMs = Date.UTC(toParts.year, toParts.month - 1, toParts.day, 23, 59, 59, 999) - jakartaOffsetMs;
-
-    return {
-      fromIso: new Date(startMs).toISOString(),
-      toIso: new Date(endMs).toISOString(),
-    };
   };
 
   const fetchTodayOrdersDirectly = async (todayKey: string, mapper?: (data: any[]) => any[]) => {
@@ -3366,23 +3073,6 @@ export const MasterDataProvider: React.FC<{
     void run(1);
   };
 
-  const orderPatchHasAnyField = (patch: Partial<Order>, fields: (keyof Order)[]) =>
-    fields.some((field) => Object.prototype.hasOwnProperty.call(patch, field));
-
-  const shouldSyncOrderCrmForPatch = (patch: Partial<Order>) =>
-    orderPatchHasAnyField(patch, ['customerName', 'customerPhone', 'address', 'mapsUrl', 'notes']);
-
-  const shouldSyncOrderLifecycleForPatch = (patch: Partial<Order>) =>
-    orderPatchHasAnyField(patch, [
-      'leadId',
-      'status',
-      'serviceDate',
-      'serviceTime',
-      'technicianId',
-      'branchId',
-      'areaId',
-    ]);
-
   const addOrder = async (item: Order, options?: MutationOptions) => {
     validateOrderScheduleBeforeSave(item);
     if (!options?.skipFreshScheduleValidation) {
@@ -3403,8 +3093,12 @@ export const MasterDataProvider: React.FC<{
     }
     const savedOrder = await updateItem('orders', item, setOrders, mapOrderToDB, mapOrderFromDB, options);
     const orderForSync = (savedOrder || item) as Order;
-    syncOrderCrmContactSnapshot(orderForSync, 'pesanan_update_otomatis');
-    queueOrderProspectLifecycleSync(orderForSync, 'order_update');
+    if (shouldSyncOrderCrmForOrder(previousOrder, orderForSync)) {
+      syncOrderCrmContactSnapshot(orderForSync, 'pesanan_update_otomatis');
+    }
+    if (shouldSyncOrderLifecycleForOrder(previousOrder, orderForSync)) {
+      queueOrderProspectLifecycleSync(orderForSync, 'order_update');
+    }
     return savedOrder;
   };
 
@@ -3443,11 +3137,11 @@ export const MasterDataProvider: React.FC<{
         toast.success('Data berhasil diperbarui');
       }
 
-      if (shouldSyncOrderCrmForPatch(patch)) {
+      if (shouldSyncOrderCrmForPatch(previousOrder, patch)) {
         syncOrderCrmContactSnapshot(savedOrder, 'pesanan_update_otomatis');
       }
 
-      if (shouldSyncOrderLifecycleForPatch(patch)) {
+      if (shouldSyncOrderLifecycleForPatch(previousOrder, patch)) {
         queueOrderProspectLifecycleSync(savedOrder, 'order_patch');
       }
 

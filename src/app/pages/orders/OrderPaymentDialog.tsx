@@ -50,6 +50,7 @@ export function OrderPaymentDialog({
       isOpen={isOpen}
       onClose={onClose}
       size="xl"
+      className="orderPaymentDialog"
       title={
         <div className="flex items-center gap-2">
           <span>Pembayaran Pesanan</span>
@@ -60,14 +61,14 @@ export function OrderPaymentDialog({
       }
       footer={
         <div className="flex w-full justify-end">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
             Tutup
           </Button>
         </div>
       }
     >
-      <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-4">
+      <div className="orderPaymentDialogBody space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-2 flex items-center gap-2 text-slate-500">
               <ReceiptText className="h-4 w-4" />
@@ -112,8 +113,8 @@ export function OrderPaymentDialog({
               <QrCode className="h-4 w-4" />
               <span className="text-xs font-bold uppercase tracking-wide">QRIS Pembayaran</span>
             </div>
-            <div className="grid gap-4 md:grid-cols-[176px_minmax(0,1fr)] md:items-center">
-              <div className="flex h-44 w-44 items-center justify-center rounded-xl border border-emerald-200 bg-white p-2 dark:border-emerald-900 dark:bg-slate-950">
+            <div className="grid gap-4 sm:grid-cols-[176px_minmax(0,1fr)] sm:items-center">
+              <div className="flex aspect-square w-full max-w-44 items-center justify-center rounded-xl border border-emerald-200 bg-white p-2 dark:border-emerald-900 dark:bg-slate-950">
                 {qrisImageUrl ? (
                   <img src={qrisImageUrl} alt={`QRIS ${paymentMethod.bankName}`} className="h-full w-full object-contain" />
                 ) : (

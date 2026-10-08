@@ -9,6 +9,7 @@ export const tiktokAdsFunctionsBaseUrl = buildMakeServerUrl();
 const TIKTOK_BUSINESS_CENTER_CACHE_KEY = 'polesheadlamp_tiktok_business_centers_cache_v1';
 const TIKTOK_ADVERTISER_CACHE_KEY = 'polesheadlamp_tiktok_advertisers_cache_v1';
 const TIKTOK_INTEGRATION_CONFIG_STORAGE_KEY = 'polesheadlamp_tiktok_integration_configs_v1';
+const TIKTOK_SNAPSHOT_SYNC_TIMEOUT_MS = 90_000;
 
 export interface TikTokBusinessCenter {
   bcId: string;
@@ -181,8 +182,8 @@ function writeTikTokIntegrationConfigsToStorage(configs: TikTokAdsIntegrationCon
   writeCachedValue(TIKTOK_INTEGRATION_CONFIG_STORAGE_KEY, configs);
 }
 
-async function fetchTikTokJson<T>(url: string, init?: RequestInit) {
-  const response = await fetchWithTimeout(url, init);
+async function fetchTikTokJson<T>(url: string, init?: RequestInit, timeoutMs?: number, timeoutMessage?: string) {
+  const response = await fetchWithTimeout(url, init, timeoutMs, timeoutMessage);
   const payload = await response.json().catch(() => ({} as ServiceErrorPayload));
 
   if (!response.ok) {
@@ -444,6 +445,8 @@ export async function syncTikTokAdsSnapshotDataset({
           minFreshMinutes,
         }),
       },
+      TIKTOK_SNAPSHOT_SYNC_TIMEOUT_MS,
+      'Sinkronisasi TikTok Ads terlalu lama. Menampilkan snapshot terakhir yang tersimpan.',
     );
   } catch (error) {
     const syncError =

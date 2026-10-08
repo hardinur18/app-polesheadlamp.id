@@ -44,7 +44,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [x] Phase 8 Payment & Proof Assets dirapikan: modal scroll-safe, upload bukti bayar lebih stabil, dan proof asset dialog aman di mobile.
 - [ ] CRUD prospek, pesanan, payment, dan master data diaudit penuh.
 - [~] Security/RLS diaudit dan dirapikan: anonymous access dan service-role fallback sudah dirapikan; granular RLS menunggu refactor data access.
-- [~] Refactor file besar dimulai: app-data server route/config dan helper aman `MasterDataCtx` sudah dipisah bertahap.
+- [x] Phase 10 refactor struktur besar selesai untuk batch fundamental: server app-data, MasterDataCtx, dashboard CS/Advertiser, pesanan, prospek, modal shared, API snapshot, dan Iklan Harian sudah dirapikan tanpa mengubah flow bisnis utama.
 - [ ] Test automation core flow lengkap.
 - [ ] Final release checklist 100% pass.
 
@@ -311,15 +311,15 @@ Catatan progress 2026-10-08:
 
 Tujuan: mengurangi risiko perubahan kecil bikin error besar.
 
-- [~] Pecah `MasterDataCtx.tsx`.
-- [~] Pecah `supabase/functions/server/index.tsx`.
-- [~] Pecah `supabase/functions/server/meta_messaging.tsx`.
-- [~] Pecah dashboard CS logic.
-- [~] Pecah dashboard Advertiser logic.
-- [~] Pecah pesanan logic.
-- [~] Pecah prospek logic bila masih terlalu padat.
-- [ ] Pindahkan logic bisnis ke service/helper yang bisa dites.
-- [ ] Pastikan refactor tidak mengubah perilaku bisnis.
+- [x] Pecah `MasterDataCtx.tsx`.
+- [x] Pecah `supabase/functions/server/index.tsx`.
+- [x] Pecah `supabase/functions/server/meta_messaging.tsx`.
+- [x] Pecah dashboard CS logic.
+- [x] Pecah dashboard Advertiser logic.
+- [x] Pecah pesanan logic.
+- [x] Pecah prospek logic bila masih terlalu padat.
+- [x] Pindahkan logic bisnis ke service/helper yang bisa dites.
+- [x] Pastikan refactor tidak mengubah perilaku bisnis.
 
 Definition of done:
 
@@ -356,6 +356,12 @@ Catatan progress 2026-10-08:
 - Helper UI/formatter dashboard Advertiser dipindah ke `src/app/pages/advertiser/internal/advertiserDashboardUi.tsx`, termasuk format currency/number/percent, badge cost/volume/ROAS, status class API, dan skeleton KPI.
 - Refactor dashboard Advertiser ini hanya memindahkan presentational helper; flow sync API, cache snapshot, mapping akun, filter CS/advertiser, dan kalkulasi data tetap di `AdvertiserDashboard.tsx`.
 - Verifikasi setelah ekstraksi helper dashboard Advertiser: `npm run typecheck:full`, `npm run lint`, dan `git diff --check` pass.
+- Dashboard CS dibersihkan lagi: type status API, label/class status, dan skeleton KPI dipindah ke `src/app/pages/cs/internal/csDashboardKpiHelpers.tsx`; page tetap memegang flow data, filter, dan CRUD spam input.
+- Modal shared diperkuat dengan body scroll lock berbasis counter supaya nested/stacked modal tidak saling merusak scroll halaman.
+- Iklan Harian dibersihkan dari preview API lama yang fetch provider langsung di page. Preview/commit rekap API sekarang satu pintu lewat `adsDailySyncService`, sedangkan import spreadsheet/manual CRUD tetap memakai flow lama yang sama.
+- Merge snapshot API diperkuat: bila provider tidak mengirim external account id, key merge fallback ke internal account id atau nama akun/grup sehingga akun berbeda di tanggal sama tidak saling menimpa.
+- Service sync iklan tetap memakai pola database hasil sync sebagai sumber UI; snapshot provider eksternal hanya staging/audit sebelum commit ke `daily_ads`.
+- Verifikasi final Phase 10: `npm run typecheck:full`, `npm run lint`, `npm run build`, `npm run smoke:routes`, dan `git diff --check` pass pada 2026-10-08. Build masih menampilkan warning non-blocking Browserslist data lama.
 
 ## Phase 11 - Type Safety
 

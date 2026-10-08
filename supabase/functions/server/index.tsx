@@ -32,6 +32,29 @@ import {
   parseBooleanFlag,
 } from "./ads_snapshot_utils.tsx";
 import {
+  ADS_MANAGE_PERMISSION,
+  ADS_REFERENCE_READ_PERMISSIONS,
+  CS_OKR_MANAGE_PERMISSION,
+  CS_OKR_VIEW_PERMISSION,
+  DAILY_REPORT_CREATE_PERMISSION,
+  DAILY_REPORT_DELETE_PERMISSION,
+  DAILY_REPORT_EDIT_PERMISSION,
+  DAILY_REPORT_VIEW_PERMISSION,
+  MAP_EXPAND_URL_PERMISSIONS,
+  MARKETING_MONITORING_VIEW_PERMISSION,
+  MASTER_DATA_CREATE_PERMISSION,
+  MASTER_DATA_DELETE_PERMISSION,
+  MASTER_DATA_EDIT_PERMISSION,
+  MASTER_DATA_VIEW_PERMISSION,
+  OPERATIONAL_EXPENSE_CREATE_PERMISSION,
+  OPERATIONAL_EXPENSE_DELETE_PERMISSION,
+  OPERATIONAL_EXPENSE_EDIT_PERMISSION,
+  OPERATIONAL_EXPENSE_VIEW_PERMISSION,
+  RECURRING_EXPENSE_PAY_PERMISSION,
+  RECURRING_EXPENSE_VIEW_PERMISSION,
+} from "./app_data_access.ts";
+import { registerAppDataRoutes } from "./app_data_routes.tsx";
+import {
   findLeadDuplicates,
   formatLeadDuplicateWarning,
   getLeadDuplicateCsId,
@@ -623,300 +646,7 @@ async function getActorName(authHeader?: string, clientTokenHeader?: string) {
     return user?.user_metadata?.name || user?.email || "System";
 }
 
-const OPERATIONAL_EXPENSE_VIEW_PERMISSION: PermissionKey = "operational_expenses.view";
-const OPERATIONAL_EXPENSE_CREATE_PERMISSION: PermissionKey = "operational_expenses.create";
-const OPERATIONAL_EXPENSE_EDIT_PERMISSION: PermissionKey = "operational_expenses.edit";
-const OPERATIONAL_EXPENSE_DELETE_PERMISSION: PermissionKey = "operational_expenses.delete";
 const OPERATIONAL_EXPENSE_SOURCE_TYPES = new Set(["manual", "cash_out_forward", "recurring", "adjustment", "import"]);
-const RECURRING_EXPENSE_VIEW_PERMISSION: PermissionKey = "recurring_expenses.view";
-const RECURRING_EXPENSE_PAY_PERMISSION: PermissionKey = "recurring_expenses.pay";
-const MASTER_DATA_VIEW_PERMISSION: PermissionKey = "master_data.view";
-const MASTER_DATA_CREATE_PERMISSION: PermissionKey = "master_data.create";
-const MASTER_DATA_EDIT_PERMISSION: PermissionKey = "master_data.edit";
-const MASTER_DATA_DELETE_PERMISSION: PermissionKey = "master_data.delete";
-const ADS_MANAGE_PERMISSION: PermissionKey = "ads.manage";
-const MARKETING_MONITORING_VIEW_PERMISSION: PermissionKey = "monitoring.marketing.view";
-const CS_OKR_VIEW_PERMISSION: PermissionKey = "cs_okr.view";
-const CS_OKR_MANAGE_PERMISSION: PermissionKey = "cs_okr.manage";
-const DAILY_REPORT_VIEW_PERMISSION: PermissionKey = "daily_report.view";
-const DAILY_REPORT_CREATE_PERMISSION: PermissionKey = "daily_report.create";
-const DAILY_REPORT_EDIT_PERMISSION: PermissionKey = "daily_report.edit";
-const DAILY_REPORT_DELETE_PERMISSION: PermissionKey = "daily_report.delete";
-const ORDER_READ_PERMISSIONS: PermissionKey[] = ["order.view", "order.view_details", "teknisi.view_mobile"];
-const OPERATIONAL_REFERENCE_READ_PERMISSIONS: PermissionKey[] = [
-  "master_data.view",
-  "order.view",
-  "order.create",
-  "order.edit",
-  "leads.view",
-  "leads.create",
-  "schedule.view",
-  "technician_schedule.view",
-  "monitoring.view",
-  "monitoring.activity_view",
-  "teknisi.view_mobile",
-  DAILY_REPORT_VIEW_PERMISSION,
-  "finance_report.view",
-  OPERATIONAL_EXPENSE_VIEW_PERMISSION,
-  "payroll.view",
-];
-const ADS_REFERENCE_READ_PERMISSIONS: PermissionKey[] = [
-  "master_data.view",
-  "ads.view_daily",
-  "ads.view_analytics",
-  ADS_MANAGE_PERMISSION,
-  MARKETING_MONITORING_VIEW_PERMISSION,
-  CS_OKR_VIEW_PERMISSION,
-  "leads.view",
-  "leads.create",
-  "order.view",
-  "dashboard.view_advertiser",
-  "dashboard.view_cs",
-  "dashboard.view_owner",
-];
-const USER_REFERENCE_READ_PERMISSIONS: PermissionKey[] = [
-  "users.view",
-  "role_permissions.view",
-  "master_data.view",
-  "order.view",
-  "order.create",
-  "leads.view",
-  "schedule.view",
-  "technician_schedule.view",
-  "monitoring.view",
-  "monitoring.activity_view",
-  "payroll.view",
-  DAILY_REPORT_VIEW_PERMISSION,
-  "finance_report.view",
-  MARKETING_MONITORING_VIEW_PERMISSION,
-  CS_OKR_VIEW_PERMISSION,
-  "whatsapp.view",
-];
-const MAP_EXPAND_URL_PERMISSIONS: PermissionKey[] = [
-  "map.view_route",
-  "map.view_global",
-  "order.view_details",
-  "order.create",
-  "order.edit",
-  "schedule.view",
-  "monitoring.activity_view",
-  "teknisi.view_mobile",
-];
-
-type AppDataAccessConfig = {
-  table: string;
-  read: PermissionKey[];
-  create?: PermissionKey[];
-  edit?: PermissionKey[];
-  delete?: PermissionKey[];
-  orderBy?: string;
-  ascending?: boolean;
-  maxLimit?: number;
-  filterableColumns?: string[];
-};
-
-const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
-  branches: {
-    table: "branches",
-    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  areas: {
-    table: "areas",
-    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  services: {
-    table: "services",
-    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  vehicle_types: {
-    table: "vehicle_types",
-    read: OPERATIONAL_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  payment_methods: {
-    table: "payment_methods",
-    read: [...OPERATIONAL_REFERENCE_READ_PERMISSIONS, "order.payment.view"],
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  cancel_reasons: {
-    table: "cancel_reasons",
-    read: ORDER_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  ad_platforms: {
-    table: "ad_platforms",
-    read: ADS_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
-  },
-  ad_sub_channels: {
-    table: "ad_sub_channels",
-    read: ADS_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
-  },
-  ad_accounts: {
-    table: "ad_accounts",
-    read: ADS_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
-  },
-  ad_account_assignments: {
-    table: "ad_account_assignments",
-    read: ADS_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
-  },
-  ad_account_owner_assignments: {
-    table: "ad_account_owner_assignments",
-    read: ADS_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
-  },
-  ad_sources: {
-    table: "ad_sources",
-    read: ADS_REFERENCE_READ_PERMISSIONS,
-    create: [MASTER_DATA_CREATE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION, ADS_MANAGE_PERMISSION],
-  },
-  roles: {
-    table: "roles",
-    read: ["role_permissions.view", "users.view", MASTER_DATA_VIEW_PERMISSION, "payroll.view"],
-    create: [MASTER_DATA_CREATE_PERMISSION],
-    edit: [MASTER_DATA_EDIT_PERMISSION],
-    delete: [MASTER_DATA_DELETE_PERMISSION],
-  },
-  profiles: {
-    table: "profiles",
-    read: USER_REFERENCE_READ_PERMISSIONS,
-    edit: ["users.edit"],
-    delete: ["users.delete"],
-    filterableColumns: ["id", "email", "role", "status", "branch_id"],
-  },
-  affiliates: {
-    table: "affiliates",
-    read: ["affiliate.view", "affiliate.manage", "order.view", "order.create", "leads.view", MASTER_DATA_VIEW_PERMISSION],
-    create: ["affiliate.manage", MASTER_DATA_CREATE_PERMISSION],
-    edit: ["affiliate.manage", MASTER_DATA_EDIT_PERMISSION],
-    delete: ["affiliate.manage", MASTER_DATA_DELETE_PERMISSION],
-  },
-  vendors: {
-    table: "vendors",
-    read: ["finance.view", "finance.manage", "debts.view", OPERATIONAL_EXPENSE_VIEW_PERMISSION, MASTER_DATA_VIEW_PERMISSION],
-    create: [MASTER_DATA_CREATE_PERMISSION, "finance.manage"],
-    edit: [MASTER_DATA_EDIT_PERMISSION, "finance.manage"],
-    delete: [MASTER_DATA_DELETE_PERMISSION, "finance.manage"],
-  },
-  leads: {
-    table: "leads",
-    read: ["leads.view"],
-    create: ["leads.create"],
-    edit: ["leads.edit"],
-    delete: ["leads.delete"],
-    orderBy: "created_at",
-    ascending: false,
-    filterableColumns: ["created_at", "status", "cs_id", "advertiser_id", "platform_id", "ad_account_id"],
-  },
-  prospect_bookings: {
-    table: "prospect_bookings",
-    read: ["leads.view", "schedule.view", "order.view"],
-    create: ["leads.create", "leads.edit"],
-    edit: ["leads.edit", "order.edit"],
-    delete: ["leads.delete"],
-    orderBy: "schedule_date",
-    ascending: false,
-    filterableColumns: ["schedule_date", "status", "cs_id", "technician_id", "advertiser_id", "platform_id", "branch_id"],
-  },
-  orders: {
-    table: "orders",
-    read: ORDER_READ_PERMISSIONS,
-    create: ["order.create"],
-    edit: ["order.edit", "order.status.edit", "order.payment.edit_status", "order.payment.edit_type", "order.assign_technician"],
-    delete: ["order.delete"],
-    orderBy: "created_at",
-    filterableColumns: ["service_date", "lead_date", "created_at", "status", "cs_id", "technician_id", "advertiser_id", "branch_id"],
-  },
-  wa_templates: {
-    table: "wa_templates",
-    read: ["wa_template.view", "whatsapp.templates.manage", "leads.view", "order.view"],
-    create: ["wa_template.create", "whatsapp.templates.manage"],
-    edit: ["wa_template.edit", "whatsapp.templates.manage"],
-    delete: ["wa_template.delete", "whatsapp.templates.manage"],
-  },
-  daily_ads: {
-    table: "daily_ads",
-    read: ["ads.view_daily", MARKETING_MONITORING_VIEW_PERMISSION, CS_OKR_VIEW_PERMISSION, "dashboard.view_advertiser", "dashboard.view_cs"],
-    create: [ADS_MANAGE_PERMISSION],
-    edit: [ADS_MANAGE_PERMISSION],
-    delete: [ADS_MANAGE_PERMISSION],
-    orderBy: "date",
-    ascending: false,
-    maxLimit: 1000,
-    filterableColumns: ["date", "advertiser_id", "platform_id", "sub_channel_id", "ad_account_id", "cs_id"],
-  },
-  lead_spam_daily_inputs: {
-    table: "lead_spam_daily_inputs",
-    read: [MARKETING_MONITORING_VIEW_PERMISSION, CS_OKR_VIEW_PERMISSION, "dashboard.view_advertiser", "dashboard.view_cs"],
-    create: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
-    edit: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
-    delete: ["leads.edit", CS_OKR_MANAGE_PERMISSION, ADS_MANAGE_PERMISSION],
-    orderBy: "input_date",
-    ascending: false,
-    maxLimit: 1000,
-    filterableColumns: ["input_date", "cs_id", "platform_id", "advertiser_id"],
-  },
-  proof_assets: {
-    table: "proof_assets",
-    read: ["proof_assets.view"],
-    create: ["proof_assets.create"],
-    edit: ["proof_assets.edit"],
-    delete: ["proof_assets.delete"],
-    orderBy: "created_at",
-    ascending: false,
-    maxLimit: 500,
-    filterableColumns: ["vehicle_type_id", "is_active", "created_at"],
-  },
-  technician_schedules: {
-    table: "technician_schedules",
-    read: ["technician_schedule.view", "technician_schedule.manage", "schedule.view", "order.view", "teknisi.view_mobile"],
-    create: ["technician_schedule.manage"],
-    edit: ["technician_schedule.manage"],
-    delete: ["technician_schedule.manage"],
-    orderBy: "date",
-    ascending: false,
-    maxLimit: 1000,
-    filterableColumns: ["date", "user_id", "type"],
-  },
-  audit_logs: {
-    table: "audit_logs",
-    read: ["audit_logs.view"],
-    orderBy: "created_at",
-    ascending: false,
-    maxLimit: 5000,
-    filterableColumns: ["created_at", "action", "entity", "user_name"],
-  },
-};
 
 function normalizeOperationalExpenseText(value: unknown) {
   return String(value || "").trim();
@@ -1764,6 +1494,7 @@ async function syncMetaSnapshotRange(params: {
   to: string;
   requestedBusinessId?: string;
   requestedAccountId?: string;
+  requestedAccountName?: string;
   force?: boolean;
   minFreshMinutes?: number;
   mappedOnly?: boolean;
@@ -1827,10 +1558,15 @@ async function syncMetaSnapshotRange(params: {
     }
     const accountIdVariants = buildMetaExternalAccountIdVariants(account.id)
       .concat(buildMetaExternalAccountIdVariants(account.account_id));
+    const requestedNameVariants = buildMetaAccountNameVariants(params.requestedAccountName);
+    const accountNameVariants = buildMetaAccountNameVariants(account.name);
     if (
       params.requestedAccountId &&
-      !buildMetaExternalAccountIdVariants(params.requestedAccountId).some((accountId) =>
-        accountIdVariants.includes(accountId),
+      !(
+        buildMetaExternalAccountIdVariants(params.requestedAccountId).some((accountId) =>
+          accountIdVariants.includes(accountId),
+        ) ||
+        (requestedNameVariants.size > 0 && Array.from(requestedNameVariants).some((name) => accountNameVariants.has(name)))
       )
     ) {
       return false;
@@ -1842,6 +1578,12 @@ async function syncMetaSnapshotRange(params: {
     }
     return true;
   });
+
+  if (params.requestedAccountId && filteredAccounts.length === 0) {
+    throw new Error(
+      `Akun Meta ${params.requestedAccountName || params.requestedAccountId} tidak ditemukan di token Meta aktif. Cek mapping akun iklan atau reconnect Meta.`,
+    );
+  }
 
   let upsertedCount = 0;
   for (const chunk of listDateChunks(params.from, params.to, 31)) {
@@ -1909,7 +1651,15 @@ async function syncMetaSnapshotRange(params: {
       return records.filter(isNonNull);
     });
 
-    if (chunkRecords.length === 0) continue;
+    if (chunkRecords.length === 0) {
+      const insightErrors = filteredAccounts
+        .map((account) => insightMap.get(account.id)?.error)
+        .filter(Boolean);
+      if (insightErrors.length > 0) {
+        throw new Error(`Meta tidak mengembalikan insight: ${insightErrors[0]}`);
+      }
+      continue;
+    }
     const chunkResult = await upsertAdsDailySnapshots(chunkRecords);
     upsertedCount += chunkResult.upsertedCount;
   }
@@ -2206,6 +1956,8 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
       typeof body?.businessId === "string" ? body.businessId : c.req.query("businessId");
     const requestedAccountId =
       typeof body?.accountId === "string" ? body.accountId : c.req.query("accountId");
+    const requestedAccountName =
+      typeof body?.accountName === "string" ? body.accountName : c.req.query("accountName");
     const force = parseBooleanFlag(
       typeof body?.force !== "undefined" ? body.force : c.req.query("force"),
       false,
@@ -2236,6 +1988,7 @@ app.post("/make-server-f781cd00/meta/sync-snapshots", async (c) => {
       to: to!,
       requestedBusinessId: requestedBusinessId || undefined,
       requestedAccountId: requestedAccountId || undefined,
+      requestedAccountName: requestedAccountName || undefined,
       force,
       minFreshMinutes,
       mappedOnly,
@@ -3362,312 +3115,13 @@ app.post("/make-server-f781cd00/upload-image", handleProofAssetUpload);
 app.post("/upload-image", handleProofAssetUpload);
 
 // --- GUARDED APP DATA API (Postgres-backed) ---
-
-function getAppDataAccessConfig(type: string) {
-  return APP_DATA_ACCESS[type] || null;
-}
-
-function getAppDataRange(c: any, config: AppDataAccessConfig) {
-  const rawFrom = Number(c.req.query("from") || 0);
-  const rawTo = Number(c.req.query("to") || 999);
-  const from = Number.isFinite(rawFrom) && rawFrom >= 0 ? Math.floor(rawFrom) : 0;
-  const requestedTo = Number.isFinite(rawTo) && rawTo >= from ? Math.floor(rawTo) : from + 999;
-  const maxLimit = config.maxLimit || 1000;
-  const to = Math.min(requestedTo, from + maxLimit - 1);
-  return { from, to };
-}
-
-function applyAppDataFilters(query: any, c: any, config: AppDataAccessConfig) {
-  let nextQuery = query;
-
-  (config.filterableColumns || []).forEach((column) => {
-    const eqValue = c.req.query(`eq_${column}`);
-    const gteValue = c.req.query(`gte_${column}`);
-    const lteValue = c.req.query(`lte_${column}`);
-
-    if (typeof eqValue === "string" && eqValue.length > 0) {
-      nextQuery = nextQuery.eq(column, eqValue);
-    }
-    if (typeof gteValue === "string" && gteValue.length > 0) {
-      nextQuery = nextQuery.gte(column, gteValue);
-    }
-    if (typeof lteValue === "string" && lteValue.length > 0) {
-      nextQuery = nextQuery.lte(column, lteValue);
-    }
-  });
-
-  return nextQuery;
-}
-
-function getAppDataOrderBy(c: any, config: AppDataAccessConfig) {
-  const fallbackOrderBy = config.orderBy || "created_at";
-  const requestedOrderBy = c.req.query("orderBy");
-  if (!requestedOrderBy) return fallbackOrderBy;
-
-  const orderableColumns = new Set([
-    fallbackOrderBy,
-    "created_at",
-    "updated_at",
-    ...(config.filterableColumns || []),
-  ].filter(Boolean));
-
-  return orderableColumns.has(requestedOrderBy) ? requestedOrderBy : fallbackOrderBy;
-}
-
-function isAppDataSchemaRetryable(config: AppDataAccessConfig, error: any) {
-  const text = [
-    error?.code,
-    error?.message,
-    error?.details,
-    error?.hint,
-  ].filter(Boolean).join(" ").toLowerCase();
-
-  if (
-    (config.table === "ad_account_assignments" || config.table === "ad_account_owner_assignments") &&
-    text.includes("notes") &&
-    text.includes("schema cache")
-  ) {
-    return true;
-  }
-
-  if (config.table !== "leads") return false;
-
-  return (
-    text.includes("pgrst204") ||
-    text.includes("42703") ||
-    text.includes("schema cache") ||
-    [
-      "social_platform",
-      "social_username",
-      "social_profile_url",
-      "social_chat_url",
-      "embed_form_id",
-      "embed_form_submission_id",
-      "embed_form_slug",
-      "embed_form_name",
-      "service_id",
-      "affiliate_id",
-      "origin",
-      "landing_page_url",
-      "utm_source",
-      "utm_medium",
-      "utm_campaign",
-      "utm_term",
-      "utm_content",
-    ].some((column) => text.includes(column))
-  );
-}
-
-function withoutAppDataDraftColumns(config: AppDataAccessConfig, payload: Record<string, unknown>) {
-  if (config.table === "ad_account_assignments" || config.table === "ad_account_owner_assignments") {
-    const { notes: _notes, ...rest } = payload;
-    return rest;
-  }
-
-  if (config.table === "leads") {
-    const {
-      social_platform: _social_platform,
-      social_username: _social_username,
-      social_profile_url: _social_profile_url,
-      social_chat_url: _social_chat_url,
-      embed_form_id: _embed_form_id,
-      embed_form_submission_id: _embed_form_submission_id,
-      embed_form_slug: _embed_form_slug,
-      embed_form_name: _embed_form_name,
-      service_id: _service_id,
-      affiliate_id: _affiliate_id,
-      origin: _origin,
-      landing_page_url: _landing_page_url,
-      utm_source: _utm_source,
-      utm_medium: _utm_medium,
-      utm_campaign: _utm_campaign,
-      utm_term: _utm_term,
-      utm_content: _utm_content,
-      ...rest
-    } = payload;
-    return rest;
-  }
-
-  return payload;
-}
-
-async function requireAppDataAccess(c: any, config: AppDataAccessConfig, action: "read" | "create" | "edit" | "delete") {
-  const permissions = action === "read"
-    ? config.read
-    : action === "create"
-      ? config.create
-      : action === "edit"
-        ? config.edit
-        : config.delete;
-
-  if (!permissions?.length) {
-    return { requester: null, response: c.json({ error: "Forbidden" }, 403) };
-  }
-
-  return requireAuthorizedRequester(c, permissions);
-}
-
-app.get("/make-server-f781cd00/app-data/:type", async (c) => {
-  const type = c.req.param("type");
-  const config = getAppDataAccessConfig(type);
-  if (!config) return c.json({ error: "Unknown app data type" }, 404);
-
-  const auth = await requireAppDataAccess(c, config, "read");
-  if (auth.response) return auth.response;
-
-  try {
-    const { from, to } = getAppDataRange(c, config);
-    const orderBy = getAppDataOrderBy(c, config);
-    const ascending = parseBooleanFlag(c.req.query("ascending"), Boolean(config.ascending));
-
-    let query = supabase
-      .from(config.table)
-      .select("*")
-      .order(orderBy, { ascending });
-
-    query = applyAppDataFilters(query, c, config).range(from, to);
-
-    let { data, error } = await query;
-
-    if (error && error.code === "42703") {
-      let retryQuery = supabase
-        .from(config.table)
-        .select("*");
-      retryQuery = applyAppDataFilters(retryQuery, c, config).range(from, to);
-      const retry = await retryQuery;
-      data = retry.data;
-      error = retry.error;
-    }
-
-    if (error) throw error;
-
-    return c.json({
-      rows: data || [],
-      range: { from, to },
-      rowCount: data?.length || 0,
-    });
-  } catch (err: any) {
-    return c.json({ error: err.message || "Gagal memuat app data." }, 500);
-  }
-});
-
-app.post("/make-server-f781cd00/app-data/:type", async (c) => {
-  const type = c.req.param("type");
-  const config = getAppDataAccessConfig(type);
-  if (!config) return c.json({ error: "Unknown app data type" }, 404);
-
-  const auth = await requireAppDataAccess(c, config, "create");
-  if (auth.response) return auth.response;
-
-  try {
-    const payload = await c.req.json();
-    if (config.table === "leads") {
-      await assertNoBlockingLeadDuplicate(payload);
-    }
-
-    let { data, error } = await supabase
-      .from(config.table)
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error && isAppDataSchemaRetryable(config, error)) {
-      const retry = await supabase
-        .from(config.table)
-        .insert(withoutAppDataDraftColumns(config, payload))
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
-    if (error) throw error;
-
-    const actor = auth.requester?.actorName || "System";
-    runBackgroundTask(
-      `audit create ${type}`,
-      logActivity(actor, `Create ${type}`, `Created ${type} ${(payload as any)?.id || ""}`, "System"),
-    );
-
-    return c.json({ row: data }, 201);
-  } catch (err: any) {
-    return c.json({ error: err.message || "Gagal menyimpan app data." }, getHttpErrorStatus(err));
-  }
-});
-
-app.put("/make-server-f781cd00/app-data/:type/:id", async (c) => {
-  const type = c.req.param("type");
-  const id = c.req.param("id");
-  const config = getAppDataAccessConfig(type);
-  if (!config) return c.json({ error: "Unknown app data type" }, 404);
-
-  const auth = await requireAppDataAccess(c, config, "edit");
-  if (auth.response) return auth.response;
-
-  try {
-    const payload = await c.req.json();
-    if (config.table === "leads") {
-      await assertNoBlockingLeadDuplicate(payload, id);
-    }
-
-    let { data, error } = await supabase
-      .from(config.table)
-      .update(payload)
-      .eq("id", id)
-      .select()
-      .single();
-
-    if (error && isAppDataSchemaRetryable(config, error)) {
-      const retry = await supabase
-        .from(config.table)
-        .update(withoutAppDataDraftColumns(config, payload))
-        .eq("id", id)
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
-    if (error) throw error;
-
-    const actor = auth.requester?.actorName || "System";
-    runBackgroundTask(
-      `audit update ${type}`,
-      logActivity(actor, `Update ${type}`, `Updated ${type} ${id}`, "System"),
-    );
-
-    return c.json({ row: data });
-  } catch (err: any) {
-    return c.json({ error: err.message || "Gagal memperbarui app data." }, getHttpErrorStatus(err));
-  }
-});
-
-app.delete("/make-server-f781cd00/app-data/:type/:id", async (c) => {
-  const type = c.req.param("type");
-  const id = c.req.param("id");
-  const config = getAppDataAccessConfig(type);
-  if (!config) return c.json({ error: "Unknown app data type" }, 404);
-
-  const auth = await requireAppDataAccess(c, config, "delete");
-  if (auth.response) return auth.response;
-
-  try {
-    const { error } = await supabase
-      .from(config.table)
-      .delete()
-      .eq("id", id);
-    if (error) throw error;
-
-    const actor = auth.requester?.actorName || "System";
-    runBackgroundTask(
-      `audit delete ${type}`,
-      logActivity(actor, `Delete ${type}`, `Deleted ${type} ${id}`, "System"),
-    );
-
-    return c.json({ success: true });
-  } catch (err: any) {
-    return c.json({ error: err.message || "Gagal menghapus app data." }, 500);
-  }
+registerAppDataRoutes(app, {
+  supabase,
+  requireAuthorizedRequester,
+  logActivity,
+  runBackgroundTask,
+  assertNoBlockingLeadDuplicate,
+  getHttpErrorStatus,
 });
 
 // --- EMBED LEAD FORMS API ---

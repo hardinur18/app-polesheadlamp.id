@@ -12,6 +12,7 @@ const GOOGLE_LIVE_BREAKDOWN_CACHE_PREFIX = 'polesheadlamp_google_live_breakdown_
 const GOOGLE_LIVE_REGISTRY_CACHE_KEY = 'polesheadlamp_google_live_registry_cache_v1';
 const GOOGLE_INTEGRATION_CONFIG_STORAGE_KEY = 'polesheadlamp_google_integration_configs_v1';
 const GOOGLE_SYNC_COOLDOWN_STORAGE_KEY = 'polesheadlamp_google_sync_cooldown_v1';
+const GOOGLE_SNAPSHOT_SYNC_TIMEOUT_MS = 90_000;
 
 export interface GoogleAdsLiveManagerSnapshot {
   id: string;
@@ -736,18 +737,32 @@ export async function syncGoogleAdsSnapshotDataset({
     } as GoogleAdsSnapshotDatasetResponse;
   }
 
-  const response = await fetchWithTimeout(`${googleAdsFunctionsBaseUrl}/google/sync-snapshots`, {
-    method: 'POST',
-    headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
-    body: JSON.stringify({
-      from,
-      to,
-      managerId: managerId && managerId !== 'all' ? managerId : undefined,
-      customerId: customerId && customerId !== 'all' ? customerId : undefined,
-      force,
-      minFreshMinutes,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${googleAdsFunctionsBaseUrl}/google/sync-snapshots`,
+      {
+        method: 'POST',
+        headers: await getSessionBackedEdgeHeaders({ includeJsonContentType: true }),
+        body: JSON.stringify({
+          from,
+          to,
+          managerId: managerId && managerId !== 'all' ? managerId : undefined,
+          customerId: customerId && customerId !== 'all' ? customerId : undefined,
+          force,
+          minFreshMinutes,
+        }),
+      },
+      GOOGLE_SNAPSHOT_SYNC_TIMEOUT_MS,
+      'Sinkronisasi Google Ads terlalu lama. Menampilkan snapshot terakhir yang tersimpan.',
+    );
+  } catch (error) {
+    const syncError =
+      error instanceof Error
+        ? error.message
+        : 'Sinkronisasi snapshot Google Ads gagal.';
+    return fallbackToStoredSnapshots(syncError);
+  }
 
   const payload = await response.json().catch(() => ({} as ServiceErrorPayload));
   if (!response.ok) {

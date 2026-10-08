@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Order } from '../../master-data/data';
 import { isReasonRequiredStatus } from '../cancelReasonOptions';
+import { getOrderCrudErrorMessage } from '../orderCrudErrors';
 import { getStatusLabel } from '../orderHelpers';
 import { logActivity } from '@/app/services/auditService';
 
@@ -98,7 +99,7 @@ export function useOrderStatusActions({
       }
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memperbarui status pesanan');
+      toast.error(getOrderCrudErrorMessage(error, 'Gagal memperbarui status pesanan'));
     }
   }, [updateOrder, buildStatusUpdatePayload, openQuickStatusChange, currentUser]);
 
@@ -140,7 +141,7 @@ export function useOrderStatusActions({
       resetQuickStatusChange();
     } catch (error) {
       console.error(error);
-      toast.error('Gagal memperbarui status pesanan');
+      toast.error(getOrderCrudErrorMessage(error, 'Gagal memperbarui status pesanan'));
     }
   }, [quickStatusChange, quickStatusReason, quickStatusReasonNote, updateOrder, buildStatusUpdatePayload, currentUser, resetQuickStatusChange]);
 

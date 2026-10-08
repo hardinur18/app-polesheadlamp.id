@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useMasterData } from '../master-data/context';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { FoundationDateRangePicker } from '@/app/components/ui/date-range-picker';
 import { Input } from '@/app/components/ui/input';
@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsRail, TabsTrigger, TabsViewport } from '@/app/co
 import { HorizontalDragScrollArea } from '@/app/components/ui/horizontal-drag-scroll';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { DateRange } from "react-day-picker";
-import { addDays, differenceInCalendarDays, startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay, parseISO } from 'date-fns';
+import { addDays, differenceInCalendarDays, startOfMonth, endOfMonth, eachDayOfInterval, format, parseISO } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { 
   Users, 
@@ -44,7 +44,6 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Area, CartesianGrid, ComposedChart, Legend, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import { Badge } from '@/app/components/ui/badge';
 import { usePermissions } from '@/app/hooks/usePermissions';
@@ -70,8 +69,7 @@ import {
 import { PlatformLogo } from '@/app/components/ui/PlatformLogo';
 import { readDashboardSnapshotCache, writeDashboardSnapshotCache } from '@/app/services/dashboardSnapshotCache';
 import {
-  buildAdsDailySyncPreview,
-  commitAdsDailySyncPreview,
+  syncAdsApiToDailyAds,
 } from '@/app/services/adsDailySyncService';
 import {
   fetchAdAccountApiMappings,
@@ -88,6 +86,33 @@ import {
   OperationalTableCard,
 } from '@/app/components/ui/operational-page';
 import { toast } from 'sonner';
+import {
+  ConversionRateBadge,
+  CostIndicatorBadge,
+  CostPerLeadBadge,
+  CprClosingCellValue,
+  DailyRateMetric,
+  DailySummaryMetric,
+  DailySummaryTableCell,
+  KpiMetricSkeleton,
+  OrderVolumeBadge,
+  RoasBadgeValue,
+  SpendingCellValue,
+  SummaryCell,
+  apiStatusClassName,
+  formatCount,
+  formatNumber,
+  formatPercent,
+  formatPercentAllowZero,
+  formatShortCurrency,
+  getApiStatusLabel,
+  getConversionRateTextClass,
+  getCostIndicatorTextClass,
+  getCostPerLeadTextClass,
+  getCostPerLeadTone,
+  type ApiAdsStatus,
+  type MetricTone,
+} from './internal/csDashboardKpiHelpers';
 
 type SpamInputFormState = {
   id?: string;
@@ -130,8 +155,6 @@ type AdsSnapshotRowLike = {
   spend?: number | null;
   conversions?: number | null;
 };
-
-type ApiAdsStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 
 type CsViewApiCacheEntry = {
   metrics: Record<string, CsAdsDailyMetric>;
@@ -179,7 +202,6 @@ type CsViewTab = 'performance' | 'spam-inputs';
 const CS_VIEW_FILTER_STORAGE_KEY = 'polesheadlamp_cs_view_filters_v1';
 const CS_VIEW_MAX_RANGE_DAYS = 62;
 const CS_VIEW_DEFAULT_ITEMS_PER_PAGE = 31;
-const DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS = 5 * 60_000;
 const DASHBOARD_API_PROVIDER_TIMEOUT_MS = 20_000;
 const DASHBOARD_API_SYNC_TIMEOUT_MS = 75_000;
 const CS_DASHBOARD_API_CACHE_NAMESPACE = 'cs-dashboard-api';
@@ -200,161 +222,6 @@ function withDashboardProviderTimeout<T>(
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timeoutId) globalThis.clearTimeout(timeoutId);
   });
-}
-
-const formatShortCurrency = (value: number) =>
-  Number.isFinite(value) && value > 0
-    ? value.toLocaleString('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      maximumFractionDigits: 0,
-    })
-    : Number.isFinite(value) && value === 0
-      ? 'Rp 0'
-      : '-';
-
-const formatNumber = (value: number) =>
-  Number.isFinite(value) ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '-';
-
-const formatCount = (value: number) =>
-  Number.isFinite(value) ? value.toLocaleString('id-ID', { maximumFractionDigits: 0 }) : '0';
-
-const getConversionRateTextClass = (value: number) => {
-  if (!Number.isFinite(value)) return 'text-slate-950 dark:text-slate-100';
-  if (value < 10) return 'text-red-600 dark:text-red-300';
-  if (value <= 12) return 'text-amber-500 dark:text-amber-300';
-  return 'text-emerald-600 dark:text-emerald-300';
-};
-
-const getCostPerLeadTextClass = (value: number) => {
-  if (!Number.isFinite(value) || value <= 0) return 'text-slate-950 dark:text-slate-100';
-  if (value < 8_000) return 'text-emerald-600 dark:text-emerald-300';
-  if (value <= 10_000) return 'text-amber-500 dark:text-amber-300';
-  return 'text-red-600 dark:text-red-300';
-};
-
-type MetricTone = 'default' | 'blue' | 'cyan' | 'emerald' | 'amber' | 'red';
-
-const getCostPerLeadTone = (value: number): MetricTone => {
-  if (!Number.isFinite(value) || value <= 0) return 'default';
-  if (value < 8_000) return 'emerald';
-  if (value <= 10_000) return 'amber';
-  return 'red';
-};
-
-type SpendIndicatorTone = 'none' | 'low' | 'target' | 'high';
-type CostIndicatorTone = 'none' | 'good' | 'target' | 'bad';
-
-const getSpendIndicatorTone = (spendTotal: number): SpendIndicatorTone => {
-  if (spendTotal <= 0) return 'none';
-  if (spendTotal < 1_000_000) return 'low';
-  if (spendTotal <= 1_200_000) return 'target';
-  return 'high';
-};
-
-const spendIndicatorStyles: Record<SpendIndicatorTone, { badge: string; dot: string; title: string }> = {
-  none: {
-    badge: 'text-slate-500 dark:text-slate-400',
-    dot: 'bg-slate-300',
-    title: 'Belum ada total spending',
-  },
-  low: {
-    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
-    dot: 'bg-red-500',
-    title: 'Total spending di bawah Rp 1.000.000',
-  },
-  target: {
-    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
-    dot: 'bg-amber-500',
-    title: 'Total spending Rp 1.000.000 sampai Rp 1.200.000',
-  },
-  high: {
-    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
-    dot: 'bg-emerald-500',
-    title: 'Total spending di atas Rp 1.200.000',
-  },
-};
-
-const getCprClosingIndicatorTone = (value: number): CostIndicatorTone => {
-  if (value <= 0) return 'none';
-  if (value < 80_000) return 'good';
-  if (value <= 100_000) return 'target';
-  return 'bad';
-};
-
-const cprClosingIndicatorStyles: Record<CostIndicatorTone, { badge: string; dot: string; title: string }> = {
-  none: {
-    badge: 'text-slate-500 dark:text-slate-400',
-    dot: 'bg-slate-300',
-    title: 'Belum ada CPR closing',
-  },
-  good: {
-    badge: 'border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
-    dot: 'bg-emerald-500',
-    title: 'CPR closing di bawah Rp 80.000',
-  },
-  target: {
-    badge: 'border border-amber-100 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
-    dot: 'bg-amber-500',
-    title: 'CPR closing Rp 80.000 sampai Rp 100.000',
-  },
-  bad: {
-    badge: 'border border-red-100 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300',
-    dot: 'bg-red-500',
-    title: 'CPR closing di atas Rp 100.000',
-  },
-};
-
-function SpendingCellValue({
-  spendDashboard,
-  spendTotal,
-}: {
-  spendDashboard: number;
-  spendTotal: number;
-}) {
-  const tone = getSpendIndicatorTone(spendTotal);
-  const indicator = spendIndicatorStyles[tone];
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">
-        {formatShortCurrency(spendDashboard)}
-      </div>
-      <div
-        className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] leading-tight ${indicator.badge}`}
-        title={indicator.title}
-      >
-        {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
-        <span>{formatShortCurrency(spendTotal)}</span>
-      </div>
-    </div>
-  );
-}
-
-function CprClosingCellValue({
-  cprClosing,
-  cprClosingTotal,
-}: {
-  cprClosing: number;
-  cprClosingTotal: number;
-}) {
-  const tone = getCprClosingIndicatorTone(cprClosingTotal);
-  const indicator = cprClosingIndicatorStyles[tone];
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">
-        {formatShortCurrency(cprClosing)}
-      </div>
-      <div
-        className={`inline-flex items-center justify-end gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] leading-tight ${indicator.badge}`}
-        title={indicator.title}
-      >
-        {tone !== 'none' && <span className={`h-1.5 w-1.5 rounded-full ${indicator.dot}`} />}
-        <span>{formatShortCurrency(cprClosingTotal)}</span>
-      </div>
-    </div>
-  );
 }
 
 const readCsViewFilterState = (): CsViewFilterState => {
@@ -412,9 +279,6 @@ const readInitialDateRange = (): DateRange => {
 
 const buildApiCacheKey = (range: { from: string; to: string } | null, mappingKey: string) =>
   range ? `${range.from}:${range.to}:${mappingKey || 'unmapped'}` : null;
-
-const dashboardRangeIncludesToday = (range: { from: string; to: string }, today: string) =>
-  range.from <= today && range.to >= today;
 
 const createEmptyApiLoadDiagnostics = (): CsApiLoadDiagnostics => ({
   rawRows: 0,
@@ -500,168 +364,8 @@ const resolvePlatformKey = (value?: string | null) => {
   return 'meta';
 };
 
-const formatPercent = (value: number) =>
-  Number.isFinite(value) && value > 0 ? `${value.toFixed(1)}%` : '-';
-
-const formatPercentAllowZero = (value: number) =>
-  Number.isFinite(value) ? `${value.toFixed(1)}%` : '-';
-
-type SummaryCellProps = {
-  label: string;
-  primary: React.ReactNode;
-  secondary?: React.ReactNode;
-  align?: 'left' | 'center' | 'right';
-  primaryClassName?: string;
-  showLabel?: boolean;
-};
-
-const summaryAlignClass = {
-  left: 'text-left',
-  center: 'text-center',
-  right: 'text-right',
-};
-
-function SummaryCell({
-  label,
-  primary,
-  secondary,
-  align = 'right',
-  primaryClassName = 'text-slate-950 dark:text-slate-100',
-  showLabel = false,
-}: SummaryCellProps) {
-  return (
-    <th className={`px-4 py-4 align-top font-normal ${summaryAlignClass[align]}`}>
-      {showLabel && (
-        <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          {label}
-        </div>
-      )}
-      <div className={`${showLabel ? 'mt-1' : ''} font-mono text-[12px] font-semibold leading-tight ${primaryClassName}`}>
-        {primary}
-      </div>
-      {secondary && (
-        <div className="mt-1 font-mono text-[10px] leading-tight text-slate-500 dark:text-slate-400">
-          {secondary}
-        </div>
-      )}
-    </th>
-  );
-}
-
-type DailySummaryMetricProps = {
-  label: string;
-  primary: React.ReactNode;
-  secondary?: React.ReactNode;
-  tone?: MetricTone;
-  align?: 'left' | 'center' | 'right';
-};
-
-const dailyMetricToneClass: Record<NonNullable<DailySummaryMetricProps['tone']>, string> = {
-  default: 'text-slate-950 dark:text-slate-100',
-  blue: 'text-blue-600 dark:text-blue-300',
-  cyan: 'text-cyan-600 dark:text-cyan-300',
-  emerald: 'text-emerald-600 dark:text-emerald-300',
-  amber: 'text-amber-500 dark:text-amber-300',
-  red: 'text-red-500 dark:text-red-300',
-};
-
-function DailySummaryMetric({
-  label,
-  primary,
-  secondary,
-  tone = 'default',
-  align = 'left',
-}: DailySummaryMetricProps) {
-  return (
-    <div
-      className={`min-w-0 rounded-md bg-slate-50 px-2.5 py-2 dark:bg-slate-800/60 sm:rounded-none sm:bg-transparent sm:p-0 sm:dark:bg-transparent ${
-        align === 'right' ? 'text-left sm:text-right' : 'text-left'
-      }`}
-    >
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-        {label}
-      </div>
-      <div className={`mt-1 break-words font-mono text-[13px] font-bold leading-tight sm:whitespace-nowrap ${dailyMetricToneClass[tone]}`}>
-        {primary}
-      </div>
-      {secondary && (
-        <div className="mt-1 break-words font-mono text-[10px] leading-tight text-slate-500 dark:text-slate-400 sm:whitespace-nowrap">
-          {secondary}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DailySummaryTableCell({
-  label,
-  primary,
-  secondary,
-  tone = 'default',
-  align = 'right',
-}: DailySummaryMetricProps & { align?: 'left' | 'center' | 'right' }) {
-  const alignClass = align === 'left' ? 'text-left' : align === 'center' ? 'text-center' : 'text-right';
-
-  return (
-    <div className={`flex h-full min-w-0 flex-col justify-start px-2 pt-1.5 ${alignClass}`}>
-      <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-        {label}
-      </div>
-      <div className={`mt-1 truncate font-mono text-[13px] font-bold leading-tight ${dailyMetricToneClass[tone]}`}>
-        {primary}
-      </div>
-      <div className={`mt-1 truncate font-mono text-[10px] leading-tight text-slate-500 dark:text-slate-400 ${secondary ? '' : 'invisible'}`}>
-        {secondary || '-'}
-      </div>
-    </div>
-  );
-}
-
-function DailyRateMetric({ value }: { value: number }) {
-  const progress = Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
-  const conversionRateTextClass = getConversionRateTextClass(value);
-
-  return (
-    <div className="rounded-md bg-slate-50 px-2.5 py-2 dark:bg-slate-800/60 sm:rounded-none sm:bg-transparent sm:p-0 sm:dark:bg-transparent">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          Konversi
-        </div>
-        <div className={`font-mono text-[12px] font-bold ${conversionRateTextClass}`}>
-          {formatPercent(value)}
-        </div>
-      </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-50 dark:bg-blue-950/30">
-        <div
-          className="h-full rounded-full bg-blue-500 transition-all"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-const getApiStatusLabel = (status: ApiAdsStatus) => {
-  if (status === 'ready') return 'Connected';
-  if (status === 'loading') return 'Loading';
-  if (status === 'empty') return 'Data kosong';
-  if (status === 'error') return 'API error';
-  if (status === 'idle') return 'Belum dimuat';
-  return 'Unconnect';
-};
-
-const apiStatusClassName = (status: ApiAdsStatus) => {
-  if (status === 'ready') {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300';
-  }
-  if (status === 'loading') {
-    return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300';
-  }
-  if (status === 'error') {
-    return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300';
-  }
-  return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
-};
+const getOrderDateKey = (order: { leadDate?: string; serviceDate?: string; created_at?: string }) =>
+  (order.leadDate || order.serviceDate || order.created_at || '').slice(0, 10);
 
 export function CSDashboard({ userId }: { userId?: string }) {
   const {
@@ -728,15 +432,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const [googleIntegrationConfigs, setGoogleIntegrationConfigs] = useState<GoogleAdsIntegrationConfig[]>([]);
   const [tiktokIntegrationConfigs, setTikTokIntegrationConfigs] = useState<TikTokAdsIntegrationConfig[]>([]);
   const [apiAccountMappings, setApiAccountMappings] = useState<AdAccountApiMapping[]>([]);
-  const [apiRefreshNonce, setApiRefreshNonce] = useState(0);
-  const [apiSnapshotRefreshNonce, setApiSnapshotRefreshNonce] = useState(0);
+  const [apiRefreshNonce] = useState(0);
+  const [apiSnapshotRefreshNonce] = useState(0);
   const [isApiDailySyncing, setIsApiDailySyncing] = useState(false);
-  const [isChartOpen, setIsChartOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(CS_VIEW_DEFAULT_ITEMS_PER_PAGE);
+  const [isPerformanceRangeLoading, setIsPerformanceRangeLoading] = useState(false);
+  const [expandedCprBreakdowns, setExpandedCprBreakdowns] = useState<string[]>([]);
   const [isSpamDialogOpen, setIsSpamDialogOpen] = useState(false);
   const [isSavingSpamInput, setIsSavingSpamInput] = useState(false);
   const [activeTab, setActiveTab] = useState<CsViewTab>('performance');
+  const [isMobileFilterExpanded, setIsMobileFilterExpanded] = useState(false);
   const [spamInputToDelete, setSpamInputToDelete] = useState<string | null>(null);
   const [isSpamFormMobile, setIsSpamFormMobile] = useState(false);
   const [spamForm, setSpamForm] = useState<SpamInputFormState>({
@@ -753,6 +457,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
   const lastApiRefreshNonceRef = React.useRef(0);
   const lastApiSnapshotRefreshNonceRef = React.useRef(0);
   const apiRequestInFlightRef = React.useRef(false);
+  const performanceRangeRequestRef = React.useRef(0);
   const lastMasterRefreshTriggerRef = React.useRef(refreshTrigger);
   const lastSpamScopeKeyRef = React.useRef('');
 
@@ -767,9 +472,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
     if (refreshTrigger === lastMasterRefreshTriggerRef.current) return;
     lastMasterRefreshTriggerRef.current = refreshTrigger;
   }, [refreshTrigger]);
-  React.useEffect(() => {
-    setItemsPerPage((current) => current === 25 ? CS_VIEW_DEFAULT_ITEMS_PER_PAGE : current);
-  }, []);
   const handleDateRangeChange = React.useCallback((range: DateRange | undefined) => {
     setDateRange(sanitizeCsViewDateRange(range));
   }, []);
@@ -789,13 +491,21 @@ export function CSDashboard({ userId }: { userId?: string }) {
       to: format(dateRange.to || dateRange.from, 'yyyy-MM-dd'),
     };
   }, [dateRange]);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCsId !== 'all') count += 1;
+    if (selectedPlatformId !== 'all') count += 1;
+    if (rangeParams) count += 1;
+    return count;
+  }, [rangeParams, selectedCsId, selectedPlatformId]);
 
   const handleSyncAdsApiToDailyAds = React.useCallback(async () => {
     if (!rangeParams) return;
 
     setIsApiDailySyncing(true);
+    setApiAdsStatus('loading');
     try {
-      const preview = await buildAdsDailySyncPreview({
+      const syncResult = await syncAdsApiToDailyAds({
         range: rangeParams,
         context: {
           dailyAds,
@@ -813,26 +523,47 @@ export function CSDashboard({ userId }: { userId?: string }) {
           mappedOnly: true,
         },
       });
-      const actionableRows = preview.rows.filter((row) => row.status === 'new' || row.status === 'update');
+      const unmappedRows = syncResult.rows.filter((row) =>
+        row.status === 'unmapped' && ((Number(row.amountSpent) || 0) > 0 || (Number(row.leadsDashboard) || 0) > 0),
+      );
+      setApiLoadDiagnostics({
+        rawRows: syncResult.rows.length,
+        matchedRows: syncResult.rows.length - unmappedRows.length,
+        unmatchedRows: unmappedRows.map((row) => ({
+          source: row.sourceLabel.toLowerCase(),
+          externalAccountId: row.adAccountId || undefined,
+          externalAccountName: row.accountName,
+          spend: row.amountSpent,
+          conversions: row.leadsDashboard,
+          snapshotDate: row.date,
+        })),
+        failedSources: syncResult.providerStatuses
+          .filter((status) => status.state === 'error')
+          .map((status) => status.key),
+      });
 
-      if (preview.providerStatuses.length === 0) {
+      if (syncResult.providerStatuses.length === 0) {
         toast.info('Platform ini belum punya konektor API laporan iklan.');
+        setApiAdsStatus('empty');
         return;
       }
 
-      if (actionableRows.length === 0) {
-        const errorHint = preview.errors.length > 0 ? ` ${preview.errors[0]}` : '';
+      const hasExistingDailyAds = syncResult.rows.some((row) => row.status === 'skip' && row.existing);
+      if (syncResult.actionableCount === 0) {
+        if (hasExistingDailyAds) {
+          await refreshAdPerformanceInputsForDateRange(rangeParams);
+        }
+        const errorHint = syncResult.errors.length > 0 ? ` ${syncResult.errors[0]}` : '';
         toast.info(`Tidak ada data API yang perlu disimpan ke Iklan Harian.${errorHint}`);
-        setApiRefreshNonce((value) => value + 1);
+        setApiAdsStatus(syncResult.errors.length > 0 ? 'error' : syncResult.rows.length > 0 ? 'ready' : 'empty');
         return;
       }
 
-      const result = await commitAdsDailySyncPreview(actionableRows);
       await refreshAdPerformanceInputsForDateRange(rangeParams);
-      setApiSnapshotRefreshNonce((value) => value + 1);
-      setApiRefreshNonce((value) => value + 1);
-      toast.success(`Sinkron API selesai: ${result.inserted} ditambahkan, ${result.updated} diperbarui di Iklan Harian.`);
+      setApiAdsStatus('ready');
+      toast.success(`Sinkron API selesai: ${syncResult.inserted} ditambahkan, ${syncResult.updated} diperbarui di Iklan Harian.`);
     } catch (error) {
+      setApiAdsStatus('error');
       toast.error(error instanceof Error ? error.message : 'Gagal sinkron API ke Iklan Harian.');
     } finally {
       setIsApiDailySyncing(false);
@@ -853,31 +584,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
   React.useEffect(() => {
     if (!rangeParams) return;
 
-    const refreshSnapshot = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (apiRequestInFlightRef.current) return;
-      if (!dashboardRangeIncludesToday(rangeParams, format(new Date(), 'yyyy-MM-dd'))) return;
-      setApiSnapshotRefreshNonce((value) => value + 1);
-    };
-    const handleVisibilityRefresh = () => {
-      if (document.visibilityState === 'visible') {
-        refreshSnapshot();
-      }
-    };
-
-    const intervalId = window.setInterval(refreshSnapshot, DASHBOARD_API_AUTO_REFRESH_INTERVAL_MS);
-    window.addEventListener('focus', refreshSnapshot);
-    document.addEventListener('visibilitychange', handleVisibilityRefresh);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshSnapshot);
-      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
-    };
-  }, [rangeParams]);
-
-  React.useEffect(() => {
-    if (!rangeParams) return;
+    let isCancelled = false;
+    const requestId = performanceRangeRequestRef.current + 1;
+    performanceRangeRequestRef.current = requestId;
+    setIsPerformanceRangeLoading(true);
 
     void Promise.allSettled([
       ensureOrdersForDateRange({ from: rangeParams.from, to: rangeParams.to, mode: 'lead' }),
@@ -892,7 +602,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
           }
         });
       }
+    }).finally(() => {
+      if (!isCancelled && performanceRangeRequestRef.current === requestId) {
+        setIsPerformanceRangeLoading(false);
+      }
     });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [
     ensureLeadsForDateRange,
     ensureOrdersForDateRange,
@@ -1050,38 +768,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return new Map(googleIntegrationConfigs.map((config) => [config.adAccountId, config]));
   }, [googleIntegrationConfigs]);
 
-  const metaIntegrationConfigByAdAccountId = useMemo(() => {
-    return new Map(metaIntegrationConfigs.map((config) => [config.adAccountId, config]));
-  }, [metaIntegrationConfigs]);
-
-  const tiktokIntegrationConfigByAdAccountId = useMemo(() => {
-    return new Map(tiktokIntegrationConfigs.map((config) => [config.adAccountId, config]));
-  }, [tiktokIntegrationConfigs]);
-
-  const isConnectedAdAccount = React.useCallback(
-    (account: (typeof adAccounts)[number]) => {
-      const platformKey = resolvePlatformKey(
-        platforms.find((platform) => platform.id === account.platformId)?.name,
-      );
-
-      if (platformKey === 'google') {
-        return googleIntegrationConfigByAdAccountId.get(account.id)?.enabled === true;
-      }
-
-      if (platformKey === 'tiktok') {
-        return tiktokIntegrationConfigByAdAccountId.get(account.id)?.enabled === true;
-      }
-
-      return metaIntegrationConfigByAdAccountId.get(account.id)?.enabled === true;
-    },
-    [
-      googleIntegrationConfigByAdAccountId,
-      metaIntegrationConfigByAdAccountId,
-      platforms,
-      tiktokIntegrationConfigByAdAccountId,
-    ],
-  );
-
   const shouldShowAdAccountInCsView = React.useCallback(
     (account: (typeof adAccounts)[number]) => {
       const platformKey = resolvePlatformKey(
@@ -1171,6 +857,16 @@ export function CSDashboard({ userId }: { userId?: string }) {
       setSpamForm((current) => ({ ...current, platformId: '', id: undefined, spamCount: '', notes: '' }));
     }
   }, [isSpamDialogOpen, spamForm.platformId, spamPlatformOptions]);
+
+  const adAccountMasterLookup = useMemo(() => {
+    const byId = new Map<string, (typeof adAccounts)[number]>();
+
+    for (const account of adAccounts) {
+      byId.set(account.id, account);
+    }
+
+    return { byId };
+  }, [adAccounts]);
 
   const adAccountLookup = useMemo(() => {
     const byId = new Map<string, (typeof adAccounts)[number]>();
@@ -1317,6 +1013,53 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return { resolveAssignment };
   }, [adAccountAssignments]);
 
+  const adAccountOwnerLookup = useMemo(() => {
+    const resolveOwner = (adAccountId?: string, date?: string) => {
+      if (!adAccountId) return null;
+
+      if (date) {
+        const datedOwner = adAccountOwnerAssignments
+          .filter((assignment) =>
+            assignment.adAccountId === adAccountId &&
+            isActiveDataStatus(assignment.status) &&
+            assignment.startDate <= date &&
+            (!assignment.endDate || assignment.endDate >= date)
+          )
+          .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+
+        if (datedOwner?.advertiserId) return datedOwner;
+      }
+
+      const openOwner = adAccountOwnerAssignments
+        .filter((assignment) =>
+          assignment.adAccountId === adAccountId &&
+          isActiveDataStatus(assignment.status) &&
+          !assignment.endDate
+        )
+        .sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+
+      return openOwner || null;
+    };
+
+    return { resolveOwner };
+  }, [adAccountOwnerAssignments]);
+
+  const csPerformanceAds = useMemo(() => {
+    return dailyAds.map((dailyAd) => {
+      const adAccount = adAccountMasterLookup.byId.get(dailyAd.adAccountId);
+      const assignment = adAccountCsLookup.resolveAssignment(dailyAd.adAccountId, dailyAd.date);
+      const owner = adAccountOwnerLookup.resolveOwner(dailyAd.adAccountId, dailyAd.date);
+
+      return {
+        ...dailyAd,
+        advertiserId: owner?.advertiserId || adAccount?.advertiserId || dailyAd.advertiserId,
+        platformId: adAccount?.platformId || dailyAd.platformId,
+        subChannelId: assignment?.subChannelId || adAccount?.subChannelId || dailyAd.subChannelId || undefined,
+        csId: assignment?.csId || dailyAd.csId || undefined,
+      };
+    });
+  }, [adAccountCsLookup, adAccountMasterLookup, adAccountOwnerLookup, dailyAds]);
+
   React.useEffect(() => {
     if (!rangeParams) {
       setApiAdsMetrics({});
@@ -1342,6 +1085,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const backgroundRefresh = apiSnapshotRefreshNonce !== lastApiSnapshotRefreshNonceRef.current;
     if (backgroundRefresh) {
       lastApiSnapshotRefreshNonceRef.current = apiSnapshotRefreshNonce;
+    }
+    if (!forceRefresh && !backgroundRefresh) {
+      setApiAdsMetrics({});
+      setApiAdsByDateAccount({});
+      setApiAdsStatus('idle');
+      setApiLoadDiagnostics(createEmptyApiLoadDiagnostics());
+      return;
     }
     const cacheKey = buildApiCacheKey(rangeParams, adAccountMappingCacheKey);
     const persistentCachedSnapshot =
@@ -1653,37 +1403,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
     };
   }, [adAccountCsLookup, adAccountLookup, adAccountMappingCacheKey, apiRefreshNonce, apiSnapshotRefreshNonce, isOperationalDataLoading, platforms, rangeParams, scopedApiPlatformKeys]);
 
-  // Filter Logic
-  const filteredData = useMemo(() => {
-    if (!dateRange?.from) return { orders: [], leads: [] };
-
-    const from = dateRange.from;
-    const to = dateRange.to || dateRange.from; // Handle single day selection
-
-    const filteredOrders = orders.filter(o => {
-        // If targetId is defined, filter by it. If undefined (Owner view all), show all.
-        if (targetId && o.csId !== targetId) return false;
-        if (targetPlatformId && o.platformId !== targetPlatformId) return false;
-        
-        // Use leadDate or serviceDate or createdAt logic? Usually leadDate for sales performance
-        const dateStr = o.leadDate || o.serviceDate || ''; 
-        if (!dateStr) return false;
-        const d = new Date(dateStr);
-        return d >= from && d <= to;
-    });
-
-    const filteredLeads = leads.filter(l => {
-        // If targetId is defined, filter by it. If undefined (Owner view all), show all.
-        if (targetId && l.csId !== targetId) return false;
-        if (targetPlatformId && l.platformId !== targetPlatformId) return false;
-
-        const d = new Date(l.timestamp);
-        return d >= from && d <= to;
-    });
-
-    return { orders: filteredOrders, leads: filteredLeads };
-  }, [orders, leads, targetId, targetPlatformId, dateRange]);
-
   const spamScopeInputs = useMemo(() => {
     if (!rangeParams) return [];
 
@@ -1725,59 +1444,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
     return grouped;
   }, [spamScopeInputs]);
 
-  const { orders: myOrders, leads: myLeads } = filteredData;
-
-  // Generate Daily Stats for Table & Chart
-  const dailyStats = useMemo(() => {
-      if (!dateRange?.from) return [];
-      
-      const from = dateRange.from;
-      const to = dateRange.to || dateRange.from;
-      
-      // Limit range to prevent crashing if user selects "All Time" with huge range
-      // But for "All Time", we might just want to show actual data points instead of filling gaps?
-      // For now, assume reasonable range or specific filling behavior.
-      // If range > 365 days, maybe group by month? The requirement asked for "1-31" table.
-      
-      const days = eachDayOfInterval({ start: from, end: to });
-      
-      return days.map(day => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          
-          // Orders on this day (based on leadDate for consistency with sales funnel)
-          const dayOrders = myOrders.filter(o => (o.leadDate || '').startsWith(dateStr));
-          // Leads on this day
-          const dayLeads = myLeads.filter(l => l.timestamp.startsWith(dateStr));
-          const apiMetric = apiAdsMetrics[dateStr];
-          const adsMetric = apiMetric && (apiMetric.spend > 0 || apiMetric.leads > 0) ? apiMetric : undefined;
-          const adsSpend = adsMetric?.spend || 0;
-          const adsLeads = adsMetric?.leads || 0;
-
-          return {
-              date: day,
-              dateLabel: format(day, 'd MMM yyyy', { locale: id }),
-              dayNum: format(day, 'd'),
-              adsSpend,
-              adsLeads,
-              adsCpl: adsLeads > 0 ? adsSpend / adsLeads : 0,
-              leads: dayLeads.length,
-              orders: dayOrders.length,
-              pending: dayOrders.filter(o => o.status === 'pending').length,
-              process: dayOrders.filter(o => ['processing', 'otw', 'working', 'qc'].includes(o.status)).length,
-              done: dayOrders.filter(o => o.status === 'done').length,
-              cancel: dayOrders.filter(o => o.status === 'cancelled').length,
-              revenue: dayOrders.filter(o => o.status === 'done').reduce((acc, curr) => acc + (curr.price || 0), 0)
-          };
-      });
-  }, [apiAdsMetrics, dateRange, myOrders, myLeads]);
-
-  const chartData = dailyStats.map(stat => ({
-      name: format(stat.date, 'd/M'),
-      date: stat.date,
-      Leads: stat.leads,
-      Orders: stat.orders
-  }));
-
   const detailRows = useMemo(() => {
     if (!rangeParams) return [];
 
@@ -1786,9 +1452,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const subChannelName = new Map(subChannels.map((subChannel) => [subChannel.id, subChannel.name]));
     const activeAdAccounts = adAccounts.filter(
       (account) =>
-        account.status === 'active' &&
-        (!targetPlatformId || account.platformId === targetPlatformId) &&
-        shouldShowAdAccountInCsView(account),
+        isActiveDataStatus(account.status) &&
+        (!targetPlatformId || account.platformId === targetPlatformId),
     );
     const activeAdAccountById = new Map(activeAdAccounts.map((account) => [account.id, account]));
 
@@ -1827,9 +1492,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
     type AssignedAccountGroup = {
       date: string;
       account: (typeof activeAdAccounts)[number];
+      advertiserId: string;
       assignment: ReturnType<typeof adAccountCsLookup.resolveAssignment>;
       apiMetrics: CsAdsAccountMetric[];
-      operationalAds: typeof dailyAds;
+      operationalAds: typeof csPerformanceAds;
       leads: typeof leads;
       orders: typeof orders;
     };
@@ -1840,140 +1506,17 @@ export function CSDashboard({ userId }: { userId?: string }) {
       end: parseISO(`${rangeParams.to}T00:00:00`),
     }).map((date) => format(date, 'yyyy-MM-dd'));
     const dates = getDateRange();
-    const leadById = new Map(leads.map((lead) => [lead.id, lead]));
-
-    const readNestedString = (value: unknown): string | null => {
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        return trimmed || null;
-      }
-      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-      return null;
-    };
-
-    const collectPayloadValue = (source: unknown, keys: string[]) => {
-      if (!source || typeof source !== 'object') return null;
-      const record = source as Record<string, unknown>;
-      for (const key of keys) {
-        const value = readNestedString(record[key]);
-        if (value) return value;
-      }
-
-      const payload = record.payload;
-      if (!payload || typeof payload !== 'object') return null;
-      const payloadRecord = payload as Record<string, unknown>;
-      for (const key of keys) {
-        const value = readNestedString(payloadRecord[key]);
-        if (value) return value;
-      }
-
-      for (const nestedKey of ['adAccount', 'ad_account', 'source', 'apiAccount', 'api_account']) {
-        const nested = payloadRecord[nestedKey];
-        if (!nested || typeof nested !== 'object') continue;
-        const nestedRecord = nested as Record<string, unknown>;
-        for (const key of keys) {
-          const value = readNestedString(nestedRecord[key]);
-          if (value) return value;
-        }
-      }
-
-      return null;
-    };
-
-    const resolveExplicitAdAccount = (...sources: unknown[]) => {
-      const internalIdKeys = [
-        'adAccountId',
-        'ad_account_id',
-        'internalAdAccountId',
-        'internal_ad_account_id',
-      ];
-      const externalIdKeys = [
-        'externalAccountId',
-        'external_account_id',
-        'liveMetaAccountId',
-        'live_meta_account_id',
-        'metaAccountId',
-        'meta_account_id',
-        'liveGoogleCustomerId',
-        'live_google_customer_id',
-        'liveTikTokAdvertiserId',
-        'live_tiktok_advertiser_id',
-      ];
-      const nameKeys = [
-        'adAccountName',
-        'ad_account_name',
-        'internalAccountName',
-        'internal_account_name',
-        'externalAccountName',
-        'external_account_name',
-        'accountName',
-        'account_name',
-      ];
-
-      for (const source of sources) {
-        const internalId = collectPayloadValue(source, internalIdKeys);
-        if (internalId) {
-          const account = activeAdAccountById.get(internalId);
-          if (account) return account;
-        }
-      }
-
-      for (const source of sources) {
-        const externalId = collectPayloadValue(source, externalIdKeys);
-        if (!externalId) continue;
-        for (const platformKey of ['meta', 'google', 'tiktok'] as const) {
-          for (const key of buildExternalAccountLookupKeys(platformKey, externalId)) {
-            const account = adAccountLookup.byExternalId.get(key);
-            if (account && activeAdAccountById.has(account.id)) return account;
-          }
-        }
-      }
-
-      for (const source of sources) {
-        const accountName = collectPayloadValue(source, nameKeys);
-        if (!accountName) continue;
-        for (const key of getAdAccountNameLookupVariants(accountName)) {
-          const account = adAccountLookup.byName.get(key);
-          if (account && activeAdAccountById.has(account.id)) return account;
-        }
-      }
-
-      return null;
-    };
-
-    const getSyntheticAssignment = (
-      date: string,
-      account: (typeof activeAdAccounts)[number],
-      fallbackCsId?: string | null,
-      fallbackSubChannelId?: string | null,
-    ) => fallbackCsId ? ({
-      id: `operational-${date}-${account.id}-${fallbackCsId}`,
-      adAccountId: account.id,
-      csId: fallbackCsId,
-      subChannelId: fallbackSubChannelId || account.subChannelId || null,
-      startDate: date,
-      endDate: null,
-      status: 'active' as const,
-      notes: null,
-    }) : null;
-
-    const getGroup = (
-      date: string,
-      account: (typeof activeAdAccounts)[number],
-      fallback?: { csId?: string | null; subChannelId?: string | null },
-    ) => {
+    const getGroup = (date: string, account: (typeof activeAdAccounts)[number]) => {
+      const advertiserId = adAccountOwnerLookup.resolveOwner(account.id, date)?.advertiserId || account.advertiserId || '';
       const assignment = adAccountCsLookup.resolveAssignment(account.id, date);
-      const effectiveAssignment =
-        assignment && (!fallback?.csId || assignment.csId === fallback.csId)
-          ? assignment
-          : getSyntheticAssignment(date, account, fallback?.csId, fallback?.subChannelId);
-      if (targetId && effectiveAssignment?.csId !== targetId) return null;
+      if (targetId && assignment?.csId !== targetId) return null;
 
       const key = `${date}::${account.id}`;
       const current = groups.get(key) || {
         date,
         account,
-        assignment: effectiveAssignment,
+        advertiserId,
+        assignment,
         apiMetrics: [],
         operationalAds: [],
         leads: [],
@@ -1993,15 +1536,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
       group.apiMetrics.push(metric);
     }
 
-    for (const ad of dailyAds) {
+    for (const ad of csPerformanceAds) {
       if (!ad.date || ad.date < rangeParams.from || ad.date > rangeParams.to) continue;
       if (targetPlatformId && ad.platformId !== targetPlatformId) continue;
       const account = activeAdAccountById.get(ad.adAccountId);
       if (!account) continue;
-      const group = getGroup(ad.date, account, {
-        csId: ad.csId,
-        subChannelId: ad.subChannelId,
-      });
+      const group = getGroup(ad.date, account);
       if (!group) continue;
       group.operationalAds.push(ad);
     }
@@ -2019,7 +1559,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
       for (const account of activeAdAccounts) {
         const group = getGroup(date, account);
         if (!group) continue;
-        const key = getScopeKey(date, account.advertiserId, account.platformId, group.assignment?.csId);
+        const key = getScopeKey(date, group.advertiserId, account.platformId, group.assignment?.csId);
         const current = candidatesByScope.get(key) || [];
         current.push(group);
         candidatesByScope.set(key, current);
@@ -2062,55 +1602,15 @@ export function CSDashboard({ userId }: { userId?: string }) {
       return chooseBest(candidates);
     };
 
-    const findFallbackAccount = (
-      advertiserId?: string | null,
-      platformId?: string | null,
-      subChannelId?: string | null,
-    ) => {
-      const candidates = activeAdAccounts.filter((account) => {
-        if (advertiserId && account.advertiserId !== advertiserId) return false;
-        if (platformId && account.platformId !== platformId) return false;
-        return true;
-      });
-
-      if (!candidates.length) return null;
-
-      if (subChannelId) {
-        const exactSubChannel = candidates.find((account) => account.subChannelId === subChannelId);
-        if (exactSubChannel) return exactSubChannel;
-      }
-
-      return candidates[0];
-    };
-
     const getLeadDate = (lead: (typeof leads)[number]) => lead.timestamp?.slice(0, 10) || '';
-    const getOrderLeadDate = (order: (typeof orders)[number]) => (order.leadDate || order.created_at || '').slice(0, 10);
 
     for (const order of orders) {
-      const relatedLead = order.leadId ? leadById.get(order.leadId) : undefined;
-      const date = getOrderLeadDate(order) || (relatedLead ? getLeadDate(relatedLead) : '');
+      const date = getOrderDateKey(order);
       if (!date || date < rangeParams.from || date > rangeParams.to) continue;
-      const orderCsId = order.csId || relatedLead?.csId || null;
-      const orderAdvertiserId = order.advertiserId || relatedLead?.advertiserId || null;
-      const orderPlatformId = order.platformId || relatedLead?.platformId || null;
-      const orderSubChannelId = order.subChannelId || relatedLead?.subChannelId || null;
-      if (targetId && orderCsId !== targetId) continue;
-      if (targetPlatformId && orderPlatformId !== targetPlatformId) continue;
-
-      const explicitAccount = resolveExplicitAdAccount(order, relatedLead);
-      const explicitGroup = explicitAccount
-        ? getGroup(date, explicitAccount, { csId: orderCsId, subChannelId: orderSubChannelId })
-        : null;
-      const candidates = candidatesByScope.get(getScopeKey(date, orderAdvertiserId, orderPlatformId, orderCsId));
-      const group = explicitGroup || selectBestGroup(candidates, orderSubChannelId)
-        || (
-          orderCsId
-            ? (() => {
-              const account = findFallbackAccount(orderAdvertiserId, orderPlatformId, orderSubChannelId);
-              return account ? getGroup(date, account, { csId: orderCsId, subChannelId: orderSubChannelId }) : null;
-            })()
-            : null
-        );
+      if (targetId && order.csId !== targetId) continue;
+      if (targetPlatformId && order.platformId !== targetPlatformId) continue;
+      const candidates = candidatesByScope.get(getScopeKey(date, order.advertiserId, order.platformId, order.csId));
+      const group = selectBestGroup(candidates, order.subChannelId);
       if (!group) continue;
       group.orders.push(order);
     }
@@ -2121,20 +1621,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
       if (targetId && lead.csId !== targetId) continue;
       if (targetPlatformId && lead.platformId !== targetPlatformId) continue;
 
-      const explicitAccount = resolveExplicitAdAccount(lead);
-      const explicitGroup = explicitAccount
-        ? getGroup(date, explicitAccount, { csId: lead.csId, subChannelId: lead.subChannelId })
-        : null;
       const candidates = candidatesByScope.get(getScopeKey(date, lead.advertiserId, lead.platformId, lead.csId));
-      const group = explicitGroup || selectBestGroup(candidates, lead.subChannelId)
-        || (
-          lead.csId
-            ? (() => {
-              const account = findFallbackAccount(lead.advertiserId, lead.platformId, lead.subChannelId);
-              return account ? getGroup(date, account, { csId: lead.csId, subChannelId: lead.subChannelId }) : null;
-            })()
-            : null
-        );
+      const group = selectBestGroup(candidates, lead.subChannelId);
       if (!group) continue;
       group.leads.push(lead);
     }
@@ -2150,7 +1638,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
     const shouldAttachScopeSpam = (group: AssignedAccountGroup) => {
       const scopeKey = getScopeKey(
         group.date,
-        group.account.advertiserId,
+        group.advertiserId,
         group.account.platformId,
         group.assignment?.csId,
       );
@@ -2183,16 +1671,16 @@ export function CSDashboard({ userId }: { userId?: string }) {
       const doneCount = completedOrders.length;
       const spamCount = spamByScope.get(getScopeKey(
         group.date,
-        group.account.advertiserId,
+        group.advertiserId,
         group.account.platformId,
         group.assignment?.csId,
       )) || 0;
       const rowSpamCount = shouldAttachScopeSpam(group) ? spamCount : 0;
 
-      rows.push({
+      const detailRow: DetailRow = {
         accountId: group.account.id,
         date: group.date,
-        advertiserName: userName.get(group.account.advertiserId || '') || 'Advertiser belum terdaftar',
+        advertiserName: userName.get(group.advertiserId || '') || 'Advertiser belum terdaftar',
         csName: group.assignment?.csId
           ? userName.get(group.assignment.csId) || 'CS belum terdaftar'
           : 'CS belum diatur',
@@ -2222,8 +1710,18 @@ export function CSDashboard({ userId }: { userId?: string }) {
         roasTotal: spendTotal > 0 ? revenue / spendTotal : 0,
         cpl: leadsDashboard > 0 ? spendDashboard / leadsDashboard : 0,
         cplTotal: leadsDashboard > 0 ? spendTotal / leadsDashboard : 0,
-        source: group.operationalAds.length > 0 ? 'operational' : (isConnectedAdAccount(group.account) ? 'connected' : 'operational'),
-      });
+        source: group.operationalAds.length > 0 ? 'operational' : 'api',
+      };
+
+      if (
+        detailRow.spendDashboard > 0 ||
+        detailRow.leadsDash > 0 ||
+        detailRow.leadsReal > 0 ||
+        detailRow.orders > 0 ||
+        detailRow.spam > 0
+      ) {
+        rows.push(detailRow);
+      }
     }
 
     return rows.sort((left, right) => {
@@ -2237,15 +1735,13 @@ export function CSDashboard({ userId }: { userId?: string }) {
   }, [
     apiAdsByDateAccount,
     adAccountCsLookup,
+    adAccountOwnerLookup,
     adAccounts,
-    adAccountLookup,
-    dailyAds,
-    isConnectedAdAccount,
+    csPerformanceAds,
     leads,
     orders,
     platforms,
     rangeParams,
-    shouldShowAdAccountInCsView,
     spamScopeInputs,
     subChannels,
     targetId,
@@ -2309,39 +1805,187 @@ export function CSDashboard({ userId }: { userId?: string }) {
       roasTotal: spendTotal > 0 ? revenue / spendTotal : 0,
     };
   }, [detailRows, spamScopeInputs]);
-  const isApiLoading = apiAdsStatus === 'loading';
+  const csPerformanceBreakdowns = useMemo(() => {
+    type BreakdownRow = {
+      key: string;
+      label: string;
+      secondary?: string;
+      platformKey?: string;
+      spendDashboard: number;
+      spendTotal: number;
+      leadsDash: number;
+      leadsReal: number;
+      spam: number;
+      orders: number;
+      done: number;
+      revenue: number;
+      cprClosing: number;
+      cprDone: number;
+      roas: number;
+    };
+
+    type BreakdownGroup = {
+      title: string;
+      totals: {
+        spendDashboard: number;
+        leadsDash: number;
+        leadsReal: number;
+        orders: number;
+        done: number;
+        cprClosing: number;
+        cprDone: number;
+      };
+      rows: BreakdownRow[];
+    };
+
+    const buildBreakdown = (
+      title: string,
+      getKey: (row: (typeof detailRows)[number]) => string,
+      getLabel: (row: (typeof detailRows)[number]) => string,
+      getSecondary?: (row: (typeof detailRows)[number]) => string | undefined,
+      getPlatformKey?: (row: (typeof detailRows)[number]) => string | undefined,
+    ): BreakdownGroup => {
+      const groups = new Map<string, BreakdownRow>();
+
+      for (const row of detailRows) {
+        const key = getKey(row);
+        const current = groups.get(key) || {
+          key,
+          label: getLabel(row),
+          secondary: getSecondary?.(row),
+          platformKey: getPlatformKey?.(row),
+          spendDashboard: 0,
+          spendTotal: 0,
+          leadsDash: 0,
+          leadsReal: 0,
+          spam: 0,
+          orders: 0,
+          done: 0,
+          revenue: 0,
+          cprClosing: 0,
+          cprDone: 0,
+          roas: 0,
+        };
+
+        current.spendDashboard += row.spendDashboard;
+        current.spendTotal += row.spendTotal;
+        current.leadsDash += row.leadsDash;
+        current.leadsReal += row.leadsReal;
+        current.spam += row.spam;
+        current.orders += row.orders;
+        current.done += row.done;
+        current.revenue += row.revenue;
+        current.secondary = current.secondary || getSecondary?.(row);
+        current.platformKey = current.platformKey || getPlatformKey?.(row);
+        groups.set(key, current);
+      }
+
+      const rows = Array.from(groups.values()).map((row) => ({
+        ...row,
+        cprClosing: row.orders > 0 ? row.spendDashboard / row.orders : 0,
+        cprDone: row.done > 0 ? row.spendDashboard / row.done : 0,
+        roas: row.spendDashboard > 0 ? row.revenue / row.spendDashboard : 0,
+      }));
+      const visibleRows = rows.filter(
+        (row) =>
+          row.spendDashboard > 0 ||
+          row.leadsDash > 0 ||
+          row.leadsReal > 0 ||
+          row.orders > 0 ||
+          row.spam > 0,
+      );
+      const totals = visibleRows.reduce((acc, row) => ({
+        spendDashboard: acc.spendDashboard + row.spendDashboard,
+        leadsDash: acc.leadsDash + row.leadsDash,
+        leadsReal: acc.leadsReal + row.leadsReal,
+        orders: acc.orders + row.orders,
+        done: acc.done + row.done,
+        cprClosing: 0,
+        cprDone: 0,
+      }), {
+        spendDashboard: 0,
+        leadsDash: 0,
+        leadsReal: 0,
+        orders: 0,
+        done: 0,
+        cprClosing: 0,
+        cprDone: 0,
+      });
+
+      return {
+        title,
+        totals: {
+          ...totals,
+          cprClosing: totals.orders > 0 ? totals.spendDashboard / totals.orders : 0,
+          cprDone: totals.done > 0 ? totals.spendDashboard / totals.done : 0,
+        },
+        rows: visibleRows.sort((left, right) => {
+          const leftCpr = left.cprDone > 0 ? left.cprDone : left.cprClosing > 0 ? left.cprClosing : Number.MAX_SAFE_INTEGER;
+          const rightCpr = right.cprDone > 0 ? right.cprDone : right.cprClosing > 0 ? right.cprClosing : Number.MAX_SAFE_INTEGER;
+          if (leftCpr !== rightCpr) return leftCpr - rightCpr;
+          if (right.done !== left.done) return right.done - left.done;
+          if (right.orders !== left.orders) return right.orders - left.orders;
+          return right.spendDashboard - left.spendDashboard;
+        }),
+      };
+    };
+
+    return [
+      buildBreakdown('Advertiser', (row) => row.advertiserName, (row) => row.advertiserName),
+      buildBreakdown('CS', (row) => row.csName, (row) => row.csName),
+      buildBreakdown(
+        'Platform',
+        (row) => row.platformName,
+        (row) => row.platformName,
+        undefined,
+        (row) => row.platformKey,
+      ),
+      buildBreakdown(
+        'Akun Iklan',
+        (row) => row.accountId,
+        (row) => row.accountName,
+        (row) => `${row.platformName} / ${row.csName}`,
+        (row) => row.platformKey,
+      ),
+    ];
+  }, [detailRows]);
+
+  const toggleCprBreakdown = React.useCallback((title: string) => {
+    setExpandedCprBreakdowns((current) =>
+      current.includes(title)
+        ? current.filter((item) => item !== title)
+        : [...current, title],
+    );
+  }, []);
+
   const hasVisibleApiData = useMemo(
     () => detailRows.some((row) => row.spendDashboard > 0 || row.leadsDash > 0),
     [detailRows],
   );
-  const hasConnectedVisibleRows = useMemo(
-    () => detailRows.some((row) => row.source === 'api' || row.source === 'connected'),
-    [detailRows],
-  );
+  const isPerformanceDbHydrating = isPerformanceRangeLoading && !hasVisibleApiData;
+  const isApiSyncBusy = apiAdsStatus === 'loading' || isApiDailySyncing;
+  const isApiLoading = isApiSyncBusy || isPerformanceDbHydrating;
   const hasOperationalVisibleRows = detailRows.length > 0;
   const isApiScopeMismatch = apiAdsStatus === 'ready' && detailRows.length > 0 && !hasVisibleApiData;
-  const resolvedApiStatusClassName = isApiScopeMismatch
+  const shouldHighlightUnmappedApi = apiAdsStatus !== 'loading' && apiAdsStatus !== 'error' && apiLoadDiagnostics.unmatchedRows.length > 0;
+  const resolvedApiStatusClassName = shouldHighlightUnmappedApi || isApiScopeMismatch
     ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
-    : apiAdsStatus === 'error'
-      ? apiStatusClassName('error')
-      : apiAdsStatus !== 'idle'
-        ? apiStatusClassName(apiAdsStatus)
-        : hasConnectedVisibleRows
-          ? apiStatusClassName('ready')
-          : hasOperationalVisibleRows
-            ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-            : apiStatusClassName(apiAdsStatus);
-  const resolvedApiStatusLabel = isApiScopeMismatch
+    : isApiLoading || isApiDailySyncing
+      ? apiStatusClassName('loading')
+      : apiAdsStatus === 'error'
+        ? apiStatusClassName('error')
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300';
+  const resolvedApiStatusLabel = shouldHighlightUnmappedApi || isApiScopeMismatch
     ? 'Perlu mapping'
-    : apiAdsStatus === 'error'
-      ? getApiStatusLabel('error')
-      : apiAdsStatus !== 'idle'
-        ? getApiStatusLabel(apiAdsStatus)
-        : hasConnectedVisibleRows
-          ? 'Connected'
-          : hasOperationalVisibleRows
-            ? 'Operasional'
-            : getApiStatusLabel(apiAdsStatus);
+    : isPerformanceDbHydrating
+      ? 'Memuat DB'
+      : apiAdsStatus === 'loading' || isApiDailySyncing
+      ? 'Sinkronisasi'
+      : apiAdsStatus === 'error'
+        ? getApiStatusLabel('error')
+        : hasOperationalVisibleRows || apiAdsStatus === 'idle' || apiAdsStatus === 'ready'
+          ? 'Data DB'
+          : 'Belum ada data';
   const csDashboardMappingNotices = useMemo(() => {
     const canOpenMasterData = hasPermission('master_data.view');
     const notices: Array<{
@@ -2574,29 +2218,22 @@ export function CSDashboard({ userId }: { userId?: string }) {
       current.spamRate = current.leadsDash > 0 ? (current.spam / current.leadsDash) * 100 : 0;
     }
 
-    return Array.from(groups.values()).sort((left, right) => left.date.localeCompare(right.date));
+    return Array.from(groups.values()).sort((left, right) => {
+      const leftHasAdMetrics = left.spendDashboard > 0 || left.leadsDash > 0;
+      const rightHasAdMetrics = right.spendDashboard > 0 || right.leadsDash > 0;
+      if (leftHasAdMetrics !== rightHasAdMetrics) return leftHasAdMetrics ? -1 : 1;
+      return right.date.localeCompare(left.date);
+    });
   }, [detailRows, spamByDate]);
-  const totalPages = Math.max(1, Math.ceil(dateGroups.length / itemsPerPage));
-  const paginatedDateGroups = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return dateGroups.slice(start, start + itemsPerPage);
-  }, [currentPage, dateGroups, itemsPerPage]);
+  React.useEffect(() => {
+    setExpandedDateGroups(dateGroups.slice(0, 1).map((group) => group.date));
+  }, [dateGroups]);
   const selectedCsLabel = targetId
     ? users.find((user) => user.id === targetId)?.name || 'CS terpilih'
     : 'Semua CS';
   const selectedPlatformLabel = targetPlatformId
     ? platformFilterOptions.find((platform) => platform.id === targetPlatformId)?.name || 'Platform terpilih'
     : 'Semua Platform';
-
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [rangeParams?.from, rangeParams?.to, targetId, targetPlatformId, itemsPerPage]);
-
-  React.useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
 
   const handleSaveSpamInput = React.useCallback(async () => {
     if (!spamForm.inputDate || !spamForm.csId || !spamForm.platformId || !spamForm.advertiserId) {
@@ -2684,54 +2321,56 @@ export function CSDashboard({ userId }: { userId?: string }) {
         icon={Users}
       />
 
-      <OperationalFilterPanel className="csDashboardFilterPanel">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-          <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(180px,240px)_minmax(180px,240px)_minmax(260px,360px)]">
-            {isOwner && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-slate-500 dark:text-slate-400">CS</div>
-                <Select value={selectedCsId} onValueChange={setSelectedCsId}>
-                  <SelectTrigger className="csDashboardFilterControl bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                    <SelectValue placeholder="Pilih CS" />
-                  </SelectTrigger>
-                  <SelectContent className="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-                    <SelectItem value="all">Semua CS</SelectItem>
-                    {users
-                      .filter(u => isCsRole(u.role) && u.status === 'active')
-                      .map(u => (
-                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-                      ))
-                    }
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Platform</div>
-              <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
+      <OperationalFilterPanel
+        className="csDashboardFilterPanel"
+        collapsible
+        isExpanded={isMobileFilterExpanded}
+        onExpandedChange={setIsMobileFilterExpanded}
+        summary={activeFilterCount > 0 ? `${activeFilterCount} filter aktif` : 'Semua data ditampilkan'}
+        contentClassName="csDashboardFilterContent"
+      >
+        <div className="csDashboardFilterRow">
+          <div className="csDashboardFilterField csDashboardFilterDateField">
+            <FoundationDateRangePicker className="csDashboardDatePicker" date={dateRange} setDate={handleDateRangeChange} numberOfMonths={1} />
+          </div>
+          {isOwner && (
+            <div className="csDashboardFilterField">
+              <Select value={selectedCsId} onValueChange={setSelectedCsId}>
                 <SelectTrigger className="csDashboardFilterControl bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                  <SelectValue placeholder="Pilih platform" />
+                  <SelectValue placeholder="Pilih CS" />
                 </SelectTrigger>
                 <SelectContent className="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-                  <SelectItem value="all">Semua Platform</SelectItem>
-                  {platformFilterOptions.map((platform) => (
-                    <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
-                  ))}
+                  <SelectItem value="all">Semua CS</SelectItem>
+                  {users
+                    .filter(u => isCsRole(u.role) && u.status === 'active')
+                    .map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))
+                  }
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Periode</div>
-              <FoundationDateRangePicker className="csDashboardDatePicker" date={dateRange} setDate={handleDateRangeChange} />
-            </div>
+          )}
+          <div className="csDashboardFilterField">
+            <Select value={selectedPlatformId} onValueChange={setSelectedPlatformId}>
+              <SelectTrigger className="csDashboardFilterControl bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <SelectValue placeholder="Pilih platform" />
+              </SelectTrigger>
+              <SelectContent className="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+                <SelectItem value="all">Semua Platform</SelectItem>
+                {platformFilterOptions.map((platform) => (
+                  <SelectItem key={platform.id} value={platform.id}>{platform.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <div className="flex flex-wrap gap-2 xl:justify-end">
+          <div className="csDashboardFilterActions">
             {canManageSpamInputs && (
               <Button
                 type="button"
                 variant="outline"
-                className="h-10 gap-2 border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+                className="csDashboardActionButton gap-2 border-slate-200 bg-white shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
                 onClick={() => openSpamInputDialog()}
               >
                 <Plus className="h-4 w-4" />
@@ -2740,11 +2379,11 @@ export function CSDashboard({ userId }: { userId?: string }) {
             )}
             <Button
               type="button"
-              className="h-10 gap-2 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-              disabled={!rangeParams || apiAdsStatus === 'loading' || isApiDailySyncing}
+              className="csDashboardActionButton gap-2 bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+              disabled={!rangeParams || isApiSyncBusy}
               onClick={handleSyncAdsApiToDailyAds}
             >
-              <RefreshCw className={`h-4 w-4 ${apiAdsStatus === 'loading' || isApiDailySyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isApiSyncBusy ? 'animate-spin' : ''}`} />
               Sinkron API
             </Button>
           </div>
@@ -2759,78 +2398,21 @@ export function CSDashboard({ userId }: { userId?: string }) {
           </TabsRail>
         </TabsViewport>
 
-        <TabsContent value="performance" className="space-y-4">
-      <div className="csDashboardScopeGrid grid gap-3 md:grid-cols-3">
-        <div className="csDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Periode</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {rangeParams
-              ? `${format(parseISO(`${rangeParams.from}T00:00:00`), 'dd MMM yyyy', { locale: id })} - ${format(parseISO(`${rangeParams.to}T00:00:00`), 'dd MMM yyyy', { locale: id })}`
-              : 'Belum dipilih'}
-          </div>
-        </div>
-        <div className="csDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Akun Iklan Terpetakan</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {formatCount(csKpis.mappedAccountCount)} dari {formatCount(csKpis.accountCount)} akun aktif
-          </div>
-        </div>
-        <div className="csDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Status Data</div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${resolvedApiStatusClassName}`}>
-              {apiAdsStatus === 'loading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              {resolvedApiStatusLabel}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {csDashboardMappingNotices.length > 0 && (
-        <div className="grid gap-2">
-          {csDashboardMappingNotices.map((notice) => (
-            <div
-              key={notice.key}
-              className={`flex flex-col gap-3 rounded-xl border px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between ${
-                notice.tone === 'danger'
-                  ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200'
-                  : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
-              }`}
-            >
-              <div className="flex min-w-0 items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold">{notice.title}</div>
-                  <div className="mt-0.5 text-xs leading-relaxed opacity-80">{notice.detail}</div>
-                </div>
-              </div>
-              {notice.href ? (
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 border-current bg-white/70 text-current hover:bg-white dark:bg-slate-950/30 dark:hover:bg-slate-950/50"
-                >
-                  <a href={notice.href}>{notice.actionLabel}</a>
-                </Button>
-              ) : (
-                <span className="shrink-0 rounded-full border border-current/25 px-3 py-1 text-xs font-semibold">
-                  {notice.actionLabel}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <OperationalKpiGrid className="csDashboardKpiGrid">
+        <TabsContent value="performance" className="advertiserDashboardTabContent space-y-4">
+      <OperationalKpiGrid className="advertiserDashboardKpiGrid advertiserDashboardCsKpiGrid">
         <OperationalKpiCard
           label="Spending"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatShortCurrency(csKpis.spendDashboard)}</span>
-              <span>{formatShortCurrency(csKpis.spendTotal)}</span>
+              <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--info">{formatShortCurrency(csKpis.spendDashboard)}</span>
+              <span className={`foundationMetricSubValue ${csKpis.spendTotal > csKpis.spendDashboard ? 'foundationMetricSubValue--danger' : 'foundationMetricSubValue--warning'}`}>
+                {formatShortCurrency(csKpis.spendTotal)}
+              </span>
             </div>
+            )
           }
           icon={TrendingUp}
           tone="blue"
@@ -2838,19 +2420,24 @@ export function CSDashboard({ userId }: { userId?: string }) {
         <OperationalKpiCard
           label="Lead Dashboard"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatCount(csKpis.leadsDashboard)}</span>
-              <span>Prospek {formatCount(csKpis.prospects)}</span>
+              <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--info">{formatCount(csKpis.leadsDashboard)}</span>
+              <span className="foundationMetricSubValue foundationMetricSubValue--info">Prospek {formatCount(csKpis.prospects)}</span>
             </div>
+            )
           }
           icon={Users}
-          tone="violet"
+          tone="blue"
         />
         <OperationalKpiCard
           label="Spam"
           value={
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-rose-600 dark:text-rose-300">{formatCount(csKpis.spamCount)}</span>
+              <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--danger">{formatCount(csKpis.spamCount)}</span>
+              <span className="invisible">-</span>
             </div>
           }
           icon={AlertTriangle}
@@ -2859,9 +2446,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
         <OperationalKpiCard
           label="Spam Rate"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton withSubValue={false} />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-amber-500 dark:text-amber-300">{formatPercentAllowZero(csKpis.spamRate)}</span>
+              <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--warning">{formatPercentAllowZero(csKpis.spamRate)}</span>
+              <span className="invisible">-</span>
             </div>
+            )
           }
           icon={TrendingUp}
           tone="amber"
@@ -2869,10 +2461,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
         <OperationalKpiCard
           label="Cost/Lead"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
               <span className={`text-2xl font-semibold ${getCostPerLeadTextClass(csKpis.cprDashboard)}`}>{formatShortCurrency(csKpis.cprDashboard)}</span>
               <span>{formatShortCurrency(csKpis.cprDashboardTotal)}</span>
             </div>
+            )
           }
           icon={CheckCircle}
           tone="emerald"
@@ -2881,8 +2477,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
           label="Closing"
           value={
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatCount(csKpis.orders)}</span>
-              <span className="text-emerald-600 dark:text-emerald-300">Selesai: {formatCount(csKpis.done)}</span>
+              <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{formatCount(csKpis.orders)}</span>
+              <span className="foundationMetricSubValue foundationMetricSubValue--success">Selesai: {formatCount(csKpis.done)}</span>
             </div>
           }
           icon={ShoppingCart}
@@ -2891,10 +2487,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
         <OperationalKpiCard
           label="Cost/Closing"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatShortCurrency(csKpis.costPerClosing)}</span>
+              <span className={`text-2xl font-semibold ${getCostIndicatorTextClass(csKpis.costPerClosing)}`}>{formatShortCurrency(csKpis.costPerClosing)}</span>
               <span>{formatShortCurrency(csKpis.costPerClosingTotal)}</span>
             </div>
+            )
           }
           icon={ShoppingCart}
           tone="amber"
@@ -2902,10 +2502,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
         <OperationalKpiCard
           label="Cost/Selesai"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{formatShortCurrency(csKpis.costPerDone)}</span>
+              <span className={`text-2xl font-semibold ${getCostIndicatorTextClass(csKpis.costPerDone)}`}>{formatShortCurrency(csKpis.costPerDone)}</span>
               <span>{formatShortCurrency(csKpis.costPerDoneTotal)}</span>
             </div>
+            )
           }
           icon={CheckCircle}
           tone="emerald"
@@ -2913,142 +2517,258 @@ export function CSDashboard({ userId }: { userId?: string }) {
         <OperationalKpiCard
           label="ROAS"
           value={
+            isPerformanceDbHydrating ? (
+              <KpiMetricSkeleton withSubValue={false} />
+            ) : (
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">{csKpis.roas > 0 ? `${csKpis.roas.toFixed(2)}x` : '-'}</span>
+              <span className="text-2xl font-semibold text-slate-950 dark:text-slate-100">
+                <RoasBadgeValue value={csKpis.roas} />
+              </span>
+              <span className="invisible">-</span>
             </div>
+            )
           }
           icon={TrendingUp}
           tone="amber"
         />
       </OperationalKpiGrid>
 
-      <div className="grid gap-4 md:grid-cols-1">
-        {/* Chart */}
-        <Card className="csDashboardChartCard border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <CardHeader className="csDashboardSectionHeader border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base text-slate-800 dark:text-slate-100">Grafik Lead Dashboard dan Order</CardTitle>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Tren harian berdasarkan tanggal lead dashboard.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="hidden w-fit border-slate-200 bg-slate-50 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 sm:inline-flex">
-                  {chartData.length} hari
-                </Badge>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                  onClick={() => setIsChartOpen((value) => !value)}
-                  aria-label={isChartOpen ? 'Tutup grafik' : 'Buka grafik'}
-                >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${isChartOpen ? '' : '-rotate-90'}`} />
-                </Button>
-              </div>
+      <div className="grid gap-4">
+        <OperationalTableCard className="advertiserDashboardLegacyCprCard">
+          <CardHeader className="advertiserDashboardLegacyCprHeader border-b border-slate-100 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
+            <div>
+              <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CPR Terbaik</CardTitle>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
+                Seluruh advertiser, CS, platform, dan akun iklan aktif berdasarkan CPR closing dan selesai dari filter aktif.
+              </p>
             </div>
           </CardHeader>
-          {isChartOpen && (
-          <CardContent className="px-4 pt-5">
-            <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="csLeadsGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.18} />
-                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="csOrdersGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.18} />
-                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis
-                      dataKey="date"
-                      tickFormatter={(value) => format(value, 'd/M')}
-                      stroke="#64748b"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#64748b"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `${value}`}
-                    />
-                    <Tooltip
-                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 12px 24px -16px rgb(15 23 42 / 0.35)' }}
-                        labelFormatter={(value) => format(value as Date, 'dd MMMM yyyy', { locale: id })}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="Leads"
-                      name="Lead Dashboard"
-                      stroke="#06b6d4"
-                      fill="url(#csLeadsGradient)"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: '#06b6d4', strokeWidth: 1, stroke: '#fff' }}
-                      activeDot={{ r: 5 }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="Orders"
-                      name="Orders"
-                      stroke="#2563eb"
-                      fill="url(#csOrdersGradient)"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: '#2563eb', strokeWidth: 1, stroke: '#fff' }}
-                      activeDot={{ r: 5 }}
-                    />
-                </ComposedChart>
-                </ResponsiveContainer>
-            </div>
-          </CardContent>
-          )}
-        </Card>
+          <div className="advertiserDashboardLegacyCprGrid grid grid-cols-1 gap-4 p-3 sm:p-5">
+            {csPerformanceBreakdowns.map((breakdown) => {
+              const isBreakdownExpanded = expandedCprBreakdowns.includes(breakdown.title);
 
-        <OperationalTableCard className="csDashboardTableCard csDashboardPerformanceCard">
-          <CardHeader className="csDashboardSectionHeader border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+              return (
+                <div key={breakdown.title} className="advertiserDashboardLegacyCprPanel overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                  <div className="advertiserDashboardLegacyCprPanelHeader flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
+                        onClick={() => toggleCprBreakdown(breakdown.title)}
+                        aria-expanded={isBreakdownExpanded}
+                        aria-label={`${isBreakdownExpanded ? 'Tutup' : 'Buka'} Performa ${breakdown.title}`}
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isBreakdownExpanded ? 'rotate-180' : ''}`} />
+                      </Button>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          Performa {breakdown.title}
+                        </div>
+                        <div className="mt-1 text-[11px] text-slate-400">
+                          Menampilkan {breakdown.rows.length} data aktif by CPR selesai
+                        </div>
+                      </div>
+                    </div>
+                    <div className="advertiserDashboardLegacyCprBadges grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
+                      <div className="advertiserDashboardLegacyCprBadge rounded-md bg-cyan-50 px-2.5 py-1.5 dark:bg-cyan-950/30">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">Lead Dashboard</div>
+                        <div className="mt-0.5 font-mono text-sm font-bold text-cyan-700 dark:text-cyan-300">{formatNumber(breakdown.totals.leadsDash)}</div>
+                      </div>
+                      <div className="advertiserDashboardLegacyCprBadge rounded-md bg-blue-50 px-2.5 py-1.5 dark:bg-blue-950/30">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Lead Real</div>
+                        <div className="mt-0.5 font-mono text-sm font-bold text-blue-700 dark:text-blue-300">{formatNumber(breakdown.totals.leadsReal)}</div>
+                      </div>
+                      <div className="advertiserDashboardLegacyCprBadge rounded-md bg-violet-50 px-2.5 py-1.5 dark:bg-violet-950/30">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">Closing</div>
+                        <div className="mt-0.5 font-mono text-sm font-bold text-violet-700 dark:text-violet-300">{formatNumber(breakdown.totals.orders)}</div>
+                      </div>
+                      <div className="advertiserDashboardLegacyCprBadge rounded-md bg-emerald-50 px-2.5 py-1.5 dark:bg-emerald-950/30">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Done</div>
+                        <div className="mt-0.5 font-mono text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatNumber(breakdown.totals.done)}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {isBreakdownExpanded && (breakdown.rows.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] table-fixed text-xs">
+                        <colgroup>
+                          <col className="w-[230px]" />
+                          <col className="w-[110px]" />
+                          <col className="w-[75px]" />
+                          <col className="w-[75px]" />
+                          <col className="w-[110px]" />
+                          <col className="w-[110px]" />
+                          <col className="w-[75px]" />
+                        </colgroup>
+                        <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left font-medium">{breakdown.title}</th>
+                            <th className="px-3 py-2.5 text-right font-medium">Spend</th>
+                            <th className="px-3 py-2.5 text-center font-medium">Closing</th>
+                            <th className="px-3 py-2.5 text-center font-medium">Done</th>
+                            <th className="px-3 py-2.5 text-right font-medium">CPR Closing</th>
+                            <th className="px-3 py-2.5 text-right font-medium">CPR Selesai</th>
+                            <th className="px-3 py-2.5 text-center font-medium">ROAS</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                          {breakdown.rows.map((row) => (
+                            <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                              <td className="px-4 py-3 align-top">
+                                <div className="flex min-w-0 items-start gap-2">
+                                  {row.platformKey && (
+                                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                                      <PlatformLogo platform={row.platformKey} size="sm" />
+                                    </span>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="truncate font-semibold text-slate-900 dark:text-slate-100" title={row.label}>
+                                      {row.label}
+                                    </div>
+                                    {row.secondary && (
+                                      <div className="mt-1 truncate text-[11px] text-slate-500" title={row.secondary}>
+                                        {row.secondary}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                <SpendingCellValue
+                                  spendDashboard={row.spendDashboard}
+                                  spendTotal={row.spendTotal}
+                                  subtleTotal
+                                />
+                              </td>
+                              <td className="px-3 py-3 text-center align-top font-mono font-semibold text-violet-600">
+                                {formatNumber(row.orders)}
+                              </td>
+                              <td className="px-3 py-3 text-center align-top">
+                                <div className="font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</div>
+                                <div className="mt-1 font-mono text-[10px] text-slate-500">Lead {formatNumber(row.leadsDash)}</div>
+                              </td>
+                              <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                <CostIndicatorBadge value={row.cprClosing} />
+                              </td>
+                              <td className="px-3 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">
+                                <CostIndicatorBadge value={row.cprDone} />
+                              </td>
+                              <td className="px-3 py-3 text-center align-top">
+                                <RoasBadgeValue value={row.roas} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                      Belum ada data real untuk kategori ini.
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </OperationalTableCard>
+
+        <OperationalTableCard className="advertiserDashboardTableCard advertiserDashboardCsPerformanceCard">
+          <CardHeader className="advertiserDashboardSectionHeader border-b border-slate-100 bg-white px-6 py-5 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <CardTitle className="text-base text-slate-800 dark:text-slate-100">Performa CS dan Iklan</CardTitle>
                 <p className="mt-1 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
-                  Monitoring performa Customer Service dari akun iklan aktif, termasuk data iklan harian yang belum terhubung ke CS.
+                  Monitoring read-only performa CS berdasarkan akun iklan advertiser, platform, dan periode aktif.
                 </p>
-                {isApiScopeMismatch && (
-                  <p className="mt-2 max-w-3xl text-xs text-amber-700 dark:text-amber-200">
-                    Snapshot API ada pada periode ini, tetapi tidak ada yang cocok dengan filter CS/platform atau mapping akun iklan aktif. Cek assignment CS dan integrasi akun iklan di Master Data.
-                  </p>
-                )}
               </div>
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-medium ${resolvedApiStatusClassName}`}>
-                  {apiAdsStatus === 'loading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  {(isApiLoading || isApiDailySyncing) && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                   {resolvedApiStatusLabel}
                 </span>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-2 rounded-full border-slate-200 bg-white px-3 text-xs font-semibold shadow-sm dark:border-slate-700 dark:bg-slate-900"
-                  disabled={!rangeParams || apiAdsStatus === 'loading' || isApiDailySyncing}
+                  className="h-8 gap-2 bg-white dark:bg-slate-900"
+                  disabled={!rangeParams || isApiSyncBusy}
                   onClick={handleSyncAdsApiToDailyAds}
-                  title="Refresh data snapshot API iklan"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${apiAdsStatus === 'loading' || isApiDailySyncing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-4 w-4 ${isApiSyncBusy ? 'animate-spin' : ''}`} />
                   Sinkron API
                 </Button>
               </div>
             </div>
           </CardHeader>
           <div className="space-y-3 p-3 sm:p-5">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Rincian Performa
+            <div className="advertiserDashboardScopeGrid grid gap-3 md:grid-cols-3">
+              <div className="advertiserDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">CS Termonitor</div>
+                <div className="mt-2 font-semibold text-slate-900 dark:text-slate-100">
+                  {targetId ? selectedCsLabel : `${spamCsOptions.length} CS`}
+                </div>
+              </div>
+              <div className="advertiserDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Platform</div>
+                <div className="mt-2 font-semibold text-slate-900 dark:text-slate-100">
+                  {selectedPlatformLabel}
+                </div>
+              </div>
+              <div className="advertiserDashboardScopeCard rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Akun Iklan</div>
+                <div className="mt-2 font-semibold text-slate-900 dark:text-slate-100">
+                  {formatCount(csKpis.accountCount)} akun aktif
+                </div>
+              </div>
             </div>
+
+            <div className={`advertiserDashboardMappingHealth ${csDashboardMappingNotices.length === 0 ? 'isClean' : 'hasIssues'}`}>
+              <div className="advertiserDashboardMappingHealthHeader">
+                {csDashboardMappingNotices.length === 0 ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                <div>
+                  <strong>
+                    {csDashboardMappingNotices.length === 0 ? 'Mapping master data normal' : 'Perlu cek mapping master data'}
+                  </strong>
+                  <span>
+                    {csDashboardMappingNotices.length === 0
+                      ? 'Akun aktif, assignment, dan data iklan harian sudah terbaca untuk filter aktif.'
+                      : 'Data master/API belum lengkap sehingga angka bisa kosong atau tidak teratribusi.'}
+                  </span>
+                </div>
+              </div>
+
+              {csDashboardMappingNotices.length > 0 && (
+                <div className="advertiserDashboardMappingHealthItems">
+                  {csDashboardMappingNotices.map((notice) => (
+                    <div key={notice.key} className="advertiserDashboardMappingHealthItem">
+                      <div className="advertiserDashboardMappingHealthItemLabel">{notice.title}</div>
+                      <div className="advertiserDashboardMappingHealthItemValue">{notice.actionLabel}</div>
+                      <div className="advertiserDashboardMappingHealthItemList">{notice.detail}</div>
+                      {notice.href ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-3 h-8 w-fit bg-white dark:bg-slate-900"
+                          onClick={() => {
+                            window.location.href = notice.href;
+                          }}
+                        >
+                          {notice.actionLabel}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
                 {isApiLoading && dateGroups.length === 0 ? (
                   <div className="space-y-3">
                     {Array.from({ length: 4 }).map((_, index) => (
@@ -3062,28 +2782,23 @@ export function CSDashboard({ userId }: { userId?: string }) {
                     ))}
                   </div>
                 ) : dateGroups.length > 0 ? (
-                  paginatedDateGroups.map((group) => {
+                  dateGroups.map((group) => {
                     const isExpanded = expandedDateGroups.includes(group.date);
 
                     return (
-                    <div key={group.date} className="csDashboardDateGroup transition-colors">
-                        <div className={`csDashboardDateGroupFrame overflow-hidden rounded-lg border bg-white transition-colors dark:bg-slate-900 ${
-                          isExpanded
-                            ? 'border-blue-200 shadow-sm dark:border-blue-900/60'
-                            : 'border-slate-200 dark:border-slate-800'
-                        }`}>
+                    <div key={group.date} className="advertiserDashboardDateGroup overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                           <button
                             type="button"
                             aria-expanded={isExpanded}
                             onClick={() => toggleDateGroup(group.date)}
-                            className="csDashboardDateGroupButton w-full bg-white px-3 py-4 text-left transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70 sm:px-4 xl:p-0"
+                            className="advertiserDashboardDateGroupButton w-full px-4 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70"
                           >
-                            <div className="xl:hidden">
+                            <div className="flex flex-col gap-4 xl:hidden">
                               <div className="flex items-start gap-3">
-                                <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm transition-colors ${
+                                <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
                                   isExpanded
-                                    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300'
-                                    : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                    : 'border-slate-200 bg-white text-slate-500'
                                 }`}>
                                   <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                                 </span>
@@ -3155,8 +2870,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                 />
                                 <div className="rounded-md bg-slate-50 px-2.5 py-2 dark:bg-slate-800/60">
                                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">ROAS</div>
-                                  <div className="mt-1 inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                                    {group.roas > 0 ? `${group.roas.toFixed(2)}x` : '-'}
+                                  <div className="mt-1">
+                                    <RoasBadgeValue value={group.roas} />
                                   </div>
                                   <div className="mt-1 font-mono text-[10px] leading-tight text-slate-500 dark:text-slate-400">
                                     {group.roasTotal > 0 ? `${group.roasTotal.toFixed(2)}x` : '-'}
@@ -3169,12 +2884,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
                               </div>
                             </div>
 
-                            <div className="csDashboardDateSummary hidden min-h-[92px] items-stretch divide-x divide-slate-100 px-2 py-3 dark:divide-slate-800 xl:grid">
+                            <div className="advertiserDashboardDateSummary hidden items-stretch divide-x divide-slate-100 dark:divide-slate-800 xl:grid">
                               <div className="flex h-full min-w-0 items-center gap-3 pr-3">
-                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm transition-colors ${
+                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
                                   isExpanded
-                                    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300'
-                                    : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                    : 'border-slate-200 bg-white text-slate-500'
                                 }`}>
                                   <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                                 </span>
@@ -3245,8 +2960,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                   <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                                     Konversi
                                   </div>
-                                  <div className="font-mono text-[12px] font-bold text-slate-950 dark:text-slate-100">
-                                    {formatPercent(group.closingRate)}
+                                  <div>
+                                    <ConversionRateBadge value={group.closingRate} />
                                   </div>
                                 </div>
                                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-50 dark:bg-blue-950/30">
@@ -3259,8 +2974,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
                               </div>
                               <div className="flex h-full min-w-0 flex-col justify-start px-2 pt-1.5 text-right">
                                 <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">ROAS</div>
-                                <div className="mt-1 inline-flex self-end rounded-full border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] font-semibold leading-tight text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                                  {group.roas > 0 ? `${group.roas.toFixed(2)}x` : '-'}
+                                <div className="mt-1 inline-flex self-end">
+                                  <RoasBadgeValue value={group.roas} />
                                 </div>
                                 <div className="mt-1 truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">
                                   {group.roasTotal > 0 ? `${group.roasTotal.toFixed(2)}x burn` : '-'}
@@ -3342,8 +3057,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
                           {isExpanded && (
                           <>
-                            <HorizontalDragScrollArea className="csDashboardDetailScroller border-t border-slate-100 pb-2 dark:border-slate-800">
-                            <table className="w-full min-w-[1760px] table-fixed text-xs">
+                            <HorizontalDragScrollArea className="advertiserDashboardCsDetailDesktop w-full max-w-full border-t border-slate-100 pb-2 dark:border-slate-800">
+                            <table className="w-full min-w-[1640px] table-fixed text-xs">
                               <colgroup>
                                 <col className="w-[170px]" />
                                 <col className="w-[320px]" />
@@ -3355,12 +3070,10 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                 <col className="w-[110px]" />
                                 <col className="w-[130px]" />
                                 <col className="w-[130px]" />
+                                <col className="w-[130px]" />
                                 <col className="w-[95px]" />
-                                <col className="w-[85px]" />
-                                <col className="w-[75px]" />
-                                <col className="w-[130px]" />
-                                <col className="w-[130px]" />
-                                <col className="w-[85px]" />
+                                <col className="w-[95px]" />
+                                <col className="w-[120px]" />
                               </colgroup>
                               <thead className="bg-white text-slate-500 dark:bg-slate-900">
                                 <tr
@@ -3487,11 +3200,9 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                   <th className="px-4 py-3 text-right font-medium">Konversi</th>
                                   <th className="px-4 py-3 text-right font-medium">Cost per Lead</th>
                                   <th className="px-4 py-3 text-right font-medium">Cost per Closing</th>
-                                  <th className="px-4 py-3 text-center font-medium">Terjadwal</th>
+                                  <th className="px-4 py-3 text-right font-medium">Cost per Selesai</th>
                                   <th className="px-4 py-3 text-center font-medium">Selesai</th>
                                   <th className="px-4 py-3 text-center font-medium">Batal</th>
-                                  <th className="px-4 py-3 text-right font-medium">Biaya/Selesai</th>
-                                  <th className="px-4 py-3 text-right font-medium">Revenue</th>
                                   <th className="px-4 py-3 text-right font-medium">ROAS</th>
                                 </tr>
                                 )}
@@ -3501,16 +3212,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                 {group.rows.map((row, index) => (
                                   <tr key={`${row.date}-${row.accountName}-${row.csName}-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
                                     <td className="px-4 py-3 align-top">
-                                      <div className="mb-2">
-                                        <div className="font-medium text-slate-700 dark:text-slate-200">
-                                          {format(new Date(`${row.date}T00:00:00`), 'dd MMM yyyy', { locale: id })}
-                                        </div>
-                                        <div className="mt-0.5 text-[11px] font-normal text-slate-400">
-                                          {format(new Date(`${row.date}T00:00:00`), 'EEEE', { locale: id })}
-                                        </div>
-                                      </div>
                                       <div className="font-semibold text-slate-800 dark:text-slate-100">{row.csName}</div>
-                                      <div className="mt-1 max-w-[170px] truncate text-[11px] font-normal text-slate-400 dark:text-slate-500" title={row.advertiserName}>
+                                      <div className="mt-1 max-w-[170px] truncate text-[11px] text-slate-400" title={row.advertiserName}>
                                         {row.advertiserName}
                                       </div>
                                     </td>
@@ -3526,11 +3229,11 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                           </div>
                                           <Badge
                                             variant="outline"
-                                            className={row.source === 'api' || row.source === 'connected'
+                                            className={row.source === 'api'
                                               ? 'mt-2 border-emerald-200 bg-emerald-50 text-[11px] text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
                                               : 'mt-2 border-slate-200 bg-slate-50 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}
                                           >
-                                            {row.source === 'api' || row.source === 'connected' ? 'Connected' : 'Operasional'}
+                                            {row.source === 'api' ? 'Connected' : 'Operasional'}
                                           </Badge>
                                         </div>
                                       </div>
@@ -3547,43 +3250,25 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                     </td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-red-600 dark:text-red-300">{formatNumber(row.spam)}</td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-amber-500 dark:text-amber-300">{formatPercentAllowZero(row.spamRate)}</td>
-                                    <td className="px-4 py-3 text-center align-top font-mono font-semibold text-blue-600">{formatNumber(row.orders)}</td>
-                                    <td className={`px-4 py-3 text-right align-top font-mono font-semibold ${getConversionRateTextClass(row.orderRate)}`}>{formatPercent(row.orderRate)}</td>
-                                    <td className="px-4 py-3 text-right align-top">
-                                      <div className={`font-mono font-semibold ${getCostPerLeadTextClass(row.cpl)}`}>{formatShortCurrency(row.cpl)}</div>
-                                      {row.leadsDash > 0 && (
-                                        <div className="mt-1 font-mono text-[11px] text-slate-500">
-                                          {formatShortCurrency(row.cplTotal)}
-                                        </div>
-                                      )}
+                                    <td className="px-4 py-3 text-center align-top">
+                                      <OrderVolumeBadge value={row.orders} />
                                     </td>
                                     <td className="px-4 py-3 text-right align-top">
-                                      <CprClosingCellValue
-                                        cprClosing={row.cprClosing}
-                                        cprClosingTotal={row.cprClosingTotal}
-                                      />
+                                      <ConversionRateBadge value={row.orderRate} />
                                     </td>
-                                    <td className="px-4 py-3 text-center align-top font-mono">{formatNumber(row.scheduled)}</td>
+                                    <td className="px-4 py-3 text-right align-top">
+                                      <CostPerLeadBadge value={row.cpl} />
+                                    </td>
+                                    <td className="px-4 py-3 text-right align-top">
+                                      <CostIndicatorBadge value={row.cprClosing} />
+                                    </td>
+                                    <td className="px-4 py-3 text-right align-top">
+                                      <CostIndicatorBadge value={row.costPerDone} />
+                                    </td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-emerald-600">{formatNumber(row.done)}</td>
                                     <td className="px-4 py-3 text-center align-top font-mono font-semibold text-red-500">{formatNumber(row.cancelled)}</td>
                                     <td className="px-4 py-3 text-right align-top">
-                                      <div className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatShortCurrency(row.costPerDone)}</div>
-                                      {row.done > 0 && (
-                                        <div className="mt-1 font-mono text-[11px] text-slate-500">
-                                          {formatShortCurrency(row.costPerDoneTotal)}
-                                        </div>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 text-right align-top font-mono font-semibold text-slate-900 dark:text-slate-100">{formatShortCurrency(row.revenue)}</td>
-                                    <td className="px-4 py-3 text-right align-top">
-                                      <div className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 font-mono text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                                        {row.roas > 0 ? `${row.roas.toFixed(2)}x` : '-'}
-                                      </div>
-                                      {row.revenue > 0 && row.spendTotal > 0 && (
-                                        <div className="mt-1 font-mono text-[11px] text-slate-500">
-                                          {row.roasTotal.toFixed(2)}x
-                                        </div>
-                                      )}
+                                      <RoasBadgeValue value={row.roas} />
                                     </td>
                                   </tr>
                                 ))}
@@ -3594,7 +3279,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
                           </>
                           )}
                         </div>
-                    </div>
                     );
                   })
                 ) : (
@@ -3604,62 +3288,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
                     description={emptyDataHint}
                   />
                 )}
-          </div>
-          <div className="flex flex-col gap-3 border-t border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Menampilkan {dateGroups.length === 0 ? 0 : ((currentPage - 1) * itemsPerPage) + 1}
-              {' - '}
-              {Math.min(currentPage * itemsPerPage, dateGroups.length)}
-              {' dari '}
-              {dateGroups.length} tanggal ({detailRows.length} rincian)
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-300">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage === 1 || dateGroups.length === 0}
-                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                >
-                  &lt;
-                </Button>
-                <span className="min-w-[56px] text-center text-xs font-medium">
-                  {dateGroups.length === 0 ? 0 : currentPage} / {dateGroups.length === 0 ? 0 : totalPages}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={currentPage === totalPages || dateGroups.length === 0}
-                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                >
-                  &gt;
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tampilkan:</span>
-                <Select
-                  value={String(itemsPerPage)}
-                  onValueChange={(value) => {
-                    setItemsPerPage(Number(value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  <SelectTrigger className="h-8 w-[132px] bg-white text-xs dark:border-slate-700 dark:bg-slate-800">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5 Tanggal</SelectItem>
-                    <SelectItem value="10">10 Tanggal</SelectItem>
-                    <SelectItem value={String(CS_VIEW_DEFAULT_ITEMS_PER_PAGE)}>1 Bulan</SelectItem>
-                    <SelectItem value="50">50 Tanggal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
           </div>
         </OperationalTableCard>
       </div>
