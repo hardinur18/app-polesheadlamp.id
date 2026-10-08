@@ -1,3 +1,6 @@
+-- Complete order ad-account attribution backfill for projects where historical
+-- `orders` stores user ids as text while `daily_ads` stores them as uuid.
+
 alter table public.orders
   add column if not exists ad_account_id text references public.ad_accounts(id) on delete set null;
 
