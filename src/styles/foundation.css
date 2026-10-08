@@ -26447,6 +26447,36 @@ body {
   background: #eef4fb;
 }
 
+.fieldMonitorPage .leaflet-container svg,
+.mapSpreadPage .leaflet-container svg,
+.technicianMobilePage .leaflet-container svg,
+.leaflet-container svg.leaflet-zoom-animated {
+  max-width: none !important;
+  max-height: none !important;
+  overflow: visible;
+}
+
+.fieldMonitorPage .leaflet-overlay-pane path,
+.mapSpreadPage .leaflet-overlay-pane path,
+.technicianMobilePage .leaflet-overlay-pane path {
+  pointer-events: auto;
+}
+
+.fieldMonitorPage .leaflet-overlay-pane .mapRoutePolyline,
+.mapSpreadPage .leaflet-overlay-pane .mapRoutePolyline,
+.technicianMobilePage .leaflet-overlay-pane .mapRoutePolyline {
+  filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.24));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fieldMonitorPage .leaflet-overlay-pane .mapRoutePolylineHalo,
+.mapSpreadPage .leaflet-overlay-pane .mapRoutePolylineHalo,
+.technicianMobilePage .leaflet-overlay-pane .mapRoutePolylineHalo {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .mapSpreadPage {
   height: calc(100dvh - 64px);
   min-height: 520px;
@@ -28689,6 +28719,7 @@ body {
 
 .advertiserDashboardCsPerformanceCard > .space-y-3 {
   padding: 20px 24px 24px !important;
+  container-type: inline-size;
 }
 
 @media (max-width: 639px) {
@@ -28926,30 +28957,47 @@ body {
 
 .advertiserDashboardDateSummary,
 .csDashboardDateSummary {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
   align-items: stretch;
 }
 
 .advertiserDashboardDateSummary {
-  grid-template-columns: minmax(180px, 210px) minmax(138px, 154px) minmax(110px, 126px) minmax(80px, 92px) minmax(98px, 110px) minmax(92px, 104px) minmax(128px, 148px) minmax(138px, 158px) minmax(138px, 158px) minmax(132px, 150px) minmax(82px, 96px) !important;
+  grid-template-columns:
+    minmax(150px, 1.32fr)
+    minmax(120px, 1fr)
+    minmax(98px, 0.78fr)
+    minmax(70px, 0.55fr)
+    minmax(86px, 0.68fr)
+    minmax(92px, 0.72fr)
+    minmax(116px, 0.9fr)
+    minmax(112px, 0.88fr)
+    minmax(74px, 0.58fr) !important;
 }
 
 .csDashboardDateSummary {
-  grid-template-columns: minmax(180px, 214px) minmax(140px, 160px) minmax(112px, 130px) minmax(76px, 88px) minmax(96px, 112px) minmax(82px, 94px) minmax(88px, 104px) minmax(124px, 144px) minmax(138px, 158px) minmax(132px, 152px) minmax(128px, 148px) minmax(92px, 108px) !important;
+  grid-template-columns:
+    minmax(150px, 1.28fr)
+    minmax(120px, 0.98fr)
+    minmax(104px, 0.82fr)
+    minmax(70px, 0.56fr)
+    minmax(82px, 0.66fr)
+    minmax(88px, 0.68fr)
+    minmax(116px, 0.9fr)
+    minmax(116px, 0.9fr)
+    minmax(78px, 0.6fr) !important;
 }
 
 .advertiserDashboardDateGroupButton,
 .csDashboardDateGroupButton {
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  overflow: hidden;
+  position: relative;
 }
 
 .advertiserDashboardDateSummary > div,
 .csDashboardDateSummary > div {
   min-width: 0;
+  overflow: hidden;
 }
 
 .advertiserDashboardDateSummary > div:not(:first-child),
@@ -28961,9 +29009,131 @@ body {
 .advertiserDashboardDateSummary :where(.font-mono.font-bold),
 .csDashboardDateSummary :where(.font-mono.font-bold) {
   max-width: 100%;
+  font-size: clamp(0.78rem, 0.72vw, 0.875rem) !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   white-space: nowrap !important;
+}
+
+.advertiserDashboardDateSummary :where(.font-mono),
+.csDashboardDateSummary :where(.font-mono) {
+  letter-spacing: 0;
+}
+
+@media (min-width: 1024px) {
+  .advertiserDashboardCsPerformanceCard > .space-y-3 > .advertiserDashboardDateGroup,
+  .advertiserDashboardCsPerformanceCard > .space-y-3 > .csDashboardDateGroupFrame {
+    border-width: 1px !important;
+    border-radius: 16px !important;
+    border-color: rgba(226, 232, 240, 0.9) !important;
+    background: #ffffff !important;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.045) !important;
+  }
+
+  .dark .advertiserDashboardCsPerformanceCard > .space-y-3 > .advertiserDashboardDateGroup,
+  .dark .advertiserDashboardCsPerformanceCard > .space-y-3 > .csDashboardDateGroupFrame {
+    border-color: rgba(30, 41, 59, 0.9) !important;
+    background: rgba(15, 23, 42, 0.94) !important;
+    box-shadow: none !important;
+  }
+
+  .advertiserDashboardCsPerformanceCard > .space-y-3 > .advertiserDashboardDateGroup > .advertiserDashboardDateGroupButton,
+  .advertiserDashboardCsPerformanceCard > .space-y-3 > .csDashboardDateGroupFrame > .csDashboardDateGroupButton {
+    min-height: 76px;
+    border-radius: inherit !important;
+    padding: 14px 16px !important;
+  }
+
+  .advertiserDashboardDateSummary > div:not(:first-child),
+  .csDashboardDateSummary > div:not(:first-child) {
+    padding-left: clamp(6px, 0.55vw, 12px) !important;
+    padding-right: clamp(6px, 0.55vw, 12px) !important;
+  }
+}
+
+@container (max-width: 1600px) {
+  .advertiserDashboardDateSummary,
+  .csDashboardDateSummary {
+    grid-template-columns: minmax(150px, 0.86fr) repeat(4, minmax(0, 1fr)) !important;
+    grid-auto-flow: row;
+    row-gap: 0;
+  }
+
+  .advertiserDashboardDateSummary > div:first-child,
+  .csDashboardDateSummary > div:first-child {
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    justify-content: center;
+    border-left-width: 0 !important;
+    border-top-width: 0 !important;
+  }
+
+  .advertiserDashboardDateSummary > div:not(:first-child),
+  .csDashboardDateSummary > div:not(:first-child) {
+    border-left-width: 1px !important;
+    border-left-color: rgba(226, 232, 240, 0.72) !important;
+  }
+
+  .advertiserDashboardDateSummary > div:not(:first-child),
+  .csDashboardDateSummary > div:not(:first-child) {
+    padding-left: clamp(8px, 0.9cqw, 14px) !important;
+    padding-right: clamp(8px, 0.9cqw, 14px) !important;
+  }
+
+  .advertiserDashboardDateSummary > div:nth-child(n + 6),
+  .csDashboardDateSummary > div:nth-child(n + 6) {
+    border-top: 1px solid rgba(226, 232, 240, 0.72);
+    padding-top: 12px !important;
+  }
+
+  .advertiserDashboardDateSummary > div:not(:first-child):nth-child(-n + 5),
+  .csDashboardDateSummary > div:not(:first-child):nth-child(-n + 5) {
+    padding-bottom: 12px !important;
+  }
+
+  .dark .advertiserDashboardDateSummary > div:nth-child(n + 6),
+  .dark .csDashboardDateSummary > div:nth-child(n + 6) {
+    border-top-color: rgba(30, 41, 59, 0.88);
+  }
+
+  .dark .advertiserDashboardDateSummary > div:not(:first-child),
+  .dark .csDashboardDateSummary > div:not(:first-child) {
+    border-left-color: rgba(30, 41, 59, 0.88) !important;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1600px) {
+  .advertiserDashboardDateSummary,
+  .csDashboardDateSummary {
+    grid-template-columns: minmax(150px, 0.86fr) repeat(4, minmax(0, 1fr)) !important;
+    row-gap: 0;
+  }
+
+  .advertiserDashboardDateSummary > div:first-child,
+  .csDashboardDateSummary > div:first-child {
+    grid-row: 1 / span 2;
+    align-self: stretch;
+    justify-content: center;
+    border-left-width: 0 !important;
+    border-top-width: 0 !important;
+  }
+
+  .advertiserDashboardDateSummary > div:not(:first-child),
+  .csDashboardDateSummary > div:not(:first-child) {
+    border-left-width: 1px !important;
+    border-left-color: rgba(226, 232, 240, 0.72) !important;
+  }
+
+  .advertiserDashboardDateSummary > div:nth-child(n + 6),
+  .csDashboardDateSummary > div:nth-child(n + 6) {
+    border-top: 1px solid rgba(226, 232, 240, 0.72);
+    padding-top: 12px !important;
+  }
+
+  .advertiserDashboardDateSummary > div:not(:first-child):nth-child(-n + 5),
+  .csDashboardDateSummary > div:not(:first-child):nth-child(-n + 5) {
+    padding-bottom: 12px !important;
+  }
 }
 
 .dark .advertiserDashboardFilterPanel.filterPanel,
@@ -30176,6 +30346,53 @@ body {
 
 .dark .foundationMetricDivider {
   color: #475569 !important;
+}
+
+@media (min-width: 768px) {
+  .advertiserDashboardFilterContent {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(clamp(170px, 16vw, 230px), 1fr)) !important;
+    align-items: center;
+    gap: clamp(10px, 1vw, 14px) !important;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .advertiserDashboardHeaderActions,
+  .advertiserDashboardFilterGrid.adFilterGrid,
+  .advertiserDashboardFilterGrid.adFilterGrid.csMode,
+  .advertiserDashboardFilterGridCs {
+    display: contents !important;
+    max-width: none !important;
+  }
+
+  .advertiserDashboardHeaderDate,
+  .advertiserDashboardHeaderControl,
+  .advertiserDashboardFilterField {
+    width: 100%;
+    min-width: 0;
+    max-width: none !important;
+  }
+
+  .advertiserDashboardHeaderDate > div,
+  .advertiserDashboardHeaderDate .uiPeriodPicker,
+  .advertiserDashboardHeaderDate .uiPeriodPicker.uiPeriodPicker--foundation,
+  .advertiserDashboardControl.uiInput,
+  .advertiserDashboardControl.uiSelectTrigger {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .advertiserDashboardSearchField {
+    grid-column: span 2;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  .advertiserDashboardSearchField {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 767px) {

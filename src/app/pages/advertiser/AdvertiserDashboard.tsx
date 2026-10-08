@@ -2958,19 +2958,21 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
                       return (
                         <div key={breakdown.title} className="advertiserDashboardLegacyCprPanel overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                        <div className="advertiserDashboardLegacyCprPanelHeader flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+                        <div
+                          className="advertiserDashboardLegacyCprPanelHeader flex cursor-pointer flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleCprBreakdown(breakdown.title)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              toggleCprBreakdown(breakdown.title);
+                            }
+                          }}
+                          aria-expanded={isBreakdownExpanded}
+                          aria-label={`${isBreakdownExpanded ? 'Tutup' : 'Buka'} Performa ${breakdown.title}`}
+                        >
                           <div className="flex min-w-0 items-center gap-3">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
-                              onClick={() => toggleCprBreakdown(breakdown.title)}
-                              aria-expanded={isBreakdownExpanded}
-                              aria-label={`${isBreakdownExpanded ? 'Tutup' : 'Buka'} Performa ${breakdown.title}`}
-                            >
-                              <ChevronDown className={`h-4 w-4 transition-transform ${isBreakdownExpanded ? 'rotate-180' : ''}`} />
-                            </Button>
                             <div className="min-w-0">
                               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 Performa {breakdown.title}
@@ -3251,7 +3253,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                               : [...current, group.date],
                           )}
                         >
-                          <div className="flex flex-col gap-4 xl:hidden">
+                          <div className="flex flex-col gap-4 lg:hidden">
                             <div className="flex items-start gap-3">
                               <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
                                 isExpanded ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500'
@@ -3291,13 +3293,8 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                             </div>
                           </div>
 
-                              <div className="advertiserDashboardDateSummary hidden items-stretch divide-x divide-slate-100 dark:divide-slate-800 xl:grid">
-                            <div className="flex h-full min-w-0 items-center gap-3 pr-3">
-                              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
-                                isExpanded ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500'
-                              }`}>
-                                <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                              </span>
+                              <div className="advertiserDashboardDateSummary hidden items-stretch divide-x divide-slate-100 dark:divide-slate-800 lg:grid">
+                            <div className="flex h-full min-w-0 items-center pr-3">
                               <div className="min-w-0">
                                 <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Tanggal</div>
                                 <div className="mt-1 truncate font-mono text-[14px] font-bold text-slate-950 dark:text-slate-100">
@@ -3312,13 +3309,11 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                               ['Spend', formatCurrency(group.spendDashboard), formatCurrency(group.spendTotal), 'text-slate-950 dark:text-slate-100'],
                               ['Lead Dash.', formatNumber(group.leadsDash), `CRM: ${formatNumber(group.leadsReal)}`, 'text-cyan-600'],
                               ['Spam', formatNumber(group.spam), formatPercentAllowZero(group.spamRate), 'text-red-600'],
-                              ['Order', formatNumber(group.orders), `Selesai: ${formatNumber(group.done)}`, 'text-blue-600'],
+                                ['Order', formatNumber(group.orders), `Selesai: ${formatNumber(group.done)}`, 'text-blue-600'],
                                 ['CPL', formatCurrency(group.cpl), '', getCostPerLeadTextClass(group.cpl)],
-                                ['Cost/Closing', formatCurrency(group.cprClosing), '', getCostIndicatorTextClass(group.cprClosing)],
-                                ['Cost/Selesai', group.done > 0 ? formatCurrency(group.spendDashboard / group.done) : '-', '', getCostIndicatorTextClass(group.done > 0 ? group.spendDashboard / group.done : 0)],
+                                ['CP Closing', formatCurrency(group.cprClosing), '', getCostIndicatorTextClass(group.cprClosing)],
                                 ['Revenue', formatCurrency(group.revenue), '', group.revenue > 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-slate-950 dark:text-slate-100'],
                                 ['ROAS', group.roas > 0 ? `${group.roas.toFixed(2)}x` : '-', '', group.roas >= 2 ? 'text-emerald-600 dark:text-emerald-300' : group.roas >= 1 ? 'text-amber-500 dark:text-amber-300' : group.roas > 0 ? 'text-red-600 dark:text-red-300' : 'text-slate-950 dark:text-slate-100'],
-                                ['Rows', formatNumber(group.rows.length), '', 'text-slate-950 dark:text-slate-100'],
                             ].map(([label, primary, secondary, className]) => (
                               <div key={label} className="flex h-full min-w-0 flex-col justify-start px-2 pt-1.5 text-right">
                                 <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>

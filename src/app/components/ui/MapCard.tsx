@@ -61,8 +61,15 @@ interface MapCardProps {
   className?: string; 
 }
 
-const isFiniteCoordinate = (lat?: number | null, lng?: number | null) =>
-    Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+const isFiniteCoordinate = (lat?: number | null, lng?: number | null) => {
+    const numericLat = Number(lat);
+    const numericLng = Number(lng);
+    return Number.isFinite(numericLat) &&
+        Number.isFinite(numericLng) &&
+        Math.abs(numericLat) <= 90 &&
+        Math.abs(numericLng) <= 180 &&
+        !(numericLat === 0 && numericLng === 0);
+};
 
 // Custom Pin Icon
 const createPinIcon = (status: string, index?: number, overrideColor?: string, iconType?: 'home' | 'building') => {
@@ -362,30 +369,45 @@ const SmartPolyline = ({ points, color, disableRouting = false }: { points: Rout
             clearTimeout(timeoutId);
             if (controller) controller.abort();
         };
-    }, [pointsKey]); // Use stable key instead of validPoints array reference
+    }, [pointsKey, disableRouting]); // Use stable key instead of validPoints array reference
 
     if (path.length < 2) return null;
 
     return (
-        <Polyline 
-            positions={path}
-            pathOptions={{ 
-                color: color, 
-                weight: 5, 
-                opacity: isFetching ? 0.5 : 0.9, 
-                dashArray: isFetching ? '10, 10' : undefined,
-                lineCap: 'round',
-                lineJoin: 'round'
-            }}
-        >
-             {!isFetching && (
-                <Tooltip sticky direction="top" offset={[0, -10]}>
-                    <span className="flex items-center gap-1 text-xs font-semibold">
-                        <Navigation className="w-3 h-3" /> Rute Jalan
-                    </span>
-                </Tooltip>
-             )}
-        </Polyline>
+        <>
+            <Polyline
+                positions={path}
+                interactive={false}
+                pathOptions={{
+                    color: '#FFFFFF',
+                    weight: 9,
+                    opacity: 0.72,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                    className: 'mapRoutePolylineHalo',
+                }}
+            />
+            <Polyline
+                positions={path}
+                pathOptions={{
+                    color: color,
+                    weight: 5,
+                    opacity: isFetching ? 0.55 : 0.95,
+                    dashArray: isFetching ? '10, 10' : undefined,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                    className: 'mapRoutePolyline',
+                }}
+            >
+                 {!isFetching && (
+                    <Tooltip sticky direction="top" offset={[0, -10]}>
+                        <span className="flex items-center gap-1 text-xs font-semibold">
+                            <Navigation className="w-3 h-3" /> Rute Jalan
+                        </span>
+                    </Tooltip>
+                 )}
+            </Polyline>
+        </>
     );
 };
 

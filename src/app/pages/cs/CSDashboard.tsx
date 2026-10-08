@@ -2599,19 +2599,21 @@ export function CSDashboard({ userId }: { userId?: string }) {
 
               return (
                 <div key={breakdown.title} className="advertiserDashboardLegacyCprPanel overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                  <div className="advertiserDashboardLegacyCprPanelHeader flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+                  <div
+                    className="advertiserDashboardLegacyCprPanelHeader flex cursor-pointer flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleCprBreakdown(breakdown.title)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleCprBreakdown(breakdown.title);
+                      }
+                    }}
+                    aria-expanded={isBreakdownExpanded}
+                    aria-label={`${isBreakdownExpanded ? 'Tutup' : 'Buka'} Performa ${breakdown.title}`}
+                  >
                     <div className="flex min-w-0 items-center gap-3">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
-                        onClick={() => toggleCprBreakdown(breakdown.title)}
-                        aria-expanded={isBreakdownExpanded}
-                        aria-label={`${isBreakdownExpanded ? 'Tutup' : 'Buka'} Performa ${breakdown.title}`}
-                      >
-                        <ChevronDown className={`h-4 w-4 transition-transform ${isBreakdownExpanded ? 'rotate-180' : ''}`} />
-                      </Button>
                       <div className="min-w-0">
                         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                           Performa {breakdown.title}
@@ -2836,14 +2838,14 @@ export function CSDashboard({ userId }: { userId?: string }) {
                     const isExpanded = expandedDateGroups.includes(group.date);
 
                     return (
-                    <div key={group.date} className="advertiserDashboardDateGroup overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                    <div key={group.date} className="csDashboardDateGroupFrame overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                           <button
                             type="button"
                             aria-expanded={isExpanded}
                             onClick={() => toggleDateGroup(group.date)}
-                            className="advertiserDashboardDateGroupButton w-full px-4 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70"
+                            className="csDashboardDateGroupButton w-full px-4 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70"
                           >
-                            <div className="flex flex-col gap-4 xl:hidden">
+                            <div className="flex flex-col gap-4 lg:hidden">
                               <div className="flex items-start gap-3">
                                 <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
                                   isExpanded
@@ -2934,15 +2936,8 @@ export function CSDashboard({ userId }: { userId?: string }) {
                               </div>
                             </div>
 
-                            <div className="advertiserDashboardDateSummary hidden items-stretch divide-x divide-slate-100 dark:divide-slate-800 xl:grid">
-                              <div className="flex h-full min-w-0 items-center gap-3 pr-3">
-                                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border shadow-sm ${
-                                  isExpanded
-                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
-                                    : 'border-slate-200 bg-white text-slate-500'
-                                }`}>
-                                  <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                                </span>
+                            <div className="csDashboardDateSummary hidden items-stretch divide-x divide-slate-100 dark:divide-slate-800 lg:grid">
+                              <div className="flex h-full min-w-0 items-center pr-3">
                                 <div className="min-w-0">
                                   <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">Tanggal</div>
                                   <div className="mt-1 truncate font-mono text-[14px] font-bold text-slate-950 dark:text-slate-100">
@@ -2959,7 +2954,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                 secondary={formatShortCurrency(group.spendTotal)}
                               />
                               <DailySummaryTableCell
-                                label="Lead Dashboard"
+                                label="Lead Dash."
                                 primary={formatNumber(group.leadsDash)}
                                 secondary={`Prospek CRM: ${formatNumber(group.leadsReal)}`}
                                 tone="cyan"
@@ -2968,36 +2963,25 @@ export function CSDashboard({ userId }: { userId?: string }) {
                               <DailySummaryTableCell
                                 label="Spam"
                                 primary={formatNumber(group.spam)}
+                                secondary={formatPercentAllowZero(group.spamRate)}
                                 tone="red"
-                                align="center"
-                              />
-                              <DailySummaryTableCell
-                                label="Spam Rate"
-                                primary={formatPercentAllowZero(group.spamRate)}
-                                tone="amber"
                                 align="center"
                               />
                               <DailySummaryTableCell
                                 label="Order"
                                 primary={formatNumber(group.orders)}
+                                secondary={`Selesai: ${formatNumber(group.done)}`}
                                 tone="blue"
                                 align="center"
                               />
                               <DailySummaryTableCell
-                                label="Selesai"
-                                primary={formatNumber(group.done)}
-                                secondary={`Batal: ${formatNumber(group.cancelled)}`}
-                                tone="emerald"
-                                align="center"
-                              />
-                              <DailySummaryTableCell
-                                label="Cost/Lead"
+                                label="CPL"
                                 primary={formatShortCurrency(group.cpl)}
                                 secondary={group.leadsDash > 0 ? formatShortCurrency(group.cplTotal) : undefined}
                                 tone={getCostPerLeadTone(group.cpl)}
                               />
                               <DailySummaryTableCell
-                                label="Cost/Closing"
+                                label="CP Closing"
                                 primary={formatShortCurrency(group.cprClosing)}
                                 secondary={group.orders > 0 ? formatShortCurrency(group.cprClosingTotal) : undefined}
                               />
@@ -3005,23 +2989,6 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                 label="Revenue"
                                 primary={formatShortCurrency(group.revenue)}
                               />
-                              <div className="flex h-full min-w-0 flex-col justify-start px-3 pt-1.5">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Konversi
-                                  </div>
-                                  <div>
-                                    <ConversionRateBadge value={group.closingRate} />
-                                  </div>
-                                </div>
-                                <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-50 dark:bg-blue-950/30">
-                                  <div
-                                    className="h-full rounded-full bg-blue-500 transition-all"
-                                    style={{ width: `${Math.max(0, Math.min(100, Number.isFinite(group.closingRate) ? group.closingRate : 0))}%` }}
-                                  />
-                                </div>
-                                <div className="invisible mt-1 font-mono text-[10px] leading-tight">-</div>
-                              </div>
                               <div className="flex h-full min-w-0 flex-col justify-start px-2 pt-1.5 text-right">
                                 <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">ROAS</div>
                                 <div className="mt-1 inline-flex self-end">

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { MapCard } from '../components/ui/MapCard';
+import { MapCard, type RoutePoint } from '../components/ui/MapCard';
 import { Input } from '../components/ui/input';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
@@ -20,6 +20,7 @@ import { DateRange } from 'react-day-picker';
 import { Order } from './master-data/data';
 import { Label } from '../components/ui/label';
 import { isAdvertiserRole, isCsRole, isTechnicianRole } from '@/app/data/roleHelpers';
+import { expandShortUrl, getCoordinatesFromUrl, getDistance, isValidMapCoordinate } from '@/utils/mapUtils';
 
 const FIELD_MONITOR_STATUS_OPTIONS = [
   { id: 'pending', label: 'Terjadwal' },
@@ -38,6 +39,35 @@ const fieldMonitorPlainIconButton =
 const getFieldMonitorStatusKey = (status?: string | null) =>
   status === 'teknisi_completed' ? 'qc' : status || 'pending';
 
+const DEFAULT_MAP_COORDINATE = { lat: -6.2088, lng: 106.8456 };
+
+const isDefaultMapCoordinate = (lat?: number | null, lng?: number | null) =>
+  isValidMapCoordinate(lat, lng) &&
+  Math.abs(Number(lat) - DEFAULT_MAP_COORDINATE.lat) < 0.0001 &&
+  Math.abs(Number(lng) - DEFAULT_MAP_COORDINATE.lng) < 0.0001;
+
+const isRouteCoordinate = (lat?: number | null, lng?: number | null) =>
+  isValidMapCoordinate(lat, lng) && !isDefaultMapCoordinate(lat, lng);
+
+const resolveStoredCoordinate = (lat?: number | null, lng?: number | null, mapsUrl?: string | null) => {
+  if (isRouteCoordinate(lat, lng)) {
+    return { lat: Number(lat), lng: Number(lng) };
+  }
+
+  const parsed = getCoordinatesFromUrl(mapsUrl);
+  if (parsed && isRouteCoordinate(parsed.lat, parsed.lng)) {
+    return parsed;
+  }
+
+  return null;
+};
+
+const isShortMapsUrl = (value: string) =>
+  value.includes('goo.gl') ||
+  value.includes('maps.app.goo.gl') ||
+  value.includes('bit.ly') ||
+  value.includes('g.co');
+
 export function Pemantauan() {
   const { 
     orders = [], 
@@ -50,6 +80,7 @@ export function Pemantauan() {
     vehicles = [], 
     payments = [],
     ensureOrdersForDateRange,
+    updateOrderPatch,
   } = useMasterData();
   const { hasPermission } = usePermissions();
   
@@ -69,7 +100,7 @@ export function Pemantauan() {
   });
 
   // Dropdown Filters (Toolbar)
-  const [groupingMode, setGroupingMode] = useState<'technician' | 'cs'>('cs');
+  const [groupingMode, setGroupingMode] = useState<'technician' | 'cs'>('technician');
   const [technicianFilter, setTechnicianFilter] = useState<string>('all');
   const [serviceFilter, setServiceFilter] = useState<string>('all');
   const [branchFilter, setBranchFilter] = useState<string>('all');
@@ -234,6 +265,55 @@ export function Pemantauan() {
     );
   }, [filteredOrdersBase, statusFilter]);
 
+  const attemptedCoordinateResolution = React.useRef<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    const resolveMissingOrderCoordinates = async () => {
+      const ordersToResolve = filteredOrdersBase
+        .filter((order) => (
+          order.mapsUrl &&
+          !attemptedCoordinateResolution.current.has(order.id) &&
+          !resolveStoredCoordinate(order.lat, order.lng, order.mapsUrl)
+        ))
+        .slice(0, 8);
+
+      if (ordersToResolve.length === 0) return;
+
+      for (const order of ordersToResolve) {
+        attemptedCoordinateResolution.current.add(order.id);
+        const originalUrl = order.mapsUrl?.trim();
+        if (!originalUrl) continue;
+
+        try {
+          let targetUrl = originalUrl;
+          let coords = getCoordinatesFromUrl(targetUrl);
+
+          if (!coords && (isShortMapsUrl(targetUrl) || targetUrl.startsWith('http'))) {
+            const expandedUrl = await expandShortUrl(targetUrl);
+            if (expandedUrl && expandedUrl !== targetUrl) {
+              targetUrl = expandedUrl;
+              coords = getCoordinatesFromUrl(targetUrl);
+            }
+          }
+
+          if (coords && isRouteCoordinate(coords.lat, coords.lng)) {
+            await updateOrderPatch(
+              order.id,
+              { lat: coords.lat, lng: coords.lng },
+              { silent: true, skipFreshScheduleValidation: true },
+            );
+          }
+        } catch (error) {
+          if (import.meta.env.DEV) {
+            console.warn('[Pemantauan] Failed to resolve order coordinates', order.id, error);
+          }
+        }
+      }
+    };
+
+    void resolveMissingOrderCoordinates();
+  }, [filteredOrdersBase, updateOrderPatch]);
+
   // --- COMPONENT: CAPACITY DASHBOARD (Sesuai Gambar Referensi) ---
   const CapacityDashboard = () => (
       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -394,95 +474,30 @@ export function Pemantauan() {
     </div>
   );
   const branchPoints = useMemo(() => {
-    const getCoordinatesFromUrl = (url?: string) => {
-        if (!url) return null;
-        try {
-            const patterns = [
-                /@(-?\d+\.\d+),(-?\d+\.\d+)/,
-                /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
-                /search\/.*\/(-?\d+\.\d+),(-?\d+\.\d+)/
-            ];
-            for (const pattern of patterns) {
-                const match = url.match(pattern);
-                if (match) {
-                    return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-                }
-            }
-        } catch (e) { console.error(e); }
-        return null;
-    };
-
     return branches.map(branch => {
-        let lat = branch.lat;
-        let lng = branch.lng;
-        let radius = branch.radius;
-
-        // Priority 1: Try parsing mapsUrl from Master Data (Dynamic updates from user input)
-        if (branch.mapsUrl) {
-            const coords = getCoordinatesFromUrl(branch.mapsUrl);
-            if (coords) {
-                return {
-                    id: branch.id,
-                    name: branch.name,
-                    code: branch.code,
-                    lat: coords.lat,
-                    lng: coords.lng,
-                    address: branch.address,
-                    radius: radius || 0
-                };
-            }
+        const coords = resolveStoredCoordinate(branch.lat, branch.lng, branch.mapsUrl);
+        if (!coords) {
+            return null;
         }
 
-        // Priority 2: Use explicit lat/lng from Master Data (Fallback)
-        if (lat && lng) {
-            return {
-                id: branch.id,
-                name: branch.name,
-                code: branch.code,
-                lat,
-                lng,
-                address: branch.address,
-                radius: radius || 0 
-            };
-        }
-        
-        return null;
+        return {
+            id: branch.id,
+            name: branch.name,
+            code: branch.code,
+            lat: coords.lat,
+            lng: coords.lng,
+            address: branch.address,
+            radius: branch.radius || 0
+        };
     }).filter((b): b is NonNullable<typeof b> => b !== null);
   }, [branches]);
 
+  const branchPointById = useMemo(() => (
+    new Map(branchPoints.map((branch) => [branch.id, branch]))
+  ), [branchPoints]);
+
   // --- ROUTE GROUPS ---
   const routeGroups = useMemo(() => {
-    const getCoordinatesFromUrl = (url?: string) => {
-        if (!url) return null;
-        try {
-            const patterns = [
-                /@(-?\d+\.\d+),(-?\d+\.\d+)/,
-                /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
-                /search\/.*\/(-?\d+\.\d+),(-?\d+\.\d+)/
-            ];
-            for (const pattern of patterns) {
-                const match = url.match(pattern);
-                if (match) {
-                    return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-                }
-            }
-        } catch (e) { console.error(e); }
-        return null;
-    };
-
-    const getDistance = (lat1?: number, lon1?: number, lat2?: number, lon2?: number) => {
-        if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
-        const R = 6371; 
-        const dLat = (lat2 - lat1) * (Math.PI / 180);
-        const dLon = (lon2 - lon1) * (Math.PI / 180);
-        const a = 
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    };
-
     const TECH_COLORS = [
       '#0E7490', '#E11D48', '#D97706', '#4F46E5', '#059669', '#7C3AED', '#DB2777',
     ];
@@ -517,49 +532,50 @@ export function Pemantauan() {
         });
 
         // Calculate points and distances
+        let previousCoordinate: { lat: number; lng: number } | null = null;
         const points = sorted.map((order, index) => {
-            let lat = order.lat;
-            let lng = order.lng;
-            
-            if ((!lat || !lng) && order.mapsUrl) {
-                const coords = getCoordinatesFromUrl(order.mapsUrl);
-                if (coords) { lat = coords.lat; lng = coords.lng; }
+            let coordinate = resolveStoredCoordinate(order.lat, order.lng, order.mapsUrl);
+            let isFallback = false;
+
+            if (!coordinate && order.branchId) {
+                const branchPoint = branchPointById.get(order.branchId);
+                if (branchPoint) {
+                    const angle = index * (Math.PI / 3);
+                    const radius = 0.0004 + (index * 0.00005);
+                    coordinate = {
+                        lat: branchPoint.lat + Math.cos(angle) * radius,
+                        lng: branchPoint.lng + Math.sin(angle) * radius,
+                    };
+                    isFallback = true;
+                }
             }
 
             let distance = '0 km';
             let travelTimeEstimate = '';
 
-            if (index > 0) {
-                const prev = sorted[index - 1];
-                let prevLat = prev.lat;
-                let prevLng = prev.lng;
-                
-                if ((!prevLat || !prevLng) && prev.mapsUrl) {
-                   const c = getCoordinatesFromUrl(prev.mapsUrl);
-                   if(c) { prevLat = c.lat; prevLng = c.lng; }
-                }
-
-                if (lat && lng && prevLat && prevLng) {
-                    const d = getDistance(prevLat, prevLng, lat, lng);
+            if (coordinate && previousCoordinate) {
+                    const d = getDistance(previousCoordinate.lat, previousCoordinate.lng, coordinate.lat, coordinate.lng);
                     distance = `${d.toFixed(1)} km`;
                     const minutes = Math.round(d * 2); 
                     const finalMinutes = minutes + (d > 0.5 ? 5 : 0); // +5 min buffer
                     travelTimeEstimate = `± ${finalMinutes} mnt`;
-                }
             }
+
+            if (coordinate) previousCoordinate = coordinate;
             
             return {
                 id: order.id,
                 name: order.customerName,
                 address: order.address,
-                lat: lat || 0,
-                lng: lng || 0,
+                lat: coordinate?.lat ?? Number.NaN,
+                lng: coordinate?.lng ?? Number.NaN,
                 status: order.status,
                 time: order.serviceTime,
                 distance: distance,
                 travelTimeEstimate,
                 technicianName: groupName, // Rename to groupName conceptually but keep key for compat
                 orderData: order,
+                isFallback,
                 orderIndex: index + 1 // Add index for pin numbering
             };
         });
@@ -573,7 +589,42 @@ export function Pemantauan() {
             ordersCount: sorted.length
         };
     }).filter(group => group.points.length > 0);
-  }, [filteredOrders, users, groupingMode]);
+  }, [filteredOrders, users, groupingMode, branchPointById]);
+
+  const mapRouteGroups = useMemo(() => {
+    if (groupingMode !== 'technician') return routeGroups;
+
+    return routeGroups.map((group) => {
+      const firstCoordinatePoint = group.points.find((point) => isRouteCoordinate(point.lat, point.lng));
+      const firstOrderBranchId = firstCoordinatePoint?.orderData?.branchId || group.points[0]?.orderData?.branchId;
+      const technicianBranchId = users.find((user) => user.id === group.id)?.branchId;
+      const startBranch = branchPointById.get(technicianBranchId || firstOrderBranchId || '');
+
+      if (!startBranch || !firstCoordinatePoint) {
+        return group;
+      }
+
+      const branchStartPoint: RoutePoint & { orderData: Order } = {
+        ...firstCoordinatePoint,
+        id: `start-${group.id}-${startBranch.id}`,
+        name: `Mulai: ${startBranch.name}`,
+        address: startBranch.address || '',
+        lat: startBranch.lat,
+        lng: startBranch.lng,
+        status: 'branch_start',
+        time: undefined,
+        distance: '0 km',
+        travelTimeEstimate: undefined,
+        isFallback: false,
+        orderIndex: undefined,
+      };
+
+      return {
+        ...group,
+        points: [branchStartPoint, ...group.points],
+      };
+    });
+  }, [branchPointById, groupingMode, routeGroups, users]);
 
   // --- STATS ---
   const stats = useMemo(() => {
@@ -1354,15 +1405,15 @@ export function Pemantauan() {
 
         {/* --- 2. MAIN MAP AREA (Flex Item) --- */}
         <div className="flex-1 relative w-full overflow-hidden">
-             
+
              {/* BACKGROUND MAP */}
              <div className="absolute inset-0 z-0">
-                  <MapCard 
-                       groups={routeGroups} 
+                  <MapCard
+                       groups={mapRouteGroups}
                        branches={branchPoints}
-                       height="100%" 
-                       width="100%" 
-                       className="h-full w-full rounded-none border-0" 
+                       height="100%"
+                       width="100%"
+                       className="h-full w-full rounded-none border-0"
                        showLegend={true} 
                        showRadius={showRadius}
                        hideControls={true}
