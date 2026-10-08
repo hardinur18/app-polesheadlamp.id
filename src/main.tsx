@@ -8,8 +8,10 @@ import {
   STALE_CHUNK_RELOAD_MARKER,
   installReactDomMutationGuard,
   isReactDomRemovalError,
+  isStaleChunkError,
   reloadOnce,
 } from './app/errors/recoverableErrors'
+import { installGlobalErrorReportingHandlers } from './app/services/errorTelemetry'
 import './styles/theme.css'
 import './styles/fonts.css'
 import './styles/globals.css'
@@ -56,6 +58,9 @@ if (typeof window !== 'undefined') {
   const themeResetMarker = 'rhi-system-theme-reset-v1'
 
   installReactDomMutationGuard()
+  installGlobalErrorReportingHandlers({
+    shouldIgnore: (error) => isReactDomRemovalError(error) || isStaleChunkError(error),
+  })
 
   document.documentElement.classList.add('notranslate')
   document.documentElement.setAttribute('translate', 'no')

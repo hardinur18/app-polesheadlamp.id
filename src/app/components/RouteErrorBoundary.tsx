@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouteError } from 'react-router';
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
@@ -9,6 +9,7 @@ import {
   isStaleChunkError,
   reloadOnce,
 } from '@/app/errors/recoverableErrors';
+import { getFriendlyErrorMessage, reportClientError } from '@/app/services/errorTelemetry';
 
 const getRouteErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
@@ -20,6 +21,7 @@ const getRouteErrorMessage = (error: unknown) => {
 
 export function RouteErrorBoundary() {
   const error = useRouteError();
+  const [incidentId, setIncidentId] = useState<string | null>(null);
   const message = getRouteErrorMessage(error);
   const isDomRemovalError = isReactDomRemovalError(error);
   const isChunkError = isStaleChunkError(error);
@@ -47,7 +49,19 @@ export function RouteErrorBoundary() {
     ? 'Halaman ini membutuhkan master data, tetapi provider aplikasi belum aktif di route yang sedang dibuka. Kembali ke Dashboard akan membentuk ulang wrapper aplikasi.'
     : isRecoverableReloadError
       ? 'Tampilan mendeteksi perubahan DOM atau asset lama. Muat ulang halaman untuk mengambil state terbaru.'
-      : 'Aplikasi menangkap error saat membuka halaman ini. Muat ulang halaman atau kembali ke Dashboard untuk memulai ulang state.';
+      : getFriendlyErrorMessage(error);
+
+  useEffect(() => {
+    const report = reportClientError(error, {
+      area: 'RouteErrorBoundary',
+      severity: isRecoverableReloadError ? 'warning' : 'error',
+      tags: {
+        recoverableReload: isRecoverableReloadError,
+        masterDataProvider: isMasterDataProviderError,
+      },
+    });
+    setIncidentId(report.id);
+  }, [error, isRecoverableReloadError, isMasterDataProviderError]);
 
   return (
     <main className="min-h-screen bg-slate-50 p-6 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -60,7 +74,8 @@ export function RouteErrorBoundary() {
           {description}
         </p>
         <code className="mt-4 block max-h-24 overflow-auto rounded-lg bg-slate-100 p-3 text-left text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-400">
-          {message}
+          {incidentId ? `Ref: ${incidentId}\n` : ''}
+          {import.meta.env.DEV ? message : 'Detail error tersimpan di sesi browser.'}
         </code>
         <Button className="mt-5 w-full" onClick={() => window.location.reload()}>
           <RefreshCw className="mr-2 h-4 w-4" />

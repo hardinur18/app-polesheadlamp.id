@@ -47,6 +47,7 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [x] Phase 10 refactor struktur besar selesai untuk batch fundamental: server app-data, MasterDataCtx, dashboard CS/Advertiser, pesanan, prospek, modal shared, API snapshot, dan Iklan Harian sudah dirapikan tanpa mengubah flow bisnis utama.
 - [x] Phase 11 type safety flow kritis selesai: `@ts-ignore` global dibersihkan, payload app-data, sync iklan harian, Iklan Harian, dan flow pesanan utama sudah typed.
 - [~] Test automation core flow lengkap: smoke contract deterministic sudah ada; login real-role dan payment upload masih perlu credential/manual.
+- [~] Observability/error handling distandarkan: client error reporter, app boundary, route boundary, dan global runtime listener sudah ada.
 - [ ] Final release checklist 100% pass.
 
 ## Phase 1 - Baseline Safety
@@ -413,10 +414,10 @@ Catatan progress 2026-10-08:
 
 Tujuan: kalau ada error live, sumbernya cepat ketemu.
 
-- [ ] Audit semua `console.log` liar.
-- [ ] Standarkan error message user-facing.
-- [ ] Standarkan error logging developer-facing.
-- [ ] Tambah error boundary untuk area rawan.
+- [~] Audit semua `console.log` liar.
+- [~] Standarkan error message user-facing.
+- [~] Standarkan error logging developer-facing.
+- [x] Tambah error boundary untuk area rawan.
 - [ ] Tambah log context untuk API critical path.
 - [ ] Siapkan opsi error monitoring eksternal.
 
@@ -425,6 +426,13 @@ Definition of done:
 - Error user jelas.
 - Error developer bisa dilacak.
 - Tidak ada spam log yang bikin diagnosis makin susah.
+
+Catatan progress 2026-10-08:
+
+- Utility `errorTelemetry` ditambahkan untuk normalisasi error, friendly message, incident id, dedupe log 10 detik, dan rolling error report di `sessionStorage`.
+- `ErrorBoundary` app-level dan `RouteErrorBoundary` sekarang melaporkan error lewat reporter yang sama, menampilkan reference id, dan menyembunyikan detail mentah di production.
+- Global `window.error` dan `unhandledrejection` listener ditambahkan di entrypoint, dengan ignore khusus untuk stale chunk/DOM removal yang sudah punya auto-reload recovery.
+- Verifikasi Phase 13 foundation: `npm run typecheck:full` dan `npm run lint` pass pada 2026-10-08.
 
 ## Phase 14 - Final Verification
 
