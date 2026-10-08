@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Search, Plus, MapPin, Calendar, Clock, Map as MapIcon, Eye, MoreVertical,
   CheckCircle2, XCircle, Timer, Truck, Edit, Trash2, Package, RefreshCw, Banknote, Loader2, MessageCircle, Camera, CreditCard,
-  User as UserIcon, Building2, ChevronDown, Settings, Megaphone, Filter, FileSpreadsheet, FileDown, FileUp, FileText, Ruler, Lock, AlertTriangle, Phone, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, QrCode, ImageOff
+  User as UserIcon, Building2, ChevronDown, Settings, Megaphone, Filter, FileSpreadsheet, FileDown, FileUp, FileText, Ruler, Lock, AlertTriangle, Phone, ArrowUpDown, ArrowUp, ArrowDown, ClipboardList, QrCode
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,12 +13,8 @@ import {
 import { DataTable, createDataTableColumns } from '../components/ui/data-table';
 import { Badge } from '../components/ui/badge';
 import { Modal } from '../components/ui/Modal';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
-  Tooltip,
-  TooltipContent,
   TooltipProvider,
-  TooltipTrigger,
 } from "../components/ui/tooltip"
 import {
   Select,
@@ -65,7 +61,6 @@ import { OrderStatusReasonFields } from './orders/OrderStatusReasonFields';
 import { toast } from 'sonner';
 import { isReasonRequiredStatus } from './orders/cancelReasonOptions';
 import { getCoordinatesFromUrl, expandShortUrl } from '../../utils/mapUtils';
-import { Upload } from '../components/ui/Upload';
 import { supabase } from '../../lib/supabaseClient';
 import { copyToClipboard } from '@/lib/clipboard';
 import {
@@ -95,6 +90,33 @@ import {
   saveOrderToCrmContact,
   saveOrdersToCrmContacts,
 } from '@/app/services/crmContactsService';
+import { WhatsappIcon } from './orders/WhatsappIcon';
+import { getStatusLabel, getStatusBadgeVariant, getStatusReasonSummary, normalizeReasonFilterValue } from './orders/orderHelpers';
+import { useOrderLookupMaps } from './orders/hooks/useOrderLookupMaps';
+import { useOrderFilters } from './orders/hooks/useOrderFilters';
+import { useOrderPagination } from './orders/hooks/useOrderPagination';
+import { useOrderExport } from './orders/hooks/useOrderExport';
+import { useOrderImport } from './orders/hooks/useOrderImport';
+import { useOrderBulkActions } from './orders/hooks/useOrderBulkActions';
+import { useOrderStatusActions } from './orders/hooks/useOrderStatusActions';
+import { getOrderCrudErrorMessage } from './orders/orderCrudErrors';
+import {
+  ORDER_PHOTO_INITIAL_LIMIT,
+  getInitialPhotoTab,
+  getOrderDocumentationSummary,
+  getOrderPhotoUrls,
+  type OrderDocumentationKey,
+} from './orders/orderDocumentation';
+import { OrderPhotoViewerDialog } from './orders/OrderPhotoViewerDialog';
+import {
+  ORDER_ACTION_ICON_CLASS,
+  ORDER_MENU_CONTENT_CLASS,
+  ORDER_MENU_ITEM_CLASS,
+  OrderActionButton,
+  OrderMobileSkeleton,
+  OrderTableSkeleton,
+} from './orders/orderPageUi';
+import { OrderViewModeTabs, type OrderViewMode } from './orders/OrderViewModeTabs';
 
 const MapCard = React.lazy(() =>
   import('../components/ui/MapCard').then((module) => ({ default: module.MapCard })),
@@ -115,14 +137,6 @@ const OrderPaymentDialog = React.lazy(() =>
 const ImportPreviewModal = React.lazy(() =>
   import('./orders/ImportPreviewModal').then((module) => ({ default: module.ImportPreviewModal })),
 );
-
-const ORDER_ACTION_ICON_CLASS =
-  'relative h-8 w-8 rounded-md bg-transparent p-0 text-slate-500 shadow-none transition-colors hover:bg-transparent hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-blue-200 dark:text-slate-400 dark:hover:text-slate-100';
-
-const ORDER_MENU_CONTENT_CLASS =
-  'w-56 border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800';
-
-const ORDER_MENU_ITEM_CLASS = 'cursor-pointer gap-2 text-sm';
 
 const ORDER_TABLE_PAGE_SIZE_OPTIONS = [50, 100, 300, 500];
 const ORDER_TABLE_INTERACTIVE_SELECTOR =
@@ -149,205 +163,6 @@ const toLocalDateKey = (date: Date) => {
 
 const uniqueById = <T extends { id: string }>(items: T[]) =>
   Array.from(new Map(items.map((item) => [item.id, item])).values());
-
-const ORDER_DOCUMENTATION_ITEMS = [
-  { key: 'before', label: 'Sebelum' },
-  { key: 'after', label: 'Sesudah' },
-  { key: 'payment', label: 'Bayar' },
-  { key: 'signature', label: 'TTD' },
-] as const;
-type OrderDocumentationKey = typeof ORDER_DOCUMENTATION_ITEMS[number]['key'];
-const ORDER_PHOTO_INITIAL_LIMIT = 4;
-
-function getOrderDocumentationSummary(order: Order) {
-  const items = ORDER_DOCUMENTATION_ITEMS.map((item) => {
-    const count = getOrderPhotoUrls(order, item.key).length;
-    return { ...item, count };
-  });
-  const completed = items.filter((item) => item.count > 0).length;
-  const missingLabels = items.filter((item) => item.count === 0).map((item) => item.label);
-  const total = ORDER_DOCUMENTATION_ITEMS.length;
-
-  return {
-    completed,
-    total,
-    isComplete: completed === total,
-    isEmpty: completed === 0,
-    label: `${completed}/${total}`,
-    tooltip: completed === total
-      ? 'Dokumentasi lengkap'
-      : `Dokumentasi belum lengkap: ${missingLabels.join(', ')}`,
-  };
-}
-
-function getOrderPhotoUrls(order: Order | null | undefined, type: OrderDocumentationKey) {
-  const value = (order?.photos as Record<string, unknown> | null | undefined)?.[type];
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed ? [trimmed] : [];
-  }
-  return Array.isArray(value) ? value.filter((url): url is string => typeof url === 'string' && url.trim().length > 0) : [];
-}
-
-function getInitialPhotoTab(order: Order): OrderDocumentationKey {
-  return ORDER_DOCUMENTATION_ITEMS.find((item) => getOrderPhotoUrls(order, item.key).length > 0)?.key || 'before';
-}
-
-function OrderDocumentationImage({
-  src,
-  alt,
-  priority = false,
-}: {
-  src: string;
-  alt: string;
-  priority?: boolean;
-}) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setLoaded(false);
-    setFailed(false);
-  }, [src]);
-
-  return (
-    <div className="orderPhotoImageFrame group">
-      {!loaded && !failed && (
-        <div className="orderPhotoImageLoading">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Memuat foto...</span>
-        </div>
-      )}
-      {failed ? (
-        <div className="orderPhotoImageFallback">
-          <ImageOff className="h-8 w-8" />
-          <span>Foto gagal dimuat</span>
-          <a href={src} target="_blank" rel="noopener noreferrer">
-            Buka file
-          </a>
-        </div>
-      ) : (
-        <img
-          src={src}
-          alt={alt}
-          className={`orderPhotoImage ${loaded ? 'isLoaded' : ''}`}
-          loading={priority ? 'eager' : 'lazy'}
-          decoding="async"
-          fetchPriority={priority ? 'high' : 'auto'}
-          draggable={false}
-          onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
-        />
-      )}
-      {!failed && (
-        <>
-          <div className="orderPhotoImageShade" />
-          <div className="orderPhotoImageActions">
-            <a
-              href={src}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="orderPhotoImageOpen"
-            >
-              Lihat Full Size
-            </a>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function OrderActionButton({
-  label,
-  className = '',
-  children,
-  ...props
-}: React.ComponentProps<typeof Button> & { label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={label}
-          title={label}
-          className={`${ORDER_ACTION_ICON_CLASS} ${className}`.trim()}
-          {...props}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {label}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function OrderTableSkeleton({
-  columns,
-  rows = 8,
-}: {
-  columns: number;
-  rows?: number;
-}) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, rowIndex) => (
-        <TableRow key={`order-table-skeleton-${rowIndex}`} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-          {Array.from({ length: columns }).map((__, columnIndex) => (
-            <TableCell key={`order-table-skeleton-${rowIndex}-${columnIndex}`} className="py-6 align-top">
-              <Skeleton
-                className={
-                  columnIndex === 0
-                    ? 'mx-auto h-4 w-8 rounded-md'
-                    : columnIndex === 4
-                      ? 'h-12 w-full max-w-[260px] rounded-md'
-                      : 'h-4 w-full max-w-[160px] rounded-md'
-                }
-              />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
-  );
-}
-
-function OrderMobileSkeleton({ rows = 4 }: { rows?: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, index) => (
-        <div
-          key={`order-mobile-skeleton-${index}`}
-          className="orderMobileCard rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <Skeleton className="h-4 w-28 rounded-md" />
-            <Skeleton className="h-5 w-20 rounded-md" />
-          </div>
-          <Skeleton className="mt-4 h-4 w-40 rounded-md" />
-          <Skeleton className="mt-3 h-3 w-full rounded-md" />
-          <Skeleton className="mt-2 h-3 w-2/3 rounded-md" />
-        </div>
-      ))}
-    </>
-  );
-}
-
-// Extracted modules
-import { WhatsappIcon } from './orders/WhatsappIcon';
-import { getStatusLabel, getStatusBadgeVariant, getStatusReasonSummary, normalizeReasonFilterValue } from './orders/orderHelpers';
-import { useOrderLookupMaps } from './orders/hooks/useOrderLookupMaps';
-import { useOrderFilters } from './orders/hooks/useOrderFilters';
-import { useOrderPagination } from './orders/hooks/useOrderPagination';
-import { useOrderExport } from './orders/hooks/useOrderExport';
-import { useOrderImport } from './orders/hooks/useOrderImport';
-import { useOrderBulkActions } from './orders/hooks/useOrderBulkActions';
-import { useOrderStatusActions } from './orders/hooks/useOrderStatusActions';
-import { OrderViewModeTabs, type OrderViewMode } from './orders/OrderViewModeTabs';
 
 export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   // --- Context & Permissions ---
@@ -927,9 +742,18 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
   // --- Upload ---
   const uploadToStorage = async (file: File, path: string) => {
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${path}/${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('orders').upload(fileName, file);
+      const rawExt = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const fileExt = rawExt === 'jpeg' ? 'jpg' : rawExt;
+      const randomPart =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const fileName = `${path}/${Date.now()}-${randomPart}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('orders').upload(fileName, file, {
+        cacheControl: '3600',
+        contentType: file.type || undefined,
+        upsert: false,
+      });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from('orders').getPublicUrl(fileName);
       return data.publicUrl;
@@ -949,14 +773,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
       const newPhotos = await Promise.all(uploadPromises);
       const currentPhotos = photoViewerOrder.photos || {};
       const existingPaymentPhotos = (currentPhotos as any)['payment'] || [];
-      const updatedPhotos = { ...currentPhotos, payment: [...existingPaymentPhotos, ...newPhotos] };
+      const updatedPhotos = {
+        ...currentPhotos,
+        payment: [...existingPaymentPhotos, ...newPhotos],
+        paymentDeleted: false,
+        paymentDeletedAt: undefined,
+      };
       // @ts-ignore
       await updateOrder({ ...photoViewerOrder, photos: updatedPhotos });
       setPhotoViewerOrder(prev => prev ? ({ ...prev, photos: updatedPhotos }) : null);
       toast.success("Bukti pembayaran berhasil diupload");
       setUploadedFiles([]);
     } catch (e: any) {
-      toast.error("Gagal upload: " + e.message);
+      toast.error(getOrderCrudErrorMessage(e, 'Gagal upload bukti pembayaran'));
     } finally {
       setIsUploading(false);
     }
@@ -1214,7 +1043,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
       toast.success(successMessage);
     } catch (error: any) {
       console.error('Failed to update order:', error);
-      toast.error(error?.message || 'Gagal memperbarui pesanan');
+      toast.error(getOrderCrudErrorMessage(error, 'Gagal memperbarui pesanan'));
       throw error;
     } finally {
       setSavingOrderActionKey((currentKey) => currentKey === key ? null : currentKey);
@@ -3870,124 +3699,19 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
         )}
 
         {/* Photo Viewer Modal */}
-        <Modal
-            isOpen={!!photoViewerOrder}
-            onClose={handleClosePhotoViewer}
-            title="Dokumentasi Pekerjaan"
-            size="lg"
-            className="orderPhotoDialog"
-            preventOutsideClose
-        >
-            {photoViewerOrder && (
-                <div className="orderPhotoViewer flex flex-col">
-                    <Tabs
-                        value={photoViewerTab}
-                        onValueChange={(value) => setPhotoViewerTab(value as OrderDocumentationKey)}
-                        className="w-full flex-1 flex flex-col"
-                    >
-                        <TabsList className="grid w-full grid-cols-4 mb-4 bg-slate-100 dark:bg-slate-800 p-1">
-                            <TabsTrigger value="before" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">Sebelum ({getOrderPhotoUrls(photoViewerOrder, 'before').length})</TabsTrigger>
-                            <TabsTrigger value="after" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">Sesudah ({getOrderPhotoUrls(photoViewerOrder, 'after').length})</TabsTrigger>
-                            <TabsTrigger value="payment" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">
-                                Bayar ({getOrderPhotoUrls(photoViewerOrder, 'payment').length === 0 && (photoViewerOrder.photos as any)?.paymentDeleted ? <span className="text-red-500 font-medium">Dihapus</span> : getOrderPhotoUrls(photoViewerOrder, 'payment').length})
-                            </TabsTrigger>
-                            <TabsTrigger value="signature" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:shadow-sm text-[10px] sm:text-xs px-1">TTD ({getOrderPhotoUrls(photoViewerOrder, 'signature').length})</TabsTrigger>
-                        </TabsList>
-                        
-                        {ORDER_DOCUMENTATION_ITEMS.map((item) => {
-                            const type = item.key;
-                            const urls = getOrderPhotoUrls(photoViewerOrder, type);
-                            const isExpanded = Boolean(expandedPhotoTabs[type]);
-                            const visibleUrls = isExpanded ? urls : urls.slice(0, ORDER_PHOTO_INITIAL_LIMIT);
-                            const hiddenCount = Math.max(0, urls.length - visibleUrls.length);
-
-                            return (
-                             <TabsContent key={type} value={type} className="orderPhotoTabContent flex-1 min-h-0 p-1">
-                                {urls.length > 0 ? (
-                                    <>
-                                    <div className={`grid gap-4 pb-4 ${type === 'payment' || type === 'signature' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
-                                        {visibleUrls.map((url: string, idx: number) => (
-                                            <OrderDocumentationImage
-                                                key={`${type}-${url}-${idx}`}
-                                                src={url}
-                                                alt={`${item.label} ${idx + 1}`}
-                                                priority={idx < 2}
-                                            />
-                                        ))}
-                                    </div>
-                                    {hiddenCount > 0 && (
-                                        <div className="pb-4 text-center">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => setExpandedPhotoTabs((prev) => ({ ...prev, [type]: true }))}
-                                            >
-                                                Tampilkan {hiddenCount} foto lagi
-                                            </Button>
-                                        </div>
-                                    )}
-                                    </>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl mb-4">
-                                        {type === 'payment' && (photoViewerOrder.photos as any)?.paymentDeleted ? (
-                                            <>
-                                                <Trash2 className="w-12 h-12 mb-3 text-red-400 opacity-50" />
-                                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Bukti pembayaran telah dihapus</p>
-                                                <p className="text-xs text-slate-500 mt-1">
-                                                    Dihapus pada {(photoViewerOrder.photos as any)?.paymentDeletedAt ? new Date((photoViewerOrder.photos as any).paymentDeletedAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : 'sistem'}
-                                                </p>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Camera className="w-12 h-12 mb-2 opacity-20 text-slate-400" />
-                                                <p className="text-sm text-slate-400">Tidak ada foto {
-                                                    type === 'payment' ? 'bukti pembayaran' : 
-                                                    type === 'before' ? 'sebelum pengerjaan' : 
-                                                    type === 'after' ? 'setelah pengerjaan' : 
-                                                    'bukti tanda tangan'
-                                                }</p>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-
-                                {type === 'payment' && canUploadPaymentProof && (
-                                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                        <h4 className="font-bold text-sm mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                                            <FileUp className="w-4 h-4" />
-                                            Upload Bukti Pembayaran
-                                        </h4>
-                                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                                            <Upload
-                                                label="Pilih foto bukti transfer/pembayaran"
-                                                accept="image/*"
-                                                multiple={true}
-                                                maxFiles={3}
-                                                onChange={setUploadedFiles}
-                                                preview={true}
-                                            />
-                                            <div className="mt-4 flex justify-end">
-                                                <Button 
-                                                    size="sm" 
-                                                    onClick={handleSavePaymentProof}
-                                                    disabled={isUploading || uploadedFiles.length === 0}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                                                >
-                                                    {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileUp className="w-4 h-4 mr-2" />}
-                                                    {isUploading ? 'Mengupload...' : 'Simpan Foto'}
-                                                </Button>
-                                            </div>
-                                        </div>
-                                     </div>
-                                 )}
-                              </TabsContent>
-                            );
-                        })}
-                    </Tabs>
-                </div>
-            )}
-        </Modal>
+        <OrderPhotoViewerDialog
+          order={photoViewerOrder}
+          tab={photoViewerTab}
+          onTabChange={setPhotoViewerTab}
+          expandedTabs={expandedPhotoTabs}
+          onExpandTab={(type) => setExpandedPhotoTabs((prev) => ({ ...prev, [type]: true }))}
+          onClose={handleClosePhotoViewer}
+          canUploadPaymentProof={canUploadPaymentProof}
+          uploadedFiles={uploadedFiles}
+          onUploadedFilesChange={setUploadedFiles}
+          isUploading={isUploading}
+          onSavePaymentProof={handleSavePaymentProof}
+        />
 
       {/* Import Preview Dialog */}
       {isImportPreviewOpen && (

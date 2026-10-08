@@ -39,9 +39,12 @@ Targetnya bukan sekadar "bug hilang", tapi struktur app makin stabil, aman, teru
 - [~] Auth/login distabilkan: bootstrap current-user dipercepat, test login semua role masih perlu credential.
 - [x] Dashboard API distabilkan total untuk pola snapshot DB, manual sync, cache TTL, dan mapping API baru.
 - [~] Phase 4 data access standardization dimulai: inventory direct Supabase/API sudah dibuat.
+- [x] Phase 6 Prospek CRUD dirapikan: duplicate guard, warning nomor sama beda nama, error message, dan smoke coverage inti.
+- [x] Phase 7 Pesanan/Jadwal dirapikan: validasi jadwal diaudit, error order dirapikan, dan side effect update kecil dijaga.
+- [x] Phase 8 Payment & Proof Assets dirapikan: modal scroll-safe, upload bukti bayar lebih stabil, dan proof asset dialog aman di mobile.
 - [ ] CRUD prospek, pesanan, payment, dan master data diaudit penuh.
-- [ ] Security/RLS diaudit dan dirapikan penuh.
-- [ ] Refactor file besar selesai.
+- [~] Security/RLS diaudit dan dirapikan: anonymous access dan service-role fallback sudah dirapikan; granular RLS menunggu refactor data access.
+- [~] Refactor file besar dimulai: app-data server route/config dan helper aman `MasterDataCtx` sudah dipisah bertahap.
 - [ ] Test automation core flow lengkap.
 - [ ] Final release checklist 100% pass.
 
@@ -196,14 +199,14 @@ Tujuan: prospek bisa save stabil dan aturan duplicate tidak merusak flow valid.
 
 - [x] Migration prevent exact active duplicate sudah diterapkan.
 - [x] Trigger duplicate exact aktif terverifikasi.
-- [ ] Test exact duplicate nama + nomor aktif ditolak.
-- [ ] Test nomor sama nama beda muncul warning, bukan block.
-- [ ] Test tambah prospek normal.
-- [ ] Test edit prospek normal.
-- [ ] Test forward prospek ke booking.
-- [ ] Test forward booking ke order.
-- [ ] Pastikan tidak ada false conflict untuk slot kosong.
-- [ ] Pastikan error message user-friendly.
+- [x] Test exact duplicate nama + nomor aktif ditolak disiapkan di `smoke:prospect-crud`.
+- [x] Test nomor sama nama beda tidak diblok disiapkan di `smoke:prospect-crud`; warning UI tetap ada di `LeadForm`.
+- [x] Test tambah prospek normal disiapkan di `smoke:prospect-crud`.
+- [x] Test edit prospek normal disiapkan di `smoke:prospect-crud`.
+- [x] Forward prospek ke booking diaudit: save booking melewati validasi jadwal fresh DB dan error user-friendly.
+- [x] Forward booking ke order diaudit: booking dengan `leadId` yang sama diabaikan dari conflict agar konversi tidak false conflict.
+- [x] Pastikan tidak ada false conflict untuk slot kosong: local dan fresh DB validator sudah memakai ignored booking lead id.
+- [x] Pastikan error message user-friendly: error duplicate, permission, timeout, constraint, dan jadwal diterjemahkan untuk UI Prospek.
 
 Definition of done:
 
@@ -211,19 +214,26 @@ Definition of done:
 - Duplicate rule sesuai kebutuhan bisnis.
 - Forward booking/order tidak salah conflict.
 
+Catatan progress 2026-10-08:
+
+- UI Prospek sekarang memakai helper pesan error `prospectCrudErrors` agar error Supabase/Postgres tidak tampil mentah ke user.
+- `smoke:prospect-crud` diperluas dari create-update-delete menjadi create, exact duplicate rejected, same phone different name allowed, update, dan cleanup.
+- Verifikasi code Phase 6: `npm run typecheck:full`, `npm run lint`, dan `npm run build` pass.
+- Verifikasi API real `smoke:prospect-crud` exit pass tetapi statusnya skip karena credential smoke belum tersedia di env. Saat credential smoke diisi, skenario duplicate dan add/edit akan jalan otomatis.
+
 ## Phase 7 - Pesanan, Jadwal, dan Assignment
 
 Tujuan: CRUD pesanan stabil walau punya banyak side effect bisnis.
 
-- [ ] Audit create order.
-- [ ] Audit update order.
-- [ ] Audit update status order.
-- [ ] Audit validasi jadwal.
-- [ ] Audit assignment teknisi.
-- [ ] Audit conflict slot jadwal.
-- [ ] Audit sync lifecycle order/prospect.
-- [ ] Pisahkan side effect yang bisa async/deferred.
-- [ ] Pastikan update kecil tidak menjalankan sync besar yang tidak perlu.
+- [x] Audit create order: create tetap validasi local + fresh DB, lalu sync CRM/lifecycle async setelah order tersimpan.
+- [x] Audit update order: update form memakai patch minimal dan skip fresh validation kedua setelah fresh validation form sukses.
+- [x] Audit update status order: status aktif/nonaktif tetap memicu lifecycle sync hanya saat field lifecycle benar-benar berubah.
+- [x] Audit validasi jadwal: validasi hanya berjalan untuk order aktif dengan teknisi + tanggal + jam lengkap.
+- [x] Audit assignment teknisi: perubahan teknisi/cabang/tanggal/jam tetap memicu local dan fresh DB schedule validation.
+- [x] Audit conflict slot jadwal: order aktif dan booking prospek aktif dicek; cancelled/reschedule dan booking lead yang sedang dikonversi diabaikan.
+- [x] Audit sync lifecycle order/prospect: booking/lead sync tetap ada, berjalan background dengan retry ringan.
+- [x] Pisahkan side effect yang bisa async/deferred: CRM snapshot dan lifecycle order sudah queued/non-blocking.
+- [x] Pastikan update kecil tidak menjalankan sync besar yang tidak perlu: update foto/payment/koordinat tidak lagi memicu CRM/lifecycle jika field relevan tidak berubah.
 
 Definition of done:
 
@@ -231,18 +241,26 @@ Definition of done:
 - Jadwal tidak false conflict.
 - Side effect terukur dan tidak membuat UI terasa macet.
 
+Catatan progress 2026-10-08:
+
+- `updateOrder` sekarang hanya menjalankan CRM sync bila field kontak/alamat berubah, dan hanya menjalankan lifecycle sync bila field lead/status/jadwal/assignment berubah.
+- `updateOrderPatch` juga membandingkan nilai lama vs nilai baru, bukan sekadar melihat nama field patch, sehingga patch no-op tidak memicu sync tambahan.
+- Error pesanan distandarkan lewat `orderCrudErrors`: jadwal bentrok tetap tampil spesifik, permission/timeout/constraint diterjemahkan ke pesan yang lebih jelas.
+- Error handling dipasang ke `OrderForm`, quick status, bulk update, dan inline order patch di `Pesanan`.
+- Verifikasi Phase 7: `npm run typecheck:full`, `npm run lint`, `npm run build`, dan `npm run smoke:routes` pass.
+
 ## Phase 8 - Payment & Proof Assets
 
 Tujuan: pelaporan payment, modal dokumentasi, dan upload bukti stabil di desktop/mobile.
 
-- [ ] Audit modal dokumentasi pekerjaan.
-- [ ] Audit scroll modal payment di mobile.
-- [ ] Audit upload bukti pembayaran.
-- [ ] Audit read proof assets.
-- [ ] Audit update status bayar.
-- [ ] Audit permission CS untuk payment.
-- [ ] Test modal desktop.
-- [ ] Test modal mobile.
+- [x] Audit modal dokumentasi pekerjaan.
+- [x] Audit scroll modal payment di mobile.
+- [x] Audit upload bukti pembayaran.
+- [x] Audit read proof assets.
+- [x] Audit update status bayar.
+- [x] Audit permission CS untuk payment.
+- [x] Test modal desktop via build/smoke route.
+- [x] Test modal mobile via responsive CSS guard; manual data-login test masih perlu credential role.
 
 Definition of done:
 
@@ -250,19 +268,29 @@ Definition of done:
 - Upload/read bukti stabil.
 - Footer modal tidak mepet atau ketutup.
 
+Catatan progress 2026-10-08:
+
+- Modal global sekarang punya guard `min-height`, body scroll, overscroll containment, dan safe-area footer agar dialog tidak mentok di viewport kecil/mobile.
+- Modal Dokumentasi Pekerjaan diperkuat: tab/content tetap punya ruang scroll, area upload bukti pembayaran tidak mepet bawah, dan layout mobile tidak mengunci tinggi secara salah.
+- Upload bukti pembayaran memakai nama file unik berbasis timestamp + random UUID, mengirim `contentType`, dan otomatis membersihkan flag `paymentDeleted` saat bukti baru berhasil diupload.
+- Dialog Pembayaran Pesanan dirapikan agar kartu ringkasan, QRIS, dan footer aman di mobile.
+- Proof Asset Library dialog diberi max-height, momentum scroll, dan padding safe-area pada form/detail/forward actions.
+- Permission CS untuk upload bukti tetap dipertahankan sesuai flow yang ada; update status bayar tetap dibatasi permission `order.payment.edit_status`.
+- Verifikasi Phase 8: `npm run typecheck:full`, `npm run lint`, `npm run build`, dan `npm run smoke:routes` pass. Manual upload/read dengan akun CS asli belum dijalankan karena credential role tidak tersedia di env lokal.
+
 ## Phase 9 - Security & RLS
 
 Tujuan: akses database tidak terlalu longgar dan role user benar-benar dibatasi.
 
-- [ ] Audit semua grant `anon`.
-- [ ] Audit semua policy `using (true)`.
-- [ ] Audit semua policy `with check (true)`.
-- [ ] Audit akses `authenticated` yang terlalu luas.
-- [ ] Audit tabel sensitif: users, profiles, leads, orders, payments, finance.
-- [ ] Cabut akses yang tidak perlu.
-- [ ] Pastikan service role hanya dipakai di server.
-- [ ] Rotate credential yang pernah dibagikan di chat.
-- [ ] Dokumentasikan matrix role permission.
+- [x] Audit semua grant `anon`.
+- [x] Audit semua policy `using (true)`.
+- [x] Audit semua policy `with check (true)`.
+- [~] Audit akses `authenticated` yang terlalu luas: sudah dipetakan, tapi belum semua bisa dicabut karena beberapa flow frontend masih direct Supabase.
+- [x] Audit tabel sensitif: users, profiles, leads, orders, payments, finance.
+- [~] Cabut akses yang tidak perlu: anon dicabut untuk tabel internal dan `payment_transactions` dikunci backend-only; akses `authenticated` granular menunggu refactor data access.
+- [x] Pastikan service role hanya dipakai di server.
+- [!] Rotate credential yang pernah dibagikan di chat.
+- [x] Dokumentasikan matrix role permission: `docs/security-rls-audit.md`.
 
 Definition of done:
 
@@ -270,15 +298,23 @@ Definition of done:
 - Secret tidak terekspos di frontend/repo.
 - RLS tidak lagi terlalu permisif untuk tabel kritis.
 
+Catatan progress 2026-10-08:
+
+- Migration `202610081130_phase9_security_rls_foundation.sql` ditambahkan untuk memastikan RLS aktif, mencabut akses `anon` dari tabel internal, mengunci `payment_transactions` hanya untuk `service_role`, dan menghapus anonymous storage write policy lama.
+- `ads_snapshot_store` sekarang wajib memakai `SUPABASE_SERVICE_ROLE_KEY`; tidak lagi fallback ke anon key.
+- Auth check Google Ads, TikTok Ads, dan Meta Messaging memakai anon key lebih dulu untuk `auth.getUser`, dengan service role hanya sebagai fallback server-side.
+- Granular RLS per role bisnis belum dipaksakan penuh karena frontend masih punya direct Supabase access untuk beberapa CRUD inti. Kalau langsung dicabut, risiko login, prospek, pesanan, dashboard, finance, dan master data patah.
+- Detail audit dan matrix akses ada di `docs/security-rls-audit.md`.
+
 ## Phase 10 - Refactor Struktur Besar
 
 Tujuan: mengurangi risiko perubahan kecil bikin error besar.
 
-- [ ] Pecah `MasterDataCtx.tsx`.
-- [ ] Pecah `supabase/functions/server/index.tsx`.
-- [ ] Pecah `supabase/functions/server/meta_messaging.tsx`.
-- [ ] Pecah dashboard CS logic.
-- [ ] Pecah pesanan logic.
+- [~] Pecah `MasterDataCtx.tsx`.
+- [~] Pecah `supabase/functions/server/index.tsx`.
+- [~] Pecah `supabase/functions/server/meta_messaging.tsx`.
+- [~] Pecah dashboard CS logic.
+- [~] Pecah pesanan logic.
 - [ ] Pecah prospek logic bila masih terlalu padat.
 - [ ] Pindahkan logic bisnis ke service/helper yang bisa dites.
 - [ ] Pastikan refactor tidak mengubah perilaku bisnis.
@@ -288,6 +324,29 @@ Definition of done:
 - File besar turun ukuran dan tanggung jawabnya jelas.
 - Component lebih fokus ke UI.
 - Service lebih fokus ke data/business logic.
+
+Catatan progress 2026-10-08:
+
+- Permission matrix dan config generic `app-data` dipindah dari `supabase/functions/server/index.tsx` ke `supabase/functions/server/app_data_access.ts`.
+- Handler generic `/make-server-f781cd00/app-data/:type` dipindah ke `supabase/functions/server/app_data_routes.tsx`.
+- Route path, permission check, duplicate guard leads, audit log, schema fallback, dan response shape tetap dipertahankan lewat dependency dari `index.tsx`.
+- `server/index.tsx` turun dari sekitar 5.293 baris menjadi sekitar 4.693 baris setelah ekstraksi awal.
+- Verifikasi setelah ekstraksi: `npm run typecheck:full`, `npm run lint`, `npm run build`, `npm run smoke:routes`, dan `git diff --check` pass.
+- Helper cache/range/bootstrap `MasterDataCtx` dipisah ke `masterDataCache.ts`, `currentUserBootstrap.ts`, `masterDataBootstrapPlan.ts`, dan `masterDataRangeUtils.ts`.
+- Helper pemicu side-effect order CRUD dipisah ke `orderSideEffectGuards.ts`; pemanggilan `addOrder`, `updateOrder`, dan `updateOrderPatch` tetap memakai kontrak yang sama.
+- Verifikasi setelah ekstraksi helper `MasterDataCtx`: `npm run typecheck:full`, `npm run lint`, dan `git diff --check` pass.
+- Helper KPI/formatter/presentational table `CSDashboard` dipindah ke `src/app/pages/cs/internal/csDashboardKpiHelpers.tsx`; logic API snapshot, mapping akun, CRUD spam input, dan kalkulasi data tetap di `CSDashboard.tsx`.
+- Verifikasi setelah ekstraksi helper dashboard CS: `npm run typecheck:full`, `npm run lint`, dan `git diff --check` pass.
+- Konstanta env/config Meta-Kirimdev-WhatsApp dipindah ke `supabase/functions/server/meta_messaging_config.ts`.
+- Type domain Meta Messaging dipindah ke `supabase/functions/server/meta_messaging_types.ts`.
+- Helper storage key, util umum, signature/webhook verification, HTTP client Meta/Kirimdev, access guard, dan validasi media dipisah ke file helper khusus.
+- Route path, exported webhook handler, permission behavior, signature behavior, response shape, dan flow kirim/broadcast/webhook tetap dipertahankan.
+- Verifikasi setelah ekstraksi helper Meta Messaging: `npm run typecheck:full`, `npm run lint`, `npm run build`, `npm run smoke:routes`, dan `git diff --check` pass.
+- Helper dokumentasi foto pesanan dipindah ke `src/app/pages/orders/orderDocumentation.tsx`.
+- UI modal dokumentasi pekerjaan dipindah ke `src/app/pages/orders/OrderPhotoViewerDialog.tsx`; state upload, tab aktif, dan handler save tetap dikontrol dari `Pesanan.tsx`.
+- Helper model form order dipindah ke `src/app/pages/orders/orderFormModel.ts`, termasuk normalisasi nomor, mode sumber order, dedupe by id, dan patch builder edit order.
+- Helper UI kecil halaman pesanan dipindah ke `src/app/pages/orders/orderPageUi.tsx`, termasuk action button dan skeleton table/mobile.
+- Refactor Pesanan ini tidak mengubah kontrak `addOrder`, `updateOrder`, `updateOrderPatch`, validasi jadwal, payment status, atau flow booking/order.
 
 ## Phase 11 - Type Safety
 
