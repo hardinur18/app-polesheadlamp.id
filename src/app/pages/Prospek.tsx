@@ -184,6 +184,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const [editingItem, setEditingItem] = useState<Lead | null>(null);
   const [leadFormInstanceKey, setLeadFormInstanceKey] = useState(0);
   const [isLabelManagerOpen, setIsLabelManagerOpen] = useState(false);
+  const [labelTargetLead, setLabelTargetLead] = useState<Lead | null>(null);
+  const [labelEditorIds, setLabelEditorIds] = useState<string[]>([]);
   const [editingLabel, setEditingLabel] = useState<ProspectLabel | null>(null);
   const [labelDraft, setLabelDraft] = useState({
     name: '',
@@ -669,6 +671,43 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     setEditingItem(lead);
     setLeadFormInstanceKey(prev => prev + 1);
     setIsAddOpen(true);
+  };
+
+  const openLeadLabelEditor = (lead: Lead) => {
+    if (!canEditLead(lead)) {
+      toast.error('Anda tidak memiliki akses untuk mengubah label prospek ini');
+      return;
+    }
+    setLabelTargetLead(lead);
+    setLabelEditorIds([...(lead.labels || [])]);
+  };
+
+  const closeLeadLabelEditor = () => {
+    setLabelTargetLead(null);
+    setLabelEditorIds([]);
+  };
+
+  const toggleLeadLabel = (labelId: string) => {
+    setLabelEditorIds((current) => {
+      if (current.includes(labelId)) return current.filter((id) => id !== labelId);
+      return [...current, labelId].slice(0, 6);
+    });
+  };
+
+  const handleSaveLeadLabels = async () => {
+    if (!labelTargetLead) return;
+    try {
+      await Promise.resolve(updateLead({
+        ...labelTargetLead,
+        labels: labelEditorIds,
+      }));
+      toast.success('Label prospek berhasil diperbarui');
+      closeLeadLabelEditor();
+    } catch (error: any) {
+      toast.error('Label prospek gagal disimpan', {
+        description: getProspectCrudErrorMessage(error),
+      });
+    }
   };
 
   const handleAddSheetOpenChange = (open: boolean) => {
@@ -1748,6 +1787,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                             {canEditLead(item) && (
                               <DropdownMenuItem onClick={() => openEditLeadForm(item)}>Edit</DropdownMenuItem>
                             )}
+                            {canEditLead(item) && (
+                              <DropdownMenuItem onClick={() => openLeadLabelEditor(item)}>
+                                <Tags className="w-4 h-4 mr-2" /> Atur Label
+                              </DropdownMenuItem>
+                            )}
                             {canManageLeadBooking(item) && (
                               <DropdownMenuItem onClick={() => openBookingForm(item)}>
                                 Booking Jadwal
@@ -2499,6 +2543,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                                     Edit
                                   </TableActionMenuItem>
                                 )}
+                                {canEditLead(item) && (
+                                  <TableActionMenuItem icon={Tags} onClick={() => openLeadLabelEditor(item)}>
+                                    Atur Label
+                                  </TableActionMenuItem>
+                                )}
                                 {canManageLeadBooking(item) && (
                                   <TableActionMenuItem icon={CalendarClock} onClick={() => openBookingForm(item)}>
                                     Booking Jadwal
@@ -2624,6 +2673,11 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                             {canEditLead(item) && (
                               <TableActionMenuItem icon={Edit} onClick={() => openEditLeadForm(item)}>
                                 Edit
+                              </TableActionMenuItem>
+                            )}
+                            {canEditLead(item) && (
+                              <TableActionMenuItem icon={Tags} onClick={() => openLeadLabelEditor(item)}>
+                                Atur Label
                               </TableActionMenuItem>
                             )}
                             {canManageLeadBooking(item) && (
@@ -2993,6 +3047,99 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
               submitDisabled={!bulkField || !bulkValue || selectedEditableLeads.length === 0}
             />
           </form>
+        </MasterDataFormDialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!labelTargetLead}
+        onOpenChange={(open) => {
+          if (!open) closeLeadLabelEditor();
+        }}
+      >
+        <MasterDataFormDialogContent size="default">
+          <MasterDataFormHeader
+            icon={Tags}
+            title="Atur Label Prospek"
+            description={labelTargetLead ? `Pilih label resmi untuk ${labelTargetLead.name}.` : 'Pilih label resmi untuk prospek.'}
+          />
+          <MasterDataDialogBody compact className="space-y-4">
+            {activeProspectLabels.length === 0 ? (
+              <OperationalEmptyState
+                icon={Tags}
+                title="Belum ada master label aktif"
+                description="Buat master label dulu agar prospek bisa ditandai dengan label yang konsisten."
+                className="py-8"
+              />
+            ) : (
+              <>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm font-semibold text-blue-800">
+                  {labelEditorIds.length} dari maksimal 6 label dipilih.
+                </div>
+                <div className="grid gap-2">
+                  {activeProspectLabels.map((label) => {
+                    const checked = labelEditorIds.includes(label.id);
+                    return (
+                      <div
+                        key={label.id}
+                        role="button"
+                        tabIndex={0}
+                        className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${
+                          checked
+                            ? 'border-blue-200 bg-blue-50 shadow-sm'
+                            : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50'
+                        }`}
+                        onClick={() => toggleLeadLabel(label.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            toggleLeadLabel(label.id);
+                          }
+                        }}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onClick={(event) => event.stopPropagation()}
+                          onCheckedChange={() => toggleLeadLabel(label.id)}
+                        />
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
+                        <span className="min-w-0 flex-1">
+                          <strong className="block truncate text-sm font-extrabold text-slate-900">#{label.name}</strong>
+                          <small className="block truncate text-xs font-semibold text-slate-500">
+                            {label.description || (label.followUpEnabled ? 'Masuk rencana follow up' : 'Label segmentasi prospek')}
+                          </small>
+                        </span>
+                        {label.followUpEnabled && (
+                          <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+                            Plan FU
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </MasterDataDialogBody>
+          <DialogFooter className="masterDataFormActions">
+            <Button type="button" variant="outline" onClick={closeLeadLabelEditor}>
+              Batal
+            </Button>
+            {activeProspectLabels.length === 0 ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  closeLeadLabelEditor();
+                  setIsLabelManagerOpen(true);
+                }}
+              >
+                Kelola Label
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => void handleSaveLeadLabels()}>
+                Simpan Label
+              </Button>
+            )}
+          </DialogFooter>
         </MasterDataFormDialogContent>
       </Dialog>
 
