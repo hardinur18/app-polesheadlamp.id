@@ -994,6 +994,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
   const avgCplReal = totals.leadsReal > 0 ? totals.spend / totals.leadsReal : 0;
   const avgCpr = totals.orders > 0 ? totals.spend / totals.orders : 0;
   const avgCprDone = totals.ordersDone > 0 ? totals.spend / totals.ordersDone : 0;
+  const totalClosingRate = totals.leadsDash > 0 ? (totals.orders / totals.leadsDash) * 100 : 0;
 
   // 3. Chart Data
   const chartData = useMemo(() => {
@@ -1800,6 +1801,7 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
 
   const csPerformanceSummary = useMemo(() => ({
     spamRate: csPerformanceTotals.leadsDash > 0 ? (csPerformanceTotals.spam / csPerformanceTotals.leadsDash) * 100 : 0,
+    closingRate: csPerformanceTotals.leadsDash > 0 ? (csPerformanceTotals.orders / csPerformanceTotals.leadsDash) * 100 : 0,
     cpl: csPerformanceTotals.leadsDash > 0 ? csPerformanceTotals.spendDashboard / csPerformanceTotals.leadsDash : 0,
     cplTotal: csPerformanceTotals.leadsDash > 0 ? csPerformanceTotals.spendTotal / csPerformanceTotals.leadsDash : 0,
     costPerClosing: csPerformanceTotals.orders > 0 ? csPerformanceTotals.spendDashboard / csPerformanceTotals.orders : 0,
@@ -2356,10 +2358,15 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                     isAdsSummaryDbHydrating ? (
                       <KpiMetricSkeleton />
                     ) : (
-	                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-	                    <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{totals.orders}</span>
-	                    <span className="foundationMetricSubValue foundationMetricSubValue--success">Selesai: {totals.ordersDone}</span>
-	                  </div>
+		                  <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+		                    <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{totals.orders}</span>
+		                    <span className="foundationMetricSubValue foundationMetricSubValue--success">
+                        Selesai: {totals.ordersDone}
+                      </span>
+		                    <span className="foundationMetricSubValue foundationMetricSubValue--success">
+                        Rate: {formatPercentAllowZero(totalClosingRate)}
+                      </span>
+		                  </div>
                     )
 	                }
 	              />
@@ -2888,11 +2895,16 @@ export function AdvertiserDashboard({ userId }: { userId?: string }) {
                   icon={ShoppingCart}
 	                  tone="violet"
 	                  value={
-	                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
-	                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{formatNumber(csPerformanceTotals.orders)}</span>
-	                      <span className="foundationMetricSubValue foundationMetricSubValue--success">Selesai: {formatNumber(csPerformanceTotals.done)}</span>
-	                    </div>
-	                  }
+		                    <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
+		                      <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{formatNumber(csPerformanceTotals.orders)}</span>
+		                      <span className="foundationMetricSubValue foundationMetricSubValue--success">
+                          Selesai: {formatNumber(csPerformanceTotals.done)}
+                        </span>
+		                      <span className="foundationMetricSubValue foundationMetricSubValue--success">
+                          Rate: {formatPercentAllowZero(csPerformanceSummary.closingRate)}
+                        </span>
+		                    </div>
+		                  }
 	                />
                 <OperationalKpiCard
                   label="Cost/Closing"

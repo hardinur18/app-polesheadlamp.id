@@ -2377,7 +2377,7 @@ export function CSDashboard({ userId }: { userId?: string }) {
         isExpanded={isMobileFilterExpanded}
         onExpandedChange={setIsMobileFilterExpanded}
         summary={activeFilterCount > 0 ? `${activeFilterCount} filter aktif` : 'Semua data ditampilkan'}
-        contentClassName="csDashboardFilterContent"
+        contentClassName={`csDashboardFilterContent ${isOwner ? 'csDashboardFilterContent--owner' : 'csDashboardFilterContent--compact'}`}
       >
         <div className="csDashboardFilterRow">
           <div className="csDashboardFilterField csDashboardFilterDateField">
@@ -2528,7 +2528,12 @@ export function CSDashboard({ userId }: { userId?: string }) {
           value={
             <div className="flex flex-col gap-1 text-sm font-normal text-slate-500 dark:text-slate-400">
               <span className="text-2xl font-semibold foundationMetricValue foundationMetricValue--success">{formatCount(csKpis.orders)}</span>
-              <span className="foundationMetricSubValue foundationMetricSubValue--success">Selesai: {formatCount(csKpis.done)}</span>
+              <span className="foundationMetricSubValue foundationMetricSubValue--success">
+                Selesai: {formatCount(csKpis.done)}
+              </span>
+              <span className="foundationMetricSubValue foundationMetricSubValue--success">
+                Rate: {formatPercentAllowZero(csKpis.conversionRate)}
+              </span>
             </div>
           }
           icon={ShoppingCart}
@@ -2958,21 +2963,18 @@ export function CSDashboard({ userId }: { userId?: string }) {
                                 primary={formatNumber(group.leadsDash)}
                                 secondary={`Prospek CRM: ${formatNumber(group.leadsReal)}`}
                                 tone="cyan"
-                                align="center"
                               />
                               <DailySummaryTableCell
                                 label="Spam"
                                 primary={formatNumber(group.spam)}
                                 secondary={formatPercentAllowZero(group.spamRate)}
                                 tone="red"
-                                align="center"
                               />
                               <DailySummaryTableCell
                                 label="Order"
                                 primary={formatNumber(group.orders)}
                                 secondary={`Selesai: ${formatNumber(group.done)}`}
                                 tone="blue"
-                                align="center"
                               />
                               <DailySummaryTableCell
                                 label="CPL"

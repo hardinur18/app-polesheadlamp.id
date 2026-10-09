@@ -28271,40 +28271,64 @@ body {
 }
 
 .csDashboardFilterPanel.filterPanel {
-  padding: 14px;
+  padding: 16px 18px;
+}
+
+.csDashboardFilterContent {
+  display: block !important;
+  width: 100%;
+  min-width: 0;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+.csDashboardFilterContent--compact,
+.csDashboardFilterContent--owner {
+  display: block !important;
 }
 
 .csDashboardFilterRow {
-  display: inline-flex;
-  width: max-content;
-  min-width: max-content;
+  display: grid !important;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: 10px;
+  gap: 12px 14px;
+}
+
+.csDashboardFilterContent--compact .csDashboardFilterRow {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .csDashboardFilterField {
-  flex: 0 0 240px;
-  width: 240px;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
 .csDashboardFilterDateField {
-  flex-basis: 272px;
-  width: 272px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .csDashboardFilterActions {
-  display: inline-flex;
-  flex: 0 0 auto;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
   align-items: center;
+  justify-content: end;
+  justify-self: end;
+  align-self: center;
+  grid-column: 1 / -1;
   gap: 8px;
+  margin-left: 0;
   white-space: nowrap;
 }
 
 .csDashboardActionButton.uiButton {
-  height: 44px;
-  min-height: 44px;
-  border-radius: 14px;
+  height: 46px;
+  min-height: 46px;
+  border-radius: 15px;
   padding-inline: 16px;
   font-size: 0.82rem;
   font-weight: 820;
@@ -28312,11 +28336,13 @@ body {
 
 .csDashboardFilterControl.uiSelectTrigger,
 .csDashboardDatePicker.uiPeriodPicker {
-  height: 44px !important;
-  min-height: 44px !important;
-  border-radius: 14px;
+  height: 46px !important;
+  min-height: 46px !important;
+  border-radius: 15px;
   font-size: 0.82rem;
   font-weight: 760;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .csDashboardDatePicker.uiPeriodPicker.uiPeriodPicker--foundation {
@@ -28329,6 +28355,67 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (min-width: 1320px) {
+  .csDashboardFilterContent--compact .csDashboardFilterRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) max-content;
+  }
+
+  .csDashboardFilterContent--compact .csDashboardFilterActions {
+    grid-column: auto;
+  }
+}
+
+@media (min-width: 1720px) {
+  .csDashboardFilterContent--owner .csDashboardFilterRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) max-content;
+  }
+
+  .csDashboardFilterContent--owner .csDashboardFilterActions {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 1180px) {
+  .csDashboardFilterRow,
+  .csDashboardFilterContent--owner .csDashboardFilterRow,
+  .csDashboardFilterContent--compact .csDashboardFilterRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .csDashboardFilterDateField {
+    max-width: 100%;
+  }
+
+  .csDashboardFilterActions {
+    grid-column: 1 / -1;
+    justify-content: end;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 640px) {
+  .csDashboardFilterPanel.filterPanel {
+    padding: 12px;
+  }
+
+  .csDashboardFilterRow,
+  .csDashboardFilterContent--compact .csDashboardFilterRow,
+  .csDashboardFilterContent--owner .csDashboardFilterRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .csDashboardFilterActions {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+    width: 100%;
+    justify-content: stretch;
+    justify-self: stretch;
+  }
+
+  .csDashboardActionButton.uiButton {
+    width: 100%;
+  }
 }
 
 .advertiserDashboardHeaderActions {
@@ -29199,6 +29286,53 @@ body {
   .csDashboardDateSummary > div:not(:first-child):nth-child(-n + 5) {
     padding-bottom: 12px !important;
   }
+}
+
+.advertiserDashboardDateSummary,
+.csDashboardDateSummary {
+  grid-template-columns: minmax(170px, 0.74fr) repeat(4, minmax(0, 1fr)) !important;
+  grid-auto-flow: row;
+}
+
+.advertiserDashboardDateSummary > div:first-child,
+.csDashboardDateSummary > div:first-child {
+  grid-row: 1 / span 2;
+  align-self: stretch;
+  justify-content: center;
+  padding-left: clamp(14px, 1vw, 18px) !important;
+  padding-right: clamp(14px, 1vw, 18px) !important;
+  border-left-width: 0 !important;
+  border-top-width: 0 !important;
+}
+
+.advertiserDashboardDateSummary > div:not(:first-child),
+.csDashboardDateSummary > div:not(:first-child) {
+  min-height: 86px;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  text-align: right !important;
+  border-left: 1px solid rgba(226, 232, 240, 0.72) !important;
+}
+
+.advertiserDashboardDateSummary > div:not(:first-child) > *,
+.csDashboardDateSummary > div:not(:first-child) > * {
+  max-width: 100%;
+  text-align: right !important;
+}
+
+.advertiserDashboardDateSummary > div:nth-child(n + 6),
+.csDashboardDateSummary > div:nth-child(n + 6) {
+  border-top: 1px solid rgba(226, 232, 240, 0.72);
+}
+
+.dark .advertiserDashboardDateSummary > div:not(:first-child),
+.dark .csDashboardDateSummary > div:not(:first-child) {
+  border-left-color: rgba(30, 41, 59, 0.88) !important;
+}
+
+.dark .advertiserDashboardDateSummary > div:nth-child(n + 6),
+.dark .csDashboardDateSummary > div:nth-child(n + 6) {
+  border-top-color: rgba(30, 41, 59, 0.88);
 }
 
 .dark .advertiserDashboardFilterPanel.filterPanel,
