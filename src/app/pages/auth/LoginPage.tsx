@@ -8,15 +8,23 @@ import { Label } from '../../components/ui/label';
 import { Loader2, Lock, Mail, AlertCircle, Eye, EyeOff, LogIn, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Session, User } from '@supabase/supabase-js';
+import {
+  clearNonCriticalBrowserCaches,
+  isBrowserStorageQuotaError,
+} from '@/app/services/internal/browserStorageMaintenance';
 
 const LOCAL_AUTH_SESSION_KEY = 'rhi-v2-local-session';
 const useLocalAuth = import.meta.env.VITE_AUTH_MODE === 'local';
 const LOGIN_TIMEOUT_MS = 12_000;
-const LOGIN_MAX_ATTEMPTS = 1;
+const LOGIN_MAX_ATTEMPTS = 2;
 const LOGIN_RETRY_BASE_DELAY_MS = 700;
 const SUPABASE_SET_SESSION_TIMEOUT_MS = 2_500;
+const AUTH_OFFLINE_MESSAGE =
+  'Koneksi internet perangkat belum terhubung. Sambungkan internet dulu, lalu coba login lagi.';
 const AUTH_SERVER_UNAVAILABLE_MESSAGE =
-  'Server auth Supabase belum merespons. Ini bukan indikasi password salah; coba lagi setelah koneksi server normal.';
+  'Server auth Supabase belum merespons. Ini bukan indikasi password salah; cek koneksi, lalu coba lagi beberapa detik.';
+const AUTH_STORAGE_FULL_MESSAGE =
+  'Storage/cache browser penuh sehingga token login tidak bisa disimpan. Cache aplikasi sudah dibersihkan otomatis; coba login lagi.';
 
 const clearSupabaseAuthStorage = () => {
   for (const key of Object.keys(window.localStorage)) {
@@ -80,6 +88,25 @@ const isRetryableLoginError = (err: unknown) => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type PasswordSignInResult = Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>;
+
+const safeSetLocalStorageItem = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (error) {
+    if (isBrowserStorageQuotaError(error)) {
+      clearNonCriticalBrowserCaches();
+
+      try {
+        window.localStorage.setItem(key, value);
+      } catch {
+        // Non-auth metadata should not block login.
+      }
+      return;
+    }
+
+    throw error;
+  }
+};
 
 const parseAuthErrorPayload = (payload: unknown) => {
   if (!payload || typeof payload !== 'object') return '';
@@ -161,7 +188,31 @@ const persistDirectAuthSession = (payload: DirectAuthPayload, email: string): Se
   } as Session;
 
   if (projectId) {
-    window.localStorage.setItem(`sb-${projectId}-auth-token`, JSON.stringify(session));
+    const authStorageKey = `sb-${projectId}-auth-token`;
+    const serializedSession = JSON.stringify(session);
+
+    try {
+      window.localStorage.setItem(authStorageKey, serializedSession);
+    } catch (error) {
+      if (!isBrowserStorageQuotaError(error)) {
+        throw error;
+      }
+
+      const removedCount = clearNonCriticalBrowserCaches();
+      console.warn('[Login] Browser storage quota exceeded while saving auth token. Cleared non-critical caches.', {
+        removedCount,
+      });
+
+      try {
+        window.localStorage.setItem(authStorageKey, serializedSession);
+      } catch (retryError) {
+        if (isBrowserStorageQuotaError(retryError)) {
+          throw new Error(AUTH_STORAGE_FULL_MESSAGE);
+        }
+
+        throw retryError;
+      }
+    }
   }
 
   return session;
@@ -234,6 +285,10 @@ const signInWithDirectAuth = async (
 };
 
 const signInWithRetry = async (email: string, password: string): Promise<PasswordSignInResult> => {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error(AUTH_OFFLINE_MESSAGE);
+  }
+
   let lastRetryableResult: PasswordSignInResult | null = null;
 
   for (let attempt = 1; attempt <= LOGIN_MAX_ATTEMPTS; attempt += 1) {
@@ -263,11 +318,24 @@ const signInWithRetry = async (email: string, password: string): Promise<Passwor
 
 const getLoginErrorMessage = (err: unknown) => {
   if (err instanceof Error) {
+    if (err.message === AUTH_OFFLINE_MESSAGE || err.message === AUTH_STORAGE_FULL_MESSAGE) {
+      return err.message;
+    }
+
     if (err.message === 'Invalid login credentials') {
       return 'Email atau password salah. Silakan cek kembali.';
     }
 
+    if (isBrowserStorageQuotaError(err)) {
+      clearNonCriticalBrowserCaches();
+      return AUTH_STORAGE_FULL_MESSAGE;
+    }
+
     if (isRetryableLoginError(err)) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return AUTH_OFFLINE_MESSAGE;
+      }
+
       return AUTH_SERVER_UNAVAILABLE_MESSAGE;
     }
 
@@ -295,9 +363,9 @@ export const LoginPage = () => {
 
     try {
       if (useLocalAuth) {
-        localStorage.setItem(LOCAL_AUTH_SESSION_KEY, 'active');
-        localStorage.setItem('rhi-v2-local-email', email.trim() || 'owner@polesheadlamp.id');
-        localStorage.setItem('app_last_active', Date.now().toString());
+        safeSetLocalStorageItem(LOCAL_AUTH_SESSION_KEY, 'active');
+        safeSetLocalStorageItem('rhi-v2-local-email', email.trim() || 'owner@polesheadlamp.id');
+        safeSetLocalStorageItem('app_last_active', Date.now().toString());
         toast.success('Login lokal v2 berhasil.');
         window.location.href = '/dashboard/';
         return;
@@ -309,7 +377,7 @@ export const LoginPage = () => {
 
       // FIX: Reset activity timer to prevent immediate auto-logout due to old session data
       const timestamp = Date.now().toString();
-      localStorage.setItem('app_last_active', timestamp);
+      safeSetLocalStorageItem('app_last_active', timestamp);
       console.log(`[Login] Activity tracker reset: ${timestamp}`);
 
       toast.success('Login berhasil!');
