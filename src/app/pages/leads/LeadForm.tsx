@@ -43,6 +43,7 @@ import {
   MasterDataDialogBody,
   MasterDataFormActions,
 } from '../../components/ui/master-data-ui';
+import { Badge } from '../../components/ui/badge';
 import {
   AdAccount,
   AdAccountAssignment,
@@ -55,6 +56,7 @@ import {
 import { useMasterData } from '../master-data/context';
 import { getTodayDateKey } from '../master-data/dateKeys';
 import { LEAD_SOCIAL_PLATFORM_OPTIONS, getLeadSocialPlatformLabel } from './socialContact';
+import { normalizeLeadLabels } from './prospectModel';
 import { isAdminManagementRole, isAdvertiserRole, isCsRole } from '@/app/data/roleHelpers';
 import {
   findLeadDuplicates,
@@ -98,6 +100,7 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 }) => {
 	  const {
 	    leads,
+	    prospectLabels,
 	    users,
 	    subChannels: contextSubChannels,
 	    adAccounts,
@@ -108,12 +111,14 @@ export const LeadForm: React.FC<LeadFormProps> = ({
   
   const [openSocialHelp, setOpenSocialHelp] = useState(false);
   const [openVehicle, setOpenVehicle] = useState(false);
+  const [openLabels, setOpenLabels] = useState(false);
 
   const form = useForm<LeadFormValues>({
     resolver: zodResolver(leadSchema),
     defaultValues: {
       name: item?.name || '',
       phone: item?.phone || '',
+      labels: normalizeLeadLabels(item?.labels),
       platformId: item?.platformId || '',
       subChannelId: item?.subChannelId || '',
       advertiserId: item?.advertiserId || '',
@@ -136,6 +141,22 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 	  const watchedName = form.watch('name');
 	  const watchedPhone = form.watch('phone');
 	  const watchedStatus = form.watch('status');
+
+	  const activeProspectLabels = useMemo(
+	    () => [...prospectLabels]
+	      .filter((label) => label.status === 'active')
+	      .sort((left, right) => {
+	        const sortDelta = (left.sortOrder || 0) - (right.sortOrder || 0);
+	        if (sortDelta !== 0) return sortDelta;
+	        return left.name.localeCompare(right.name, 'id-ID', { sensitivity: 'base' });
+	      }),
+	    [prospectLabels],
+	  );
+
+	  const labelNameById = useMemo(
+	    () => new Map(prospectLabels.map((label) => [label.id, label.name])),
+	    [prospectLabels],
+	  );
   
   const isCSLogin = isCsRole(currentUser?.role);
   const isAdvertiserLogin = isAdvertiserRole(currentUser?.role);
@@ -456,7 +477,10 @@ export const LeadForm: React.FC<LeadFormProps> = ({
 	      return;
 	    }
 
-	    onSubmit(values);
+	    onSubmit({
+	      ...values,
+	      labels: normalizeLeadLabels(values.labels),
+	    });
 	  };
 
 	  // Keep dependent dropdowns aligned with the selected advertiser/ad-account scope.
@@ -543,6 +567,116 @@ export const LeadForm: React.FC<LeadFormProps> = ({
             )}
           />
 	        </div>
+
+	        <FormField
+	          control={form.control}
+	          name="labels"
+	          render={({ field }) => {
+	            const value = normalizeLeadLabels(field.value);
+	            const selectedLabels = value
+	              .map((labelId) => prospectLabels.find((label) => label.id === labelId))
+	              .filter(Boolean);
+	            const toggleLabel = (labelId: string) => {
+	              const nextValue = value.includes(labelId)
+	                ? value.filter((id) => id !== labelId)
+	                : [...value, labelId].slice(0, 6);
+	              field.onChange(nextValue);
+	            };
+
+	            return (
+	              <FormItem>
+	                <FormLabel>Label</FormLabel>
+	                <Popover open={openLabels} onOpenChange={setOpenLabels}>
+	                  <PopoverTrigger asChild>
+	                    <FormControl>
+	                      <Button
+	                        type="button"
+	                        variant="outline"
+	                        role="combobox"
+	                        aria-expanded={openLabels}
+	                        className="min-h-11 w-full justify-between border-slate-200 bg-white px-3 py-2 font-normal shadow-sm focus:ring-slate-200"
+	                      >
+	                        <span className={cn("flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-left", value.length === 0 && "text-slate-500")}>
+	                          {value.length > 0 ? (
+	                            selectedLabels.slice(0, 3).map((label) => (
+	                              <Badge
+	                                key={label!.id}
+	                                variant="outline"
+	                                className="border-slate-200 bg-slate-50 text-slate-600"
+	                                style={{ borderColor: `${label!.color}55`, color: label!.color }}
+	                              >
+	                                #{label!.name}
+	                              </Badge>
+	                            ))
+	                          ) : (
+	                            'Pilih label prospek'
+	                          )}
+	                          {value.length > 3 && (
+	                            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-500">
+	                              +{value.length - 3}
+	                            </Badge>
+	                          )}
+	                        </span>
+	                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+	                      </Button>
+	                    </FormControl>
+	                  </PopoverTrigger>
+	                  <PopoverContent className="z-[9999] w-[--radix-popover-trigger-width] p-0" align="start">
+	                    <Command>
+	                      <CommandInput placeholder="Cari label..." />
+	                      <CommandList className="max-h-[320px]">
+	                        <CommandEmpty>Label tidak ditemukan.</CommandEmpty>
+	                        <CommandGroup>
+	                          {activeProspectLabels.length === 0 ? (
+	                            <div className="px-3 py-4 text-sm text-slate-500">
+	                              Buat master label dulu dari tombol Kelola Label.
+	                            </div>
+	                          ) : (
+	                            activeProspectLabels.map((label) => {
+	                              const isSelected = value.includes(label.id);
+	                              return (
+	                                <CommandItem
+	                                  key={label.id}
+	                                  value={label.name}
+	                                  onSelect={() => toggleLabel(label.id)}
+	                                >
+	                                  <Check
+	                                    className={cn(
+	                                      "mr-2 h-4 w-4",
+	                                      isSelected ? "opacity-100" : "opacity-0",
+	                                    )}
+	                                  />
+	                                  <span
+	                                    className="mr-2 h-2.5 w-2.5 rounded-full"
+	                                    style={{ backgroundColor: label.color }}
+	                                  />
+	                                  <span className="flex-1">{label.name}</span>
+	                                  {label.followUpEnabled && (
+	                                    <span className="text-xs font-semibold text-blue-600">FU</span>
+	                                  )}
+	                                </CommandItem>
+	                              );
+	                            })
+	                          )}
+	                        </CommandGroup>
+	                      </CommandList>
+	                    </Command>
+	                  </PopoverContent>
+	                </Popover>
+	                {value.length > 0 && (
+	                  <div className="flex flex-wrap gap-1.5 pt-1">
+	                    {value.map((labelId) => (
+	                      <Badge key={labelId} variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+	                        #{labelNameById.get(labelId) || labelId}
+	                      </Badge>
+	                    ))}
+	                  </div>
+	                )}
+	                <FormMessage />
+	              </FormItem>
+	            );
+	          }}
+	        />
 
 	        {duplicateWarning && (
 	          <div

@@ -98,6 +98,8 @@ export interface Lead {
   id: string; 
   name: string; 
   phone: string; 
+  /** Prospect label IDs from prospect_labels. */
+  labels?: string[];
   platformId?: string; // Changed from sourceId, optional, links to Platform
   subChannelId?: string; // Optional, links to SubChannel
   advertiserId?: string; // New field for Advertiser
@@ -125,6 +127,19 @@ export interface Lead {
   utmCampaign?: string;
   utmTerm?: string;
   utmContent?: string;
+}
+
+export interface ProspectLabel {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  description?: string | null;
+  status: 'active' | 'inactive';
+  followUpEnabled: boolean;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ProspectBooking {
@@ -363,6 +378,9 @@ export interface WATemplate {
     message: string;
     category?: 'Leads' | 'Orders' | 'General' | 'Teknisi';
     usage_count?: number; // Tracks how many times this template has been used
+    followUpStep?: number | null;
+    followUpDelayDays?: number | null;
+    followUpIsActive?: boolean;
 }
 
 export interface DailyAd {

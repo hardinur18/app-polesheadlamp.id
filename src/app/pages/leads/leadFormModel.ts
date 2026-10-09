@@ -3,6 +3,7 @@ import * as z from 'zod';
 export const leadSchema = z.object({
   name: z.string().min(1, 'Nama wajib diisi'),
   phone: z.string().min(1, 'Nomor HP wajib diisi'),
+  labels: z.array(z.string()).optional(),
   platformId: z.string().optional(),
   subChannelId: z.string().optional(),
   advertiserId: z.string().optional(),

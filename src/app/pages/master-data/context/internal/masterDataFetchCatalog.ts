@@ -14,6 +14,7 @@ import type {
   Order,
   PaymentMethod,
   Platform,
+  ProspectLabel,
   ProspectBooking,
   RoleItem,
   ServiceType,
@@ -40,6 +41,7 @@ import {
 import {
   mapDailyAdFromDB,
   mapLeadSpamDailyInputFromDB,
+  mapProspectLabelFromDB,
   mapScheduleFromDB,
   mapWATemplateFromDB,
 } from './mappers/miscMappers';
@@ -81,6 +83,7 @@ type CreateMasterDataFetchCatalogParams = {
   setAffiliates: StateSetter<Affiliate>;
   setVendors: StateSetter<Vendor>;
   setCancelReasons: StateSetter<CancelReason>;
+  setProspectLabels: StateSetter<ProspectLabel>;
   setLeads: StateSetter<Lead>;
   setProspectBookings: StateSetter<ProspectBooking>;
   setOrders: StateSetter<Order>;
@@ -116,6 +119,7 @@ export const createMasterDataFetchCatalog = ({
   setAffiliates,
   setVendors,
   setCancelReasons,
+  setProspectLabels,
   setLeads,
   setProspectBookings,
   setOrders,
@@ -142,6 +146,7 @@ export const createMasterDataFetchCatalog = ({
     { table: 'affiliates', setter: setAffiliates, mapper: mapRowsWith(mapAffiliateFromDB) },
     { table: 'vendors', setter: setVendors, mapper: mapRowsWith(mapVendorFromDB) },
     { table: 'cancel_reasons', setter: setCancelReasons, mapper: mapRowsWith(mapCancelReasonFromDB) },
+    { table: 'prospect_labels', setter: setProspectLabels, mapper: mapRowsWith(mapProspectLabelFromDB) },
   ],
   transactional: [
     { table: 'leads', setter: setLeads, mapper: mapRowsWith(mapLeadRow) },

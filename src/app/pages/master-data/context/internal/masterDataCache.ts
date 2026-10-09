@@ -21,6 +21,7 @@ export const CACHEABLE_MASTER_TABLES = new Set([
   'payment_methods',
   'roles',
   'wa_templates',
+  'prospect_labels',
 ]);
 
 export const CACHEABLE_RANGE_TABLES = new Set([

@@ -1,4 +1,4 @@
-import { DailyAd, LeadSpamDailyInput, Notification, WATemplate } from '../../../data';
+import { DailyAd, LeadSpamDailyInput, Notification, ProspectLabel, WATemplate } from '../../../data';
 
 type TechnicianScheduleLike = {
   id: string;
@@ -42,6 +42,9 @@ export const mapWATemplateFromDB = (t: any): WATemplate => ({
   message: t.message,
   category: t.category,
   usage_count: t.usage_count || 0,
+  followUpStep: t.follow_up_step ?? null,
+  followUpDelayDays: t.follow_up_delay_days ?? null,
+  followUpIsActive: t.follow_up_is_active ?? true,
 });
 
 export const mapWATemplateToDB = (t: WATemplate) => ({
@@ -50,6 +53,33 @@ export const mapWATemplateToDB = (t: WATemplate) => ({
   message: t.message,
   category: t.category,
   usage_count: t.usage_count,
+  follow_up_step: t.followUpStep ?? null,
+  follow_up_delay_days: t.followUpDelayDays ?? null,
+  follow_up_is_active: t.followUpIsActive ?? true,
+});
+
+export const mapProspectLabelFromDB = (label: any): ProspectLabel => ({
+  id: label.id,
+  name: label.name,
+  slug: label.slug,
+  color: label.color || '#2563EB',
+  description: label.description || null,
+  status: label.status || 'active',
+  followUpEnabled: label.follow_up_enabled ?? true,
+  sortOrder: label.sort_order ?? 0,
+  createdAt: label.created_at,
+  updatedAt: label.updated_at,
+});
+
+export const mapProspectLabelToDB = (label: ProspectLabel) => ({
+  id: label.id,
+  name: label.name,
+  slug: label.slug,
+  color: label.color || '#2563EB',
+  description: label.description || null,
+  status: label.status || 'active',
+  follow_up_enabled: label.followUpEnabled ?? true,
+  sort_order: label.sortOrder ?? 0,
 });
 
 export const mapDailyAdFromDB = (a: any): DailyAd => ({

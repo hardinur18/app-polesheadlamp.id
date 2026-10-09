@@ -219,6 +219,16 @@ export const APP_DATA_ACCESS: Record<string, AppDataAccessConfig> = {
     ascending: false,
     filterableColumns: ["created_at", "status", "cs_id", "advertiser_id", "platform_id", "ad_account_id"],
   },
+  prospect_labels: {
+    table: "prospect_labels",
+    read: ["leads.view", MASTER_DATA_VIEW_PERMISSION],
+    create: ["leads.edit", MASTER_DATA_CREATE_PERMISSION],
+    edit: ["leads.edit", MASTER_DATA_EDIT_PERMISSION],
+    delete: ["leads.delete", MASTER_DATA_DELETE_PERMISSION],
+    orderBy: "sort_order",
+    ascending: true,
+    filterableColumns: ["status", "slug"],
+  },
   prospect_bookings: {
     table: "prospect_bookings",
     read: ["leads.view", "schedule.view", "order.view"],

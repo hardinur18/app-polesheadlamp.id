@@ -21,6 +21,7 @@ import {
   Role,
   Lead,
   LeadSpamDailyInput,
+  ProspectLabel,
   ProspectBooking,
   WATemplate,
   Order,
@@ -90,6 +91,8 @@ import {
   mapDailyAdToDB,
   mapLeadSpamDailyInputFromDB,
   mapLeadSpamDailyInputToDB,
+  mapProspectLabelFromDB,
+  mapProspectLabelToDB,
 } from './internal/mappers/miscMappers';
 import {
   mapProspectBookingFromDB,
@@ -205,6 +208,7 @@ interface MasterDataContextType {
   roles: RoleItem[];
   users: User[];
   leads: Lead[];
+  prospectLabels: ProspectLabel[];
   leadSpamDailyInputs: LeadSpamDailyInput[];
   prospectBookings: ProspectBooking[];
   waTemplates: WATemplate[];
@@ -233,6 +237,10 @@ interface MasterDataContextType {
   addLead: (lead: Lead, options?: MutationOptions) => Promise<Lead | undefined>;
   updateLead: (lead: Lead) => void;
   deleteLead: (id: string, options?: MutationOptions) => Promise<void>;
+
+  addProspectLabel: (label: ProspectLabel) => void;
+  updateProspectLabel: (label: ProspectLabel) => void;
+  deleteProspectLabel: (id: string) => void;
 
   addProspectBooking: (booking: ProspectBooking, options?: MutationOptions) => Promise<ProspectBooking | undefined>;
   updateProspectBooking: (booking: ProspectBooking) => Promise<ProspectBooking | undefined>;
@@ -382,6 +390,7 @@ export const MasterDataProvider: React.FC<{
 
   // These might still be mock-heavy if tables don't exist yet, but we'll try to fetch
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [prospectLabels, setProspectLabels] = useState<ProspectLabel[]>([]);
   const [leadSocialContacts, setLeadSocialContacts] = useState<Record<string, LeadSocialFields>>({});
   const [prospectBookings, setProspectBookings] = useState<ProspectBooking[]>([]);
   const [waTemplates, setWaTemplates] = useState<WATemplate[]>([]);
@@ -2749,6 +2758,14 @@ export const MasterDataProvider: React.FC<{
     }
   };
 
+  // -- PROSPECT LABELS
+  const addProspectLabel = (item: ProspectLabel) =>
+    addItem('prospect_labels', item, setProspectLabels, mapProspectLabelToDB, mapProspectLabelFromDB);
+  const updateProspectLabel = (item: ProspectLabel) =>
+    updateItem('prospect_labels', item, setProspectLabels, mapProspectLabelToDB, mapProspectLabelFromDB);
+  const deleteProspectLabel = (id: string) =>
+    deleteItem('prospect_labels', id, setProspectLabels);
+
   const validateProspectBookingTechnicianAvailabilityBeforeSave = (
     item: ProspectBooking,
     previousBooking?: ProspectBooking,
@@ -3324,6 +3341,7 @@ export const MasterDataProvider: React.FC<{
       setAffiliates,
       setVendors,
       setCancelReasons,
+      setProspectLabels,
       setLeads,
       setProspectBookings,
       setOrders,
@@ -3856,12 +3874,13 @@ export const MasterDataProvider: React.FC<{
   const value = React.useMemo(() => ({
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
-    leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
+    leads, prospectLabels, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules, addSchedule, deleteSchedule,
     auditLogs,
 
     addUser, createSystemUser, updateUser, updateSystemUser, deleteUser, deleteSystemUser, resetUserPassword,
     addLead, updateLead, deleteLead,
+    addProspectLabel, updateProspectLabel, deleteProspectLabel,
     addProspectBooking, updateProspectBooking, deleteProspectBooking,
     addOrder, updateOrder, updateOrderPatch, deleteOrder,
     addWATemplate, updateWATemplate, deleteWATemplate,
@@ -3895,7 +3914,7 @@ export const MasterDataProvider: React.FC<{
   }), [
     areas, branches, activeBranches, services, vehicles, platforms, subChannels, 
     adAccounts, adAccountAssignments, adAccountOwnerAssignments, sources, payments, roles, users,
-    leads, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
+    leads, prospectLabels, leadSpamDailyInputs, prospectBookings, waTemplates, orders, dailyAds, notifications, affiliates, vendors, cancelReasons,
     technicianSchedules,
     auditLogs, currentRole, currentUser, isCurrentUserResolved, currentUserIssue, refreshTrigger,
     isMasterDataLoading, isOperationalDataLoading, isOrdersLoading, isLeadsLoading,

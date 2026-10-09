@@ -20,7 +20,7 @@ export const getDeferredBootstrapTablesForPath = (path: string) => {
   }
 
   if (normalizedPath.startsWith('/leads')) {
-    add('lead_social_contacts');
+    add('lead_social_contacts', 'prospect_labels');
   }
 
   if (

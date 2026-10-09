@@ -1,5 +1,6 @@
 import { Lead } from '../../../data';
 import { LeadSocialFields, normalizeLeadSocialFields } from '../../../../leads/socialContact';
+import { normalizeLeadLabels } from '../../../../leads/prospectModel';
 
 export const LEAD_SOCIAL_MASTER_TYPE = 'lead_social_contacts';
 
@@ -54,6 +55,7 @@ export const mapLeadFromDB = (lead: any, social?: LeadSocialFields): Lead => mer
   id: lead.id,
   name: lead.name,
   phone: lead.phone,
+  labels: normalizeLeadLabels(lead.label_ids || lead.labels),
   status: lead.status,
   notes: lead.notes,
   platformId: lead.platform_id,
@@ -87,6 +89,7 @@ export const mapLeadToDB = (lead: Lead) => ({
   id: lead.id,
   name: lead.name,
   phone: lead.phone,
+  label_ids: normalizeLeadLabels(lead.labels),
   status: lead.status,
   notes: lead.notes,
   platform_id: lead.platformId,

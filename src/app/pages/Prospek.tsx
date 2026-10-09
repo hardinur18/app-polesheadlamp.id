@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Search, Plus, Phone,
-  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw
+  Edit, Trash2, MoreVertical, User as UserIcon, Check, CheckCircle2, ArrowRightCircle, LayoutList, KanbanSquare, Copy, ExternalLink, CalendarClock, Ban, MessageCircle, ChevronLeft, ChevronRight, Eye, RefreshCw, Bell, Tags
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
 import { Badge } from '../components/ui/badge';
 import {
@@ -56,6 +57,7 @@ import {
   LeadStatus,
   Order,
   ProspectBooking,
+  ProspectLabel,
   User,
   WATemplate,
 } from './master-data/data';
@@ -66,16 +68,21 @@ import {
   EDITABLE_LEAD_STATUS_OPTIONS,
   LEAD_PAGE_SIZE_OPTIONS,
   MANDATORY_PLATFORM_NAMES,
+  ProspectFollowUpFilter,
+  buildLeadFollowUpTemplates,
   buildActiveBookingByLeadId,
   buildLatestBookingByLeadId,
+  buildProspectFollowUpPlan,
   formatProspectBookingDate,
+  formatProspectFollowUpDueDate,
+  getLatestTemplateHistory,
   getLeadNotesPreview,
+  getTemplateUsageCount,
   getProspectBookingStatusLabel,
   getProspectBookingSummary,
   getProspectStatusBadgeClass,
   isAutoWhatsAppLead,
   normalizeLeadNotes,
-  sortLeadTemplatesForDisplay,
   toLocalDateKey,
   uniqueById,
 } from './leads/prospectModel';
@@ -154,9 +161,13 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     adAccountAssignments,
     adAccountOwnerAssignments,
     users,
+    prospectLabels,
     addLead,
     updateLead,
     deleteLead,
+    addProspectLabel,
+    updateProspectLabel,
+    deleteProspectLabel,
     addProspectBooking,
     updateProspectBooking,
     currentUser,
@@ -172,6 +183,15 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Lead | null>(null);
   const [leadFormInstanceKey, setLeadFormInstanceKey] = useState(0);
+  const [isLabelManagerOpen, setIsLabelManagerOpen] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<ProspectLabel | null>(null);
+  const [labelDraft, setLabelDraft] = useState({
+    name: '',
+    color: '#2563EB',
+    description: '',
+    status: 'active' as ProspectLabel['status'],
+    followUpEnabled: true,
+  });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [forwardLead, setForwardLead] = useState<Lead | null>(null);
   const [bookingLead, setBookingLead] = useState<Lead | null>(null);
@@ -180,6 +200,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [subChannelFilter, setSubChannelFilter] = useState<string>('all');
   const [csFilter, setCsFilter] = useState<string>('all');
+  const [labelFilter, setLabelFilter] = useState<string>('all');
+  const [followUpFilter, setFollowUpFilter] = useState<ProspectFollowUpFilter>('all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date()
@@ -401,6 +423,43 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     return []; 
   }, [currentUser, isAdminManagementUser, isAdvertiserView, isCsUser, leads, users]);
 
+  const sortedProspectLabels = useMemo(
+    () => [...prospectLabels].sort((left, right) => {
+      const sortDelta = (left.sortOrder || 0) - (right.sortOrder || 0);
+      if (sortDelta !== 0) return sortDelta;
+      return left.name.localeCompare(right.name, 'id-ID', { sensitivity: 'base' });
+    }),
+    [prospectLabels],
+  );
+
+  const activeProspectLabels = useMemo(
+    () => sortedProspectLabels.filter((label) => label.status === 'active'),
+    [sortedProspectLabels],
+  );
+
+  const prospectLabelById = useMemo(
+    () => new Map(prospectLabels.map((label) => [label.id, label])),
+    [prospectLabels],
+  );
+
+  const prospectLabelUsageCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    leads.forEach((lead) => {
+      (lead.labels || []).forEach((labelId) => {
+        counts.set(labelId, (counts.get(labelId) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [leads]);
+
+  const getProspectLabelName = (labelId: string) =>
+    prospectLabelById.get(labelId)?.name || labelId;
+
+  const getProspectLabelStyle = (labelId: string) => {
+    const color = prospectLabelById.get(labelId)?.color;
+    return color ? { borderColor: `${color}55`, color } : undefined;
+  };
+
   // --- DYNAMIC FILTERS (Based on Actual Data) ---
   const availableAdvertisers = useMemo(() => {
       const uniqueIds = new Set(roleBasedLeads.map(l => l.advertiserId).filter(Boolean));
@@ -426,12 +485,26 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       return users.filter(u => uniqueIds.has(u.id));
   }, [roleBasedLeads, users]);
 
+  const availableLabels = useMemo(() => {
+    const usedLabelIds = new Set<string>();
+    roleBasedLeads.forEach((lead) => {
+      (lead.labels || []).forEach((labelId) => usedLabelIds.add(labelId));
+    });
+    return activeProspectLabels.filter((label) => usedLabelIds.has(label.id));
+  }, [activeProspectLabels, roleBasedLeads]);
+
   // Prospek only shows templates from the Prospek/Leads category.
   const leadTemplates = useMemo(() => {
-      return waTemplates
-        .filter(t => t.category === 'Leads')
-        .sort(sortLeadTemplatesForDisplay);
+      return buildLeadFollowUpTemplates(waTemplates);
   }, [waTemplates]);
+
+  const followUpPlanByLeadId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof buildProspectFollowUpPlan>>();
+    roleBasedLeads.forEach((lead) => {
+      map.set(lead.id, buildProspectFollowUpPlan(lead, leadTemplates));
+    });
+    return map;
+  }, [leadTemplates, roleBasedLeads]);
 
   const latestBookingByLeadId = useMemo(
     () => buildLatestBookingByLeadId(prospectBookings),
@@ -488,6 +561,90 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
   const formatBookingDate = formatProspectBookingDate;
 
   const getBookingStatusLabel = getProspectBookingStatusLabel;
+
+  const buildProspectLabelSlug = (name: string) => {
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return slug || `label-${Date.now()}`;
+  };
+
+  const resetLabelDraft = () => {
+    setEditingLabel(null);
+    setLabelDraft({
+      name: '',
+      color: '#2563EB',
+      description: '',
+      status: 'active',
+      followUpEnabled: true,
+    });
+  };
+
+  const openEditProspectLabel = (label: ProspectLabel) => {
+    setEditingLabel(label);
+    setLabelDraft({
+      name: label.name,
+      color: label.color || '#2563EB',
+      description: label.description || '',
+      status: label.status,
+      followUpEnabled: label.followUpEnabled,
+    });
+  };
+
+  const handleSaveProspectLabel = async () => {
+    const name = labelDraft.name.trim();
+    if (!name) {
+      toast.error('Nama label wajib diisi');
+      return;
+    }
+
+    const slug = editingLabel?.slug || buildProspectLabelSlug(name);
+    const duplicate = prospectLabels.some((label) =>
+      label.id !== editingLabel?.id &&
+      (label.name.trim().toLowerCase() === name.toLowerCase() || label.slug.toLowerCase() === slug.toLowerCase())
+    );
+    if (duplicate) {
+      toast.error('Nama label sudah ada');
+      return;
+    }
+
+    const payload: ProspectLabel = {
+      id: editingLabel?.id || crypto.randomUUID(),
+      name,
+      slug,
+      color: labelDraft.color || '#2563EB',
+      description: labelDraft.description.trim() || null,
+      status: labelDraft.status,
+      followUpEnabled: labelDraft.followUpEnabled,
+      sortOrder: editingLabel?.sortOrder ?? prospectLabels.length + 1,
+      createdAt: editingLabel?.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (editingLabel) {
+      await updateProspectLabel(payload);
+    } else {
+      await addProspectLabel(payload);
+    }
+    resetLabelDraft();
+  };
+
+  const handleArchiveProspectLabel = async (label: ProspectLabel) => {
+    await updateProspectLabel({ ...label, status: 'inactive', updatedAt: new Date().toISOString() });
+  };
+
+  const handleDeleteProspectLabel = async (label: ProspectLabel) => {
+    const usageCount = prospectLabelUsageCount.get(label.id) || 0;
+    if (usageCount > 0) {
+      await handleArchiveProspectLabel(label);
+      toast.info(`Label dipakai ${usageCount} prospek, jadi dinonaktifkan agar histori tetap aman.`);
+      return;
+    }
+    await deleteProspectLabel(label.id);
+    if (editingLabel?.id === label.id) resetLabelDraft();
+  };
 
   const openBookingForm = (lead: Lead) => {
     if (!canManageLeadBooking(lead)) {
@@ -742,16 +899,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       return lead.templateHistory?.some(h => h.templateId === templateId);
   };
 
-  const getTemplateUsageCount = (lead: Lead, templateId: string) => (
-    lead.templateHistory?.filter((history) => history.templateId === templateId).length || 0
-  );
-
-  const getLatestTemplateHistory = (lead: Lead, templateId: string) => (
-    [...(lead.templateHistory || [])]
-      .filter((history) => history.templateId === templateId)
-      .sort((left, right) => new Date(right.sentAt).getTime() - new Date(left.sentAt).getTime())[0]
-  );
-
   const formatTemplateSentAt = (sentAt?: string) => {
     if (!sentAt) return '';
     try {
@@ -766,9 +913,30 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     return users.find((user) => user.id === sentBy)?.name || '-';
   };
 
-  const visibleFollowUpTemplates = leadTemplates.slice(0, 4);
+  const visibleFollowUpTemplates = leadTemplates.slice(0, 6);
   const hiddenFollowUpTemplateCount = Math.max(leadTemplates.length - visibleFollowUpTemplates.length, 0);
   const canSendLeadTemplate = !isAdvertiserView && (isAdminManagementUser || isCsUser || isOwnerLikeUser);
+
+  const getLeadFollowUpPlan = (lead: Lead) =>
+    followUpPlanByLeadId.get(lead.id) || buildProspectFollowUpPlan(lead, leadTemplates);
+
+  const getFollowUpPlanBadgeClass = (lead: Lead) => {
+    const plan = getLeadFollowUpPlan(lead);
+    if (plan.isOverdue) return 'border-red-200 bg-red-50 text-red-700';
+    if (plan.isDueToday) return 'border-amber-200 bg-amber-50 text-amber-700';
+    if (plan.isUpcoming) return 'border-blue-200 bg-blue-50 text-blue-700';
+    if (plan.isCompleted) return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    return 'border-slate-200 bg-slate-50 text-slate-600';
+  };
+
+  const getFollowUpPlanLabel = (lead: Lead) => {
+    const plan = getLeadFollowUpPlan(lead);
+    if (plan.isCompleted) return 'FU selesai';
+    if (!plan.nextStep || !plan.nextTemplate) return 'Tanpa plan';
+    if (plan.isOverdue) return `FU ${plan.nextStep} terlambat`;
+    if (plan.isDueToday) return `FU ${plan.nextStep} hari ini`;
+    return `FU ${plan.nextStep} ${formatProspectFollowUpDueDate(plan.dueDate)}`;
+  };
 
   // --- PERMISSION LOGIC ---
   const canEditLead = (lead: Lead) => {
@@ -895,22 +1063,40 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     const existingBooking = prospectBookings.find(item => item.id === booking.id);
 
     try {
+      let nextLeadStatus = bookingLead?.status;
+      if (bookingLead) {
+        if (booking.status === 'cancelled') {
+          nextLeadStatus = bookingLead.status === 'Booking' ? 'Pending' : bookingLead.status;
+        } else if (bookingLead.status !== 'Booking') {
+          nextLeadStatus = 'Booking';
+        }
+      }
+
+      const nextLeadName = booking.customerName.trim();
+      const nextLeadPhone = booking.customerPhone.trim();
+      const shouldUpdateLead =
+        Boolean(bookingLead) &&
+        (
+          bookingLead?.name !== nextLeadName ||
+          bookingLead?.phone !== nextLeadPhone ||
+          bookingLead?.status !== nextLeadStatus
+        );
+
+      if (bookingLead && shouldUpdateLead) {
+        await Promise.resolve(updateLead({
+          ...bookingLead,
+          name: nextLeadName,
+          phone: nextLeadPhone,
+          status: nextLeadStatus || bookingLead.status,
+        }));
+      }
+
       if (existingBooking) {
         await updateProspectBooking(booking);
         toast.success('Booking prospek berhasil diperbarui');
       } else {
         await addProspectBooking(booking);
         toast.success('Booking prospek berhasil dibuat');
-      }
-
-      if (bookingLead) {
-        if (booking.status === 'cancelled') {
-          if (bookingLead.status === 'Booking') {
-            await Promise.resolve(updateLead({ ...bookingLead, status: 'Pending' }));
-          }
-        } else if (bookingLead.status !== 'Booking') {
-          await Promise.resolve(updateLead({ ...bookingLead, status: 'Booking' }));
-        }
       }
 
       setBookingLead(null);
@@ -1035,6 +1221,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       const socialPlatformLabel = getLeadSocialPlatformLabel(item.socialPlatform);
       const socialSearchableLink = [item.socialProfileUrl, item.socialChatUrl].filter(Boolean).join(' ');
       const originLabel = isAutoWhatsAppLead(item) ? 'auto wa api whatsapp otomatis' : '';
+      const labelText = (item.labels || []).map(getProspectLabelName).join(' ');
+      const followUpPlan = followUpPlanByLeadId.get(item.id);
 
       const matchesSearch = 
         item.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -1045,24 +1233,33 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         socialHandle.toLowerCase().includes(search.toLowerCase()) ||
         socialPlatformLabel.toLowerCase().includes(search.toLowerCase()) ||
         socialSearchableLink.toLowerCase().includes(search.toLowerCase()) ||
+        labelText.toLowerCase().includes(search.toLowerCase()) ||
         originLabel.includes(search.toLowerCase());
       
       const matchesAdvertiser = advertiserFilter === 'all' || item.advertiserId === advertiserFilter;
       const matchesPlatform = platformFilter === 'all' || item.platformId === platformFilter;
       const matchesSubChannel = subChannelFilter === 'all' || item.subChannelId === subChannelFilter;
       const matchesCS = csFilter === 'all' || item.csId === csFilter;
+      const matchesLabel = labelFilter === 'all' || (item.labels || []).includes(labelFilter);
+      const matchesFollowUp =
+        followUpFilter === 'all' ||
+        (followUpFilter === 'due_today' && Boolean(followUpPlan?.isDueToday || followUpPlan?.isOverdue)) ||
+        (followUpFilter === 'overdue' && Boolean(followUpPlan?.isOverdue)) ||
+        (followUpFilter === 'upcoming' && Boolean(followUpPlan?.isUpcoming)) ||
+        (followUpFilter === 'completed' && Boolean(followUpPlan?.isCompleted)) ||
+        (followUpFilter === 'unscheduled' && followUpPlan?.status === 'unscheduled');
 
       let matchesDate = true;
-      if (dateRange?.from) {
+      if (dateRange?.from && followUpFilter === 'all') {
         const itemDate = new Date(item.timestamp);
         const start = startOfDay(dateRange.from);
         const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
         matchesDate = isWithinInterval(itemDate, { start, end });
       }
 
-      return matchesSearch && matchesAdvertiser && matchesPlatform && matchesSubChannel && matchesDate && matchesCS;
+      return matchesSearch && matchesAdvertiser && matchesPlatform && matchesSubChannel && matchesDate && matchesCS && matchesLabel && matchesFollowUp;
     });
-  }, [roleBasedLeads, search, advertiserFilter, platformFilter, subChannelFilter, csFilter, dateRange, platforms, vehicles, users]);
+  }, [roleBasedLeads, search, advertiserFilter, platformFilter, subChannelFilter, csFilter, labelFilter, followUpFilter, followUpPlanByLeadId, dateRange, platforms, vehicles, users, prospectLabelById]);
   const leadsRangeLoading = isDateRangeLoading && filteredLeadsBase.length === 0;
   const leadTableLoading = leadsInitialLoading || leadsRangeLoading;
 
@@ -1151,6 +1348,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       platformFilter !== 'all' ||
       subChannelFilter !== 'all' ||
       csFilter !== 'all' ||
+      labelFilter !== 'all' ||
+      followUpFilter !== 'all' ||
       !isDefaultDateRange
   );
 
@@ -1161,6 +1360,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       platformFilter !== 'all',
       subChannelFilter !== 'all',
       csFilter !== 'all',
+      labelFilter !== 'all',
+      followUpFilter !== 'all',
       !isDefaultDateRange,
   ].filter(Boolean).length;
 
@@ -1169,6 +1370,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
       setStatusFilter('all');
       setAdvertiserFilter('all');
       setCsFilter('all');
+      setLabelFilter('all');
+      setFollowUpFilter('all');
       setPlatformFilter('all');
       setSubChannelFilter('all');
       setDateRange({ from: new Date(), to: new Date() });
@@ -1318,9 +1521,13 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     const pending = data.filter(l => l.status === 'Pending').length;
     const closing = data.filter(l => l.status === 'Closing').length;
     const autoWhatsApp = data.filter(isAutoWhatsAppLead).length;
+    const dueToday = data.filter((lead) => {
+      const plan = followUpPlanByLeadId.get(lead.id);
+      return Boolean(plan?.isDueToday || plan?.isOverdue);
+    }).length;
     const conversionRate = total > 0 ? ((closing / total) * 100).toFixed(1) : '0.0';
-    return { total, pending, closing, autoWhatsApp, conversionRate };
-  }, [filteredData]);
+    return { total, pending, closing, autoWhatsApp, dueToday, conversionRate };
+  }, [filteredData, followUpPlanByLeadId]);
   const leadTableColumnCount = isAdvertiserView ? (showSelection ? 10 : 9) : (showSelection ? 11 : 10);
 
   // Access Control
@@ -1492,6 +1699,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   const activeBooking = getActiveLeadBooking(item.id);
                   const socialHandle = getLeadSocialHandle(item);
                   const socialUrl = getLeadSocialUrl(item);
+                  const itemLabels = item.labels || [];
+                  const followUpPlan = getLeadFollowUpPlan(item);
 
                   return (
                     <article
@@ -1577,6 +1786,24 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                           <span>Mobil</span>
                           <strong>{getVehicleName(item.vehicleId)}</strong>
                         </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-bold ${getFollowUpPlanBadgeClass(item)}`}
+                          title={followUpPlan.dueDate ? `Jadwal: ${formatProspectFollowUpDueDate(followUpPlan.dueDate)}` : undefined}
+                        >
+                          {getFollowUpPlanLabel(item)}
+                        </span>
+                        {itemLabels.slice(0, 3).map((labelId) => (
+                          <span
+                            key={labelId}
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600"
+                            style={getProspectLabelStyle(labelId)}
+                          >
+                            #{getProspectLabelName(labelId)}
+                          </span>
+                        ))}
                       </div>
 
                       {item.notes && (
@@ -1722,9 +1949,23 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
           title="Kotak Masuk Prospek"
           subtitle="Kelola leads, follow up, booking awal, dan konversi menjadi pesanan."
           actions={
-            <div className="leadHeaderActions">
-                 {hasPermission('leads.create') && (
-                  <>
+	            <div className="leadHeaderActions">
+	                 {hasPermission('leads.edit') && (
+	                  <Button
+	                    type="button"
+	                    variant="outline"
+	                    className="leadAddButton"
+	                    icon={<Tags className="h-4 w-4" />}
+	                    onClick={() => {
+	                      resetLabelDraft();
+	                      setIsLabelManagerOpen(true);
+	                    }}
+	                  >
+	                    Kelola Label
+	                  </Button>
+	                 )}
+	                 {hasPermission('leads.create') && (
+	                  <>
                     <Button
                       size="sm"
                       aria-label="Tambah prospek"
@@ -1772,8 +2013,32 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
           <OperationalKpiCard label="Pending" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.pending} icon={CalendarClock} tone="amber" />
           <OperationalKpiCard label="Closing" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.closing} icon={CheckCircle2} tone="emerald" />
           <OperationalKpiCard label="Auto WA" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.autoWhatsApp} icon={MessageCircle} tone="emerald" />
+          <OperationalKpiCard label="FU Hari Ini" value={leadTableLoading ? <Skeleton className="h-6 w-14 rounded-md" /> : stats.dueToday} icon={Bell} tone="amber" />
           <OperationalKpiCard label="Conversion Rate" value={leadTableLoading ? <Skeleton className="h-6 w-16 rounded-md" /> : `${stats.conversionRate}%`} icon={ArrowRightCircle} tone="blue" />
         </OperationalKpiGrid>
+
+        {!isAdvertiserView && stats.dueToday > 0 && (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Bell className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold">{stats.dueToday} prospek perlu follow up</p>
+                <p className="text-xs font-medium text-amber-800">Termasuk jadwal hari ini dan yang sudah lewat.</p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-amber-200 bg-white text-amber-900 hover:bg-amber-100"
+              onClick={() => {
+                setFollowUpFilter('due_today');
+                setIsMobileFilterExpanded(true);
+              }}
+            >
+              Lihat Jadwal FU
+            </Button>
+          </div>
+        )}
 
 
         <OperationalFilterPanel
@@ -1869,10 +2134,42 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
               </div>
             )}
 
+            <div className="leadAdvancedFilter leadFilterItem">
+              <Select value={labelFilter} onValueChange={setLabelFilter}>
+                <SelectTrigger className="leadFilterControl">
+                  <SelectValue placeholder="Semua Label" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Label</SelectItem>
+                  {availableLabels.map((label) => (
+                    <SelectItem key={label.id} value={label.id}>
+                      {label.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="leadAdvancedFilter leadFilterItem">
+              <Select value={followUpFilter} onValueChange={(value) => setFollowUpFilter(value as ProspectFollowUpFilter)}>
+                <SelectTrigger className="leadFilterControl">
+                  <SelectValue placeholder="Semua Jadwal FU" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Jadwal FU</SelectItem>
+                  <SelectItem value="due_today">FU Hari Ini</SelectItem>
+                  <SelectItem value="overdue">FU Terlambat</SelectItem>
+                  <SelectItem value="upcoming">FU Mendatang</SelectItem>
+                  <SelectItem value="completed">Plan Selesai</SelectItem>
+                  <SelectItem value="unscheduled">Belum Ada Plan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="leadSearchBox leadFilterItem">
               <Search className="leadSearchIcon" />
               <Input
-                placeholder="Cari nama, nomor, platform, atau catatan..."
+                placeholder="Cari nama, nomor, platform, label, atau catatan..."
                 className="leadSearchInput"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -2019,6 +2316,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                       const platformLabel = isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-';
                       const subChannelLabel = isAutoWhatsAppLead(item) && !item.subChannelId ? 'Auto API' : getSubChannelName(item.subChannelId);
                       const rowNumber = (currentPage - 1) * itemsPerPage + index + 1;
+                      const itemLabels = item.labels || [];
+                      const followUpPlan = getLeadFollowUpPlan(item);
 
                       return (
                         <tr
@@ -2057,6 +2356,15 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                               />
                               <div className="leadInlineMeta">
                                 <AutoWhatsAppLeadBadge lead={item} />
+                                {itemLabels.slice(0, 3).map((labelId) => (
+                                  <span
+                                    key={labelId}
+                                    title={`Label: ${getProspectLabelName(labelId)}`}
+                                    style={getProspectLabelStyle(labelId)}
+                                  >
+                                    #{getProspectLabelName(labelId)}
+                                  </span>
+                                ))}
                                 {!isAdvertiserView && socialHandle && (
                                   <span title={socialHandle}>
                                     {item.socialPlatform ? getLeadSocialPlatformLabel(item.socialPlatform) : 'Sosial'}: {socialHandle}
@@ -2098,6 +2406,12 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                           </td>
                           <td>
                             <div className="leadFollowUpCell" aria-label="Template follow up">
+                              <span
+                                className={`inline-flex min-h-7 items-center rounded-full border px-2 text-[11px] font-bold ${getFollowUpPlanBadgeClass(item)}`}
+                                title={followUpPlan.dueDate ? `Jadwal: ${formatProspectFollowUpDueDate(followUpPlan.dueDate)}` : undefined}
+                              >
+                                {getFollowUpPlanLabel(item)}
+                              </span>
                               {visibleFollowUpTemplates.length > 0 ? visibleFollowUpTemplates.map((template) => {
                                 const usageCount = getTemplateUsageCount(item, template.id);
                                 const latestHistory = getLatestTemplateHistory(item, template.id);
@@ -2231,6 +2545,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   const platformLabel = isAutoWhatsAppLead(item) ? 'WhatsApp' : item.platformId ? getPlatformName(item.platformId) : '-';
                   const subChannelLabel = isAutoWhatsAppLead(item) && !item.subChannelId ? 'Auto API' : getSubChannelName(item.subChannelId);
                   const rowNumber = (currentPage - 1) * itemsPerPage + index + 1;
+                  const itemLabels = item.labels || [];
+                  const followUpPlan = getLeadFollowUpPlan(item);
 
                   return (
                     <article
@@ -2331,7 +2647,24 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                         <Badge variant="outline" className={`leadStatusBadge ${getStatusBadgeVariant(item.status)}`}>
                           {item.status}
                         </Badge>
+                        <Badge
+                          variant="outline"
+                          className={getFollowUpPlanBadgeClass(item)}
+                          title={followUpPlan.dueDate ? `Jadwal: ${formatProspectFollowUpDueDate(followUpPlan.dueDate)}` : undefined}
+                        >
+                          {getFollowUpPlanLabel(item)}
+                        </Badge>
                         <AutoWhatsAppLeadBadge lead={item} />
+                        {itemLabels.slice(0, 3).map((labelId) => (
+                          <Badge
+                            key={labelId}
+                            variant="outline"
+                            className="border-slate-200 bg-slate-50 text-slate-600"
+                            style={getProspectLabelStyle(labelId)}
+                          >
+                            #{getProspectLabelName(labelId)}
+                          </Badge>
+                        ))}
                       </div>
 
                       <div className="leadMobileMetaGrid">
@@ -2656,6 +2989,144 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         </MasterDataFormDialogContent>
       </Dialog>
 
+      <Dialog
+        open={isLabelManagerOpen}
+        onOpenChange={(open) => {
+          setIsLabelManagerOpen(open);
+          if (!open) resetLabelDraft();
+        }}
+      >
+        <MasterDataFormDialogContent size="wide" className="leadFormDialog">
+          <MasterDataFormHeader
+            icon={Tags}
+            title="Master Label Prospek"
+            description="Buat label resmi untuk segmentasi dan rencana follow up prospek."
+          />
+          <MasterDataDialogBody compact className="space-y-5">
+            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-[1.4fr_0.8fr_0.8fr]">
+              <div className="space-y-2">
+                <MasterDataFieldLabel required>Nama Label</MasterDataFieldLabel>
+                <Input
+                  className="uiInput bg-white"
+                  value={labelDraft.name}
+                  onChange={(event) => setLabelDraft((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Contoh: Hot Lead, Butuh Promo, FU Intensif"
+                />
+              </div>
+              <div className="space-y-2">
+                <MasterDataFieldLabel>Warna</MasterDataFieldLabel>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                  <input
+                    type="color"
+                    value={labelDraft.color}
+                    onChange={(event) => setLabelDraft((prev) => ({ ...prev, color: event.target.value }))}
+                    className="h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent p-0"
+                    aria-label="Warna label"
+                  />
+                  <Input
+                    className="h-8 border-0 bg-transparent p-0 font-mono text-sm shadow-none focus-visible:ring-0"
+                    value={labelDraft.color}
+                    onChange={(event) => setLabelDraft((prev) => ({ ...prev, color: event.target.value || '#2563EB' }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <MasterDataFieldLabel>Status</MasterDataFieldLabel>
+                <Select
+                  value={labelDraft.status}
+                  onValueChange={(value) => setLabelDraft((prev) => ({ ...prev, status: value as ProspectLabel['status'] }))}
+                >
+                  <SelectTrigger className="uiInput bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Aktif</SelectItem>
+                    <SelectItem value="inactive">Nonaktif</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <MasterDataFieldLabel>Deskripsi</MasterDataFieldLabel>
+                <Textarea
+                  className="min-h-20 bg-white"
+                  value={labelDraft.description}
+                  onChange={(event) => setLabelDraft((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Catatan internal kapan label ini dipakai."
+                />
+              </div>
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
+                <span>Ikut Plan FU</span>
+                <Switch
+                  checked={labelDraft.followUpEnabled}
+                  onCheckedChange={(checked) => setLabelDraft((prev) => ({ ...prev, followUpEnabled: checked }))}
+                />
+              </label>
+              <div className="flex flex-wrap gap-2 md:col-span-3">
+                <Button type="button" onClick={() => void handleSaveProspectLabel()}>
+                  {editingLabel ? 'Simpan Label' : 'Tambah Label'}
+                </Button>
+                {editingLabel && (
+                  <Button type="button" variant="outline" onClick={resetLabelDraft}>
+                    Batal Edit
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {sortedProspectLabels.length === 0 ? (
+                <OperationalEmptyState
+                  icon={Tags}
+                  title="Belum ada label prospek"
+                  description="Tambahkan label resmi agar CS bisa menandai prospek tanpa input bebas."
+                />
+              ) : (
+                sortedProspectLabels.map((label) => {
+                  const usageCount = prospectLabelUsageCount.get(label.id) || 0;
+                  return (
+                    <div key={label.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
+                          <strong className="text-slate-900">#{label.name}</strong>
+                          <Badge variant="outline" className={label.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}>
+                            {label.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                          </Badge>
+                          {label.followUpEnabled && (
+                            <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+                              Plan FU
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+                            {usageCount} prospek
+                          </Badge>
+                        </div>
+                        {label.description && (
+                          <p className="text-sm text-slate-500">{label.description}</p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => openEditProspectLabel(label)}>
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleDeleteProspectLabel(label)}
+                        >
+                          {usageCount > 0 ? 'Nonaktifkan' : 'Hapus'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </MasterDataDialogBody>
+        </MasterDataFormDialogContent>
+      </Dialog>
+
       <Dialog open={isAddOpen} onOpenChange={handleAddSheetOpenChange}>
         <MasterDataFormDialogContent size="wide" className="leadFormDialog">
           <MasterDataFormHeader
@@ -2688,6 +3159,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
             <ProspectBookingForm
               lead={bookingLead}
               booking={selectedLeadBooking}
+              editableCustomerFields
               onSubmit={handleBookingSubmit}
               onCancelBooking={(booking) => void handleCancelLeadBooking(bookingLead, booking)}
               onCancel={() => setBookingLead(null)}
@@ -2726,6 +3198,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
             const detailServiceName = getServiceName(detailLead.serviceId || detailBooking?.serviceId);
             const detailCanManageBooking = canManageLeadBooking(detailLead);
             const detailCanForwardOrder = canForwardLeadToOrder(detailLead);
+            const detailLabels = detailLead.labels || [];
+            const detailFollowUpPlan = getLeadFollowUpPlan(detailLead);
             const bookingSchedule = detailBooking
               ? [formatBookingDate(detailBooking), detailBooking.scheduleTime].filter((value) => value && value !== '-').join(' - ') || '-'
               : '-';
@@ -2762,6 +3236,9 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                       <>
                         <Badge variant="outline" className={`leadStatusBadge ${getStatusBadgeVariant(detailLead.status)}`}>
                           {detailLead.status}
+                        </Badge>
+                        <Badge variant="outline" className={getFollowUpPlanBadgeClass(detailLead)}>
+                          {getFollowUpPlanLabel(detailLead)}
                         </Badge>
                         <AutoWhatsAppLeadBadge lead={detailLead} />
                       </>
@@ -2803,8 +3280,8 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                     <FoundationDetailMetric
                       icon={MessageCircle}
                       label="Follow Up"
-                      value={`${followUpCount}x`}
-                      description={latestFollowUp ? formatTemplateSentAt(latestFollowUp.sentAt) : 'Belum ada aktivitas'}
+                      value={detailFollowUpPlan.nextStep ? `FU ${detailFollowUpPlan.nextStep}` : `${followUpCount}x`}
+                      description={detailFollowUpPlan.dueDate ? formatProspectFollowUpDueDate(detailFollowUpPlan.dueDate) : latestFollowUp ? formatTemplateSentAt(latestFollowUp.sentAt) : 'Belum ada aktivitas'}
                     />
                     <FoundationDetailMetric
                       icon={CalendarClock}
@@ -2826,6 +3303,24 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                       <FoundationDetailField label="Kontak Terakhir" value={detailLead.lastContact || '-'} />
                       <FoundationDetailField label="Sosial" value={detailSocialHandle || '-'} />
                       <FoundationDetailField label="Nomor" value={isAdvertiserView ? 'Kontak disembunyikan' : detailLead.phone || '-'} />
+                      <FoundationDetailField label="Label" span="full">
+                        {detailLabels.length > 0 ? (
+                          <span className="flex flex-wrap gap-1.5">
+                            {detailLabels.map((labelId) => (
+                              <Badge
+                                key={labelId}
+                                variant="outline"
+                                className="border-slate-200 bg-slate-50 text-slate-600"
+                                style={getProspectLabelStyle(labelId)}
+                              >
+                                #{getProspectLabelName(labelId)}
+                              </Badge>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="foundationDetailTextBlock">-</span>
+                        )}
+                      </FoundationDetailField>
                       <FoundationDetailField label="Catatan" span="full">
                         <span className="foundationDetailTextBlock">{normalizeLeadNotes(detailLead.notes) || '-'}</span>
                       </FoundationDetailField>
@@ -2892,6 +3387,51 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                       </FoundationDetailFieldGrid>
                     </FoundationDetailSection>
                   )}
+
+                  <FoundationDetailSection
+                    title="Plan Follow Up"
+                    description={leadTemplates.length > 0 ? 'Urutan template dan jadwal follow up prospek.' : 'Belum ada template Leads aktif.'}
+                    badge={
+                      <Badge variant="outline" className={getFollowUpPlanBadgeClass(detailLead)}>
+                        {detailFollowUpPlan.completedCount}/{detailFollowUpPlan.totalSteps || leadTemplates.length} selesai
+                      </Badge>
+                    }
+                  >
+                    {leadTemplates.length > 0 ? (
+                      <div className="leadDetailTimeline">
+                        {leadTemplates.map((template, templateIndex) => {
+                          const latestHistory = getLatestTemplateHistory(detailLead, template.id);
+                          const isUsed = Boolean(latestHistory);
+                          const isNext = detailFollowUpPlan.nextTemplate?.id === template.id;
+
+                          return (
+                            <div key={template.id} className="leadDetailTimelineItem">
+                              <span className="leadDetailTimelineIcon">
+                                {isUsed ? <CheckCircle2 className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+                              </span>
+                              <div>
+                                <strong>
+                                  FU {template.followUpStep || templateIndex + 1}: {template.title}
+                                </strong>
+                                <span>
+                                  {isUsed
+                                    ? `${formatTemplateSentAt(latestHistory.sentAt)} - ${getTemplateSenderName(latestHistory.sentBy)}`
+                                    : isNext && detailFollowUpPlan.dueDate
+                                      ? `Jadwal: ${formatProspectFollowUpDueDate(detailFollowUpPlan.dueDate)}`
+                                      : `Jeda H+${template.followUpDelayDays ?? 0}`}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="leadDetailEmptyPanel">
+                        <MessageCircle className="h-4 w-4" />
+                        <span>Template follow up Leads belum aktif.</span>
+                      </div>
+                    )}
+                  </FoundationDetailSection>
 
                   <FoundationDetailSection
                     title="Riwayat Follow Up"

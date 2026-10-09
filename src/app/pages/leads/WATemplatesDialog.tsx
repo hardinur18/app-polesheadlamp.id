@@ -9,6 +9,12 @@ import { Plus, Trash2, Edit, Save, X, MessageSquare } from 'lucide-react';
 import { useMasterData } from '../master-data/context';
 import { WATemplate } from '../master-data/data';
 import { toast } from 'sonner';
+import {
+  DEFAULT_FOLLOW_UP_DELAY_DAYS,
+  PROSPECT_FOLLOW_UP_MAX_STEPS,
+  getNextLeadFollowUpStep,
+  sortLeadTemplatesForDisplay,
+} from './prospectModel';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 
@@ -25,9 +31,10 @@ export const WATemplatesDialog: React.FC<WATemplatesDialogProps> = ({ open, onOp
   const [isAdding, setIsAdding] = useState(false);
 
   // Filter templates based on prop or show all
-  const filteredTemplates = categoryFilter 
-    ? waTemplates.filter(t => t.category === categoryFilter || !t.category) 
-    : waTemplates;
+  const filteredTemplates = (categoryFilter
+    ? waTemplates.filter(t => t.category === categoryFilter || !t.category)
+    : waTemplates
+  ).sort(sortLeadTemplatesForDisplay);
 
   const startEdit = (template: WATemplate) => {
     setEditingId(template.id);
@@ -36,11 +43,25 @@ export const WATemplatesDialog: React.FC<WATemplatesDialogProps> = ({ open, onOp
   };
 
   const startAdd = () => {
+    const nextLeadStep = getNextLeadFollowUpStep(waTemplates);
+    const activeLeadStepCount = new Set(
+      waTemplates
+        .filter((template) => template.category === 'Leads' && template.followUpIsActive !== false)
+        .map((template) => Number(template.followUpStep || 0))
+        .filter((step) => step >= 1 && step <= PROSPECT_FOLLOW_UP_MAX_STEPS),
+    ).size;
+    const hasAvailableFollowUpStep = activeLeadStepCount < PROSPECT_FOLLOW_UP_MAX_STEPS;
+
     setEditingId(null);
     setEditForm({ 
         title: '', 
         message: '', 
-        category: categoryFilter || 'General' 
+        category: categoryFilter || 'General',
+        followUpStep: categoryFilter === 'Leads' ? nextLeadStep : null,
+        followUpDelayDays: categoryFilter === 'Leads'
+          ? DEFAULT_FOLLOW_UP_DELAY_DAYS[nextLeadStep - 1] ?? nextLeadStep
+          : null,
+        followUpIsActive: categoryFilter === 'Leads' ? hasAvailableFollowUpStep : true,
     });
     setIsAdding(true);
   };
@@ -57,16 +78,44 @@ export const WATemplatesDialog: React.FC<WATemplatesDialogProps> = ({ open, onOp
       return;
     }
 
+    const category = editForm.category || categoryFilter || 'General';
+    const followUpStep = category === 'Leads' ? Number(editForm.followUpStep || 0) || null : null;
+    const followUpDelayDays = category === 'Leads' ? Math.max(0, Number(editForm.followUpDelayDays || 0)) : null;
+    const followUpIsActive = category === 'Leads' ? editForm.followUpIsActive !== false : true;
+
+    if (category === 'Leads' && followUpIsActive && followUpStep) {
+      const duplicateStep = waTemplates.some((template) =>
+        template.id !== editingId &&
+        template.category === 'Leads' &&
+        template.followUpIsActive !== false &&
+        Number(template.followUpStep || 0) === followUpStep,
+      );
+
+      if (duplicateStep) {
+        toast.error(`FU ${followUpStep} sudah dipakai template lain. Nonaktifkan salah satu atau pilih step berbeda.`);
+        return;
+      }
+    }
+
+    const payload: WATemplate = {
+      id: editingId || Math.random().toString(36).substr(2, 9),
+      title: editForm.title,
+      message: editForm.message,
+      category,
+      usage_count: editForm.usage_count || 0,
+      followUpStep,
+      followUpDelayDays,
+      followUpIsActive,
+    };
+
     if (isAdding) {
       const newTemplate: WATemplate = {
-        id: Math.random().toString(36).substr(2, 9),
-        title: editForm.title,
-        message: editForm.message
+        ...payload,
       };
       addWATemplate(newTemplate);
       toast.success("Template berhasil ditambahkan");
     } else if (editingId) {
-      updateWATemplate({ ...editForm, id: editingId } as WATemplate);
+      updateWATemplate(payload);
       toast.success("Template berhasil diperbarui");
     }
 
@@ -133,6 +182,55 @@ export const WATemplatesDialog: React.FC<WATemplatesDialogProps> = ({ open, onOp
                         </SelectContent>
                     </Select>
                 </div>
+                {(editForm.category || categoryFilter) === 'Leads' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">FU ke-</label>
+                      <Select
+                        value={String(editForm.followUpStep || 1)}
+                        onValueChange={(value) => setEditForm(prev => ({ ...prev, followUpStep: Number(value) }))}
+                      >
+                        <SelectTrigger className="bg-white dark:bg-slate-900 h-8 text-xs">
+                          <SelectValue placeholder="Step" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: PROSPECT_FOLLOW_UP_MAX_STEPS }, (_, index) => index + 1).map((step) => (
+                            <SelectItem key={step} value={String(step)}>
+                              FU {step}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Jeda Hari</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={editForm.followUpDelayDays ?? 0}
+                        onChange={e => setEditForm(prev => ({ ...prev, followUpDelayDays: Math.max(0, Number(e.target.value || 0)) }))}
+                        className="bg-white dark:bg-slate-900 h-8 text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Status FU</label>
+                      <Select
+                        value={editForm.followUpIsActive === false ? 'inactive' : 'active'}
+                        onValueChange={(value) => setEditForm(prev => ({ ...prev, followUpIsActive: value === 'active' }))}
+                      >
+                        <SelectTrigger className="bg-white dark:bg-slate-900 h-8 text-xs">
+                          <SelectValue placeholder="Status FU" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Aktif</SelectItem>
+                          <SelectItem value="inactive">Nonaktif</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
                 <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Isi Pesan</label>
                     <Textarea 
@@ -172,6 +270,12 @@ export const WATemplatesDialog: React.FC<WATemplatesDialogProps> = ({ open, onOp
                                 <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 dark:text-slate-500 rounded border border-slate-200 dark:border-slate-700 uppercase tracking-wide">
                                     {template.category || 'General'}
                                 </span>
+                                {template.category === 'Leads' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-100">
+                                    FU {template.followUpStep || '-'} • H+{template.followUpDelayDays ?? 0}
+                                    {template.followUpIsActive === false ? ' • nonaktif' : ''}
+                                  </span>
+                                )}
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 leading-relaxed line-clamp-2">{template.message}</p>
                         </div>

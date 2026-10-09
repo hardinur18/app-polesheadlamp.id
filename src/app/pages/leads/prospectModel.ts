@@ -6,6 +6,37 @@ export const ALL_FILTER = 'all';
 export const LEAD_PAGE_SIZE_OPTIONS = [50, 100, 300, 500] as const;
 export const MANDATORY_PLATFORM_NAMES = ['repeat order', 'organik'];
 export const EDITABLE_LEAD_STATUS_OPTIONS: LeadStatus[] = ['Pending', 'Follow Up', 'Booking', 'Cancel'];
+export const PROSPECT_FOLLOW_UP_MAX_STEPS = 6;
+export const DEFAULT_FOLLOW_UP_DELAY_DAYS = [0, 1, 3, 7, 14, 21] as const;
+export type ProspectFollowUpFilter = 'all' | 'due_today' | 'overdue' | 'upcoming' | 'completed' | 'unscheduled';
+
+const ACTIVE_FOLLOW_UP_STATUSES = new Set<LeadStatus>(['Pending', 'Follow Up']);
+
+export const normalizeLeadLabels = (labels?: string[] | string | null) => {
+  const rawLabels = Array.isArray(labels)
+    ? labels
+    : String(labels || '')
+      .split(/[,\n]/g);
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  rawLabels.forEach((label) => {
+    const value = String(label || '').trim().replace(/\s+/g, ' ');
+    if (!value) return;
+
+    const key = value.toLowerCase();
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    normalized.push(value);
+  });
+
+  return normalized.slice(0, 12);
+};
+
+export const normalizeLeadLabelKey = (label?: string | null) =>
+  String(label || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 export const toLocalDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -104,6 +135,10 @@ const LEAD_TEMPLATE_TITLE_ORDER = [
 ];
 
 const getLeadTemplateOrder = (template: WATemplate) => {
+  if (typeof template.followUpStep === 'number' && Number.isFinite(template.followUpStep) && template.followUpStep > 0) {
+    return template.followUpStep;
+  }
+
   const title = template.title.trim().toLowerCase();
   const index = LEAD_TEMPLATE_TITLE_ORDER.findIndex((keyword) => title.includes(keyword));
   return index === -1 ? 90 : index;
@@ -115,4 +150,107 @@ export const sortLeadTemplatesForDisplay = (left: WATemplate, right: WATemplate)
 
   if (leftOrder !== rightOrder) return leftOrder - rightOrder;
   return left.title.localeCompare(right.title, 'id-ID', { sensitivity: 'base' });
+};
+
+export const buildLeadFollowUpTemplates = (templates: WATemplate[]) =>
+  templates
+    .filter((template) => template.category === 'Leads' && template.followUpIsActive !== false)
+    .sort(sortLeadTemplatesForDisplay)
+    .slice(0, PROSPECT_FOLLOW_UP_MAX_STEPS);
+
+export const getNextLeadFollowUpStep = (templates: WATemplate[]) => {
+  const usedSteps = new Set(
+    templates
+      .filter((template) => template.category === 'Leads' && template.followUpIsActive !== false)
+      .map((template) => Number(template.followUpStep || 0))
+      .filter((step) => step >= 1 && step <= PROSPECT_FOLLOW_UP_MAX_STEPS),
+  );
+
+  for (let step = 1; step <= PROSPECT_FOLLOW_UP_MAX_STEPS; step += 1) {
+    if (!usedSteps.has(step)) return step;
+  }
+
+  return PROSPECT_FOLLOW_UP_MAX_STEPS;
+};
+
+const addDays = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const startOfLocalDay = (date: Date) => {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+};
+
+export const getTemplateUsageCount = (lead: Pick<Lead, 'templateHistory'>, templateId: string) => (
+  lead.templateHistory?.filter((history) => history.templateId === templateId).length || 0
+);
+
+export const getLatestTemplateHistory = (lead: Pick<Lead, 'templateHistory'>, templateId: string) => (
+  [...(lead.templateHistory || [])]
+    .filter((history) => history.templateId === templateId)
+    .sort((left, right) => new Date(right.sentAt).getTime() - new Date(left.sentAt).getTime())[0]
+);
+
+export const buildProspectFollowUpPlan = (
+  lead: Lead,
+  templates: WATemplate[],
+  today = new Date(),
+) => {
+  const plannedTemplates = buildLeadFollowUpTemplates(templates);
+  const completedCount = plannedTemplates.filter((template) => getTemplateUsageCount(lead, template.id) > 0).length;
+  const nextIndex = plannedTemplates.findIndex((template) => getTemplateUsageCount(lead, template.id) === 0);
+  const isActiveLead = ACTIVE_FOLLOW_UP_STATUSES.has(lead.status);
+  const totalSteps = plannedTemplates.length;
+  const todayStart = startOfLocalDay(today);
+
+  if (!isActiveLead || totalSteps === 0 || nextIndex === -1) {
+    return {
+      completedCount,
+      totalSteps,
+      nextStep: null as number | null,
+      nextTemplate: null as WATemplate | null,
+      dueDate: null as Date | null,
+      dueDateKey: null as string | null,
+      status: (totalSteps === 0 ? 'unscheduled' : 'completed') as ProspectFollowUpFilter,
+      isDueToday: false,
+      isOverdue: false,
+      isUpcoming: false,
+      isCompleted: totalSteps > 0 && nextIndex === -1,
+    };
+  }
+
+  const nextTemplate = plannedTemplates[nextIndex];
+  const delayDays = Math.max(0, Number(nextTemplate.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS[nextIndex] ?? nextIndex) || 0);
+  const previousTemplate = nextIndex > 0 ? plannedTemplates[nextIndex - 1] : null;
+  const previousHistory = previousTemplate ? getLatestTemplateHistory(lead, previousTemplate.id) : null;
+  const baseDate = previousHistory?.sentAt ? new Date(previousHistory.sentAt) : new Date(lead.timestamp);
+  const dueDate = startOfLocalDay(addDays(baseDate, delayDays));
+  const dueTime = dueDate.getTime();
+  const todayTime = todayStart.getTime();
+  const isOverdue = dueTime < todayTime;
+  const isDueToday = dueTime === todayTime;
+  const isUpcoming = dueTime > todayTime;
+
+  return {
+    completedCount,
+    totalSteps,
+    nextStep: nextIndex + 1,
+    nextTemplate,
+    dueDate,
+    dueDateKey: toLocalDateKey(dueDate),
+    status: (isOverdue ? 'overdue' : isDueToday ? 'due_today' : 'upcoming') as ProspectFollowUpFilter,
+    isDueToday,
+    isOverdue,
+    isUpcoming,
+    isCompleted: false,
+  };
+};
+
+export const formatProspectFollowUpDueDate = (date?: Date | null) => {
+  if (!date) return '-';
+  return format(date, 'dd MMM yyyy');
 };

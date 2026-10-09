@@ -32,6 +32,12 @@ import { usePermissions } from '@/app/hooks/usePermissions';
 import { WATemplate } from '@/app/pages/master-data/data';
 import { toast } from 'sonner';
 import { copyToClipboard } from '@/lib/clipboard';
+import {
+  DEFAULT_FOLLOW_UP_DELAY_DAYS,
+  PROSPECT_FOLLOW_UP_MAX_STEPS,
+  getNextLeadFollowUpStep,
+  sortLeadTemplatesForDisplay,
+} from './leads/prospectModel';
 
 type TemplateCategory = NonNullable<WATemplate['category']>;
 type TemplateFilter = TemplateCategory | 'all';
@@ -58,25 +64,16 @@ const AVAILABLE_VARIABLES = [
 
 const normalizeCategory = (category?: WATemplate['category']): TemplateCategory => category || 'General';
 
-const LEAD_TEMPLATE_TITLE_ORDER = [
-  'salam pertama',
-  'sapaan awal',
-  'follow up penawaran',
-  'upsell',
-  'upsel',
-];
-
-const getLeadTemplateOrder = (template: WATemplate) => {
-  if (normalizeCategory(template.category) !== 'Leads') return 100;
-
-  const title = template.title.trim().toLowerCase();
-  const index = LEAD_TEMPLATE_TITLE_ORDER.findIndex((keyword) => title.includes(keyword));
-  return index === -1 ? 90 : index;
-};
-
 const sortTemplatesForDisplay = (left: WATemplate, right: WATemplate) => {
-  const leftOrder = getLeadTemplateOrder(left);
-  const rightOrder = getLeadTemplateOrder(right);
+  const leftCategory = normalizeCategory(left.category);
+  const rightCategory = normalizeCategory(right.category);
+
+  if (leftCategory === 'Leads' && rightCategory === 'Leads') {
+    return sortLeadTemplatesForDisplay(left, right);
+  }
+
+  const leftOrder = leftCategory === 'Leads' ? 0 : 100;
+  const rightOrder = rightCategory === 'Leads' ? 0 : 100;
 
   if (leftOrder !== rightOrder) return leftOrder - rightOrder;
   return left.title.localeCompare(right.title, 'id-ID', { sensitivity: 'base' });
@@ -158,8 +155,27 @@ export const WATemplatesPage = () => {
   };
 
   const handleAddNew = () => {
+    const category = categoryFilter === 'all' ? 'General' : categoryFilter;
+    const nextLeadStep = getNextLeadFollowUpStep(waTemplates);
+    const activeLeadStepCount = new Set(
+      waTemplates
+        .filter((template) => template.category === 'Leads' && template.followUpIsActive !== false)
+        .map((template) => Number(template.followUpStep || 0))
+        .filter((step) => step >= 1 && step <= PROSPECT_FOLLOW_UP_MAX_STEPS),
+    ).size;
+    const hasAvailableFollowUpStep = activeLeadStepCount < PROSPECT_FOLLOW_UP_MAX_STEPS;
+
     setEditingId(null);
-    setEditForm({ category: categoryFilter === 'all' ? 'General' : categoryFilter, title: '', message: '' });
+    setEditForm({
+      category,
+      title: '',
+      message: '',
+      followUpStep: category === 'Leads' ? nextLeadStep : null,
+      followUpDelayDays: category === 'Leads'
+        ? DEFAULT_FOLLOW_UP_DELAY_DAYS[nextLeadStep - 1] ?? nextLeadStep
+        : null,
+      followUpIsActive: category === 'Leads' ? hasAvailableFollowUpStep : undefined,
+    });
     setIsFormDirty(false);
     setIsDialogOpen(true);
   };
@@ -201,6 +217,13 @@ export const WATemplatesPage = () => {
     const title = editForm.title?.trim();
     const message = editForm.message?.trim();
     const category = normalizeCategory(editForm.category);
+    const followUpStep = category === 'Leads'
+      ? Number(editForm.followUpStep || 0) || null
+      : null;
+    const followUpDelayDays = category === 'Leads'
+      ? Math.max(0, Number(editForm.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS[(followUpStep || 1) - 1] ?? 0))
+      : null;
+    const followUpIsActive = category === 'Leads' ? editForm.followUpIsActive !== false : true;
 
     if (!title || !message) {
       toast.error('Judul dan isi pesan wajib diisi');
@@ -220,6 +243,20 @@ export const WATemplatesPage = () => {
       return;
     }
 
+    if (category === 'Leads' && followUpIsActive && followUpStep) {
+      const duplicateStep = waTemplates.some((template) =>
+        template.id !== editingId &&
+        normalizeCategory(template.category) === 'Leads' &&
+        template.followUpIsActive !== false &&
+        Number(template.followUpStep || 0) === followUpStep,
+      );
+
+      if (duplicateStep) {
+        toast.error(`FU ${followUpStep} sudah dipakai template lain. Nonaktifkan salah satu atau pilih step berbeda.`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -230,6 +267,9 @@ export const WATemplatesPage = () => {
           message,
           category,
           usage_count: editForm.usage_count || 0,
+          followUpStep,
+          followUpDelayDays,
+          followUpIsActive,
         };
 
         await updateWATemplate(updatedTemplate);
@@ -250,6 +290,9 @@ export const WATemplatesPage = () => {
           message,
           category,
           usage_count: 0,
+          followUpStep,
+          followUpDelayDays,
+          followUpIsActive,
         };
 
         await addWATemplate(newTemplate);
@@ -435,6 +478,12 @@ export const WATemplatesPage = () => {
 
                       <div className="waTemplateCardFooter">
                         <span className="waTemplateCategoryPill">{CATEGORY_META[normalizeCategory(template.category)].shortLabel}</span>
+                        {normalizeCategory(template.category) === 'Leads' ? (
+                          <span className="waTemplateUsagePill">
+                            FU {template.followUpStep || '-'} • H+{template.followUpDelayDays ?? 0}
+                            {template.followUpIsActive === false ? ' • nonaktif' : ''}
+                          </span>
+                        ) : null}
                         <span className="waTemplateUsagePill">
                           <Check className="h-3.5 w-3.5" />
                           {template.usage_count || 0}x dipakai
@@ -476,7 +525,18 @@ export const WATemplatesPage = () => {
                 <MasterDataFieldLabel required>Kategori</MasterDataFieldLabel>
                 <Select
                   value={normalizeCategory(editForm.category)}
-                  onValueChange={(value) => updateForm({ category: value as TemplateCategory })}
+                  onValueChange={(value) => {
+                    const category = value as TemplateCategory;
+                    const nextLeadStep = getNextLeadFollowUpStep(waTemplates);
+                    updateForm({
+                      category,
+                      followUpStep: category === 'Leads' ? (editForm.followUpStep || nextLeadStep) : null,
+                      followUpDelayDays: category === 'Leads'
+                        ? editForm.followUpDelayDays ?? DEFAULT_FOLLOW_UP_DELAY_DAYS[nextLeadStep - 1] ?? 0
+                        : null,
+                      followUpIsActive: category === 'Leads' ? editForm.followUpIsActive !== false : true,
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Pilih kategori" />
@@ -491,6 +551,63 @@ export const WATemplatesPage = () => {
                 </Select>
               </div>
             </div>
+
+            {normalizeCategory(editForm.category) === 'Leads' ? (
+              <div className="masterDataFormGrid">
+                <div className="space-y-2">
+                  <MasterDataFieldLabel
+                    info={{
+                      title: 'Urutan follow up',
+                      description: 'Step ini dipakai Prospek untuk menentukan template FU berikutnya.',
+                    }}
+                  >
+                    FU ke-
+                  </MasterDataFieldLabel>
+                  <Select
+                    value={String(editForm.followUpStep || 1)}
+                    onValueChange={(value) => updateForm({ followUpStep: Number(value) })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih step FU" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: PROSPECT_FOLLOW_UP_MAX_STEPS }, (_, index) => index + 1).map((step) => (
+                        <SelectItem key={step} value={String(step)}>
+                          FU {step}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <MasterDataFieldLabel>Jeda Hari</MasterDataFieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editForm.followUpDelayDays ?? 0}
+                    onChange={(event) => updateForm({ followUpDelayDays: Math.max(0, Number(event.target.value || 0)) })}
+                    placeholder="Contoh: 3"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <MasterDataFieldLabel>Status Plan FU</MasterDataFieldLabel>
+                  <Select
+                    value={editForm.followUpIsActive === false ? 'inactive' : 'active'}
+                    onValueChange={(value) => updateForm({ followUpIsActive: value === 'active' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Aktif</SelectItem>
+                      <SelectItem value="inactive">Nonaktif</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <div className="waTemplateMessageLabelRow">
