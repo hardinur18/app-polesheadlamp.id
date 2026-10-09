@@ -14,7 +14,6 @@ const ROLE_RESTRICTED_PERMISSIONS: Partial<Record<Role, PermissionKey[]>> = {
   ],
   CS: [
     'audit_logs.view',
-    'monitoring.view',
     'monitoring.activity_view',
     'technician_schedule.view',
     'technician_schedule.manage',
