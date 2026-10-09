@@ -567,10 +567,27 @@
 .leadFollowUpCell {
   align-items: center;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 5px;
   justify-content: center;
   min-width: 0;
+  width: 100%;
+}
+
+.leadFollowUpPlanBadge {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 820;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 44px;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .leadFollowUpButton,

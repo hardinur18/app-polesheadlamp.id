@@ -938,6 +938,13 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     return `FU ${plan.nextStep} ${formatProspectFollowUpDueDate(plan.dueDate)}`;
   };
 
+  const getFollowUpPlanShortLabel = (lead: Lead) => {
+    const plan = getLeadFollowUpPlan(lead);
+    if (plan.isCompleted) return 'Selesai';
+    if (!plan.nextStep || !plan.nextTemplate) return '-';
+    return `FU ${plan.nextStep}`;
+  };
+
   // --- PERMISSION LOGIC ---
   const canEditLead = (lead: Lead) => {
     if (!hasPermission('leads.edit')) return false;
@@ -2261,7 +2268,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                 { preset: 'text', width: 'clamp(180px, 13vw, 230px)', minWidth: 180 },
                 { preset: 'description', width: 'clamp(222px, 16vw, 286px)', minWidth: 222 },
                 { preset: 'status', width: 150, minWidth: 150 },
-                { preset: 'compact', width: 176, minWidth: 176, className: 'leadFollowUpColumn' },
+                { preset: 'compact', width: 236, minWidth: 220, className: 'leadFollowUpColumn' },
                 !isAdvertiserView && { preset: 'action', width: 64, minWidth: 64 },
               ])}
               rowMinHeight={84}
@@ -2407,10 +2414,10 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                           <td>
                             <div className="leadFollowUpCell" aria-label="Template follow up">
                               <span
-                                className={`inline-flex min-h-7 items-center rounded-full border px-2 text-[11px] font-bold ${getFollowUpPlanBadgeClass(item)}`}
-                                title={followUpPlan.dueDate ? `Jadwal: ${formatProspectFollowUpDueDate(followUpPlan.dueDate)}` : undefined}
+                                className={`leadFollowUpPlanBadge ${getFollowUpPlanBadgeClass(item)}`}
+                                title={getFollowUpPlanLabel(item)}
                               >
-                                {getFollowUpPlanLabel(item)}
+                                {getFollowUpPlanShortLabel(item)}
                               </span>
                               {visibleFollowUpTemplates.length > 0 ? visibleFollowUpTemplates.map((template) => {
                                 const usageCount = getTemplateUsageCount(item, template.id);
