@@ -101,13 +101,12 @@ import { useOrderBulkActions } from './orders/hooks/useOrderBulkActions';
 import { useOrderStatusActions } from './orders/hooks/useOrderStatusActions';
 import { getOrderCrudErrorMessage } from './orders/orderCrudErrors';
 import {
-  ORDER_PHOTO_INITIAL_LIMIT,
   getInitialPhotoTab,
   getOrderDocumentationSummary,
-  getOrderPhotoUrls,
   type OrderDocumentationKey,
 } from './orders/orderDocumentation';
 import { OrderPhotoViewerDialog } from './orders/OrderPhotoViewerDialog';
+import { prepareOrderPaymentProofUpload, validateOrderPaymentProofFile } from './orders/orderPhotoUpload';
 import {
   ORDER_ACTION_ICON_CLASS,
   ORDER_MENU_CONTENT_CLASS,
@@ -756,7 +755,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const fileName = `${path}/${Date.now()}-${randomPart}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from('orders').upload(fileName, file, {
-        cacheControl: '3600',
+        cacheControl: '31536000',
         contentType: file.type || undefined,
         upsert: false,
       });
@@ -773,7 +772,10 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
     if (!photoViewerOrder || uploadedFiles.length === 0) return;
     setIsUploading(true);
     try {
-      const uploadPromises = uploadedFiles.map(file =>
+      const preparedFiles = await Promise.all(
+        uploadedFiles.map((file, index) => prepareOrderPaymentProofUpload(file, index))
+      );
+      const uploadPromises = preparedFiles.map(file =>
         uploadToStorage(file, `${photoViewerOrder.id}/payment`)
       );
       const newPhotos = await Promise.all(uploadPromises);
@@ -869,24 +871,6 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
       setPhotoViewerOrder(latestOrder);
     }
   }, [orders, photoViewerOrder]);
-
-  useEffect(() => {
-    if (!photoViewerOrder || typeof window === 'undefined') return;
-    const urls = getOrderPhotoUrls(photoViewerOrder, photoViewerTab).slice(0, ORDER_PHOTO_INITIAL_LIMIT);
-    const preloadedImages = urls.map((url) => {
-      const image = new window.Image();
-      image.decoding = 'async';
-      image.src = url;
-      return image;
-    });
-
-    return () => {
-      preloadedImages.forEach((image) => {
-        image.onload = null;
-        image.onerror = null;
-      });
-    };
-  }, [photoViewerOrder, photoViewerTab]);
 
   const isOrderRowInteractiveTarget = (target: EventTarget | null, currentTarget?: HTMLElement) => {
     if (!(target instanceof HTMLElement)) return false;
@@ -3721,6 +3705,7 @@ export function Pesanan({ onNavigate }: { onNavigate?: (id: string) => void }) {
           canUploadPaymentProof={canUploadPaymentProof}
           uploadedFiles={uploadedFiles}
           onUploadedFilesChange={setUploadedFiles}
+          validateUploadedFile={validateOrderPaymentProofFile}
           isUploading={isUploading}
           onSavePaymentProof={handleSavePaymentProof}
         />

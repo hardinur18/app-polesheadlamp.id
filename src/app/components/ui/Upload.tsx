@@ -8,6 +8,9 @@ interface UploadProps {
   maxFiles?: number;
   onChange?: (files: File[]) => void;
   preview?: boolean;
+  hint?: string;
+  validateFile?: (file: File) => string | null;
+  onRejected?: (messages: string[]) => void;
 }
 
 export function Upload({
@@ -17,6 +20,9 @@ export function Upload({
   maxFiles = 5,
   onChange,
   preview = true,
+  hint = 'PNG, JPG, JPEG hingga 10MB',
+  validateFile,
+  onRejected,
 }: UploadProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -36,15 +42,36 @@ export function Upload({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const incomingFiles = Array.from(e.target.files);
+      const acceptedIncomingFiles: File[] = [];
+      const rejectedMessages = new Set<string>();
+
+      incomingFiles.forEach((file) => {
+        const validationError = validateFile?.(file);
+        if (validationError) {
+          rejectedMessages.add(validationError);
+          return;
+        }
+
+        acceptedIncomingFiles.push(file);
+      });
+
+      if (rejectedMessages.size > 0) {
+        onRejected?.(Array.from(rejectedMessages));
+      }
+
+      if (acceptedIncomingFiles.length === 0) {
+        e.target.value = '';
+        return;
+      }
       
       let updatedFiles: File[] = [];
       
       if (multiple) {
         // Append new files, respecting maxFiles
-        updatedFiles = [...files, ...incomingFiles].slice(0, maxFiles);
+        updatedFiles = [...files, ...acceptedIncomingFiles].slice(0, maxFiles);
       } else {
         // Replace if single mode
-        updatedFiles = incomingFiles.slice(0, 1);
+        updatedFiles = acceptedIncomingFiles.slice(0, 1);
       }
       
       setFiles(updatedFiles);
@@ -54,6 +81,8 @@ export function Upload({
         const newPreviews = updatedFiles.map(file => URL.createObjectURL(file));
         replacePreviews(newPreviews);
       }
+
+      e.target.value = '';
     }
   };
   
@@ -96,7 +125,7 @@ export function Upload({
               Klik untuk upload atau drag & drop
             </p>
             <p className="text-xs text-text-muted">
-              PNG, JPG, JPEG hingga 10MB
+              {hint}
             </p>
           </div>
         </label>

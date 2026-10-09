@@ -50,6 +50,22 @@ export function getInitialPhotoTab(order: Order): OrderDocumentationKey {
   return ORDER_DOCUMENTATION_ITEMS.find((item) => getOrderPhotoUrls(order, item.key).length > 0)?.key || 'before';
 }
 
+function getOrderPhotoPreviewUrl(src: string) {
+  try {
+    const url = new URL(src);
+    const publicObjectMarker = '/storage/v1/object/public/';
+    if (!url.pathname.includes(publicObjectMarker)) return src;
+
+    url.pathname = url.pathname.replace(publicObjectMarker, '/storage/v1/render/image/public/');
+    url.searchParams.set('width', '1200');
+    url.searchParams.set('quality', '76');
+    url.searchParams.set('resize', 'contain');
+    return url.toString();
+  } catch {
+    return src;
+  }
+}
+
 export function OrderDocumentationImage({
   src,
   alt,
@@ -61,11 +77,25 @@ export function OrderDocumentationImage({
 }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const [displaySrc, setDisplaySrc] = useState(() => getOrderPhotoPreviewUrl(src));
 
   useEffect(() => {
     setLoaded(false);
     setFailed(false);
+    setSlow(false);
+    setDisplaySrc(getOrderPhotoPreviewUrl(src));
   }, [src]);
+
+  useEffect(() => {
+    if (loaded || failed) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setSlow(true);
+    }, 12000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [failed, loaded, displaySrc]);
 
   return (
     <div className="orderPhotoImageFrame group">
@@ -73,6 +103,11 @@ export function OrderDocumentationImage({
         <div className="orderPhotoImageLoading">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span>Memuat foto...</span>
+          {slow && (
+            <a href={src} target="_blank" rel="noopener noreferrer" className="orderPhotoImageSlowOpen">
+              Buka file langsung
+            </a>
+          )}
         </div>
       )}
       {failed ? (
@@ -85,7 +120,7 @@ export function OrderDocumentationImage({
         </div>
       ) : (
         <img
-          src={src}
+          src={displaySrc}
           alt={alt}
           className={`orderPhotoImage ${loaded ? 'isLoaded' : ''}`}
           loading={priority ? 'eager' : 'lazy'}
@@ -93,7 +128,15 @@ export function OrderDocumentationImage({
           fetchPriority={priority ? 'high' : 'auto'}
           draggable={false}
           onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
+          onError={() => {
+            if (displaySrc !== src) {
+              setDisplaySrc(src);
+              setSlow(false);
+              return;
+            }
+
+            setFailed(true);
+          }}
         />
       )}
       {!failed && (

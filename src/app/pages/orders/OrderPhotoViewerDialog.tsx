@@ -5,6 +5,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Upload } from '../../components/ui/Upload';
 import type { Order } from '../master-data/data';
+import { toast } from 'sonner';
 import {
   ORDER_DOCUMENTATION_ITEMS,
   ORDER_PHOTO_INITIAL_LIMIT,
@@ -23,6 +24,7 @@ type OrderPhotoViewerDialogProps = {
   canUploadPaymentProof: boolean;
   uploadedFiles: File[];
   onUploadedFilesChange: (files: File[]) => void;
+  validateUploadedFile: (file: File) => string | null;
   isUploading: boolean;
   onSavePaymentProof: () => void;
 };
@@ -44,6 +46,7 @@ export function OrderPhotoViewerDialog({
   canUploadPaymentProof,
   uploadedFiles,
   onUploadedFilesChange,
+  validateUploadedFile,
   isUploading,
   onSavePaymentProof,
 }: OrderPhotoViewerDialogProps) {
@@ -82,7 +85,8 @@ export function OrderPhotoViewerDialog({
               const type = item.key;
               const urls = getOrderPhotoUrls(order, type);
               const isExpanded = Boolean(expandedTabs[type]);
-              const visibleUrls = isExpanded ? urls : urls.slice(0, ORDER_PHOTO_INITIAL_LIMIT);
+              const initialLimit = type === 'payment' ? 1 : ORDER_PHOTO_INITIAL_LIMIT;
+              const visibleUrls = isExpanded ? urls : urls.slice(0, initialLimit);
               const hiddenCount = Math.max(0, urls.length - visibleUrls.length);
 
               return (
@@ -144,7 +148,10 @@ export function OrderPhotoViewerDialog({
                           multiple={true}
                           maxFiles={3}
                           onChange={onUploadedFilesChange}
+                          validateFile={validateUploadedFile}
+                          onRejected={(messages) => toast.warning(messages.join('\n'))}
                           preview={true}
+                          hint="Upload foto seperti biasa. Sistem otomatis kompres sebelum upload."
                         />
                         <div className="mt-4 flex justify-end">
                           <Button
