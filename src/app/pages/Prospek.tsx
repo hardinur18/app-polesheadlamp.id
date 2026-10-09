@@ -3009,9 +3009,27 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
             title="Master Label Prospek"
             description="Buat label resmi untuk segmentasi dan rencana follow up prospek."
           />
-          <MasterDataDialogBody compact className="space-y-5">
-            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-[1.4fr_0.8fr_0.8fr]">
-              <div className="space-y-2">
+          <MasterDataDialogBody compact className="prospectLabelDialogBody">
+            <section className="prospectLabelComposer">
+              <div className="prospectLabelComposerHeader">
+                <div>
+                  <span>{editingLabel ? 'Edit master label' : 'Label baru'}</span>
+                  <h3>Atur label resmi untuk prospek</h3>
+                </div>
+                <span
+                  className="prospectLabelPreview"
+                  style={{
+                    borderColor: `${labelDraft.color || '#2563EB'}55`,
+                    color: labelDraft.color || '#2563EB',
+                    backgroundColor: `${labelDraft.color || '#2563EB'}12`,
+                  }}
+                >
+                  #{labelDraft.name.trim() || 'Preview Label'}
+                </span>
+              </div>
+
+              <div className="prospectLabelFormGrid">
+                <div className="space-y-2 prospectLabelNameField">
                 <MasterDataFieldLabel required>Nama Label</MasterDataFieldLabel>
                 <Input
                   className="uiInput bg-white"
@@ -3022,7 +3040,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
               </div>
               <div className="space-y-2">
                 <MasterDataFieldLabel>Warna</MasterDataFieldLabel>
-                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div className="prospectLabelColorInput">
                   <input
                     type="color"
                     value={labelDraft.color}
@@ -3052,7 +3070,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2 prospectLabelDescriptionField">
                 <MasterDataFieldLabel>Deskripsi</MasterDataFieldLabel>
                 <Textarea
                   className="min-h-20 bg-white"
@@ -3061,14 +3079,19 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   placeholder="Catatan internal kapan label ini dipakai."
                 />
               </div>
-              <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-                <span>Ikut Plan FU</span>
-                <Switch
-                  checked={labelDraft.followUpEnabled}
-                  onCheckedChange={(checked) => setLabelDraft((prev) => ({ ...prev, followUpEnabled: checked }))}
-                />
-              </label>
-              <div className="flex flex-wrap gap-2 md:col-span-3">
+                <label className="prospectLabelFollowSwitch">
+                  <span>
+                    <strong>Ikut Plan FU</strong>
+                    <small>Label ini masuk jadwal follow up 1-6.</small>
+                  </span>
+                  <Switch
+                    checked={labelDraft.followUpEnabled}
+                    onCheckedChange={(checked) => setLabelDraft((prev) => ({ ...prev, followUpEnabled: checked }))}
+                  />
+                </label>
+              </div>
+
+              <div className="prospectLabelComposerActions">
                 <Button type="button" onClick={() => void handleSaveProspectLabel()}>
                   {editingLabel ? 'Simpan Label' : 'Tambah Label'}
                 </Button>
@@ -3078,58 +3101,68 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
                   </Button>
                 )}
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-3">
+            <section className="prospectLabelListPanel">
+              <div className="prospectLabelListHeader">
+                <div>
+                  <span>Daftar Label</span>
+                  <strong>{sortedProspectLabels.length} label</strong>
+                </div>
+                <p>Label aktif muncul di filter dan form prospek.</p>
+              </div>
               {sortedProspectLabels.length === 0 ? (
                 <OperationalEmptyState
                   icon={Tags}
                   title="Belum ada label prospek"
                   description="Tambahkan label resmi agar CS bisa menandai prospek tanpa input bebas."
+                  className="prospectLabelEmpty"
                 />
               ) : (
-                sortedProspectLabels.map((label) => {
-                  const usageCount = prospectLabelUsageCount.get(label.id) || 0;
-                  return (
-                    <div key={label.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
-                          <strong className="text-slate-900">#{label.name}</strong>
-                          <Badge variant="outline" className={label.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}>
-                            {label.status === 'active' ? 'Aktif' : 'Nonaktif'}
-                          </Badge>
-                          {label.followUpEnabled && (
-                            <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
-                              Plan FU
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
-                            {usageCount} prospek
-                          </Badge>
+                <div className="prospectLabelList">
+                  {sortedProspectLabels.map((label) => {
+                    const usageCount = prospectLabelUsageCount.get(label.id) || 0;
+                    return (
+                      <div key={label.id} className="prospectLabelListItem">
+                        <div className="prospectLabelListMain">
+                          <span className="prospectLabelDot" style={{ backgroundColor: label.color }} />
+                          <div className="min-w-0">
+                            <div className="prospectLabelTitleRow">
+                              <strong style={{ color: label.color }}>#{label.name}</strong>
+                              <Badge variant="outline" className={label.status === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}>
+                                {label.status === 'active' ? 'Aktif' : 'Nonaktif'}
+                              </Badge>
+                              {label.followUpEnabled && (
+                                <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+                                  Plan FU
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
+                                {usageCount} prospek
+                              </Badge>
+                            </div>
+                            <p>{label.description || 'Belum ada deskripsi penggunaan label.'}</p>
+                          </div>
                         </div>
-                        {label.description && (
-                          <p className="text-sm text-slate-500">{label.description}</p>
-                        )}
+                        <div className="prospectLabelListActions">
+                          <Button type="button" variant="outline" size="sm" onClick={() => openEditProspectLabel(label)}>
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void handleDeleteProspectLabel(label)}
+                          >
+                            {usageCount > 0 ? 'Nonaktifkan' : 'Hapus'}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => openEditProspectLabel(label)}>
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void handleDeleteProspectLabel(label)}
-                        >
-                          {usageCount > 0 ? 'Nonaktifkan' : 'Hapus'}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
-            </div>
+            </section>
           </MasterDataDialogBody>
         </MasterDataFormDialogContent>
       </Dialog>
