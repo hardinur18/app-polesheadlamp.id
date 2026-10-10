@@ -173,7 +173,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
     currentUser,
     currentRole,
     waTemplates,
-    updateWATemplate,
     isLeadsLoading,
     ensureLeadsForDateRange,
   } = useMasterData();
@@ -909,12 +908,6 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
         try {
           await Promise.resolve(updateLead(updatedLead));
 
-          // Increment usage count only after lead history is saved.
-          await Promise.resolve(updateWATemplate({
-            ...template, 
-            usage_count: (template.usage_count || 0) + 1 
-          }));
-
           setDetailLead((current) => (current?.id === lead.id ? updatedLead : current));
           setSelectedWaLead((current) => (current?.id === lead.id ? updatedLead : current));
         } catch (error: any) {
@@ -954,7 +947,7 @@ export const Prospek = ({ onNavigate }: { onNavigate?: (page: string) => void })
 
   const visibleFollowUpTemplates = leadTemplates.slice(0, 6);
   const hiddenFollowUpTemplateCount = Math.max(leadTemplates.length - visibleFollowUpTemplates.length, 0);
-  const canSendLeadTemplate = !isAdvertiserView && (isAdminManagementUser || isCsUser || isOwnerLikeUser);
+  const canSendLeadTemplate = hasPermission('leads.edit') && !isAdvertiserView && (isAdminManagementUser || isCsUser || isOwnerLikeUser);
 
   const getLeadFollowUpPlan = (lead: Lead) =>
     followUpPlanByLeadId.get(lead.id) || buildProspectFollowUpPlan(lead, leadTemplates);
