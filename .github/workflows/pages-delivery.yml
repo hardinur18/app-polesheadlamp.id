@@ -2,169 +2,37 @@ name: Cloudflare Pages Delivery
 
 on:
   push:
-    branches:
-      - main
-      - development
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - closed
+    branches: [main, development]
   workflow_dispatch:
 
 jobs:
-  validate:
-    name: Validate Build
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+  retire_old_application:
+    if: github.repository == 'hardinur18/app-polesheadlamp.id'
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npm run typecheck:full
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Build application
-        run: npm run build
-
-  deploy_preview:
-    name: Deploy Preview
-    if: github.event_name == 'push' && github.ref_name != 'main'
-    runs-on: ubuntu-latest
-    env:
-      VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_REF }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-    concurrency:
-      group: preview-${{ github.ref_name }}
-      cancel-in-progress: true
-    environment:
-      name: preview
-
-    permissions:
-      contents: read
-      deployments: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify Supabase build environment
-        run: |
-          test -n "$VITE_SUPABASE_ANON_KEY"
-          if [ -z "$VITE_SUPABASE_URL" ] && [ -z "$VITE_SUPABASE_PROJECT_ID" ]; then
-            echo "VITE_SUPABASE_URL or VITE_SUPABASE_PROJECT_ID must be set for the frontend build." >&2
-            exit 1
-          fi
-
-      - name: Build application
-        run: npm run build
-
-      - name: Deploy preview to Cloudflare Pages
-        id: deploy_preview
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=polesheadlamp-id --branch=${{ github.ref_name }}
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish preview summary
-        run: |
-          echo "### Preview deployment" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: \`${{ github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Cloudflare project: \`polesheadlamp-id\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Result: preview deployment created for this branch." >> "$GITHUB_STEP_SUMMARY"
-
-  deploy_production:
-    name: Deploy Production
-    if: |
-      (github.event_name == 'push' && github.ref_name == 'main') ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-        github.event.action == 'closed' &&
-        github.event.pull_request.merged == true &&
-        github.event.pull_request.base.ref == 'main')
-    runs-on: ubuntu-latest
-    env:
-      VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_REF }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
     concurrency:
       group: production-pages-deploy
-      cancel-in-progress: true
+      cancel-in-progress: false
     environment:
       name: production
       url: https://polesheadlamp-id.pages.dev
-
     permissions:
       contents: read
       deployments: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify Supabase build environment
-        run: |
-          test -n "$VITE_SUPABASE_ANON_KEY"
-          if [ -z "$VITE_SUPABASE_URL" ] && [ -z "$VITE_SUPABASE_PROJECT_ID" ]; then
-            echo "VITE_SUPABASE_URL or VITE_SUPABASE_PROJECT_ID must be set for the frontend build." >&2
-            exit 1
-          fi
-
-      - name: Build application
-        run: npm run build
-
-      - name: Deploy production to Cloudflare Pages
-        id: deploy_production
+      - name: Test retirement redirect and service worker
+        run: node scripts/test-retirement.mjs
+      - name: Prepare redirect-only delivery
+        run: mkdir -p dist && cp retirement/_worker.js retirement/index.html dist/
+      - name: Close legacy Pages application
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=polesheadlamp-id --branch=main
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish production summary
-        run: |
-          echo "### Production deployment" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Branch: \`main\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Trigger: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- URL: https://polesheadlamp-id.pages.dev" >> "$GITHUB_STEP_SUMMARY"
